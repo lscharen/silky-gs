@@ -1,0 +1,41 @@
+{
+  "name": "silky-gs",
+  "version": "1.0.0",
+  "description": "A hardware abstraction layer runtime for porting NES games to the Apple IIgs",
+  "main": "index.js",
+  "config": {
+    "merlin32": "C:\\Programs\\IIgsXDev\\bin\\Merlin32-1.1.10.exe",
+    "cadius": "C:\\Programs\\IIgsXDev\\bin\\Cadius.exe",
+    "gsport": "C:\\Programs\\gsport\\gsport_0.31\\GSPort.exe",
+    "macros": "./macros",
+    "crossrunner": "\"C:\\Program Files\\Crossrunner\\Crossrunner.exe\""
+  },
+  "scripts": {
+    "gsport": "%npm_package_config_gsport%",
+    "build:image": "npm run build:smb && npm run build-image.bat %npm_package_config_cadius%",
+    "build:docs": "cd docs && bundle exec jekyll serve",
+    "archive": "%npm_package_config_cadius% EXTRACTFILE ./emu/Target.2mg /GTEDev/Tool160.SHK .",
+    "test": "npm run build:smb && npm run build-image && %npm_package_config_gsport%",
+    "build:smb": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/SMB.s",
+    "build:debug": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/Debug.s",
+    "debug": "%npm_package_config_crossrunner% ./src/SuperMarioGS -source ./src/SuperMarioGS_S02__Output.txt -source ./src/SuperMarioGS_S03__Output.txt -source ./src/SuperMarioGS_S04__Output.txt -source ./src/SuperMarioGS_S05__Output.txt -Debug -CompatibilityLayer",
+    "install:header": "copy .\\ORCACDefs\\gte.h C:\\ProgramData\\GoldenGate\\Libraries\\ORCACDefs\\gte.h",
+    "build-image": "build-image.bat %npm_package_config_cadius% .\\emu\\Target.2mg /GTEDEV/Toolbox"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lscharen/iigs-game-engine.git"
+  },
+  "author": "Lucas Scharenbroich",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/lscharen/iigs-game-engine/issues"
+  },
+  "homepage": "https://github.com/lscharen/iigs-game-engine#readme",
+  "devDependencies": {
+    "pngjs": "^6.0.0",
+    "string-builder": "^0.1.8",
+    "watch": "latest",
+    "xml2json": "^0.12.0"
+  }
+}
