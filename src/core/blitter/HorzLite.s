@@ -13,14 +13,14 @@ _Apply
                     stx   :lines_left
                     sty   :patch+1
 
-                    cmp   #120
+                    cmp   #_LINES_PER_BANK
                     bcs   :bank_2
 
 ; The region is starting in the first bank
 :bank_1
                     eor   #$FFFF
                     sec
-                    adc   #120                  ; how many lines from the starting point to the end of the bank?
+                    adc   #_LINES_PER_BANK      ; how many lines from the starting point to the end of the bank?
                     cmp   :lines_left           ; is there enough to accomodate the number of lines to draw?
                     bcc   :split_bank_1         ; if not, break up the callback into multiple pieces
 
@@ -229,7 +229,8 @@ _ApplyBG0XPosLite
 ;  | JMP loop  |
 ;  +-----------+
 
-                    lda   StartXMod256     ; For vertical mirroring, x can range from [0, 255]. For horizontal, x is [0, 127]
+                    lda   StartX          ; For vertical mirroring, x can range from [0, 255]. For horizontal, x is [0, 127]
+                    and   #$00FF
 
 ; Alternate entry point if the virt_line_x2 and lines_left_x2 and XMod256 values are passed in externally
 
@@ -421,7 +422,6 @@ _ApplyBG0XPosAltLite
                     txa                              ; StartXMod164 - 1
                     clc
                     adc   ScreenWidth
-
                     and   #255                       ; Keep the value in range
 
                     tax
@@ -438,20 +438,42 @@ _ApplyBG0XPosAltLite
 ; Main loop
 
                     ldx   :lines_left_x2
-                    lda   #208*2
+                    lda   :virt_line_x2
+                    cmp   #_LINES_PER_BANK*2
+                    bcc   *+5
+                    sbc   #_LINES_PER_BANK*2
                     sec
-                    sbc   :virt_line_x2              ; calculate number of lines to the end of the buffer
+                    eor   #$FFFF
+                    adc   #_LINES_PER_BANK*2
                     cmp   :lines_left_x2
-                    bcs   :one_pass_odd             ; if there's room, do it in one shot
+                    bcs   :one_pass_odd              ; There are enough lines in the bank to draw the remaining lines
 
-                    tax
+                    tax                              ; Draw to the bottom of the bank
                     jsr   :one_pass_odd
 
-                    stz   :virt_line_x2
+                    lda   #{_LINES_PER_BANK-1}*2         ; Set the virtual line to the top of the next bank (0 or 120)
+                    cmp   :virt_line_x2
+                    lda   #0
+                    bcc   *+5
+                    lda   #{_LINES_PER_BANK*2}
+                    sta   :virt_line_x2
 
                     lda   :lines_left_x2
                     sec
-                    sbc   :draw_count_x2              ; this many left to draw. Fall through to finish up
+                    sbc   :draw_count_x2              ; This many left to draw
+                    tax
+                    cmp   #{_LINES_PER_BANK+1}*2      ; Can we finish?
+                    bcc   :one_pass_odd
+
+                    jsr   :one_pass_odd
+
+                    lda   :virt_line_x2               ; At this point :vert_line_x2 is either 0 or _LINES_PER_BANK*2
+                    eor   #{_LINES_PER_BANK*2}
+                    sta   :virt_line_x2
+
+                    lda   :lines_left_x2              ; Set up the remainder
+                    sec
+                    sbc   :draw_count_x2
                     tax
 
 :one_pass_odd
@@ -465,13 +487,13 @@ _ApplyBG0XPosAltLite
 
                     phb                              ; Save the existing bank
 
+                    ldx   :virt_line_x2
                     sep   #$20
-                    lda   BTableHigh                 ; Get the bank
+                    lda   BTableHigh,x               ; Get the bank
                     pha
                     plb
                     rep   #$21
 
-                    ldx   :virt_line_x2
                     ldal  BTableLow,x                ; Get the address of the first code field line
                     sta   :base_address              ; Save it to use as the base address
 

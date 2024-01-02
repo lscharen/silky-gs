@@ -219,7 +219,7 @@ _ENTRY_JMP  equ  4                       ; the jump (brl, actually) is 4 bytes a
 _ENTRY_ODD  equ  11                      ; the brl for the odd entry is a bit further in
 _EXIT_ODD   equ  474                     ; the odd enty point is just 3 bytes of code to load and push the edge byte
 _EXIT_EVEN  equ  477                     ; in the second page of the blitter line
-_LOW_SAVE   equ  {_EXIT_EVEN+3}          ; space to save the code field opcodes is right after the return jump
+_LOW_SAVE   equ  {_EXIT_EVEN+4}          ; space to save the code field opcodes is right after the return jump
 _LINE_SIZE  equ  512                     ; number of bytes for each blitter line
 
 _CODE_TOP   equ  20                      ; numbre of bytes from the base address of each blitter line to the first PEA instruction

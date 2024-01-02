@@ -67,6 +67,11 @@ x_offset    equ   8                       ; number of bytes from the left edge
             bcc   *+5
             jmp   Fail
 
+            lda   #1
+            jsr   _SetBG0XPos
+            lda   #0
+            jsr   _SetBG0YPos
+
             jsr   _ApplyBG0YPosLite       ; Set up the code field
             jsr   _ApplyBG0XPosLite       ; Set up the code field
             ldx   #0

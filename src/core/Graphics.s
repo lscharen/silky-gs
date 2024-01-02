@@ -344,7 +344,7 @@ _SetBG0XPos
                     tsb   DirtyBits                  ; Check if the value is already dirty, if so exit
                     bne   :out                       ; without overwriting the original value
 
-                    stx   OldStartX                  ; First change, so preserve the value
+                    stx   OldStartX                  ; First change, so preserve the prior value
 :out                rts
 
 
