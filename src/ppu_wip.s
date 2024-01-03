@@ -1381,7 +1381,7 @@ PPUDMA_WRITE ENT
 * ; sta: 0,x                  ; 6 = 25 cycles / word; 13 bytes
 * ;
 * ; There are 8 stores per tile, so 8 * 13 = 104 < 128, so we can still fit 512 tiles.  If we're selective
-* ; about which tiles are compiles and which ones have H/V mirroring
+* ; about which tiles are compiled and which ones have H/V mirroring
 * ;
 * ; Current implementation below is 4+6+6+4+6+7+6 = 39 cycles
 * ;

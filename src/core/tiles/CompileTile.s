@@ -1,4 +1,4 @@
-; Compile an 8x8 bitmap into executabl code into the CompileBank
+; Compile an 8x8 bitmap into executable code into the CompileBank
 ;
 ; Y = address in the compile bank
 ; 
@@ -21,16 +21,21 @@
 ;  ...
 ;  rtl
 CompileTile
-        sty  tmp2             ; Pointer to the target code address
+:target equ tmp4
+:source equ tmp5
+:copy   equ tmp7
+:flags  equ tmp8
 
-        sta  tmp0             ; Pointer to the source data
-        stx  tmp1
-        jsr  :copy_to_tmp     ; Copy the tile data to a temporary buffer on the direct page
+        sty  :target             ; Pointer to the target code address
 
-        ldy  tmp2             ; This is the pointer to the compilation bank address
+        sta  :source             ; Pointer to the source data
+        stx  :source+2
+        jsr  :copy_to_tmp        ; Copy the tile data to a temporary buffer on the direct page
+
+        ldy  :target             ; This is the pointer to the compilation bank address
         ldx  #0               ; This is the index into the tile data array on the direct page
         lda  #$FFFF
-        sta  tmp3             ; When this value is zero, all 16 words have been generated
+        sta  :flags             ; When this value is zero, all 16 words have been generated
 
 ; Pre-loop to check for any zeros which can be stored via a single STZ command  It's not much
 ; but does save an immediate load and 3 bytes of space
@@ -38,7 +43,7 @@ CompileTile
         bne  :zskip
         jsr  :emit_stz
         lda  :bit_mask,x
-        trb  tmp3
+        trb  :flags
 :zskip
         inx
         inx
@@ -49,7 +54,7 @@ CompileTile
 ; In this loop, Y and X always point to the compile bank address and data index, respectively
 :loop
         lda  :bit_mask,x      ; Get the flag for the current word
-        and  tmp3             ; Has this work already been generated?
+        and  :flags             ; Has this work already been generated?
         beq  :skip
 
 ; Found a new word, so create a lda #imm / sta abs,y code
@@ -63,7 +68,7 @@ CompileTile
         beq  :exit
 
         lda  blttmp,x
-        sta  tmp4             ; keep a copy of the word
+        sta  :copy             ; keep a copy of the word
 
 
         phx                   ; save the current index
@@ -74,8 +79,8 @@ CompileTile
         bne  :no_copy         ; no, look at the next one
         jsr  :emit_store      ; emit a store instructore for the current index
         lda  :bit_mask,x
-        trb  tmp3             ; mark this word as emitted
-        lda  tmp4             ; reload the test value
+        trb  :flags             ; mark this word as emitted
+        lda  :copy            ; reload the test value
 
 :no_copy
         cpx  #30
@@ -129,7 +134,7 @@ CompileTile
         ldy   #0
 :ctt_loop
         tyx
-        lda   [tmp0],y
+        lda   [:source],y
         sta   blttmp,x
         iny
         iny
@@ -165,20 +170,23 @@ CompileTile
 ; A = compiled tile address
 ; X = tile column (0 to 63)
 ; Y = tile row (0 to 29)
+;
+; Assumes the SwizzlePtr has already been set to point at the correct remapping table
 DrawCompiledTile
         phb
 
         sta  :patch+1     ; patch in the address
 
         txa
-        asl
+        asl               ; each tile is 2 columns wide
+        asl               ; x2 for indexing
         tax
 
         tya
+        asl               ; each tile is 8 lines tall
         asl
         asl
-        asl
-        asl
+        asl               ; x2 for indexing
         tay
 
         sep  #$20

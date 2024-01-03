@@ -67,38 +67,6 @@ x_offset    equ   8                       ; number of bytes from the left edge
             bcc   *+5
             jmp   Fail
 
-            ldy   #0
-            lda   #mytile
-            ldx   #^mytile
-            jsr   CompileTile
-            lda   #0
-            ldx   #0
-            ldy   #0
-            jsr   DrawCompiledTile
-
-            lda   #0
-            jsr   _SetBG0XPos
-            lda   #0
-            jsr   _SetBG0YPos
-
-            jsr   _ApplyBG0YPosLite       ; Set up the code field
-            jsr   _ApplyBG0XPosLite       ; Set up the code field
-            ldx   #0
-            ldy   #200
-            jsr   _BltRangeLite
-
-            jsr   WaitForKey
-            brl   Exit
-
-mytile      db    $00,$11,$00,$22
-            db    $11,$00,$22,$00
-            db    $00,$33,$00,$44
-            db    $11,$00,$22,$00
-            db    $00,$55,$00,$66
-            db    $11,$00,$22,$00
-            db    $00,$77,$00,$88
-            db    $11,$00,$22,$00
-
 ; Install a custom sprite renderer that will read directly off of the OAM table
 ;            pea   extSpriteRenderer
 ;            pea   #^drawOAMSprites
@@ -133,6 +101,44 @@ mytile      db    $00,$11,$00,$22
 
 ; Convert the CHR ROM from the cart into GTE tiles
             jsr   LoadTilesFromROM
+
+; Fill the buffer with tiles
+
+            lda   #0
+            ldx   #0
+            ldy   #0
+:drawloop
+            pha
+            phx
+            phy
+            jsr   DrawCompiledTile
+            ply
+            plx
+            pla
+
+            inx
+            cpx   #32
+            bcc   *+6
+            ldx   #0
+            iny
+
+            clc
+            adc   #$0100
+            bne   :drawloop
+
+            lda   #0
+            jsr   _SetBG0XPos
+            lda   #0
+            jsr   _SetBG0YPos
+
+            jsr   _ApplyBG0YPosLite       ; Set up the code field
+            jsr   _ApplyBG0XPosLite       ; Set up the code field
+            ldx   #0
+            ldy   #200
+            jsr   _BltRangeLite
+
+            jsr   WaitForKey
+            brl   Exit
 
 ; Start the FPS counter
             ldal  OneSecondCounter
@@ -364,6 +370,16 @@ Greyscale   dw    $0000,$5555,$AAAA,$FFFF
 
 Fail        brk   $FE
 
+mytile      db    $00,$11,$00,$22
+            db    $11,$00,$22,$00
+            db    $00,$33,$00,$44
+            db    $11,$00,$22,$00
+            db    $00,$55,$00,$66
+            db    $11,$00,$22,$00
+            db    $00,$77,$00,$88
+            db    $11,$00,$22,$00
+
+
 TmpPalette  ds    32
 
 ; Program variables
@@ -422,38 +438,30 @@ NESColorToIIgs
             rts
 
 ; Loop through the tiles and convert them from the NES ROM format into a custom
-; format that will be stored in the GTE tile buffer and rendered by the custom
-; tile rendering callbacks
+; internal format.
 LoadTilesFromROM
-            ldx   #0
-            ldy   #0
+
+; First loop is to convert the background tiles (tile numbers 0 to 255)
+            ldx  #0
+            txy
+
 :tloop
             phx
             phy
 
-            lda   #TileBuff
-            jsr  ConvertROMTile2
+            lda  #TileBuff
+            jsr  ConvertROMTile3
 
-            lda  1,s
-
-; In this implementation, tiles will be (pre) compiled
-
-;            pha                  ; start
-;            inc
-;            pha                  ; finish
-;            pea   #^TileBuff     ; pointer
-;            pea   #TileBuff
-;            _GTELoadTileSet
-
-
-            ply
-            iny
+            clc
+            pla
+            adc  #$0100          ; Put the next compiled tile on the next page
+            tay
 
             pla
-            clc
-            adc  #16                         ; NES tiles are 16 bytes
+            adc  #16             ; NES tiles are 16 bytes
             tax
-            cpx  #512*16
+
+            cpx  #16*256         ; Have we done the lat baskgorund tile?
             bcc  :tloop
             rts
 
@@ -1485,9 +1493,24 @@ native_joy  ENT
 ; to index directly into a 2048-byte swizzel table that will load the appropriate
 ; pixel data for the word.  There are 2 swizzle tables, one for tiles and one for sprites
 ; that take care of mapping the 25 possible on-screen colors to a 16-color palette.
+ConvertROMTile3
+:DPtr       equ   tmp1
+:MPtr       equ   tmp2
+
+; This routine is used for background tiles, so there is no need to create masks or
+; to provide alternative vertically and horizontally flipped variants.  Instead,
+; we leverage this to create optimized, compiled representations of the background tiles
+
+            phy                        ; Save y -- this is the compiled address location to use
+            jsr   ROMTileToLookup      ; A = address to write, X = address in CHR ROM
+            ply
+            lda   #TileBuff
+            ldx   #^TileBuff
+            jmp   CompileTile
+
 ConvertROMTile2
-:DPtr        equ   tmp1
-:MPtr        equ   tmp2
+:DPtr       equ   tmp1
+:MPtr       equ   tmp2
 
             jsr   ROMTileToLookup
 
