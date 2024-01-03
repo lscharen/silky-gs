@@ -85,8 +85,11 @@ spritemask        EXT
 ; Assumes the direct page is set and EngineMode and UserId has been initialized
 _CoreStartUp
                   jsr       IntStartUp          ; Enable certain interrupts
+                  bcs       :core_err
 
                   jsr       InitMemory          ; Allocate and initialize memory for the engine
+                  bcs       :core_err
+
                   jsr       EngineReset         ; All of the resources are allocated, put the engine in a known state
 
                   jsr       InitGraphics        ; Initialize all of the graphics-related data
@@ -94,6 +97,7 @@ _CoreStartUp
 ;                  jsr       InitTiles           ; Initialize the tile subsystem
 
 ;                  jsr       InitTimers          ; Initialize the timer subsystem
+:core_err
                   rts
 
 _CoreShutDown

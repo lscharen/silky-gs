@@ -222,5 +222,5 @@ _EXIT_EVEN  equ  477                     ; in the second page of the blitter lin
 _LOW_SAVE   equ  {_EXIT_EVEN+4}          ; space to save the code field opcodes is right after the return jmp/jml
 _LINE_SIZE  equ  512                     ; number of bytes for each blitter line
 
-_CODE_TOP   equ  20                      ; numbre of bytes from the base address of each blitter line to the first PEA instruction
+_CODE_TOP   equ  20                      ; number of bytes from the base address of each blitter line to the first PEA instruction
 _LINES_PER_BANK equ 120

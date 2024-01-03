@@ -8,15 +8,15 @@
                mx        %00
 
 InitMemory
-               PushLong  #0                          ; space for result
-               PushLong  #$000800                    ; size (2k)
-               PushWord  UserId
-               PushWord  #%11000000_00010111         ; Fixed location
-               PushLong  #$000000
-               _NewHandle                            ; returns LONG Handle on stack
-               plx                                   ; base address of the new handle
-               pla                                   ; high address 00XX of the new handle (bank)
-               bcs       :mem_err
+;               PushLong  #0                          ; space for result
+;               PushLong  #$000800                    ; size (2k)
+;               PushWord  UserId
+;               PushWord  #%11000000_00010111         ; Fixed location
+;               PushLong  #$010000                    ; Reserve space in Bank 01
+;               _NewHandle                            ; returns LONG Handle on stack
+;               plx                                   ; base address of the new handle
+;               ply                                   ; high address 00XX of the new handle (bank)
+;               bcs       :mem_err
 
                PushLong  #0                          ; space for result
                PushLong  #$008000                    ; size (32k)
@@ -25,7 +25,7 @@ InitMemory
                PushLong  #$012000
                _NewHandle                            ; returns LONG Handle on stack
                plx                                   ; base address of the new handle
-               pla                                   ; high address 00XX of the new handle (bank)
+               ply                                   ; high address 00XX of the new handle (bank)
                bcs       :mem_err
 
 ; Allocate a couple of banks of memory

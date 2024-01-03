@@ -67,7 +67,16 @@ x_offset    equ   8                       ; number of bytes from the left edge
             bcc   *+5
             jmp   Fail
 
-            lda   #1
+            ldy   #0
+            lda   #mytile
+            ldx   #^mytile
+            jsr   CompileTile
+            lda   #0
+            ldx   #0
+            ldy   #0
+            jsr   DrawCompiledTile
+
+            lda   #0
             jsr   _SetBG0XPos
             lda   #0
             jsr   _SetBG0YPos
@@ -77,7 +86,18 @@ x_offset    equ   8                       ; number of bytes from the left edge
             ldx   #0
             ldy   #200
             jsr   _BltRangeLite
+
+            jsr   WaitForKey
             brl   Exit
+
+mytile      db    $00,$11,$00,$22
+            db    $11,$00,$22,$00
+            db    $00,$33,$00,$44
+            db    $11,$00,$22,$00
+            db    $00,$55,$00,$66
+            db    $11,$00,$22,$00
+            db    $00,$77,$00,$88
+            db    $11,$00,$22,$00
 
 ; Install a custom sprite renderer that will read directly off of the OAM table
 ;            pea   extSpriteRenderer
@@ -2034,6 +2054,7 @@ WaterPalette dw     $22, $00, $15, $12, $25, $3A, $1A, $0F, $30, $12, $27, $10, 
             put   core/blitter/BlitterLite.s
             put   core/blitter/HorzLite.s
             put   core/blitter/VertLite.s
+            put   core/tiles/CompileTile.s
 
 
 ; Fixed tile
