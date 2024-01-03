@@ -256,7 +256,7 @@ EvtLoop
             brl   EvtLoop
 :not_f
 
-            cmp   #'b'                       ; Togget background flag
+            cmp   #'b'                       ; Toggle background flag
             bne   :not_b
             lda   BGToggle
             eor   #$0001
@@ -441,9 +441,9 @@ NESColorToIIgs
 ; internal format.
 LoadTilesFromROM
 
-; First loop is to convert the background tiles (tile numbers 0 to 255)
-            ldx  #0
-            txy
+; First loop is to convert the background tiles (tile numbers 256 to 511)
+            ldx  #256*16
+            ldy  #0
 
 :tloop
             phx
@@ -461,7 +461,7 @@ LoadTilesFromROM
             adc  #16             ; NES tiles are 16 bytes
             tax
 
-            cpx  #16*256         ; Have we done the lat baskgorund tile?
+            cpx  #16*512         ; Have we done the lat baskgorund tile?
             bcc  :tloop
             rts
 
@@ -1495,7 +1495,6 @@ native_joy  ENT
 ; that take care of mapping the 25 possible on-screen colors to a 16-color palette.
 ConvertROMTile3
 :DPtr       equ   tmp1
-:MPtr       equ   tmp2
 
 ; This routine is used for background tiles, so there is no need to create masks or
 ; to provide alternative vertically and horizontally flipped variants.  Instead,
@@ -1503,6 +1502,24 @@ ConvertROMTile3
 
             phy                        ; Save y -- this is the compiled address location to use
             jsr   ROMTileToLookup      ; A = address to write, X = address in CHR ROM
+
+; The :DPtr is set to point at the data buffer, so now convert the lookup values to data nibbles
+
+
+            sep   #$30                ; 8-bit mode
+            ldy   #0
+:loop
+            lda   (:DPtr),y           ; Load the index for this tile byte
+            tax
+            lda   DLUT4,x             ; Look up the two, 4-bit pixel values for this quad of bits
+            sta   (:DPtr),y
+            iny
+            cpy   #32
+            bcc   :loop
+            rep    #$30
+
+; Now we have the NES pixel data in a more linear format that matches the IIgs screen
+
             ply
             lda   #TileBuff
             ldx   #^TileBuff
