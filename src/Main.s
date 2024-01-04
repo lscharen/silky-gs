@@ -100,30 +100,44 @@ x_offset    equ   8                       ; number of bytes from the left edge
 ;            sta   LiteBank
 
 ; Convert the CHR ROM from the cart into GTE tiles
+
             jsr   LoadTilesFromROM
+
+; Set the palettes and swizzle tables
+
+            lda   #1
+            jsr   SetAreaType
 
 ; Fill the buffer with tiles
 
-            lda   #0
             ldx   #0
             ldy   #0
+            lda   #0
 :drawloop
             pha
             phx
             phy
             jsr   DrawCompiledTile
-            ply
-            plx
-            pla
-
-            inx
-            cpx   #32
-            bcc   *+6
-            ldx   #0
-            iny
 
             clc
+            pla
             adc   #$0100
+            tay
+
+            pla
+            inc
+            bit   #32
+            beq   :drawloop1
+            clc
+            adc   #$0100
+            and   #$FF00
+:drawloop1  tax
+
+            pla
+            adc   #$0200
+            and   #$0600
+
+            cpy   #0
             bne   :drawloop
 
             lda   #0
@@ -442,6 +456,7 @@ NESColorToIIgs
 LoadTilesFromROM
 
 ; First loop is to convert the background tiles (tile numbers 256 to 511)
+
             ldx  #256*16
             ldy  #0
 
@@ -461,7 +476,7 @@ LoadTilesFromROM
             adc  #16             ; NES tiles are 16 bytes
             tax
 
-            cpx  #16*512         ; Have we done the lat baskgorund tile?
+            cpx  #16*512         ; Have we done the last background tile?
             bcc  :tloop
             rts
 
@@ -1495,6 +1510,7 @@ native_joy  ENT
 ; that take care of mapping the 25 possible on-screen colors to a 16-color palette.
 ConvertROMTile3
 :DPtr       equ   tmp1
+:save       equ   tmp2
 
 ; This routine is used for background tiles, so there is no need to create masks or
 ; to provide alternative vertically and horizontally flipped variants.  Instead,
@@ -1505,14 +1521,28 @@ ConvertROMTile3
 
 ; The :DPtr is set to point at the data buffer, so now convert the lookup values to data nibbles
 
-
             sep   #$30                ; 8-bit mode
             ldy   #0
 :loop
             lda   (:DPtr),y           ; Load the index for this tile byte
             tax
-            lda   DLUT4,x             ; Look up the two, 4-bit pixel values for this quad of bits
+            lda   DLUT2_shft,x       ; Look up the two, 2-bit pixel values for this quad of bits.  This remains a 4-bit value
+            sta   tmp3
+
+            iny
+            lda   (:DPtr),y
+            tax
+            lda   DLUT2,x             ; Look up the two, 2-bit pixel values for next quad of bits
+            ora   tmp3                ; Move it int othe top nibble since it will decode to the top-byte on the SHR screen
+
+            dey
+            asl
             sta   (:DPtr),y
+            iny
+            lda   #0
+            rol
+            sta   (:DPtr),y
+
             iny
             cpy   #32
             bcc   :loop
@@ -1852,6 +1882,12 @@ DLUT2       db    $00,$01,$04,$05    ; CHR_ROM[0] = xy, CHR_ROM[8] = 00 -> 0x0y
             db    $02,$03,$06,$07    ; CHR_ROM[0] = xy, CHR_ROM[8] = 01 -> 0x1y
             db    $08,$09,$0C,$0D    ; CHR_ROM[0] = xy, CHR_ROM[8] = 10 ->
             db    $0A,$0B,$0E,$0F    ; CHR_ROM[0] = xy, CHR_ROM[8] = 11
+
+; Shifted version of the table
+DLUT2_shft  db    $00,$10,$40,$50    ; CHR_ROM[0] = xy, CHR_ROM[8] = 00 -> 0x0y
+            db    $20,$30,$60,$70    ; CHR_ROM[0] = xy, CHR_ROM[8] = 01 -> 0x1y
+            db    $80,$90,$C0,$D0    ; CHR_ROM[0] = xy, CHR_ROM[8] = 10 ->
+            db    $A0,$B0,$E0,$F0    ; CHR_ROM[0] = xy, CHR_ROM[8] = 11
 
 ; Look up the 4-bit indexes for the data words
 DLUT4       db    $00,$01,$10,$11    ; CHR_ROM[0] = xx, CHR_ROM[8] = 00

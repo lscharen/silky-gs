@@ -64,7 +64,8 @@ ForceSpriteFlag        equ   120
 RenderFlags            equ   124         ; Flags passed to the Render() function
 
 ; Application variables
-SwizzlePtr             equ   44
+SwizzlePtr             equ   44          ; Pointer to a table of 8 swizzle tables, one per palette
+ActivePtr              equ   48          ; Work pointer to point at the active swizzle table
 
 ShowFPS                equ   126
 YOrigin                equ   128

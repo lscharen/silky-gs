@@ -101,15 +101,20 @@ CompileTile
         rts
 
 :emit_load_imm
-        lda  #$00A9           ; lda #imm
+        lda  #$00A0           ; ldy #imm
         sta  [CompileBank0],y
         iny
         lda  blttmp,x
         sta  [CompileBank0],y
         iny
         iny
+        lda  #$B7+{ActivePtr*256}   ; lda [ActivePtr],y
+        sta  [CompileBank0],y
+        iny
+        iny
         rts
 
+; Zero is zero -- no need to do anything. Zero is always mapped to Universal Background Color
 :emit_stz
         lda  #$009E           ; stz abs,x
         sta  [CompileBank0],y
@@ -167,27 +172,35 @@ CompileTile
 
 ; Draw a compiled tile into the code field
 ;
-; A = compiled tile address
-; X = tile column (0 to 63)
-; Y = tile row (0 to 29)
+; A = palette select
+; X = tile row (0 to 29) | tile column (0 to 63)
+; Y = compiled tile address
 ;
 ; Assumes the SwizzlePtr has already been set to point at the correct remapping table
 DrawCompiledTile
         phb
 
-        sta  :patch+1     ; patch in the address
+        clc
+        adc  SwizzlePtr
+        sta  ActivePtr
+        lda  SwizzlePtr+2
+        sta  ActivePtr+2
+
+        sty  :patch+1     ; patch in the address
 
         txa
+        and  #$1F00
+        lsr               ; each tile is 8 lines tall (shift right 8 and shift left 4 = shift right 4)
+        lsr
+        lsr
+        lsr               ; x2 for indexing
+        tay
+
+        txa
+        and  #$003F
         asl               ; each tile is 2 columns wide
         asl               ; x2 for indexing
         tax
-
-        tya
-        asl               ; each tile is 8 lines tall
-        asl
-        asl
-        asl               ; x2 for indexing
-        tay
 
         sep  #$20
         lda  BTableHigh,y
