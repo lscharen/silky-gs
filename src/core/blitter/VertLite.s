@@ -56,10 +56,10 @@ _ApplyBG0YPosAltLite
                     lda   #{_LINES_PER_BANK*2}
                     sta   :virt_line_x2
 
-                     lda   :rtbl_idx_x2
-                     clc
-                     adc   :draw_count_x2
-                     sta   :rtbl_idx_x2
+                    lda   :rtbl_idx_x2
+                    clc
+                    adc   :draw_count_x2
+                    sta   :rtbl_idx_x2
 
                     lda   :lines_left_x2
                     sec
@@ -74,10 +74,10 @@ _ApplyBG0YPosAltLite
                     eor   #{_LINES_PER_BANK*2}
                     sta   :virt_line_x2
 
-                     lda   :rtbl_idx_x2
-                     clc
-                     adc   :draw_count_x2
-                     sta   :rtbl_idx_x2
+                    lda   :rtbl_idx_x2
+                    clc
+                    adc   :draw_count_x2
+                    sta   :rtbl_idx_x2
 
                     lda   :lines_left_x2              ; Set up the remainder
                     sec
@@ -97,13 +97,13 @@ _ApplyBG0YPosAltLite
                      tay
                      iny                              ; Fill in the first byte (_ENTRY_1 = 0)
 
-                     ldx   :rtbl_idx_x2               ; Load the stack address from here
-
                      sep   #$20                       ; Set the data bank to the code field
                      lda   BTableHigh,x
                      pha
                      plb
                      rep   #$21                       ; clear the carry while we're here...
+
+                     ldx   :rtbl_idx_x2               ; Load the stack address from here
 
                      lda   :draw_count_x2             ; Do this many lines
                      asl                              ; x4
@@ -119,8 +119,8 @@ _ApplyBG0YPosAltLite
 
 ; This is an inline, unrolled version of CopyRTableToStkAddr
 :entry               jmp   $0000
-]line                equ   199
-                     lup   200
+]line                equ   119
+                     lup   120
                      ldal  RTable+{]line*2},x
                      sta   {]line*_LINE_SIZE},y
 ]line                equ   ]line-1

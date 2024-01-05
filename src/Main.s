@@ -141,12 +141,14 @@ x_offset    equ   8                       ; number of bytes from the left edge
             cpy   #0
             bne   :drawloop
 
-            lda   #16
+            ldy   #0
+:tloop
+            phy
+            tya
             jsr   _SetBG0YPos
             jsr   _ApplyBG0YPosPreLite
 
-            lda   ppuscroll
-            and   #$00FF
+            lda   #0
             jsr   _SetBG0XPos
             jsr   _ApplyBG0YPosLite       ; Set up the code field
             jsr   _ApplyBG0XPosLite       ; Set up the code field
@@ -160,6 +162,9 @@ x_offset    equ   8                       ; number of bytes from the left edge
             stz   LastPatchOffset
 
             jsr   WaitForKey
+            ply
+            iny
+            bra   :tloop
 
 ; Render again, just to make sure it works
 
