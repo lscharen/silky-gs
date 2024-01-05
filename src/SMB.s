@@ -16,9 +16,9 @@
             KND   #$1100
             SNA   PPU1
 
-           ASM   core/blitter/TemplateLiteBank2.s
-           KND   #$1100
-           SNA   PPU2
+            ASM   core/blitter/TemplateLiteBank2.s
+            KND   #$1100
+            SNA   PPU2
 
 ; Segment #4 -- ROM
 

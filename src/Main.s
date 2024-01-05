@@ -32,8 +32,9 @@ x_offset    equ   8                       ; number of bytes from the left edge
             stz   ShowFPS
             stz   YOrigin
 
-            stz   VideoMode
-            stz   AudioMode
+            lda   #4                           ; Default to "Best" mode
+            sta   VideoMode
+            sta   AudioMode
 
             lda   #1
             sta   BGToggle
@@ -140,37 +141,58 @@ x_offset    equ   8                       ; number of bytes from the left edge
             cpy   #0
             bne   :drawloop
 
-            lda   #0
-            jsr   _SetBG0XPos
-            lda   #0
+            lda   #16
             jsr   _SetBG0YPos
+            jsr   _ApplyBG0YPosPreLite
+
+            lda   ppuscroll
+            and   #$00FF
+            jsr   _SetBG0XPos
+            jsr   _ApplyBG0YPosLite       ; Set up the code field
+            jsr   _ApplyBG0XPosLite       ; Set up the code field
+            ldx   #0
+            ldy   #200
+            jsr   _BltRangeLite
+            
+            lda   StartYMod240            ; Restore the fields back to their original state
+            ldx   ScreenHeight
+            jsr   _RestoreBG0OpcodesLite
+            stz   LastPatchOffset
+
+            jsr   WaitForKey
+
+; Render again, just to make sure it works
 
             jsr   _ApplyBG0YPosLite       ; Set up the code field
             jsr   _ApplyBG0XPosLite       ; Set up the code field
             ldx   #0
             ldy   #200
             jsr   _BltRangeLite
+            lda   StartYMod240            ; Restore the fields back to their original state
+            ldx   ScreenHeight
+            jsr   _RestoreBG0OpcodesLite
+            stz   LastPatchOffset
 
             jsr   WaitForKey
-            brl   Exit
+;            brl   Exit
 
 ; Start the FPS counter
             ldal  OneSecondCounter
             sta   OldOneSec
 
 ; Show the configuration screen
-            jsr   ShowConfig
+;            jsr   ShowConfig
             lda   #0
             jsr   ClearScreen
             jsr   InitPlayfield
 
 ; Initialize the sound hardware for APU emulation
 
-            lda   #4
-            sec
-            sbc   AudioMode               ; 0 = good, 2 = better, 4 = best
-            lsr 
-            jsr   APUStartUp              ; 0 = 240Hz, 1 = 120Hz, 2 = 60Hz (external)
+;            lda   #4
+;            sec
+;            sbc   AudioMode               ; 0 = good, 2 = better, 4 = best
+;            lsr 
+;            jsr   APUStartUp              ; 0 = 240Hz, 1 = 120Hz, 2 = 60Hz (external)
 
 ; Set an internal flag to tell the VBL interrupt handler that it is
 ; ok to start invoking the game logic.  The ROM code has to be run
@@ -191,6 +213,9 @@ x_offset    equ   8                       ; number of bytes from the left edge
 ;OffScr_LevelNumber    = $0763
 
 EvtLoop
+            jsr   triggerNMI
+            jsr   RenderFrame
+
 ;            sep   #$20
 ;            lda   #0
 ;            stal  ROMBase+$075f
@@ -217,47 +242,44 @@ EvtLoop
 ; 1. When new column(s) are exposed, set the tiles directly from the PPU nametable memory
 ; 2. When the PPU nametable memory is updated in an area that is already on-screen, set the tile
 
-            lda   singleStepMode
-            bne   :skip_render
-            jsr   RenderFrame
+;            lda   singleStepMode
+;            bne   :skip_render
+;            jsr   RenderFrame
 
-            lda   ShowFPS
-            beq   :no_fps
+;            lda   ShowFPS
+;            beq   :no_fps
 
-            ldal  OneSecondCounter
-            cmp   OldOneSec
-            beq   :skip_render
-            sta   OldOneSec
+;            ldal  OneSecondCounter
+;            cmp   OldOneSec
+;            beq   :skip_render
+;            sta   OldOneSec
             
-            ldx   #0
-            ldy   #$FFFF
-            lda   frameCount
+;            ldx   #0
+;            ldy   #$FFFF
+;            lda   frameCount
 
-            jsr   DrawByte
-            lda   frameCount
-            stz   frameCount
+;            jsr   DrawByte
+;            lda   frameCount
+;            stz   frameCount
 :no_fps
 :skip_render
-
-            lda   lastKey
-
+            jsr   readInput             ; Read the IIgs keyboard / gamepad and place in NES memory and return keycodes
             bit   #PAD_KEY_DOWN
             beq   EvtLoop
 
             and   #$007F
+            pha
 
 ; Put the game in single-step mode
-            cmp   #'s'
-            bne   :not_s
+;            cmp   #'s'
+;            bne   :not_s
 
-            lda   #1                         ; Stop the VBL interrupt from running the game logic
-            sta   singleStepMode
+;            lda   #1                         ; Stop the VBL interrupt from running the game logic
+;            sta   singleStepMode
 
-            jsr   triggerNMI
-            jsr   RenderFrame
-            brl   EvtLoop
-:not_s
-
+;            brl   EvtLoop
+;:not_s
+            pla
             cmp   #'f'
             bne   :not_f
             lda   #1
@@ -572,16 +594,16 @@ RenderFrame
 
 ; Get the current global coordinates
 
-            sei
+;            sei
 ;            lda   nt_queue_end      ; Freeze the end of the queue that contains updates up until "now"
 ;            sta   CurrNTQueueEnd
 ;            lda   ROMScrollEdge     ; This is set in the VBL IRQ
 ;            sta   CurrScrollEdge    ; Freeze it, then we can let the IRQs continue
-            cli
+;            cli
 
-            lsr
-            lsr
-            lsr
+;            lsr
+;            lsr
+;            lsr
 ;            sta   ROMScreenEdge
 
 ; Calculate how many blocks have been scrolled into view
@@ -610,6 +632,7 @@ RenderFrame
 ;            pha
 
 ; Get the player's Y coordinate and determine of we need to adjust the camera based on the physical play field size
+
             ldx   ROMZeroPg
             ldal  $0000b5,x      ; Player_Y_Page      ; 0 = above screen, 1 = on screen, 2 = below
             and   #$00FF
@@ -642,7 +665,10 @@ RenderFrame
 :max_clamp
             lda   MinYScroll
 :set_y
+            lda   #16
             sta   YOrigin
+            
+            jsr   _SetBG0YPos
 ;            pha
 ;            _GTESetBG0Origin
 
@@ -678,6 +704,16 @@ RenderFrame
 ;
 ;            pea   $FFFF             ; Render the fixed status bar and playfield
 ;            _GTERender
+            jsr   _ApplyBG0YPosLite       ; Set up the code field
+            jsr   _ApplyBG0XPosLite       ; Set up the code field
+            ldx   #0
+            ldy   #200
+            jsr   _BltRangeLite
+            lda   StartYMod240            ; Restore the fields back to their original state
+            ldx   ScreenHeight
+            jsr   _RestoreBG0OpcodesLite
+            stz   LastPatchOffset
+
 :render_done
 
 ; Check the AreaType and see if the palette needs to be changed. We do this after the screen is blitted
@@ -1461,33 +1497,33 @@ CopyNametable
 
 ; Trigger an NMI in the ROM
 triggerNMI
-            lda   AudioMode
-            bne   :good_audio
-            sep   #$30
-            jsl   quarter_speed_driver
-            rep   #$30
-:good_audio
+;            lda   AudioMode
+;            bne   :good_audio
+;            sep   #$30
+;            jsl   quarter_speed_driver
+;            rep   #$30
+;:good_audio
 
-;            ldal  ppuctrl               ; If the ROM has not enabled VBL NMI, also skip
-;            bit   #$80
-;            beq   :skip
+            ldal  ppuctrl               ; If the ROM has not enabled VBL NMI, also skip
+            bit   #$80
+            beq   :skip
 
-;            ldal  ppustatus             ; Set the bit that the VBL has started
-;            ora   #$80
-;            stal  ppustatus
+            ldal  ppustatus             ; Set the bit that the VBL has started
+            ora   #$80
+            stal  ppustatus
 
             ldx   #NonMaskableInterrupt
             jsr   romxfer
 
 ; Immediately after the NMI returns, freeze some of the global state variables so we can sync up with this frame when
-; we render the next frame.  Since we're in an interrupt handler here, sno change of the variables changing under
+; we render the next frame.  Since we're in an interrupt handler here, no change of the variables changing under
 ; our nose
 
-            sep   #$20
-            ldal  ROMBase+$071a
-            xba
-            ldal  ROMBase+$071c
-            rep   #$20
+;            sep   #$20
+;            ldal  ROMBase+$071a
+;            xba
+;            ldal  ROMBase+$071c
+;            rep   #$20
 ;            sta   ROMScrollEdge
 
 :skip       rts

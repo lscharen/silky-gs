@@ -23,6 +23,44 @@ rep8    mac
         db     ]1
         <<<
 
+          mx    %00
+DrawPPUTile
+        tya
+        xba
+        and  #$FF00    ; tiles are page-aligned
+        tay
+
+        txa
+        bit  #$0400
+        bne  :nt2
+
+        and  #$001F
+        bra  :shared
+
+:nt2
+        and  #$001F
+        ora  #$0020              ; Second table
+
+:shared
+        pha
+        txa
+        and  #$03E0
+        asl
+        asl
+        asl
+        ora  1,s
+        tax
+        pla
+
+        phd
+        ldal DPSave
+        tcd
+        lda  #0
+        jsr  DrawCompiledTile
+        pld
+
+        rts
+
           mx    %11
           dw $a5a5 ; marker to find in memory
 ppuaddr   ENT
@@ -291,9 +329,15 @@ PPUDATA_WRITE ENT
         txa
         and  #$03C0
         cmp  #$03C0
-        beq  :attrtbl
+        bcs  :attrtbl
 
-        jsr  :enqueue              ; Add the address in the X register to the queue
+;        jsr  :enqueue              ; Add the address in the X register to the queue
+; Draw the tile right now
+
+        phx                        ; Save the address
+        ldy  PPU_MEM,x
+        jsr  DrawPPUTile
+        plx                        ; restore address
 
 :nocache
         cpx  #$3F00
@@ -318,7 +362,16 @@ PPUDATA_WRITE ENT
         rtl
 
         mx   %00
+
+; Draw a tile directly into the code buffer as soon as it appears
+;
+; X = PPU_ADDR address.  The tile value is already stored
 :enqueue
+;         txa
+;         and  #$0400                ; This bit will add 32 to the column (in vertical mirroring mode)
+;         cpx  #$2400
+;         bcs  :nametable_2
+
 ;        lda  nt_queue_end
 ;        tay
 ;        inc
@@ -509,7 +562,7 @@ ppu_3F12
 
 ppu_3F14
 
-; Allow the second sprite palette to set set by the ROM in world 4 because it switched to the bowser
+; Allow the second sprite palette to be set by the ROM in world 4 because it switches to the bowser
 ; palette when player reaches the end of the level.  Mapped to IIgs palette indices 8, 9, 10
 CASTLE_AREA_TYPE equ 3
 ppu_3F15

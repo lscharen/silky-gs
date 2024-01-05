@@ -2,10 +2,6 @@
 NO_INTERRUPTS     equ       1                   ; turn off for crossrunner debugging
 NO_MUSIC          equ       1                   ; turn music + tool loading off
 
-; External data space provided by the main program segment
-tiledata          EXT
-TileStore         EXT
-
 ; Sprite plane data and mask banks are provided as an external segment
 ;
 ; The sprite data holds a set of pre-rendered sprites that are optimized to support the rendering pipeline.  There
@@ -179,7 +175,6 @@ TaskCnt           dw        1
 VblTaskCode       mx        %11
                   lda       #1
                   stal      TaskCnt            ; Reset the task count
-
                   jml       nmiTask            ; Jump to the NES NMI interrupt emulation
                   mx        %00
 

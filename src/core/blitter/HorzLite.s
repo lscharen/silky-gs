@@ -9,22 +9,28 @@ _Apply
 :virt_line          equ   tmp1
 :lines_left         equ   tmp2
 
+                    stx   :lines_left       ; See parallel code on line 305
                     sta   :virt_line
-                    stx   :lines_left
                     sty   :patch+1
 
-                    cmp   #_LINES_PER_BANK
-                    bcs   :bank_2
+; First step is to determine the starting bank.  It's a bit of calculation to figure out
+; whether the update can be done in one pass, but after that it becomes easier until
+; the last update.  For code size and efficiency, we build up the arguments on the stack
+; and then unwind them at once.  This allows most of the calculations to keep their
+; values in registers
 
-; The region is starting in the first bank
-:bank_1
+                    cmp   #_LINES_PER_BANK
+                    bcs   :start_in_bank_2
+
+; The update is starting in the first code bank.
+
                     eor   #$FFFF
                     sec
                     adc   #_LINES_PER_BANK      ; how many lines from the starting point to the end of the bank?
                     cmp   :lines_left           ; is there enough to accomodate the number of lines to draw?
                     bcc   :split_bank_1         ; if not, break up the callback into multiple pieces
 
-                    lda   :virt_line            ; restore the starting line
+                    lda   :virt_line            ; restore the starting line.  :lines_left is still in the X register
                     bra   :patch                ; jump to the callback routine just once
 
 ; The region goes to the end of the first bank and then continues
@@ -33,22 +39,32 @@ _Apply
 
                     eor   #$FFFF
                     sec
-                    adc   :lines_left           ; calculate the number that will be draw in the second bank
-                    pha                         ; and save for the second call
+                    adc   :lines_left           ; calculate the number that will remain to be drawn in the second bank
+                    sta   :lines_left
 
                     lda   :virt_line            ; restore the original virtual line number. x-reg is set above
                     jsr   :patch                ; call the subroutine
 
-                    lda   #120                  ; for the second bank, we know we're at the top
-                    plx                         ; and have this many more lines to draw
-                    bra   :patch
+                    lda   #_LINES_PER_BANK      ; If the number of reamining lines is less than the lines in the
+                    ldx   :lines_left           ; bank, we can be done now
+                    cpx   #_LINES_PER_BANK+1
+                    bcc   :patch
 
+                    jsr   :patch                ; Otherwise, apply against the full bank and come back to finish
+
+                    lda   :lines_left
+                    sec
+                    sbc   #_LINES_PER_BANK
+                    tax
+                    lda   #0                    ; Now we're at the top of the first bank
+                    bra   :patch
+ 
 ; The region is starting in the second bank.  Do the same thing as above, but the constants are
 ; a bit different
-:bank_2
+:start_in_bank_2
                     eor   #$FFFF
                     sec
-                    adc   #240                  ; how many lines from the starting point to the end of the bank?
+                    adc   #_LINES_PER_BANK      ; how many lines from the starting point to the end of the bank?
                     cmp   :lines_left           ; is there enough to accomodate the number of lines to draw?
                     bcc   :split_bank_2         ; if not, break up the callback into multiple pieces
 
@@ -62,13 +78,24 @@ _Apply
                     eor   #$FFFF
                     sec
                     adc   :lines_left           ; calculate the number that will be draw in the first bank
-                    pha                         ; and save for the second call
+                    sta   :lines_left
 
                     lda   :virt_line            ; restore the original virtual line number. x-reg is set above
                     jsr   :patch                ; call the subroutine
 
-                    lda   #0                    ; for the first bank, we know we're at the top
-                    plx                         ; and have this many more lines to draw
+                    lda   #0                    ; If the number of reamining lines is less than the lines in the
+                    ldx   :lines_left           ; bank, we can be done now
+                    cpx   #_LINES_PER_BANK+1
+                    bcc   :patch
+
+                    jsr   :patch                ; Otherwise, apply against the full bank and come back to finish
+
+                    lda   :lines_left
+                    sec
+                    sbc   #_LINES_PER_BANK
+                    tax
+                    lda   #_LINES_PER_BANK      ; Now we're at the top of the second bank
+
 :patch              jmp   $0000
 
 ; Subroutines that deal with the horizontal scrolling in the blitter. These functions
@@ -87,6 +114,8 @@ _RestoreBG0OpcodesLite
 ; bank manipulations done without worrying about changing the bank.
 _RestoreBG0OpcodesCallback
 :draw_count_x2      equ   tmp3
+
+                    phb
 
                     asl                              ; 2 x :virt_line
                     tay                              ; use to load the base address
@@ -107,8 +136,10 @@ _RestoreBG0OpcodesCallback
                     adc   #_LOW_SAVE
                     tax                              ; address of the save location
 
+                    sep   #$20
                     lda   BTableHigh,y               ; BTableHigh has the standard bank in the high word
                     pha                              ; Push two bytes
+                    rep   #$20
 
                     lda   BTableLow,y
                     adc   LastPatchOffset            ; Add some offsets to get the base address in the code field line
@@ -117,7 +148,7 @@ _RestoreBG0OpcodesCallback
                     plb                              ; Pop one byte to set the bank to the code field
 :do_restore         jsr   $0000                      ; Jump in and copy the saved patch value back into the code field, copy abs,X -> abs,Y
 
-                    stz   LastPatchOffset            ; Clear the value once completed
+;                    stz   LastPatchOffset            ; Clear the value once completed
                     plb                              ; Restore the current bank
                     rts
 
