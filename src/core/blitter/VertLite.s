@@ -35,25 +35,25 @@ _ApplyBG0YPosAltLite
 
                     sta   :rtbl_idx_x2
 
-                    ldx   :lines_left_x2
-                    lda   :virt_line_x2
-                    cmp   #_LINES_PER_BANK*2
+                    ldx   :lines_left_x2             ; 200
+                    lda   :virt_line_x2              ;  40
+                    cmp   #_LINES_PER_BANK*2         ; 120
                     bcc   *+5
                     sbc   #_LINES_PER_BANK*2
                     sec
                     eor   #$FFFF
-                    adc   #_LINES_PER_BANK*2
-                    cmp   :lines_left_x2
+                    adc   #_LINES_PER_BANK*2         ; 120 - 40 = 80
+                    cmp   :lines_left_x2             ; 200
                     bcs   :one_pass
 
-                    tax                              ; Draw to the bottom of the bank
+                    tax                              ; Draw to the bottom of the bank -- draw 80 lines
                     jsr   :one_pass
 
-                    lda   #{_LINES_PER_BANK-1}*2         ; Set the virtual line to the top of the next bank (0 or 120)
-                    cmp   :virt_line_x2
+                    lda   #{_LINES_PER_BANK-1}*2     ; Set the virtual line to the top of the next bank (0 or 120) = 119
+                    cmp   :virt_line_x2              ; 40
                     lda   #0
                     bcc   *+5
-                    lda   #{_LINES_PER_BANK*2}
+                    lda   #{_LINES_PER_BANK*2}       ; 120
                     sta   :virt_line_x2
 
                     lda   :rtbl_idx_x2
@@ -64,10 +64,12 @@ _ApplyBG0YPosAltLite
                     lda   :lines_left_x2
                     sec
                     sbc   :draw_count_x2              ; This many left to draw
+                    sta   :lines_left_x2
                     tax
                     cmp   #{_LINES_PER_BANK+1}*2      ; Can we finish?
                     bcc   :one_pass
 
+                    ldx   #_LINES_PER_BANK*2          ; Nope, so do a full bank
                     jsr   :one_pass
 
                     lda   :virt_line_x2               ; At this point :vert_line_x2 is either 0 or _LINES_PER_BANK*2
@@ -83,8 +85,6 @@ _ApplyBG0YPosAltLite
                     sec
                     sbc   :draw_count_x2
                     tax
-
-
 
 ; Set up the addresses for filling in the code field
 :one_pass

@@ -50,6 +50,7 @@ _Apply
                     cpx   #_LINES_PER_BANK+1
                     bcc   :patch
 
+                    ldx   #_LINES_PER_BANK
                     jsr   :patch                ; Otherwise, apply against the full bank and come back to finish
 
                     lda   :lines_left
@@ -88,6 +89,7 @@ _Apply
                     cpx   #_LINES_PER_BANK+1
                     bcc   :patch
 
+                    ldx   #_LINES_PER_BANK
                     jsr   :patch                ; Otherwise, apply against the full bank and come back to finish
 
                     lda   :lines_left
@@ -357,10 +359,12 @@ _ApplyBG0XPosAltLite
                     lda   :lines_left_x2
                     sec
                     sbc   :draw_count_x2              ; This many left to draw
+                    sta   :lines_left_x2
                     tax
                     cmp   #{_LINES_PER_BANK+1}*2      ; Can we finish?
                     bcc   :one_pass_even
 
+                    ldx   #_LINES_PER_BANK*2          ; Nope, so do a full bank
                     jsr   :one_pass_even
 
                     lda   :virt_line_x2               ; At this point :vert_line_x2 is either 0 or _LINES_PER_BANK*2
@@ -410,7 +414,7 @@ _ApplyBG0XPosAltLite
                     CopyXToYPrep      :do_save_entry_e;:draw_count_x6
                     LiteSetConstPrep  :do_set_bra_e;:draw_count_x3
                     stal  :do_setopcode_e+1
-                    stal  :do_set_rel_e+1
+                    stal  :do_set_rel_e+1   ; This is too short
 
                     sep   #$20
                     ldy   :entry_jmp_addr
@@ -492,10 +496,12 @@ _ApplyBG0XPosAltLite
                     lda   :lines_left_x2
                     sec
                     sbc   :draw_count_x2              ; This many left to draw
+                    sta   :lines_left_x2
                     tax
                     cmp   #{_LINES_PER_BANK+1}*2      ; Can we finish?
                     bcc   :one_pass_odd
 
+                    ldx   #_LINES_PER_BANK*2          ; Nope, so do a full bank
                     jsr   :one_pass_odd
 
                     lda   :virt_line_x2               ; At this point :vert_line_x2 is either 0 or _LINES_PER_BANK*2

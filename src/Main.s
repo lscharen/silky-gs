@@ -141,7 +141,7 @@ x_offset    equ   8                       ; number of bytes from the left edge
             cpy   #0
             bne   :drawloop
 
-            ldy   #0
+            ldy   #120
 :tloop
             phy
             tya
