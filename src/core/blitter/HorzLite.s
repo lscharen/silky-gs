@@ -63,6 +63,7 @@ _Apply
 ; The region is starting in the second bank.  Do the same thing as above, but the constants are
 ; a bit different
 :start_in_bank_2
+                    sbc   #_LINES_PER_BANK      ; Put the number into the range of one bank (carry is set)
                     eor   #$FFFF
                     sec
                     adc   #_LINES_PER_BANK      ; how many lines from the starting point to the end of the bank?
@@ -336,7 +337,7 @@ _ApplyBG0XPosAltLite
 ; This is (lines_per_bank - virt_line % lines_per_bank)
 
                     ldx   :lines_left_x2
-                    lda   :virt_line_x2
+                    lda   :virt_line_x2              ; This is not x2
                     cmp   #_LINES_PER_BANK*2
                     bcc   *+5
                     sbc   #_LINES_PER_BANK*2
@@ -412,7 +413,7 @@ _ApplyBG0XPosAltLite
 
                     sec                              ; These macros perform subtractions that do not underflow
                     CopyXToYPrep      :do_save_entry_e;:draw_count_x6
-                    LiteSetConstPrep  :do_set_bra_e;:draw_count_x3
+                    LiteSetConstPrep  :do_set_bra_e;:draw_count_x3    ; this is not a multiple of 3
                     stal  :do_setopcode_e+1
                     stal  :do_set_rel_e+1   ; This is too short
 

@@ -141,15 +141,14 @@ x_offset    equ   8                       ; number of bytes from the left edge
             cpy   #0
             bne   :drawloop
 
-            ldy   #120
+            ldy   #0
 :tloop
             phy
             tya
             jsr   _SetBG0YPos
-            jsr   _ApplyBG0YPosPreLite
-
             lda   #0
             jsr   _SetBG0XPos
+            jsr   _ApplyBG0YPosPreLite
             jsr   _ApplyBG0YPosLite       ; Set up the code field
             jsr   _ApplyBG0XPosLite       ; Set up the code field
             ldx   #0
@@ -161,7 +160,7 @@ x_offset    equ   8                       ; number of bytes from the left edge
             jsr   _RestoreBG0OpcodesLite
             stz   LastPatchOffset
 
-            jsr   WaitForKey
+;            jsr   WaitForKey
             ply
             iny
             bra   :tloop
