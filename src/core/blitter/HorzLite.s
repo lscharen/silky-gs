@@ -399,10 +399,9 @@ _ApplyBG0XPosAltLite
                     sep   #$20                       ; Set the data bank to the code field
                     lda   BTableHigh,x
                     pha
-                    plb
                     rep   #$21                       ; clear the carry while we're here...
 
-                    ldal  BTableLow,x                ; Get the address of the code field line
+                    lda   BTableLow,x                ; Get the address of the code field line
                     sta   :base_address              ; Will use this address a few times
 
                     adc   #_ENTRY_JMP                ; Add the offsets in order to get absolute addresses
@@ -418,6 +417,7 @@ _ApplyBG0XPosAltLite
 ; are two sub-steps to do here; we need to save the 8-bit value that exists at the location+1 and
 ; then overwrite it with the branch instruction.
 
+                    plb                              ; Set the bank of the code field
                     sec                              ; These macros perform subtractions that do not underflow
                     CopyXToYPrep      :do_save_entry_e;:draw_count_x6
                     LiteSetConstPrep  :do_set_bra_e;:draw_count_x3    ; this is not a multiple of 3
@@ -540,10 +540,9 @@ _ApplyBG0XPosAltLite
                     sep   #$20
                     lda   BTableHigh,x               ; Get the bank
                     pha
-                    plb
                     rep   #$21
 
-                    ldal  BTableLow,x                ; Get the address of the first code field line
+                    lda   BTableLow,x                ; Get the address of the first code field line
                     sta   :base_address              ; Save it to use as the base address
 
                     adc   #_ENTRY_JMP                ; Add the offsets in order to get absolute addresses
@@ -561,6 +560,7 @@ _ApplyBG0XPosAltLite
 
 ; Setup the jumps into the unrolled loops
 
+                    plb
                     sec
                     CopyXToYPrep      :do_save_entry_o;:draw_count_x6
                     stal  :do_save_high_byte+1

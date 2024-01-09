@@ -746,7 +746,9 @@ RenderScreen
 
 ; Now render the top 16 lines to show the status bar area
 
-            stz   tmp1                    ; virt_line_x2
+            clc
+            lda   #16*2
+            sta   tmp1                    ; virt_line_x2
             lda   #16*2
             sta   tmp2                    ; lines_left_x2
             lda   #0                      ; Xmod256
@@ -755,7 +757,7 @@ RenderScreen
 
 ; Next render the remaining lines
 
-            lda   #16*2
+            lda   #32*2
             sta   tmp1                ; virt_line_x2
             lda   ScreenHeight
             sec
@@ -774,7 +776,7 @@ RenderScreen
 
 ; Restore the buffer
 
-            lda   #0                      ; virt_line
+            lda   #16                      ; virt_line
             ldx   #16                     ; lines_left
             ldy   nesTopOffset            ; offset to patch
             jsr   _RestoreBG0OpcodesAltLite
@@ -783,7 +785,7 @@ RenderScreen
             sec
             sbc   #16
             tax                           ; lines_left
-            lda   #16                     ; virt_line
+            lda   #32                     ; virt_line
             ldy   nesBottomOffset         ; offset to patch
             jsr   _RestoreBG0OpcodesAltLite
 
