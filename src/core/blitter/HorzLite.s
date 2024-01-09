@@ -109,6 +109,10 @@ _Apply
 ; X = number of lines to render (0 - 200)
 
 _RestoreBG0OpcodesLite
+                    ldy   LastPatchOffset
+_RestoreBG0OpcodesAltLite
+:exit_offset        equ   tmp4
+                    sty   :exit_offset
                     ldy   #_RestoreBG0OpcodesCallback
                     jmp   _Apply
 
@@ -117,6 +121,7 @@ _RestoreBG0OpcodesLite
 ; bank manipulations done without worrying about changing the bank.
 _RestoreBG0OpcodesCallback
 :draw_count_x2      equ   tmp3
+:exit_offset        equ   tmp4
 
                     phb
 
@@ -145,13 +150,12 @@ _RestoreBG0OpcodesCallback
                     rep   #$20
 
                     lda   BTableLow,y
-                    adc   LastPatchOffset            ; Add some offsets to get the base address in the code field line
+                    adc   :exit_offset               ; Add some offsets to get the base address in the code field line
                     tay
 
                     plb                              ; Pop one byte to set the bank to the code field
 :do_restore         jsr   $0000                      ; Jump in and copy the saved patch value back into the code field, copy abs,X -> abs,Y
 
-;                    stz   LastPatchOffset            ; Clear the value once completed
                     plb                              ; Restore the current bank
                     rts
 
@@ -264,7 +268,6 @@ _ApplyBG0XPosLite
 ;  +-----------+
 
                     lda   StartX          ; For vertical mirroring, x can range from [0, 255]. For horizontal, x is [0, 127]
-                    and   #$00FF
 
 ; Alternate entry point if the virt_line_x2 and lines_left_x2 and XMod256 values are passed in externally
 
@@ -288,6 +291,7 @@ _ApplyBG0XPosAltLite
 :entry_odd_addr     equ   blttmp+12
 :exit_odd_addr      equ   blttmp+14
 
+                    and   #$00FF
                     bit   #$0001
 
                     beq   *+5
@@ -442,6 +446,7 @@ _ApplyBG0XPosAltLite
 :do_set_rel_e       jsr   $0000                       ; Set the relative offset for all BRL instructions
 
                     plb
+                    lda   :exit_offset                ; This is the return value
                     rts
 
 ; Odd case if very close to the even case, except that the code is entered a word later.  It is still
@@ -600,6 +605,7 @@ _ApplyBG0XPosAltLite
 :do_odd_code_entry  jsr   $0000                          ; Fill in the BRL argument for the odd entry
 
                     plb
+                    lda   :exit_offset                ; This is the return value
                     rts
 
 ; Copy from the offset at X to the offset at Y

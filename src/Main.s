@@ -141,29 +141,29 @@ x_offset    equ   8                       ; number of bytes from the left edge
             cpy   #0
             bne   :drawloop
 
-            ldy   #129
-:tloop
-            phy
-            tya
-            jsr   _SetBG0XPos
-            lda   #0
-            jsr   _SetBG0YPos
-            jsr   _ApplyBG0YPosPreLite
-            jsr   _ApplyBG0YPosLite       ; Set up the code field
-            jsr   _ApplyBG0XPosLite       ; Set up the code field
-            ldx   #0
-            ldy   #200
-            jsr   _BltRangeLite
-            
-            lda   StartYMod240            ; Restore the fields back to their original state
-            ldx   ScreenHeight
-            jsr   _RestoreBG0OpcodesLite
-            stz   LastPatchOffset
-
-            jsr   WaitForKey
-            ply
-            iny
-            bra   :tloop
+;            ldy   #129
+;:tloop
+;            phy
+;            tya
+;            jsr   _SetBG0XPos
+;            lda   #0
+;            jsr   _SetBG0YPos
+;            jsr   _ApplyBG0YPosPreLite
+;            jsr   _ApplyBG0YPosLite       ; Set up the code field
+;            jsr   _ApplyBG0XPosLite       ; Set up the code field
+;            ldx   #0
+;            ldy   #200
+;            jsr   _BltRangeLite
+;            
+;            lda   StartYMod240            ; Restore the fields back to their original state
+;            ldx   ScreenHeight
+;            jsr   _RestoreBG0OpcodesLite
+;            stz   LastPatchOffset
+;
+;            jsr   WaitForKey
+;            ply
+;            iny
+;            bra   :tloop
 
 ; Render again, just to make sure it works
 
@@ -637,15 +637,15 @@ RenderFrame
 
 ; Get the player's Y coordinate and determine of we need to adjust the camera based on the physical play field size
 
-            ldx   ROMZeroPg
-            ldal  $0000b5,x      ; Player_Y_Page      ; 0 = above screen, 1 = on screen, 2 = below
-            and   #$00FF
-            beq   :max_clamp
-            cmp   #2
-            beq   :min_clamp
+;            ldx   ROMZeroPg
+;            ldal  $0000b5,x      ; Player_Y_Page      ; 0 = above screen, 1 = on screen, 2 = below
+;            and   #$00FF
+;            beq   :max_clamp
+;            cmp   #2
+;            beq   :min_clamp
 
-            ldal  $0000ce,x      ; Player_Y_Position
-            and   #$00FF
+;            ldal  $0000ce,x      ; Player_Y_Position
+;            and   #$00FF
 
 ; The "full screen" size is 200 lines that cover NES rows 16 through 216.  If the
 ; size of the playfield is less, then we adjust the origin a bit.
@@ -655,24 +655,23 @@ RenderFrame
 ; 
 ; Y_Origin = min(200 - ScreenHeight, max(0, ROMPlayerY - NesTop))
 
-            sec
-            sbc   NesTop
-            bmi   :max_neg
-            cmp   MinYScroll
-            bcc   :max_clamp
+;            sec
+;            sbc   NesTop
+;            bmi   :max_neg
+;            cmp   MinYScroll
+;            bcc   :max_clamp
 
-            cmp   MaxYScroll
-            bcc   :set_y
-:min_clamp  lda   MaxYScroll
-            bra   :set_y
-:max_neg
-:max_clamp
-            lda   MinYScroll
-:set_y
-            lda   #16
-            sta   YOrigin
+;            cmp   MaxYScroll
+;            bcc   :set_y
+;:min_clamp  lda   MaxYScroll
+;            bra   :set_y
+;:max_neg
+;:max_clamp
+;            lda   MinYScroll
+;:set_y
+;            lda   #16
+;            sta   YOrigin
             
-            jsr   _SetBG0YPos
 ;            pha
 ;            _GTESetBG0Origin
 
@@ -684,39 +683,32 @@ RenderFrame
 ;            jsr   EnableBackground
 ;:bghop
 
-            lda   VideoMode
-            cmp   #4
-            beq   :full_screen
+;            lda   VideoMode
+;            cmp   #4
+;            beq   :full_screen
 
 ; Pull in _RenderNES anad _RenderNES2 functions
 ;
 ;            pea   $FFFD             ; Render just the playfield area
 ;            _GTERender
 
-            lda   frameCount        ; Update the status area once every 8 renders ~1 time per second
-            sec
-            sbc   LastStatusUdt
-            cmp   #8
-            bcc   :render_done
-            lda   frameCount
-            sta   LastStatusUdt
-            jsr   CopyStatusToScreen
-            bra   :render_done
+;            lda   frameCount        ; Update the status area once every 8 renders ~1 time per second
+;            sec
+;            sbc   LastStatusUdt
+;            cmp   #8
+;            bcc   :render_done
+;            lda   frameCount
+;            sta   LastStatusUdt
+;            jsr   CopyStatusToScreen
+;            bra   :render_done
 
-:full_screen
+;:full_screen
 ; Pull in _RenderNES anad _RenderNES2 functions
 ;
 ;            pea   $FFFF             ; Render the fixed status bar and playfield
 ;            _GTERender
-            jsr   _ApplyBG0YPosLite       ; Set up the code field
-            jsr   _ApplyBG0XPosLite       ; Set up the code field
-            ldx   #0
-            ldy   #200
-            jsr   _BltRangeLite
-            lda   StartYMod240            ; Restore the fields back to their original state
-            ldx   ScreenHeight
-            jsr   _RestoreBG0OpcodesLite
-            stz   LastPatchOffset
+
+            jsr   RenderScreen
 
 :render_done
 
@@ -732,6 +724,70 @@ RenderFrame
 :no_area_change
 
             inc   frameCount       ; Tick over to a new frame
+            rts
+
+; Make the screen appear
+nesTopOffset    ds 2
+nesBottomOffset ds 2
+RenderScreen
+
+; Do the basic setup
+
+; HorizontalScroll = $73f
+            lda   ppuscroll
+            and   #$FF00
+            lsr
+            xba
+            jsr   _SetBG0XPos
+            lda   #16
+            jsr   _SetBG0YPos
+            jsr   _ApplyBG0YPosPreLite
+            jsr   _ApplyBG0YPosLite       ; Set up the code field
+
+; Now render the top 16 lines to show the status bar area
+
+            stz   tmp1                    ; virt_line_x2
+            lda   #16*2
+            sta   tmp2                    ; lines_left_x2
+            lda   #0                      ; Xmod256
+            jsr   _ApplyBG0XPosAltLite
+            sta   nesTopOffset            ; cache the :exit_offset value returned form this function
+
+; Next render the remaining lines
+
+            lda   #16*2
+            sta   tmp1                ; virt_line_x2
+            lda   ScreenHeight
+            sec
+            sbc   #16
+            asl
+            sta   tmp2                ; lines_left_x2
+            lda   StartX              ; Xmod256
+            jsr   _ApplyBG0XPosAltLite
+            sta   nesBottomOffset
+
+; Copy the buffer to the graphics screen
+
+            ldx   #0
+            ldy   #200
+            jsr   _BltRangeLite
+
+; Restore the buffer
+
+            lda   #0                      ; virt_line
+            ldx   #16                     ; lines_left
+            ldy   nesTopOffset            ; offset to patch
+            jsr   _RestoreBG0OpcodesAltLite
+
+            lda   ScreenHeight
+            sec
+            sbc   #16
+            tax                           ; lines_left
+            lda   #16                     ; virt_line
+            ldy   nesBottomOffset         ; offset to patch
+            jsr   _RestoreBG0OpcodesAltLite
+
+            stz   LastPatchOffset
             rts
 
 SetAreaType
