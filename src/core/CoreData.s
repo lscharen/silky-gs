@@ -188,7 +188,7 @@ Col2CodeOffset
                   dw    _CODE_TOP+{{63-]step}*PER_TILE_SIZE}
 ]step             equ   ]step+1
                   --^
-; The second 64 values are for the words in the second nametable space. These are all exatly $100 bytes
+; The second 64 values are for the words in the second nametable space. These are all exactly $100 bytes
 ; past the other nametable
 ]step             equ   0
                   lup   64

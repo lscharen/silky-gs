@@ -297,7 +297,10 @@ _ApplyBG0XPosAltLite
 ; instruction that corresponds to the left edge of the screen
 
                     tax
-                    lda   CodeFieldEvenBRA-2,x
+
+                    and   #$007E                    ; The branch tables are the same, so just use one table
+                    tay
+                    lda   CodeFieldEvenBRA-2,y
                     sta   :exit_bra
 
                     lda   Col2CodeOffset-2,x         ; offset from :base that is the exit location
@@ -448,19 +451,22 @@ _ApplyBG0XPosAltLite
 :odd_case
                     dec
                     tax
-                    lda   CodeFieldOddBRA,x
+
+                    and   #$007E                    ; The branch tables are the same, so just use one table
+                    tay
+                    lda   CodeFieldOddBRA,y
                     sta   :exit_bra
 
                     lda   Col2CodeOffset,x
                     sta   :exit_offset
                     sta   LastPatchOffset            ; Cache as a flag for later
 
-                    txa                              ; StartXMod164 - 1
+                    txa                              ; StartXMod256 - 1
                     clc
                     adc   ScreenWidth
                     and   #255                       ; Keep the value in range
 
-                    tax
+                    tax                           ; StartXMod256 - 1
                     lda   Col2CodeOffset,x
                     clc
                     adc   #-{_ENTRY_JMP+3}        ; In this case it gets loaded in the X-register

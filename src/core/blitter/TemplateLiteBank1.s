@@ -59,7 +59,7 @@ h_tbl              ENT
 ; The lite blitter is crafted to allow the accumulator to be in 8-bit mode and avoid any
 ; need for rep/sep instructions to handle the odd-aligned case
 
-                   ds    $100-14                    ; pad so that the PEA code aligned on the page boundary
+                   ds    $100-15                    ; pad so that the PEA code aligned on the page boundary
 lite_base          ENT
 lite_entry_1       ldx   #0000                      ; Sets screen address (right edge)
                    txs
@@ -69,7 +69,7 @@ lite_entry_jmp     brl   $0000                      ; If the screen is odd-align
                                                     ; relative offset of the instruction field in the register
                                                     ; and falls through to the next instruction.
 
-                   lda:  *+1,x                      ; Get the low byte and push onto the stack
+                   ldal  *+1,x                      ; Get the low byte and push onto the stack
                    pha
 lite_odd_entry     brl   $0000                      ; unconditionally jump into the "next" instruction in the 
                                                     ; code field.  This is OK, even if the entry point was the
@@ -102,7 +102,7 @@ lite_next          lup   64
 lite_loop_exit_3b  jmp   lite_even_exit
 lite_odd_exit      lda   #0                         ; get the high byte of the saved PEA operand (odd-case is already in 8-bit mode)
                    pha
-lite_even_exit     jmp   $0400-14                   ; Jump to the next line.
+lite_even_exit     jmp   $0400-15                   ; Jump to the next line.
                    ds    1                          ; Space for when the exit vector is a JML to cross a bank
                    dfb   $F4,$00                    ; low-word of the saved PEA instruction (410 bytes)
 
@@ -111,11 +111,11 @@ lite_even_exit     jmp   $0400-14                   ; Jump to the next line.
 
 ]page              equ   $400
                    lup   118
-                   ds    43-14
+                   ds    43-15
                    ldx   #0000
                    txs
                    dfb   $82,$00,$00
-                   lda:  *+1,x
+                   ldal  *+1,x
                    pha
                    dfb   $82,$00,$00
                    jmp   ]page+$1CF
@@ -277,19 +277,19 @@ lite_even_exit     jmp   $0400-14                   ; Jump to the next line.
                    jmp   ]page+$1CF
                    lda   #0
                    pha
-                   jmp   ]page+$200-14
+                   jmp   ]page+$200-15
                    ds    1
                    dfb   $F4,$00
 
 ]page              equ   ]page+$200
                    --^
 
-                   ds    43-14                     ; More padding
+                   ds    43-15                     ; More padding
                    ldx   #0000
                    txs
                    brl   *+3
 
-                   lda:  *+1,x
+                   ldal  *+1,x
                    pha
                    brl   *+3
 

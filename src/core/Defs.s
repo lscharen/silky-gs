@@ -217,11 +217,11 @@ PER_TILE_SIZE equ 3
 ;_LINE_BASE equ 4                        ; header size
 
 _ENTRY_JMP  equ  4                       ; the jump (brl, actually) is 4 bytes after the entry point
-_ENTRY_ODD  equ  11                      ; the brl for the odd entry is a bit further in
-_EXIT_ODD   equ  474                     ; the odd enty point is just 3 bytes of code to load and push the edge byte
-_EXIT_EVEN  equ  477                     ; in the second page of the blitter line
+_ENTRY_ODD  equ  12                      ; the brl for the odd entry is a bit further in
+_EXIT_ODD   equ  475                     ; the odd enty point is just 3 bytes of code to load and push the edge byte
+_EXIT_EVEN  equ  478                     ; in the second page of the blitter line
 _LOW_SAVE   equ  {_EXIT_EVEN+4}          ; space to save the code field opcodes is right after the return jmp/jml
 _LINE_SIZE  equ  512                     ; number of bytes for each blitter line
 
-_CODE_TOP   equ  20                      ; number of bytes from the base address of each blitter line to the first PEA instruction
+_CODE_TOP   equ  21                      ; number of bytes from the base address of each blitter line to the first PEA instruction
 _LINES_PER_BANK equ 120
