@@ -734,10 +734,13 @@ RenderScreen
 ; Do the basic setup
 
 ; HorizontalScroll = $73f
-            lda   ppuscroll
-            and   #$FF00
-            lsr
-            xba
+            sep   #$20
+            lda   ppuctrl                 ; Bit 0 is the high bit of the X scroll position
+            lsr                           ; put in the carry bit
+            lda   ppuscroll+1             ; load the scroll value
+            ror                           ; put the high bit and divide by 2 for the engine
+            rep   #$20
+            and   #$00FF                  ; make sure nothing is in the high byte
             jsr   _SetBG0XPos
             lda   #16
             jsr   _SetBG0YPos
