@@ -216,6 +216,14 @@ x_offset    equ   8                       ; number of bytes from the left edge
 ;OffScr_AreaNumber     = $0767
 ;OffScr_LevelNumber    = $0763
 
+; We _never_ scroll vertically, so just set it once.  This is to make sure these kinds of optimizations
+; can be set up in the generic structure
+
+            lda   #16
+            jsr   _SetBG0YPos
+            jsr   _ApplyBG0YPosPreLite
+            jsr   _ApplyBG0YPosLite       ; Set up the code field
+
 EvtLoop
             jsr   triggerNMI
             jsr   RenderFrame
@@ -742,10 +750,6 @@ RenderScreen
             rep   #$20
             and   #$00FF                  ; make sure nothing is in the high byte
             jsr   _SetBG0XPos
-            lda   #16
-            jsr   _SetBG0YPos
-            jsr   _ApplyBG0YPosPreLite
-            jsr   _ApplyBG0YPosLite       ; Set up the code field
 
 ; Now render the top 16 lines to show the status bar area
 
@@ -2202,6 +2206,29 @@ PPU_MEM
 CHR_ROM     put   chr2.s         ; 8K of CHR-ROM at PPU memory $0000 - $2000
 PPU_NT      ds    $2000          ; Nametable memory from $2000 - $3000, $3F00 - $3F14 is palette RAM
 PPU_OAM     ds    256            ; 256 bytes of separate OAM RAM
+
+; Mapping tables to take a nametable address and return the appropriate attribute memory location.  This is a table with
+; 960 entries.  This table is just the 64 offsets above address $2xC0 stored as bytes to keep the table size reasonably
+; conpact
+PPU_ATTR_ADDR
+]row        =     0
+            lup   30
+            db    $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1,
+            db    $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3,
+            db    $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5,
+            db    $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7,
+]row        =     ]row+1
+            --^
+            
+PPU_ATTR_MASK
+            lup   7
+            db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
+            db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
+            db    $30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0
+            db    $30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0
+            --^
+            db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
+            db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
 
 ; If AreaStyle is 1 then load an alternate palette 'b'
 ;
