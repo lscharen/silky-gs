@@ -172,7 +172,7 @@ CompileTile
 
 ; Draw a compiled tile into the code field
 ;
-; A = palette select
+; A = palette select ($0000, $0200, $0400, or $0600)
 ; X = tile row (0 to 29) | tile column (0 to 63)
 ; Y = compiled tile address
 ;
@@ -218,4 +218,3 @@ DrawCompiledTile
 :patch  jsl  $000000
         plb
         rts
-

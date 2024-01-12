@@ -716,6 +716,7 @@ RenderFrame
 ;            pea   $FFFF             ; Render the fixed status bar and playfield
 ;            _GTERender
 
+            jsr   PPUFlushQueues     ; Apply all of the PPU changes to the PEA field
             jsr   RenderScreen
 
 :render_done
