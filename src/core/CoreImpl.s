@@ -227,6 +227,8 @@ EngineReset
                   ora       #$10                       ; R0W1
                   sta       STATE_REG_BLIT             ; Running the blitter, this is the mode to put us into
                   sta       STATE_REG_R0W1
+                  ora       #$20                       ; R1W1
+                  sta       STATE_REG_R1W1
                   rep       #$20
 
 ; Insert jumps to the interrupt enable code every 16 lines

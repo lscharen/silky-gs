@@ -54,6 +54,12 @@ DirtyBits              equ   38
 OldStartX              equ   40
 OldStartY              equ   42
 
+; Application variables
+SwizzlePtr             equ   44          ; Pointer to a table of 8 swizzle tables, one per palette
+ActivePtr              equ   48          ; Work pointer to point at the active swizzle table
+shadowBitmap           equ   50          ; Provide enough space for the full ppu range (240 lines) + 16 since the y coordinate can be off-screen
+_next                  equ   shadowBitmap+32
+
 TileStoreBankAndBank01 equ   106
 TileStoreBankAndTileDataBank equ 108
 TileStoreBankDoubled   equ   110
@@ -63,9 +69,6 @@ LastTick               equ   118
 ForceSpriteFlag        equ   120
 RenderFlags            equ   124         ; Flags passed to the Render() function
 
-; Application variables
-SwizzlePtr             equ   44          ; Pointer to a table of 8 swizzle tables, one per palette
-ActivePtr              equ   48          ; Work pointer to point at the active swizzle table
 
 ShowFPS                equ   126
 YOrigin                equ   128
@@ -89,7 +92,8 @@ ScreenBase             equ   158
 STATE_REG_R0W0         equ   160         ; R0W0
 STATE_REG_BLIT         equ   161         ; Value used for blit (could be R0W0 or R0W1)
 STK_SAVE               equ   162         ; Only used by the lite renderer
-STATE_REG_R0W1         equ   163         ; R0W1
+STATE_REG_R0W1         equ   164         ; R0W1
+STATE_REG_R1W1         equ   165
 
 blttmp                 equ   192         ; 32 bytes of local cache/scratch space for blitter
 

@@ -716,7 +716,30 @@ RenderFrame
 ;            pea   $FFFF             ; Render the fixed status bar and playfield
 ;            _GTERender
 
-            jsr   PPUFlushQueues     ; Apply all of the PPU changes to the PEA field
+; Apply all of the tile updates that were made during the previous frame(s).  The color attribute bytes are always set
+; in the PPUDATA hook, but then the appropriate tiles are queued up.  These tile, the tiles written to by PPUDATA in
+; the range ($2{n+0}00 - $2{n+3}C0) and any tiles occupied by sprites on the prior frame are drawn.  The queue is set up
+; as a Set, so if the same tile is affected by more than one action, it will only be drawn once.  Practically, most NES
+; games already try to minimize the number of tiles to update per frame, so this optimization is mostly beneficial
+; for erasing sprites, since charaters on screen are typically made of multiple, adjacent sprites and these 8x8 sprites
+; often overlap the same PPU Nametalbe tiles.
+
+            jsr   PPUFlushQueues
+
+; Now that the PEA field is in sync with the PPU Nametable data, we can draw the current frame's sprites on top of
+; the background.  In addition to drawing the unaligned sprite tiles into the aligned PEA field, this routine also 
+; adds the tiles into the queue so that the sprites will be erased on the next frame.
+
+;            jsr   PPUDrawSprites
+            jsr   drawOAMSprites
+
+; Finally, render the PEA field to the Super Hires screen.  This is done in one pass without any shadowing.  Because
+; the sprites are rendered into the PEA field, we can selectively render any subset of the screen, or even drop some of
+; the lines to increase the rendering speed.  The performance of the runtime is limited by this step and it is important
+; to keep the high-level rendering code generalized so that optimizations, like falling back to a dirty-rectangle mode
+; when the NES PPUSCROLL does not change, will be important to support good performance in some games -- especially
+; early games that do not use a scrolling playfield.
+
             jsr   RenderScreen
 
 :render_done
@@ -742,7 +765,6 @@ RenderScreen
 
 ; Do the basic setup
 
-; HorizontalScroll = $73f
             sep   #$20
             lda   ppuctrl                 ; Bit 0 is the high bit of the X scroll position
             lsr                           ; put in the carry bit
@@ -776,15 +798,13 @@ RenderScreen
             jsr   _ApplyBG0XPosAltLite
             sta   nesBottomOffset
 
-; Copy the buffer to the graphics screen
+; Copy the sprites and buffer to the graphics screen
 
-            ldx   #0
-            ldy   #200
-            jsr   _BltRangeLite
+            jsr   drawScreen
 
 ; Restore the buffer
 
-            lda   #16                      ; virt_line
+            lda   #16                     ; virt_line
             ldx   #16                     ; lines_left
             ldy   nesTopOffset            ; offset to patch
             jsr   _RestoreBG0OpcodesAltLite
@@ -2257,6 +2277,7 @@ WaterPalette dw     $22, $00, $15, $12, $25, $3A, $1A, $0F, $30, $12, $27, $10, 
             put   core/Graphics.s
             put   core/Math.s
             put   core/blitter/BlitterLite.s
+            put   core/blitter/PEISlammer.s
             put   core/blitter/HorzLite.s
             put   core/blitter/VertLite.s
             put   core/tiles/CompileTile.s

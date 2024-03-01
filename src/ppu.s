@@ -610,11 +610,11 @@ PPUDMA_WRITE ENT
         plp
         rtl
 
-;y_offset_rows equ 2
-;y_height_rows equ 25
-;y_offset equ {y_offset_rows*8}
-;y_height equ {y_height_rows*8}
-;max_nes_y equ {y_height+y_offset-8}
+y_offset_rows equ 2
+y_height_rows equ 25
+y_offset equ {y_offset_rows*8}
+y_height equ {y_height_rows*8}
+max_nes_y equ {y_height+y_offset-8}
 
 x_offset equ 16
 

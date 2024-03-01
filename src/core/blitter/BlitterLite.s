@@ -6,6 +6,7 @@
 ; Y = last line  (exclusive), valid range >X up to 240
 
 ; This should only be called from _Render when it is determined to be safe
+                mx    %00
 _BltRangeLite
 :exit_ptr       equ   tmp0
 :jmp_low_save   equ   tmp2

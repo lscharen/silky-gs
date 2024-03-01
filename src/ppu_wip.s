@@ -5,11 +5,22 @@ const8  mac
         db    ]1,]1,]1,]1,]1,]1,]1,]1
         <<<
 
+wconst8 mac
+        dw    ]1,]1,]1,]1,]1,]1,]1,]1
+        <<<
+
 const32 mac
         const8 ]1
         const8 ]1+1
         const8 ]1+2
         const8 ]1+3
+        <<<
+
+wconst32 mac
+        wconst8 ]1
+        wconst8 ]1+1
+        wconst8 ]1+2
+        wconst8 ]1+3
         <<<
 
 rep8    mac
@@ -23,11 +34,73 @@ rep8    mac
         db     ]1
         <<<
 
-          mx    %00
+wrep8    mac
+        dw     ]1
+        dw     ]1
+        dw     ]1
+        dw     ]1
+        dw     ]1
+        dw     ]1
+        dw     ]1
+        dw     ]1
+        <<<
+
+        mx    %00
+
+; Draw the valid sprites -- we have to scan the 64 sprite bytes to figure out what's visible and what's not.
+; Typlically, NES games will set the y-coordinate offscreen for "unused" sprites
+PPUDrawSprites
+
+;]index  =    1                ; Always skip sprite 0 (make this configurable)
+;        lup  63
+;        lda  BASE+{4*]index}
+
+;        --^
+; Draw a tile from the PPU into the code field
+;
+; X = PPU address
 DrawPPUTile
+        phx                ; save
+        txa
+        and  #$2C00        ; Create a base pointer to the nametable
+        ora  #$0300        ; page with the attributes data
+        clc
+        adc  #PPU_MEM
+        sta  tmp1
+        stz  tmp3          ; This is the palette selection
+
+        txa
+        and  #$03FF                  ; mask the address within the nametable
+        tax
+        ldy  #0                      ; zero out top and bottom bytes of Y/A.
         tya
-        xba
-        and  #$FF00    ; tiles are page-aligned
+        sep  #$20
+        lda  PPU_ATTR_ADDR,x         ; load the nametable offset for the attribute memory (value of $C0 - $FF)
+        tay
+        lda  (tmp1),y                ; load the attribute byte
+        and  PPU_ATTR_MASK,x         ; mask out just the bits for this metatile
+        beq  :pal0                   ; if the value is zero, doesn't matter what the bits are
+        bit  #$03                    ; is the value in the lowest bits
+        beq  :highbits
+        asl
+        bra  :store
+
+:highbits
+        lsr
+        bit  #$06                    ; shift until the value is in bits 1 and 2
+        bne  :store
+        lsr
+        lsr
+        bit  #$06
+        bne  :store
+        lsr
+        lsr
+:store  sta  tmp3+1                  ; put the value in the high byte
+:pal0   rep  #$20
+        plx
+
+        lda  PPU_MEM-1,x   ; load the tile id into the high byte
+        and  #$FF00        ; because tiles are page-aligned
         tay
 
         txa
@@ -42,24 +115,107 @@ DrawPPUTile
         ora  #$0020              ; Second table
 
 :shared
-        pha
+        sta  tmp2
         txa
         and  #$03E0
         asl
         asl
         asl
-        ora  1,s
+        ora  tmp2
         tax
-        pla
 
-        phd
-        ldal DPSave
-        tcd
-        lda  #0
-        jsr  DrawCompiledTile
-        pld
+        lda  tmp3
+        jmp  DrawCompiledTile
 
+; Render and clear the queues
+PPUFlushQueues
+        ldy  #0
+:at_loop
+        lda  at_queue,y          ; load the address
+        and  #$2400              ; Are we on the first or second nametable
+        sta  tmp1
+
+        lda  at_queue,y
+        and  #$003F              ; Isolate the attribute offset
+        asl
+        tax
+        lda  :corner,x           ; Load the PPU address of the corder of the metatile for this attribute byte
+        ora  tmp1
+
+        ldx  nt_queue_front
+        cpx  #{NT_QUEUE_SIZE-16}*2    ; fatal errors for now
+        bcc  *+4
+        brk  $97
+
+        clc
+        sta  nt_queue,x
+        inc
+        sta  nt_queue+2,x
+        inc
+        sta  nt_queue+4,x
+        inc
+        sta  nt_queue+6,x
+        adc  #32-3
+        sta  nt_queue+8,x
+        inc
+        sta  nt_queue+10,x
+        inc
+        sta  nt_queue+12,x
+        inc
+        sta  nt_queue+14,x
+        adc  #32-3
+        sta  nt_queue+16,x
+        inc
+        sta  nt_queue+18,x
+        inc
+        sta  nt_queue+20,x
+        inc
+        sta  nt_queue+22,x
+        adc  #32-3
+        sta  nt_queue+24,x
+        inc
+        sta  nt_queue+26,x
+        inc
+        sta  nt_queue+28,x
+        inc
+        sta  nt_queue+30,x
+        txa
+        adc  #32
+        sta  nt_queue_front
+
+        iny
+        iny
+        cpy  at_queue_front
+        bcc  :at_loop
+
+        ldy  #0
+:nt_loop
+        ldx  nt_queue,y
+        phy
+        jsr  DrawPPUTile
+        ply
+        iny
+        iny
+        cpy  nt_queue_front
+        bcc  :nt_loop
+
+        stz  nt_queue_front
+        stz  at_queue_front
         rts
+
+:corner 
+]row    =    0
+        lup  8
+        dw   {128*{]row}}+0
+        dw   {128*{]row}}+4
+        dw   {128*{]row}}+8
+        dw   {128*{]row}}+12
+        dw   {128*{]row}}+16
+        dw   {128*{]row}}+20
+        dw   {128*{]row}}+24
+        dw   {128*{]row}}+28
+]row    =    ]row+1
+        --^
 
           mx    %11
           dw $a5a5 ; marker to find in memory
@@ -283,11 +439,24 @@ PPUDATA_READ ENT
 * ;ppu_write_log_len dw 0
 * ;ppu_write_log  ds 100        ; record the first 50 PPU write addresses in each frame
 
+NT_QUEUE_SIZE     equ 2048                 ; Enough space for _every_ tile over multiple frames
+nt_queue_front    dw  0
+nt_queue          ds  2*{NT_QUEUE_SIZE}    ; Each entry is a PPU address
 
-* ;nt_queue_front dw 0
-* ;nt_queue_end   dw 0
-* ;nt_queue       ds 2*{NT_QUEUE_SIZE}
+AT_QUEUE_SIZE     equ 192                  ; Enough space for _every_ attribute byte
+at_queue_front    dw  0
+at_queue          ds  3*{AT_QUEUE_SIZE}    ; Keep the old value, too, so we can compare
 
+; The ppu data can be written in any order -- in particular, the PPU Nametable Attribute bytes
+; can be written after the tile data in the nametable.  On hardware, changing the attribute byte
+; immediately updates the palette information for the tile metablock, but we need to redraw these
+; tiles ourselves.
+;
+; So, we have to defer the drawing of tiles until after the ROM NMI routine is complete and
+; we are ready to render a new frame.  To help with ordering, the attribute bytes are stored
+; in a separate queue from the regular tile bytes.
+ppu_write_log_index dw 0
+ppu_write_log ds  3*1024
 PPUDATA_WRITE ENT
         php
         phb
@@ -303,54 +472,70 @@ PPUDATA_WRITE ENT
         cmp  PPU_MEM,x
         beq  :nochange
 
-        ldy  PPU_MEM,x                ; Save in case we need to compare later
-        sta  PPU_MEM,x
+        sta  PPU_MEM,x                ; Update PPU memory (8-bit write)
 
-        rep  #$30
+        rep  #$31                     ; Clear the carry, too
         txa
-        clc
+;        sta  ppu_write_log,y
+;        iny
+;        iny
+;        cpy  #3*1024
+;        bcc  *+5
+;        ldy  #0000
+;        sty  ppu_write_log_index
+;        clc
+
+        lda  ppuaddr
         adc  ppuincr
         and  #$3FFF
-        sta  ppuaddr
+        sta  ppuaddr                  ; Advance to the new ppu address
 
-; Anything between $2000 and $3000, we need to add to the queue.  We can't reject updates here because we may not
-; actually update the GTE tile store for several game frames and the position of the tile within the tile store
-; may change if the screen is scrolling
+; Since we've updated some PPU memory, we need to determine what area of memory it is in and
+; take an appropriate action
 ;
-; There is one special case. We want the nt_queue to only be a queue of tiles to possibly redraw.  If the PPU
-; data that is updated is in the attribute table area, then we do some extra work to decide which of the 16
-; tiles *actually* need to be redrawn
-
-        cpx  #$3000
-        bcs  :nocache
-        cpx  #$2000                ; Change to $2080 to ignore score field updates
-        bcc  :nocache
+; 1. In the range $2{x}00 to $2{x+3}BF -- this is tile data, so it should be queued for an update
+; 2. In the range $2{x+3}C0 to $2{x+3}FF -- this is tile attribute data and should be put on a separate queue
+; 3. In the range $3F00-$3FFF -- this is the palette range and executes a callback function to take a game-specific action
 
         txa
-        and  #$03C0
+        and  #$03C0                   ; Is this in the tile attribute space?
         cmp  #$03C0
-        bcs  :attrtbl
+        bcc  :not_attr
 
-;        jsr  :enqueue              ; Add the address in the X register to the queue
-; Draw the tile right now
-
-        phx                        ; Save the address
-        ldy  PPU_MEM,x
-        jsr  DrawPPUTile
-        plx                        ; restore address
-
-:nocache
-        cpx  #$3F00
-        bcc  :done
-        brl  :extra
-
-:nochange
-        rep  #$30
         txa
-        clc
-        adc  ppuincr
-        and  #$3FFF
-        sta  ppuaddr
+        ldx  at_queue_front
+        cpx  #AT_QUEUE_SIZE*2
+        bcc  *+4
+        brk  $99                   ; Fatal error if the queue size is exceeded
+
+        sta  at_queue,x
+        inx
+        inx
+        stx  at_queue_front
+        bra  :done
+
+:not_attr
+        cpx  #$2000                ; If the value is out of range, we're done
+        bcc  :done
+
+        cpx  #$3000                ; If it's within the namespace tables, save it since
+        bcc  :cache                ; we already checked for attribute memory above
+
+        cpx   #$3F00               ; Last check, if it's in the palette memory we will do
+        bcc   :done                ; some extra work
+        brl   :extra
+
+:cache
+        txa                        ; This is a nametable value that's been changed, so
+        ldx  nt_queue_front        ; save it to be handled during the next refresh
+        cpx  #NT_QUEUE_SIZE*2
+        bcc  *+4
+        brk  $99                   ; Fatal error if the queue size is exceeded
+
+        sta  nt_queue,x
+        inx
+        inx
+        stx  nt_queue_front
 
 :done
         sep  #$30
@@ -361,116 +546,15 @@ PPUDATA_WRITE ENT
         plp
         rtl
 
+:nochange
+        rep  #$31
+        lda  ppuaddr
+        adc  ppuincr
+        and  #$3FFF
+        sta  ppuaddr
+        bra  :done
+
         mx   %00
-
-; Draw a tile directly into the code buffer as soon as it appears
-;
-; X = PPU_ADDR address.  The tile value is already stored
-:enqueue
-;         txa
-;         and  #$0400                ; This bit will add 32 to the column (in vertical mirroring mode)
-;         cpx  #$2400
-;         bcs  :nametable_2
-
-;        lda  nt_queue_end
-;        tay
-;        inc
-;        inc
-;        and  #NT_QUEUE_MOD
-;        cmp  nt_queue_front
-;        beq  :full
-
-;        sta  nt_queue_end
-;        txa
-;        sta  nt_queue,y
-
-:full
-;        lda  #1
-;        jsr  setborder
-        rts
-
-:attrtbl
-        txa                           ; Calculate the base address in the nametable from the attribute address
-        and  #$2C00
-        pha
-        txa
-        and  #$0007
-        asl
-        asl
-        ora  1,s
-        sta  1,s
-        txa
-        and  #$0038
-        asl
-        asl
-        asl
-        asl
-        ora  1,s
-        sta  1,s
-
-        tya
-        eor  PPU_MEM,x                ; Identify bits that have changed
-        and  #$00FF
-        bit  #$00C0
-        beq  :skip_bot_right
-
-        pha
-        lda  3,s
-        clc
-        adc  #64+2                    ; offset 2 rows an 2 columns
-        tax
-        jsr  :enqueue_blk
-        pla
-:skip_bot_right
-
-        bit  #$0030
-        beq  :skip_bot_left
-
-        pha
-        lda  3,s
-        clc
-        adc  #64                    ; offset 2 rows
-        tax
-        jsr  :enqueue_blk
-        pla
-:skip_bot_left
-
-        bit  #$000C
-        beq  :skip_top_right
-
-        pha
-        lda  3,s
-        tax
-        inx
-        inx
-        tax
-        jsr  :enqueue_blk
-        pla
-:skip_top_right
-
-        bit  #$0003
-        beq  :skip_top_left
-
-        lda  1,s
-        tax
-        jsr  :enqueue_blk
-:skip_top_left
-
-        pla                       ; pop the base address off
-        brl  :done
-
-; Pass in PPU address in X register
-:enqueue_blk
-        jsr  :enqueue
-        inx
-        jsr  :enqueue
-        txa
-        clc
-        adc  #32
-        tax
-        jsr  :enqueue
-        dex
-        jmp  :enqueue
 
 * setborder
 *         php
@@ -640,669 +724,425 @@ PPUDMA_WRITE ENT
 ;        plp
 ;        rtl
 
+y_offset_rows equ 2
+y_height_rows equ 25
+y_offset equ {y_offset_rows*8}
+y_height equ {y_height_rows*8}
+; max_nes_y equ {y_height+y_offset-8}
+max_nes_y equ 216
+min_nes_y equ 16
+
 * ; Scan the OAM memory and copy the values of the sprites that need to be drawn. There are two reasons to do this
 * ;
 * ; 1. Freeze the OAM memory at this instanct so that the NES ISR can keep running without changing values
 * ; 2. We have to scan this list twice -- once to build up the shadow list and once to actually render the sprites
-* OAM_COPY    ds 256
-* spriteCount ds 0
-*             db 0                 ; Pad in case we can to access using 16-bit instructions
+OAM_COPY    ds 256
+spriteCount dw 0
 
-*         mx   %00
-* scanOAMSprites
-*         sep  #$30
+         mx   %00
+scanOAMSprites
 
-*         ldx  #4                  ; Always skip sprite 0
-*         ldy  #0
+; zero out the shadow bitmap (16-bit writes)
+]n       equ   0
+         lup   15
+         stz   shadowBitmap+]n
+]n       =     ]n+2
+         --^
+         stz   spriteCount
+         ldx   #4                  ; Always skip sprite 0
 
-* :loop
-* ;        lda    PPU_OAM,x         ; Y-coordinate
-*         ldal   ROMBase+$0200,x
-*         cmp    #max_nes_y+1      ; Skip anything that is beyond this line
-*         bcs    :skip
-*         cmp    #y_offset
-*         bcc    :skip
+:loop
+         ldal   ROMBase+$0202,x    ; Copy the high word
+         sta    OAM_COPY+2,x
 
-* ;        lda    PPU_OAM+1,x       ; $FC is an empty tile, don't draw it
-*         ldal   ROMBase+$0201,x
-*         cmp    #$FC
-*         beq    :skip
+         ldal   ROMBase+$0200,x
+         sta    OAM_COPY,x
 
-* ;        lda    PPU_OAM+3,x       ; If X-coordinate is off the edge skip it, too.
-*         ldal   ROMBase+$0203,x
-*         cmp    #255-8
-*         bcs    :skip
+         eor    #$FC00             ; Is the tile == $FC?
+         cmp    #$0100
+         bcc    :skip
 
-*         rep    #$20
-* ;        lda    PPU_OAM,x
-*         ldal   ROMBase+$0200,x
-*         sta    OAM_COPY,y
-* ;        lda    PPU_OAM+2,x
-*         ldal   ROMBase+$0202,x
-*         sta    OAM_COPY+2,y
-*         sep    #$20
+         and    #$00FF            ; Isolate the Y-coordinate
+         cmp    #max_nes_y+1      ; Skip anything that is beyond this line
+         bcs    :skip
+         cmp    #y_offset
+         bcc    :skip
 
-* ;        jsr    debug_values
+         phx
 
-*         iny
-*         iny
-*         iny
-*         iny
+         asl
+         tay                      ; We are drawing this sprite, so mark it in the shadow list
+         ldx    y2idx,y           ; Get the index into the shadowBitmap array for this y coordinate (y -> blk_y)
+         lda    y2bits,y          ; Get the bit pattern for the first byte
+         ora    shadowBitmap,x
+         sta    shadowBitmap,x
 
-* :skip
-*         inx
-*         inx
-*         inx
-*         inx
-*         bne  :loop
+;         rep    #$20
+;         ldal   ROMBase+$0200,x
+;         sta    OAM_COPY,y
+;         ldal   ROMBase+$0202,x
+;         sta    OAM_COPY+2,y
+;         sep    #$20
 
-*         sty  spriteCount                     ; Count * 4
-*         rep  #$30
+         inc    spriteCount
+         plx
 
-*         rts
+:skip
+         inx
+         inx
+         inx
+         inx
+         cpx  #$0100
+         bcc  :loop
 
-* debug_values
-* ; Debug APU values
-*          phy
-*          phx
-
-*          rep    #$30
-
-*          ldx    #0
-*          ldy    #$FFFF
-*          lda    APU_STATUS
-*          and    #$00FF
-*          jsr    DrawWord
-
-*          ldx    #8*160
-*          ldy    #$EEEE
-*          lda    APU_PULSE1_REG1
-*          jsr    DrawWord
-
-*          ldx    #16*160
-*          ldy    #$EEEE
-*          lda    APU_PULSE1_REG3
-*          jsr    DrawWord
-
-*          ldx    #24*160
-*          ldy    #$DDDD
-*          lda    APU_PULSE2_REG1
-*          jsr    DrawWord
-
-*          ldx    #32*160
-*          ldy    #$DDDD
-*          lda    APU_PULSE2_REG3
-*          jsr    DrawWord
-
-*          ldx    #40*160
-*          ldy    #$BBBB
-*          lda    APU_TRIANGLE_REG1
-*          jsr    DrawWord
-
-*          ldx    #48*160
-*          ldy    #$BBBB
-*          lda    APU_TRIANGLE_REG3
-*          jsr    DrawWord
-
-* ; Fetch the ensoniq parameters
-
-*          sep    #$20
-*          ldal   irq_volume
-*          stal   $e1c000+sound_control     ; access registers
-         
-*          lda    #$80+pulse1_oscillator    ; oscillator address
-*          stal   $e1c000+sound_address
-*          ldal   $e1c000+sound_data
-*          ldal   $e1c000+sound_data
-*          xba
-
-*          lda    #$40+pulse1_oscillator    ; oscillator volume
-*          stal   $e1c000+sound_address
-*          ldal   $e1c000+sound_data
-*          ldal   $e1c000+sound_data
-
-*          rep    #$30
-*          ldx    #{8*160}+{160-16}
-*          ldy    #$EEEE
-*          jsr    DrawWord
-
-*          sep    #$20
-*          lda    #$20+pulse1_oscillator    ; oscillator freq high
-*          stal   $e1c000+sound_address
-*          ldal   $e1c000+sound_data
-*          ldal   $e1c000+sound_data
-*          xba
-
-*          lda    #$00+pulse1_oscillator    ; oscillator freq low
-*          stal   $e1c000+sound_address
-*          ldal   $e1c000+sound_data
-*          ldal   $e1c000+sound_data
-
-*          rep    #$30
-*          ldx    #{16*160}+{160-16}
-*          ldy    #$EEEE
-*          jsr    DrawWord
-
-
-*          lda    #$80+pulse2_oscillator    ; oscillator address
-*          stal   $e1c000+sound_address
-*          ldal   $e1c000+sound_data
-*          ldal   $e1c000+sound_data
-*          xba
-
-*          lda    #$40+pulse2_oscillator    ; oscillator volume
-*          stal   $e1c000+sound_address
-*          ldal   $e1c000+sound_data
-*          ldal   $e1c000+sound_data
-
-*          rep    #$30
-*          ldx    #{24*160}+{160-16}
-*          ldy    #$DDDD
-*          jsr    DrawWord
-
-*          sep    #$20
-*          lda    #$20+pulse2_oscillator    ; oscillator freq high
-*          stal   $e1c000+sound_address
-*          ldal   $e1c000+sound_data
-*          ldal   $e1c000+sound_data
-*          xba
-
-*          lda    #$00+pulse2_oscillator    ; oscillator freq low
-*          stal   $e1c000+sound_address
-*          ldal   $e1c000+sound_data
-*          ldal   $e1c000+sound_data
-
-*          rep    #$30
-*          ldx    #{32*160}+{160-16}
-*          ldy    #$DDDD
-*          jsr    DrawWord
-
-*          sep    #$30
-*          plx
-*          ply
-*          rts
+         rts
 
 * ; Screen is 200 lines tall. It's worth it be exact when building the list because one extra
 * ; draw + shadow sequence takes at least 1,000 cycles.
-* shadowBitmap    ds 32              ; Provide enough space for the full ppu range (240 lines) + 16 since the y coordinate can be off-screen
+* ;shadowBitmap    ds 32              ; Provide enough space for the full ppu range (240 lines) + 16 since the y coordinate can be off-screen
 
 * ; A representation of the list as [top, bot) pairs
-* shadowListCount dw 0            ; Pad for 16-bit comparisons
-* shadowListTop   ds 64
-* shadowListBot   ds 64
+shadowListCount dw 0            ; Pad for 16-bit comparisons
+shadowListTop   ds 64
+shadowListBot   ds 64
 
-*         mx  %00
-* buildShadowBitmap
+y2idx   wconst32 $00
+        wconst32 $04
+        wconst32 $08
+        wconst32 $0C                ; 256 bytes
+        wconst32 $10
+        wconst32 $14
+        wconst32 $18
+        wconst32 $1C
 
-* ; zero out the bitmap (16-bit writes)
-* ]n      equ   0
-*         lup   15
-*         stz   shadowBitmap+]n
-* ]n      =     ]n+2
-*         --^
+; Repeating pattern of 8 consecutive 1 bits
+;y2low   rep8 $FF,$7F,$3F,$1F,$0F,$07,$03,$01
+;        rep8 $FF,$7F,$3F,$1F,$0F,$07,$03,$01
+;        rep8 $FF,$7F,$3F,$1F,$0F,$07,$03,$01
+;        rep8 $FF,$7F,$3F,$1F,$0F,$07,$03,$01
 
-* ; Run through the list of visible sprites and ORA in the bits that represent them
-*         sep   #$30
+;y2high  rep8 $00,$80,$C0,$E0,$F0,$F8,$FC,$FE
+;        rep8 $00,$80,$C0,$E0,$F0,$F8,$FC,$FE
+;        rep8 $00,$80,$C0,$E0,$F0,$F8,$FC,$FE
+;        rep8 $00,$80,$C0,$E0,$F0,$F8,$FC,$FE
 
-*         ldx   #0
-*         cpx   spriteCount
-*         beq   :exit
+y2bits  wrep8 $00FF,$807F,$C03F,$E01F,$F00F,$F807,$FC03,$FE01
+        wrep8 $00FF,$807F,$C03F,$E01F,$F00F,$F807,$FC03,$FE01
+        wrep8 $00FF,$807F,$C03F,$E01F,$F00F,$F807,$FC03,$FE01
+        wrep8 $00FF,$807F,$C03F,$E01F,$F00F,$F807,$FC03,$FE01
 
-* :loop
-*         phx
+; 25 entries to multiple steps in the shadow bitmap to scanlines
+mul8    db   $00,$08,$10,$18,$20,$28,$30,$38
+        db   $40,$48,$50,$58,$60,$68,$70,$78
+        db   $80,$88,$90,$98,$A0,$A8,$B0,$B8
+        db   $C0,$C8,$D0,$D8,$E0,$E8,$F0,$F8
 
-* ;        ldy   PPU_OAM,x
-*         ldy   OAM_COPY,x
-* ;        cpy   #max_nes_y                  ; Don't increment something right on the edge (allows )
-* ;        iny                               ; This is the y-coordinate of the top of the sprite
+; Given a bit pattern, create a LUT that count to the first set bit (MSB -> LSB), e.g. $0F = 4, $3F = 2
+offset
+        db   8,7,6,6,5,5,5,5,4,4,4,4,4,4,4,4,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3
+        db   2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
+        db   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+        db   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+        db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+invOffset
+        db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        db   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+        db   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+        db   2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
+        db   3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,6,6,7,8
 
-*         ldx   y2idx,y                     ; Get the index into the shadowBitmap array for this y coordinate (y -> blk_y)
-*         lda   y2low,y                     ; Get the bit pattern for the first byte
-*         ora   shadowBitmap,x
-*         sta   shadowBitmap,x
-*         lda   y2high,y                    ; Get the bit pattern for the second byte
-*         ora   shadowBitmap+1,x
-*         sta   shadowBitmap+1,x
+; Mask off all of the high 1 bits, keep all of the low bits after the first zero, e.g.
+; offsetMask($E3) = offsetMask(11100011) = $1F.  %11100011 & $1F = $03
+offsetMask
+        db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+        db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+        db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+        db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+        db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+        db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+        db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
+        db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF  ; 127 (everything here has a 0 in the high bit)
 
-*         plx
-*         inx
-*         inx
-*         inx
-*         inx
-*         cpx   spriteCount
-*         bcc   :loop
+        db   $7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F  ; $80 - $8F
+        db   $7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F  ; $90 - $9F
+        db   $7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F  ; $A0 - $AF
+        db   $7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F  ; $B0 - $BF
 
-* :exit
-*         rep   #$30
-*         rts
+        db   $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F  ; $C0 - $CF
+        db   $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F  ; $D0 - $DF
 
-* ; Set the SCB values equal to the bitmap to visually debug
-*         ldx   #0
-*         ldy   #0
-* :vloop
-*         lda   #8
-*         sta   Tmp6
-*         lda   shadowBitmap+2,y
-* :iloop
-*         asl
-*         pha
-
-*         lda   #0
-*         bcc   :zero
-*         inc
-* :zero   stal  $E19D00,x
-*         pla
-
-*         inx
-*         dec   Tmp6
-*         bne   :iloop
-
-*         iny
-*         cpy   #25
-*         bcc   :vloop
-
-*         rep   #$30
-*         rts
-
-* y2idx   const32 $00
-*         const32 $04
-*         const32 $08
-*         const32 $0C                ; 128 bytes
-*         const32 $10
-*         const32 $14
-*         const32 $18
-*         const32 $1C
-
-* ; Repeating pattern of 8 consecutive 1 bits
-* y2low   rep8 $FF,$7F,$3F,$1F,$0F,$07,$03,$01
-*         rep8 $FF,$7F,$3F,$1F,$0F,$07,$03,$01
-*         rep8 $FF,$7F,$3F,$1F,$0F,$07,$03,$01
-*         rep8 $FF,$7F,$3F,$1F,$0F,$07,$03,$01
-
-* y2high  rep8 $00,$80,$C0,$E0,$F0,$F8,$FC,$FE
-*         rep8 $00,$80,$C0,$E0,$F0,$F8,$FC,$FE
-*         rep8 $00,$80,$C0,$E0,$F0,$F8,$FC,$FE
-*         rep8 $00,$80,$C0,$E0,$F0,$F8,$FC,$FE
-
-* ; 25 entries to multiple steps in the shadow bitmap to scanlines
-* mul8    db   $00,$08,$10,$18,$20,$28,$30,$38
-*         db   $40,$48,$50,$58,$60,$68,$70,$78
-*         db   $80,$88,$90,$98,$A0,$A8,$B0,$B8
-*         db   $C0,$C8,$D0,$D8,$E0,$E8,$F0,$F8
-
-* ; Given a bit pattern, create a LUT that count to the first set bit (MSB -> LSB), e.g. $0F = 4, $3F = 2
-* offset
-*         db   8,7,6,6,5,5,5,5,4,4,4,4,4,4,4,4,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3
-*         db   2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
-*         db   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
-*         db   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
-*         db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-*         db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-*         db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-*         db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-* invOffset
-*         db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-*         db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-*         db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-*         db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-*         db   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
-*         db   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
-*         db   2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
-*         db   3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,6,6,7,8
-
-* ; Mask off all of the high 1 bits, keep all of the low bits after the first zero, e.g.
-* ; offsetMask($E3) = offsetMask(11100011) = $1F.  %11100011 & $1F = $03
-* offsetMask
-*         db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
-*         db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
-*         db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
-*         db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
-*         db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
-*         db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
-*         db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
-*         db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF  ; 127 (everything here has a 0 in the high bit)
-
-*         db   $7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F  ; $80 - $8F
-*         db   $7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F  ; $90 - $9F
-*         db   $7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F  ; $A0 - $AF
-*         db   $7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F  ; $B0 - $BF
-
-*         db   $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F  ; $C0 - $CF
-*         db   $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F  ; $D0 - $DF
-
-*         db   $1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F  ; $E0 - $EF
-*         db   $0F,$0F,$0F,$0F,$0F,$0F,$0F,$0F,$07,$07,$07,$07,$03,$03,$01,$00  ; $F0 - $FF
+        db   $1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F  ; $E0 - $EF
+        db   $0F,$0F,$0F,$0F,$0F,$0F,$0F,$0F,$07,$07,$07,$07,$03,$03,$01,$00  ; $F0 - $FF
 
 
-* ; Scan the bitmap list and call BltRange on the ranges
-*         mx   %00
-* drawShadowList
-*         ldx  #0
-*         cpx  shadowListCount
-*         beq  :exit
+; Scan the bitmap list and call BltRange on the ranges
+        mx   %00
+drawShadowList
+        ldx  #0
+        cpx  shadowListCount
+        beq  :exit
 
-* :loop
-*         phx
+:loop
+        phx
 
-*         lda  shadowListBot,x
-*         and  #$00FF
-*         tay
-* ;        cpy  #201
-* ;        bcc  *+4
-* ;        brk  $cc
+        lda  shadowListBot,x
+        and  #$00FF
+        tay
 
-*         lda  shadowListTop,x
-*         and  #$00FF
-*         tax
-* ;        cpx  #200
-* ;        bcc  *+4
-* ;        brk  $dd
+        lda  shadowListTop,x
+        and  #$00FF
+        tax
 
-*         lda  #0                 ; Invoke the BltRange function
-*         jsl  LngJmp
+        jsr  _BltRangeLite
 
-*         plx
-*         inx
-*         cpx  shadowListCount
-*         bcc  :loop
-* :exit
-*         rts
+        plx
+        inx
+        cpx  shadowListCount
+        bcc  :loop
+:exit
+        rts
 
 * ; Altername between BltRange and PEISlam to expose the screen
-* exposeShadowList
-* :last   equ  Tmp0
-* :top    equ  Tmp1
-* :bottom equ  Tmp2
+exposeShadowList
+:last   equ  tmp3
+:top    equ  tmp4
+:bottom equ  tmp5
 
-*         ldx  #0
-*         stx  :last
-*         cpx  shadowListCount
-*         beq  :exit
-* :loop
-*         phx
+        ldx  #0
+        stx  :last
+        cpx  shadowListCount
+        beq  :exit
+:loop
+        phx
 
-*         lda  shadowListTop,x
-*         and  #$00FF
-*         sta  :top
+        lda  shadowListTop,x
+        and  #$00FF
+        sta  :top
 
-*         cmp  #200
-*         bcc  *+4
-*         brk  $44
+        cmp  #200
+        bcc  *+4
+        brk  $44
 
-*         lda  shadowListBot,x
-*         and  #$00FF
-*         sta  :bottom
+        lda  shadowListBot,x
+        and  #$00FF
+        sta  :bottom
 
-*         cmp  #201
-*         bcc  *+4
-*         brk   $66
+        cmp  #201
+        bcc  *+4
+        brk   $66
 
-*         cmp  :top
-*         bcs  *+4
-*         brk  $55
+        cmp  :top
+        bcs  *+4
+        brk  $55
 
-*         ldx  :last
-*         ldy  :top
-*         lda  #0
-*         jsl  LngJmp             ; Draw the background up to this range
+        ldx  :last
+        ldy  :top
+        jsr  _BltRangeLite      ; Draw the background up to this range
 
-*         ldx  :top
-*         ldy  :bottom
-*         sty  :last              ; This is where we ended
-*         lda  #1
-*         jsl  LngJmp             ; Expose the already-drawn sprites
+        ldx  :top
+        ldy  :bottom
+        sty  :last              ; This is where we ended
+        jsr  _PEISlam           ; Expose the already-drawn sprites
 
-*         plx
-*         inx
-*         cpx  shadowListCount
-*         bcc  :loop
+        plx
+        inx
+        cpx  shadowListCount
+        bcc  :loop
 
-* :exit
-*         ldx  :last              ; Expose the final part
-*         ldy  #y_height
-*         lda  #0
-*         jsl  LngJmp
-*         rts
+:exit
+        ldx  :last              ; Expose the final part
+        ldy  #y_height
+        jmp  _BltRangeLite
 
 * ; This routine needs to adjust the y-coordinates based of the offset of the GTE playfield within
 * ; the PPU RAM
-* shadowBitmapToList
-* :top      equ  Tmp0
-* :bottom   equ  Tmp2
-* :bitfield equ  Tmp4
+shadowBitmapToList
+:top      equ  tmp0
+:bottom   equ  tmp2
+:bitfield equ  tmp4
 
-*         sep  #$30
+        sep  #$30
 
-*         ldx  #y_offset_rows               ; Start at the third row (y_offset = 16) walk the bitmap for 25 bytes (200 lines of height)
-*         lda  #0
-*         sta  shadowListCount  ; zero out the shadow list count
+        ldx  #y_offset_rows               ; Start at the third row (y_offset = 16) walk the bitmap for 25 bytes (200 lines of height)
+        lda  #0
+        sta  shadowListCount  ; zero out the shadow list count
 
-* ; This loop is called when we are not tracking a sprite range
-* :zero_loop
-*         ldy  shadowBitmap,x
-*         beq  :zero_next
+; This loop is called when we are not tracking a sprite range
+:zero_loop
+        ldy  shadowBitmap,x
+        beq  :zero_next
 
-*         lda  {mul8-y_offset_rows},x           ; This is the scanline we're on (offset by the starting byte)
-*         clc
-*         adc  offset,y                         ; This is the first line defined by the bit pattern
-*         sta  :top
-*         bra  :one_next
+        lda  {mul8-y_offset_rows},x           ; This is the scanline we're on (offset by the starting byte)
+        clc
+        adc  offset,y                         ; This is the first line defined by the bit pattern
+        sta  :top
+        bra  :one_next
 
-* :zero_next
-*         inx
-*         cpx  #y_height_rows+y_offset_rows ; +1              ; End at byte 27
-*         bcc  :zero_loop
-*         bra  :exit           ; ended while not tracking a sprite, so exit the function
+:zero_next
+        inx
+        cpx  #y_height_rows+y_offset_rows ; +1              ; End at byte 27
+        bcc  :zero_loop
+        bra  :exit           ; ended while not tracking a sprite, so exit the function
 
-* :one_loop
-*         lda  shadowBitmap,x  ; if the next byte is all sprite, just continue
-*         cmp  #$FF
-*         beq  :one_next
+:one_loop
+        lda  shadowBitmap,x  ; if the next byte is all sprite, just continue
+        cmp  #$FF
+        beq  :one_next
 
-* ; The byte has to look like 1...10...0*.  The first step is to mask off the high bits and store the result
+* ; The byte has to look like 1..10..0  The first step is to mask off the high bits and store the result
 * ; back into the shadowBitmap
 
-*         tay
-*         and  offsetMask,y
-*         sta  shadowBitmap,x
+        tay
+        and  offsetMask,y
+        sta  shadowBitmap,x
 
-*         lda  {mul8-y_offset_rows},x
-*         clc
-*         adc  invOffset,y
+        lda  {mul8-y_offset_rows},x
+        clc
+        adc  invOffset,y
 
-*         ldy  shadowListCount
-*         sta  shadowListBot,y
-*         lda  :top
-*         sta  shadowListTop,y
-*         iny
-*         sty  shadowListCount
+        ldy  shadowListCount
+        sta  shadowListBot,y
+        lda  :top
+        sta  shadowListTop,y
+        iny
+        sty  shadowListCount
 
-* ; Loop back to check if there is more sprite data on this byte
+; Loop back to check if there is more sprite data on this byte
 
-*         bra  :zero_loop
-
-
-* :one_next
-*         inx
-*         cpx  #y_height_rows+y_offset_rows+1
-*         bcc  :one_loop
-
-* ; If we end while tracking a sprite, add to the list as the last item
-
-*         ldx  shadowListCount
-*         lda  :top
-*         sta  shadowListTop,x
-*         lda  #y_height
-*         sta  shadowListBot,x
-*         inx
-*         stx  shadowListCount
-
-* :exit
-*         rep  #$30
-*         lda  shadowListCount
-*         cmp  #64
-*         bcc  *+4
-*         brk  $13
+        bra  :zero_loop
 
 
-*         rts
+:one_next
+        inx
+        cpx  #y_height_rows+y_offset_rows+1
+        bcc  :one_loop
 
-* ; Helper to bounce into the function in the FTblPtr. See IIgs TN #90
-* LngJmp
-*         sty  FTblTmp
-*         asl
-*         asl
-*         tay
-*         iny
-*         lda  [FTblPtr],y
-*         pha
-*         dey
-*         lda  [FTblPtr],y
-*         dec
-*         phb
-*         sta  1,s
-*         ldy  FTblTmp          ; Restore the y register
-*         rtl
+; If we end while tracking a sprite, add to the list as the last item
 
-* ; Callback entrypoint from the GTE renderer
-* drawOAMSprites
-*         phb
-*         phd
+        ldx  shadowListCount
+        lda  :top
+        sta  shadowListTop,x
+        lda  #y_height
+        sta  shadowListBot,x
+        inx
+        stx  shadowListCount
 
-*         phk
-*         plb
-
-*         pha                ; Save the phase indicator
-*         tdc                ; Keep a copy of the second page of GTE direct page space
-*         clc
-*         adc   #$0100
-*         sta   GTE_DP2+1
-
-*         lda   DPSave
-*         tcd
-
-* ; Save the pointer to the function table
-
-*         sty   FTblPtr
-*         stx   FTblPtr+2
-
-*         pla
-
-* ; Check what phase we're in
-* ;
-* ; Phase 1: A = 0
-* ; Phase 2: A = 1
-
-*         cmp   #0
-*         bne   :phase2
-
-* ; This is phase 1.  We will build the sprite list and draw the background in the areas covered by
-* ; sprites.  This phase draws the sprites, too
+:exit
+        rep  #$30
+        lda  shadowListCount
+        cmp  #64
+        bcc  *+4
+        brk  $13
 
 
-* ; We need to "freeze" the OAM values, otherwise they can change between when we build the rendering pipeline
+        rts
 
-*         sei
-*         jsr   scanOAMSprites              ; Filter out any sprites that don't need to be drawn
-*         cli
+; Setup all of the sprites from the NES OAM memory.  If possible, we read the OAM information directly
+; from a game-specific area of NES RAM, rather than supporting the OAMDMA operation, to avoid extra
+; copying.
 
-*         jsr   buildShadowBitmap           ; Run though and quickly create a bitmap of lines with sprites
-*         jsr   shadowBitmapToList          ; Scan the bitmap and create (top, bottom) pairs of ranges
+drawOAMSprites
 
-*         jsr   drawShadowList              ; Draw the background lines that have sprite on them
-*         jsr   drawSprites                 ; Draw the sprites on top of the lines they occupy
+; Step 1: Scan the OAM sprite information.  Since we're reading NES RAM, we disable interrupts so that
+;         a VBL cannot fire while we sync the data.
 
-*         bra   :exit
+         sei
+         jsr   scanOAMSprites              ; Filter out any sprites that don't need to be drawn and mark occupied lines
+         cli
 
-* ; In Phase 2 we scan the shadow list and alternately blit the background in empty areas and
-* ; PEI slam the sprite regions
-* :phase2
-*         jsr   exposeShadowList            ; Show everything on the SHR screen
+; Step 2: Convert the bitmap to a list of (top, bottom) pairs in order to update the screen
 
-* ; Return form the callback
-* :exit
-*         pld
-*         plb
-*         rtl
+         jmp   shadowBitmapToList
 
-* drawSprites
-* :tmp    equ   Tmp0
+; Render the prepared frame date
+drawScreen
 
-*         sep   #$30          ; 8-bit cpu
+; Step 1: Draw the PEA lines that have sprites on them
 
-* ; Run through the copy of the OAM memory
+        jsr   drawShadowList
 
-*         ldx   #0
-*         cpx   spriteCount
-*         bne   oam_loop
-*         rep   #$30
-*         rts
+; Step 2: Draw the sprites
 
-*         mx %11
-* oam_loop
-*         phx                  ; Save x
+        jsr   drawSprites
 
-*         lda   OAM_COPY,x     ; Y-coordinate
-* ;        inc                  ; Compensate for PPU delayed scanline
+; Step 3: Reveal the sprites and background using alternative render and PEI slams
 
-*         rep   #$30
-*         and   #$00FF
-*         mul160 Tmp0
-*         clc
-*         adc  #$2000-{y_offset*160}+x_offset
-*         sta  Tmp0
+        jmp   exposeShadowList
 
-*         lda  OAM_COPY+3,x
-*         lsr
-*         and  #$007F
-*         clc
-*         adc  Tmp0
-*         tay
+drawSprites
+:tmp    equ   tmp0
 
-*         lda  OAM_COPY+2,x
-*         pha
-*         bit  #$0040                   ; horizontal flip
-*         bne  :hflip
+; Run through the copy of the OAM memory
 
-*         lda  OAM_COPY,x               ; Load the tile index into the high byte (x256)
-*         and  #$FF00
-*         lsr                           ; multiple by 128
-*         tax
-*         bra  :noflip
+        ldx   #0
+        cpx   spriteCount
+        bne   oam_loop
+        rts
 
-* :hflip
-*         lda  OAM_COPY,x               ; Load the tile index into the high byte (x256)
-*         and  #$FF00
-*         lsr                           ; multiple by 128
-*         adc  #64                      ; horizontal flip
-*         tax
+oam_loop
+        phx                  ; Save x
 
-* :noflip
-*         pla
-*         asl
-*         and   #$0146                 ; Set the vflip bit, priority, and palette select bits
+        lda   OAM_COPY,x     ; Y-coordinate
+;        inc                  ; Compensate for PPU delayed scanline
 
-*         phd
-* GTE_DP2 pea   $0000
-*         pld
-*         sec                          ; Select the sprite palettes
-*         jsr   drawTileToScreen
-*         pld
+        and   #$00FF
+        mul160 tmp0
+        clc
+        adc  #$2000-{y_offset*160}+x_offset
+        sta  tmp0
 
-* ;drawTilePatch
-* ;        jsl   $000000                ; Draw the tile on the graphics screen
+        lda  OAM_COPY+3,x
+        lsr
+        and  #$007F
+        clc
+        adc  tmp0
+        tay
 
-*         sep   #$30
-*         plx                          ; Restore the counter
-*         inx
-*         inx
-*         inx
-*         inx
-*         cpx   spriteCount
-*         bcc   oam_loop
+        lda  OAM_COPY+2,x
+        pha
+        bit  #$0040                   ; horizontal flip
+        bne  :hflip
 
-*         rep   #$30
-*         rts
+        lda  OAM_COPY,x               ; Load the tile index into the high byte (x256)
+        and  #$FF00
+        lsr                           ; multiple by 128
+        tax
+        bra  :noflip
+
+:hflip
+        lda  OAM_COPY,x               ; Load the tile index into the high byte (x256)
+        and  #$FF00
+        lsr                           ; multiple by 128
+        adc  #64                      ; horizontal flip
+        tax
+
+:noflip
+        pla
+        asl
+        and   #$0146                 ; Set the vflip bit, priority, and palette select bits
+
+;        phd
+;GTE_DP2 pea   $0000
+;        pld
+;        sec                          ; Select the sprite palettes
+        jsr   drawTileToScreen
+;        pld
+
+        plx                          ; Restore the counter
+        inx
+        inx
+        inx
+        inx
+        cpx   spriteCount
+        bcc   oam_loop
+
+        rts
 
 * ; Mapping table to go from the NES y-coordinate to the proper address on-screen.  The map will always put a sprite into
 * ; a legal range, but does not clip -- that must be done prior to looking up the on-screen address
@@ -1322,18 +1162,18 @@ PPUDMA_WRITE ENT
 *         bcc  :loop
 *         rts
 
-* mul160  mac
-*         asl
-*         asl
-*         asl
-*         asl
-*         asl
-*         sta  ]1
-*         asl
-*         asl
-*         clc
-*         adc  ]1
-*         <<<
+mul160  mac
+        asl
+        asl
+        asl
+        asl
+        asl
+        sta  ]1
+        asl
+        asl
+        clc
+        adc  ]1
+        <<<
 
 * ; Custom tile blitter
 * ;
@@ -1385,7 +1225,16 @@ PPUDMA_WRITE ENT
 *         jsr   drawTileToScreen       ; Just a shim since this function is called via JSL
 *         rtl
 
-* drawTileToScreen
+drawTileToScreen
+          tyx
+          lda   #0
+]line     equ   0
+          lup   8
+          stal  $E10000+{]line*SHR_LINE_WIDTH}+0,x
+          stal  $E10000+{]line*SHR_LINE_WIDTH}+2,x
+]line     equ   ]line+1
+          --^
+          rts
 
 *         pha
 *         and   #$0006
