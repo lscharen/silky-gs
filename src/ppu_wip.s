@@ -748,17 +748,15 @@ scanOAMSprites
          stz   shadowBitmap+]n
 ]n       =     ]n+2
          --^
-         stz   spriteCount
+
          ldx   #4                  ; Always skip sprite 0
+         ldy   #0                  ; This is the destination index
 
 :loop
-         ldal   ROMBase+$0202,x    ; Copy the high word
-         sta    OAM_COPY+2,x
+         ldal   ROMBase+$0200,x    ; Copy the low word
+         sta    OAM_COPY,y
 
-         ldal   ROMBase+$0200,x
-         sta    OAM_COPY,x
-
-         eor    #$FC00             ; Is the tile == $FC?
+         eor    #$FC00             ; Is the tile == $FC? This is a blank tile in this ROM
          cmp    #$0100
          bcc    :skip
 
@@ -769,6 +767,7 @@ scanOAMSprites
          bcc    :skip
 
          phx
+         phy
 
          asl
          tay                      ; We are drawing this sprite, so mark it in the shadow list
@@ -777,15 +776,16 @@ scanOAMSprites
          ora    shadowBitmap,x
          sta    shadowBitmap,x
 
-;         rep    #$20
-;         ldal   ROMBase+$0200,x
-;         sta    OAM_COPY,y
-;         ldal   ROMBase+$0202,x
-;         sta    OAM_COPY+2,y
-;         sep    #$20
-
-         inc    spriteCount
+         ply
          plx
+
+         ldal   ROMBase+$0202,x    ; Copy the high word
+         sta    OAM_COPY+2,y
+
+         iny
+         iny
+         iny
+         iny
 
 :skip
          inx
@@ -795,6 +795,7 @@ scanOAMSprites
          cpx  #$0100
          bcc  :loop
 
+         sty   spriteCount           ; spriteCount * 4 for easy coparison later
          rts
 
 * ; Screen is 200 lines tall. It's worth it be exact when building the list because one extra
@@ -1227,11 +1228,11 @@ mul160  mac
 
 drawTileToScreen
           tyx
-          lda   #0
+          lda   #$ffff
 ]line     equ   0
           lup   8
-          stal  $E10000+{]line*SHR_LINE_WIDTH}+0,x
-          stal  $E10000+{]line*SHR_LINE_WIDTH}+2,x
+          stal  $010000+{]line*SHR_LINE_WIDTH}+0,x
+          stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
 ]line     equ   ]line+1
           --^
           rts
