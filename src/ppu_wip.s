@@ -761,7 +761,7 @@ scanOAMSprites
          bcc    :skip
 
          and    #$00FF            ; Isolate the Y-coordinate
-         cmp    #max_nes_y+1      ; Skip anything that is beyond this line
+         cmp    #{max_nes_y-8}+1      ; Skip anything that is beyond this line
          bcs    :skip
          cmp    #y_offset
          bcc    :skip
@@ -795,7 +795,7 @@ scanOAMSprites
          cpx  #$0100
          bcc  :loop
 
-         sty   spriteCount           ; spriteCount * 4 for easy coparison later
+         sty   spriteCount           ; spriteCount * 4 for easy comparison later
          rts
 
 * ; Screen is 200 lines tall. It's worth it be exact when building the list because one extra
@@ -1066,11 +1066,13 @@ drawScreen
 
 ; Step 1: Draw the PEA lines that have sprites on them
 
+        jsr   _ShadowOff
         jsr   drawShadowList
 
 ; Step 2: Draw the sprites
 
         jsr   drawSprites
+        jsr   _ShadowOn
 
 ; Step 3: Reveal the sprites and background using alternative render and PEI slams
 
@@ -1090,7 +1092,7 @@ oam_loop
         phx                  ; Save x
 
         lda   OAM_COPY,x     ; Y-coordinate
-;        inc                  ; Compensate for PPU delayed scanline
+;        inc                 ; Compensate for PPU delayed scanline
 
         and   #$00FF
         mul160 tmp0
