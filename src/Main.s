@@ -12,7 +12,7 @@
 
             mx    %00
 
-x_offset    equ   8                       ; number of bytes from the left edge
+x_offset    equ   16                      ; number of bytes from the left edge
 
             phk
             plb

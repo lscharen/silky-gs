@@ -11,7 +11,12 @@ _BltRangeLite
 :exit_ptr       equ   tmp0
 :jmp_low_save   equ   tmp2
 
-                phb
+;                phb
+
+                sty   tmp0           ; Range check
+                cpx   tmp0
+                bcc   *+3
+                rts
 
                 clc
                 dey
@@ -41,7 +46,7 @@ _BltRangeLite
 ; The trick we use is to patch the low byte to force the code to jump to a special return
 ; function (jml blt_return) in the *next* code field line.
 
-                ldy   #_EXIT_EVEN+1       ; this is a JMP instruction that points to the next line.
+                ldy   #_EXIT_EVEN+1       ; this is a JMP/JML instruction that points to the next line.
                 lda   [:exit_ptr],y       ; we have to save because not every line points to the same
                 sta   :jmp_low_save       ; position in the next code line
 
@@ -52,9 +57,9 @@ _BltRangeLite
                 php                       ; save the current processor flags
                 sep   #$20                ; run the lite blitter in 8-bit accumulator mode
 
-                lda   :exit_ptr+2         ; set the bank to the code field
-                pha
-                plb
+;                lda   :exit_ptr+2         ; set the bank to the code field
+;                pha
+;                plb
 
                 sei                       ; disable interrupts
                 lda   STATE_REG_BLIT
@@ -79,5 +84,5 @@ blt_return_lite ENT
                 lda   :jmp_low_save
                 sta   [:exit_ptr],y
 
-                plb
+;                plb
                 rts

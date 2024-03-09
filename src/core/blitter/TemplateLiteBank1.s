@@ -32,7 +32,7 @@ lite_base_2        EXT
 
 ; Return to caller -- this is the target address to patch in the JMP instruction on the last rendered line. We
 ; put it at the beginning so the rest of the bank can be replicated line templates.
-lite_full_return   jml   blt_return_lite            ; Full exit
+                   jml   blt_return_lite            ; Full exit (must be at address $0000)
 
 ; This is a table of logical lookup values used for blitting in order to handle wrap-around seamlessly. We
 ; don't need a full double-sized array, just enough for the maximum sprite width.

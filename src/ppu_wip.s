@@ -1074,7 +1074,7 @@ drawScreen
         jsr   drawSprites
         jsr   _ShadowOn
 
-; Step 3: Reveal the sprites and background using alternative render and PEI slams
+; Step 3: Reveal the sprites and background using alternating render and PEI slams
 
         jmp   exposeShadowList
 
