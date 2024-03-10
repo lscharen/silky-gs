@@ -2248,47 +2248,47 @@ TileConst
 ; Compiled Tile template
 ; Bank is set, X = tile corner, A = palette select in bits 9 and 10: 00000ppw wxxyyzz0
 ; Swizzle Ptr is aligned to a 2048-byte boundary
-DrawTile
-            sta   SwizzlePtr
+;DrawTile
+;            sta   SwizzlePtr
 ;            ldy   #DATA             ; %0000_000w_wxxy_yzz0
 
 ;            lda   #MASK
-            and:  $001,x
-            ora   [SwizzlePtr],y
-            sta:  $001,x
+;            and:  $001,x
+;            ora   [SwizzlePtr],y
+;            sta:  $001,x
 
 ;            lda   #MASK             ; Skip ldy for repeating data
-            and:  $004,x
-            ora   [SwizzlePtr],y
-            sta:  $004,x
+;            and:  $004,x
+;            ora   [SwizzlePtr],y
+;            sta:  $004,x
 
 ;            ldy   #DATA             ; No mask for solid words
-            lda   [SwizzlePtr],y
-            sta:  $201,x
-            sta:  $204,x            ; Repeat solid, unmasked values
-            sta:  $401,x
-            sta:  $404,x
-            rts
+;            lda   [SwizzlePtr],y
+;            sta:  $201,x
+;            sta:  $204,x            ; Repeat solid, unmasked values
+;            sta:  $401,x
+;            sta:  $404,x
+;            rts
 
 ; Compiles sprites for "normal" sprites -- have a fallback routine for sprites that
 ; cross the nametable boundary
-CompiledSpriteTemplate
-            sta   SwizzlePtr
+; CompiledSpriteTemplate
+;            sta   SwizzlePtr
 
 ;            ldy   #DATA             ; No mask for solid words
-            lda:  $201,x
-            pha                     ; stash the data
-            lda   [SwizzlePtr],y
-            sta:  $201,x
+;            lda:  $201,x
+;            pha                     ; stash the data
+;            lda   [SwizzlePtr],y
+;            sta:  $201,x
 
 ;            ldy   #DATA 
-            lda:  $204,x
-            pha
+;            lda:  $204,x
+;            pha
 ;            and   #MASK
-            ora   [SwizzlePtr],y
-            sta:  $001,x
+;            ora   [SwizzlePtr],y
+;            sta:  $001,x
 
-            pea   %1101_1100_0011_111           ; push bitfield of which words to restore (expect sprites to be dense)
+;            pea   %1101_1100_0011_111           ; push bitfield of which words to restore (expect sprites to be dense)
 
 * ; and  #MASK                ; 3
 * ; ora  [USER_FREE_SPACE],y  ; 7 lookup and merge in swizzled tile data = *(SwizzlePtr + palbits)

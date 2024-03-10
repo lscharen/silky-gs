@@ -143,7 +143,7 @@ PPUFlushQueues
         ora  tmp1
 
         ldx  nt_queue_front
-        cpx  #{NT_QUEUE_SIZE-16}*2    ; fatal errors for now (This gets hit going into a warp zone)
+        cpx  #{NT_QUEUE_SIZE-16}*2    ; fatal errors for now (This gets hit going into a warp zone, queue_front = $FEE)
         bcc  *+4
         brk  $97
 
@@ -1081,7 +1081,8 @@ drawScreen
 drawSprites
 :tmp    equ   tmp0
 
-; Run through the copy of the OAM memory
+; Run through the copy of the OAM memory and render each sprite to the graphics screen.  Typically,
+; shadowing is disabled during this routing.
 
         ldx   #0
         cpx   spriteCount
@@ -1089,10 +1090,12 @@ drawSprites
         rts
 
 oam_loop
-        phx                  ; Save x
+        phx                           ; Save x
 
-        lda   OAM_COPY,x     ; Y-coordinate
-;        inc                 ; Compensate for PPU delayed scanline
+; First, calculate the physical location on the SHR screen at which to draw the sprite
+
+        lda   OAM_COPY,x              ; Y-coordinate
+;        inc                          ; Compensate for PPU delayed scanline
 
         and   #$00FF
         mul160 tmp0
@@ -1100,43 +1103,44 @@ oam_loop
         adc  #$2000-{y_offset*160}+x_offset
         sta  tmp0
 
-        lda  OAM_COPY+3,x
-        and  #$00FE          ; Mask before the shift so that we know a 0 goes into the carry
+        lda  OAM_COPY+3,x             ; X-coordinate (In NES pixels, need to convert to IIgs bytes)
+        and  #$00FE                   ; Mask before the shift so that we know a 0 goes into the carry
         lsr
-        adc  tmp0
-        tay
+        adc  tmp0                     ; Add to the base address calculated fom the Y-coordinate
+        tay                           ; This is the SHR address at which to draw the sprite
+
+; Set the palette pointer for this sprite
+
+        lda  OAM_COPY+1,x             ; Put attribute byte in the high byte
+        and  #$0300
+        ora  #$0400                   ; Select the second set of palettes
+        asl
+        adc  SwizzlePtr               ; Carry is clear from the asl
+        sta  ActivePtr
+        lda  SwizzlePtr+2
+        sta  ActivePtr+2
+
+; Calculate the address of the tile data
+
+        lda  OAM_COPY,x
+        and  #$FF00
+        lsr
+        sta  tmp0                     ; This is loaded in the draw routines
+
+; Now, examine the other control bits.  We dispatch differently based on the herizontal flip, vertical
+; flip and priority bits. when calling the rendering function, Y = screen address, X = tile data address
 
         lda  OAM_COPY+2,x
-        pha
-        bit  #$0040                   ; horizontal flip
-        bne  :hflip
-
-        lda  OAM_COPY,x               ; Load the tile index into the high byte (x256)
-        and  #$FF00
-        lsr                           ; multiple by 128
+        and  #$00E0
+        lsr
+        lsr
+        lsr
+        lsr
         tax
-        bra  :noflip
+        jmp  (drawProcs,x)
 
-:hflip
-        lda  OAM_COPY,x               ; Load the tile index into the high byte (x256)
-        and  #$FF00
-        lsr                           ; multiple by 128
-        adc  #64                      ; horizontal flip
-        tax
-
-:noflip
-        pla
-        asl
-        and   #$0146                 ; Set the vflip bit, priority, and palette select bits
-
-;        phd
-;GTE_DP2 pea   $0000
-;        pld
-;        sec                          ; Select the sprite palettes
-        jsr   drawTileToScreen
-;        pld
-
-        plx                          ; Restore the counter
+draw_rtn
+        plx                           ; Restore the counter
         inx
         inx
         inx
@@ -1145,6 +1149,10 @@ oam_loop
         bcc   oam_loop
 
         rts
+
+drawProcs
+        dw drawTileToScreen,drawTileToScreenP,drawTileToScreenH,drawTileToScreenPH
+        dw drawTileToScreenV,drawTileToScreenPV,drawTileToScreenHV,drawTileToScreenPHV
 
 * ; Mapping table to go from the NES y-coordinate to the proper address on-screen.  The map will always put a sprite into
 * ; a legal range, but does not clip -- that must be done prior to looking up the on-screen address
@@ -1177,63 +1185,20 @@ mul160  mac
         adc  ]1
         <<<
 
-* ; Custom tile blitter
-* ;
-* ; D = GTE blitter direct page space
-* ; X = offset to the tile record
-* ; 
-*         mx    %00
-
-* ; Temporary tile space on the direct page
-* tmp_tile_data      equ 80
-
-* DP2_TILEDATA_AND_BANK01_BANKS equ 172
-
-* ;USER_TILE_RECORD   equ  178
-* USER_TILE_ID       equ  178         ; copy of the tile id in the tile store
-* ;USER_TILE_CODE_PTR equ  180         ; pointer to the code bank in which to patch
-* USER_TILE_ADDR     equ  184         ; address in the tile data bank (set on entry)
-* USER_FREE_SPACE    equ  186         ; a few bytes of scratch space
-
-* USER_SCREEN_ADDR   equ  190
-* USER_TEMP_0        equ  192
-* USER_TEMP_1        equ  194
-
+; Define the opcodes directly so we can use then in a macro.  The brancket from long-indirect addressing, e.g. [],
+; causes the macro processor to get confused since variables can be written as "]x"
 LDA_IND_LONG_IDX equ $B7
-* ORA_IND_LONG_IDX equ $17
+ORA_IND_LONG_IDX equ $17
 
-* SHR_LINE_WIDTH equ 160
+drawTileToScreenH
 
-* ; Draw a tile to the graphics screen
-* ;
-* ; D = GTE Page 2
-* ; X = tile address
-* ; Y = screen address
-* ; A = tile control bits; h ($0100), v ($0040) and palette select ($0006)
-* jne     mac
-*         beq   *+5
-*         jmp   ]1
-*         <<<
-
-* jeq     mac
-*         bne   *+5
-*         jmp   ]1
-*         <<<
-
-* NESDirectTileBlitter
-*         asl
-*         and   #$0146                 ; Set the vflip bit, priority, and palette select bit
-*         cpx   #$8000
-*         jsr   drawTileToScreen       ; Just a shim since this function is called via JSL
-*         rtl
+          lda   tmp0
+          clc
+          adc   #64
+          sta   tmp0
 
 drawTileToScreen
-          bit    #$0040
-          beq    :no_prio
-          jmp    drawPriorityToScreen
 
-:no_prio
-          stx   tmp0        ; tiledata address
           sty   tmp1        ; screen address
 
           phb
@@ -1244,15 +1209,19 @@ drawTileToScreen
           lup   8
 
           ldx   tmp0
-          ldy:  {]line*4},x
+          ldy:  {]line*4},x                            ; Load the tile data lookup value
+          lda:  {]line*4}+32,x                         ; Load the mask value
           ldx   tmp1
-          db    LDA_IND_LONG_IDX,SwizzlePtr
+          andl  $010000+{]line*SHR_LINE_WIDTH},x       ; Mask against the screen
+          db    ORA_IND_LONG_IDX,ActivePtr             ; Merge in the remapped tile data
           stal  $010000+{]line*SHR_LINE_WIDTH},x
 
           ldx   tmp0
           ldy:  {]line*4}+2,x
+          lda:  {]line*4}+32+2,x
           ldx   tmp1
-          db    LDA_IND_LONG_IDX,SwizzlePtr
+          andl  $010000+{]line*SHR_LINE_WIDTH}+2,x
+          db    ORA_IND_LONG_IDX,ActivePtr
           stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
 
 ]line     equ   ]line+1
@@ -1260,145 +1229,80 @@ drawTileToScreen
 
           plb
           plb
-          rts
+          jmp   draw_rtn
 
-*         pha
-*         and   #$0006
-*         sta   USER_FREE_SPACE                   ; Isolate the palette selection bits
+drawTileToScreenHV
 
-*         clc
-*         adc   #8                                ; Roll the carry bit to use as background vs sprite palette selection
-* ;        rol
-* ;        asl
-* ;        asl
-* ;        asl                                     ; carry * 8
-*         adc   USER_FREE_SPACE
-*         xba
-*         clc
-*         adcl  SwizzlePtr
-*         sta   USER_FREE_SPACE
-*         lda   #^AT1_T0                           ; Bank is a constant
-*         sta   USER_FREE_SPACE+2                  ; Set the pointer to the right swizzle table
+          lda   tmp0
+          clc
+          adc   #64
+          sta   tmp0
 
-*         stx   USER_TILE_ADDR
-*         sty   USER_SCREEN_ADDR
+drawTileToScreenV
 
-*         phb
-*         pei   DP2_TILEDATA_AND_BANK01_BANKS
-*         plb
+          sty   tmp1        ; screen address
 
-*         pla                                      ; reload the saved accumulator
-*         bit    #$0040
-*         beq    :no_prio
-*         bit    #$0100
-*         jeq    :drawPriorityToScreen
-* ;        jmp    :drawPriorityToScreenV
-
-* :no_prio
-*         bit    #$0100
-*         jne    :drawTileToScreenV
-
-* ; If we compile the sprites, then each word can be implemented as:
-* ;
-* ; x = screen address
-* ;
-* ; ldy  #LOOKUP_VAL          ; 3 constant 6-bit tile lookup value from NES CHR rom
-* ; lda: 0,x                  ; 6
-* ; and  #MASK                ; 3
-* ; ora  [USER_FREE_SPACE],y  ; 7 lookup and merge in swizzled tile data = *(SwizzlePtr + palbits)
-* ; sta: 0,x                  ; 6 = 25 cycles / word; 13 bytes
-* ;
-* ; There are 8 stores per tile, so 8 * 13 = 104 < 128, so we can still fit 512 tiles.  If we're selective
-* ; about which tiles are compiled and which ones have H/V mirroring
-* ;
-* ; Current implementation below is 4+6+6+4+6+7+6 = 39 cycles
-* ;
-* ; Most tiles don't have 4 consecutive transparent pixels, but there will be some minor savings
-* ; by avoiding those operations.  For MASK = $FFFF, the simplified code is and solid words are
-* ; quite common, at least 25 - 30% of the words are solid.  So conservative estimate of
-* ; 25 * 0.75 + 16 * 0.25 = ~22 cycles/word on average.  Throw in the 100% savings from MASK=0
-* ; words and it's close to twice the speed of the current routine.
-* ;
-* ; ldy  #LOOKUP_VAL          ; 3 constant 6-bit tile lookup value from NES CHR rom
-* ; lda  [USER_FREE_SPACE],y  ; 7 lookup and merge in swizzled tile data = *(SwizzlePtr + palbits)
-* ; sta: 0,x                  ; 6 = 16 cycles / word
-
-* ;]line   equ   0
-* ;        lup   8
-* ;        ldx   USER_TILE_ADDR
-* ;        ldy:  {]line*4}+2,x                       ; Load the tile data lookup value
-* ;        ldx   USER_SCREEN_ADDR
-* ;        db    LDA_IND_LONG_IDX,USER_FREE_SPACE    ; Insert the actual tile data
-* ;        stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
-
-* ;        ldx   USER_TILE_ADDR
-* ;        ldy:  {]line*4},x                         ; Load the tile data lookup value
-* ;        ldx   USER_SCREEN_ADDR
-* ;        db    LDA_IND_LONG_IDX,USER_FREE_SPACE    ; Insert the actual tile data
-* ;        stal  $010000+{]line*SHR_LINE_WIDTH},x
-
-* ;]line   equ   ]line+1
-* ;        --^
-
-* ]line   equ   0
-*         lup   8
-*         ldx   USER_TILE_ADDR
-*         ldy:  {]line*4}+2,x                       ; Load the tile data lookup value
-*         lda:  {]line*4}+32+2,x                    ; Load the mask value
-*         ldx   USER_SCREEN_ADDR
-*         andl  $010000+{]line*SHR_LINE_WIDTH}+2,x  ; Mask against the screen
-*         db    ORA_IND_LONG_IDX,USER_FREE_SPACE    ; Insert the actual tile data
-*         stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
-
-*         ldx   USER_TILE_ADDR
-*         ldy:  {]line*4},x                         ; Load the tile data lookup value
-*         lda:  {]line*4}+32,x                      ; Load the mask value
-*         ldx   USER_SCREEN_ADDR
-*         andl  $010000+{]line*SHR_LINE_WIDTH},x    ; Mask against the screen
-*         db    ORA_IND_LONG_IDX,USER_FREE_SPACE    ; Insert the actual tile data
-*         stal  $010000+{]line*SHR_LINE_WIDTH},x
-
-* ]line   equ   ]line+1
-*         --^
-
-*         plb
-*         plb                        ; Restore initial data bank
-*         rts
-
-* :drawTileToScreenV
-* ]line   equ   0
-*         lup   8
-*         ldx   USER_TILE_ADDR
-*         ldy:  {]line*4}+2,x                       ; Load the tile data lookup value
-*         lda:  {]line*4}+32+2,x                    ; Load the mask value
-*         ldx   USER_SCREEN_ADDR
-*         andl  $010000+{{7-]line}*SHR_LINE_WIDTH}+2,x  ; Mask against the screen
-*         db    ORA_IND_LONG_IDX,USER_FREE_SPACE      ; Insert the actual tile data
-*         stal  $010000+{{7-]line}*SHR_LINE_WIDTH}+2,x
-
-*         ldx   USER_TILE_ADDR
-*         ldy:  {]line*4},x                       ; Load the tile data lookup value
-*         lda:  {]line*4}+32,x                    ; Load the mask value
-*         ldx   USER_SCREEN_ADDR
-*         andl  $010000+{{7-]line}*SHR_LINE_WIDTH},x  ; Mask against the screen
-*         db    ORA_IND_LONG_IDX,USER_FREE_SPACE    ; Insert the actual tile data
-*         stal  $010000+{{7-]line}*SHR_LINE_WIDTH},x
-
-* ]line   equ   ]line+1
-*         --^
-
-*         plb
-*         plb                        ; Restore initial data bank
-*         rts
-
-drawPriorityToScreen
-          tyx
+          phb
+          pea   #^tiledata
+          plb
 
 ]line     equ   0
           lup   8
-          lda   #$FFFF                                 ; data
-          eorl  $010000+{]line*SHR_LINE_WIDTH}+0,x     ; save a blended value
+
+          ldx   tmp0
+          ldy:  {{7-]line}*4},x
+          lda:  {{7-]line}*4}+32,x
+          ldx   tmp1
+          andl  $010000+{]line*SHR_LINE_WIDTH},x
+          db    ORA_IND_LONG_IDX,ActivePtr
+          stal  $010000+{]line*SHR_LINE_WIDTH},x
+
+          ldx   tmp0
+          ldy:  {{7-]line}*4}+2,x
+          lda:  {{7-]line}*4}+32+2,x
+          ldx   tmp1
+          andl  $010000+{]line*SHR_LINE_WIDTH}+2,x
+          db    ORA_IND_LONG_IDX,ActivePtr
+          stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+
+]line     equ   ]line+1
+          --^
+
+          plb
+          plb
+          jmp   draw_rtn
+
+drawTileToScreenPHV
+drawTileToScreenPH
+
+          lda   tmp0
+          clc
+          adc   #64
           sta   tmp0
+
+drawTileToScreenPV
+drawTileToScreenP
+
+          sty   tmp1        ; screen address
+
+          phb
+          pea   #^tiledata
+          plb
+
+]line     equ   0
+          lup   8
+
+          ldx   tmp0
+          lda:  {]line*4}+32,x                         ; load the mask and invert it
+          eor   #$FFFF
+          sta   tmp2
+
+          ldy:  {]line*4}+0,x                          ; load the lookup value
+          db    LDA_IND_LONG_IDX,ActivePtr             ; get the correct pixel data
+
+          ldx   tmp1                                   ; Get the screen address
+          eorl  $010000+{]line*SHR_LINE_WIDTH}+0,x     ; save a blended value of the sprite and screen data
+          sta   tmp3
 
 ; Alternative to use a full branching network to shave a few cycles off
 ;          bit   #$F000
@@ -1427,13 +1331,24 @@ drawPriorityToScreen
           beq   *+5
           ora   #$000F
           eor   #$FFFF
-          and   tmp0                                   ; set background pixels to zero
+          and   tmp2                                   ; AND against the inverted sprite mask
+          and   tmp3                                   ; Apply mask to the blended pixel data
+
           eorl  $010000+{]line*SHR_LINE_WIDTH}+0,x     ; flip tile pixels back to original value and let sprite pixels show
           stal  $010000+{]line*SHR_LINE_WIDTH}+0,x
 
-          lda   #$FFFF                                 ; data
-          eorl  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; save a blended value
-          sta   tmp0
+
+          ldx   tmp0
+          lda:  {]line*4}+32+2,x                         ; load the mask and invert it
+          eor   #$FFFF
+          sta   tmp2
+
+          ldy:  {]line*4}+2,x                          ; load the lookup value
+          db    LDA_IND_LONG_IDX,ActivePtr             ; get the correct pixel data
+
+          ldx   tmp1                                   ; Get the screen address
+          eorl  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; save a blended value of the sprite and screen data
+          sta   tmp3
 
           ldal  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; create mask where F = !0 and 0 = 0.
           bit   #$F000
@@ -1449,195 +1364,14 @@ drawPriorityToScreen
           beq   *+5
           ora   #$000F
           eor   #$FFFF
-          and   tmp0                                   ; set background pixels to zero
+          and   tmp2                                   ; AND against the inverted sprite mask
+          and   tmp3                                   ; Apply mask to the blended pixel data
           eorl  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; flip tile pixels back to original value and let sprite pixels show
           stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
 
 ]line     equ   ]line+1
           --^
-          rts
 
-* :drawPriorityToScreen
-* ]line   equ   0
-*         lup   8
-*         ldx   USER_TILE_ADDR
-*         lda:  {]line*4}+32+2,x                      ; Save the inverted mask
-*         eor   #$FFFF
-*         sta   USER_TEMP_1
-
-*         ldy:  {]line*4}+2,x                         ; Load the tile data lookup value
-*         db    LDA_IND_LONG_IDX,USER_FREE_SPACE      ; Insert the actual tile data
-
-*         ldx   USER_SCREEN_ADDR
-*         eorl  $010000+{]line*SHR_LINE_WIDTH}+2,x
-*         sta   USER_TEMP_0
-
-* ; Convert the screen data to a mask.  Zero in screen = zero in mask, else $F
-*         ldal  $010000+{]line*SHR_LINE_WIDTH}+2,x
-*         bit   #$F000
-*         beq   *+5
-*         ora   #$F000
-*         bit   #$0F00
-*         beq   *+5
-*         ora   #$0F00
-*         bit   #$00F0
-*         beq   *+5
-*         ora   #$00F0
-*         bit   #$000F
-*         beq   *+5
-*         ora   #$000F
-*         eor   #$FFFF
-*         and   USER_TEMP_0
-*         and   USER_TEMP_1
-
-*         eorl  $010000+{]line*SHR_LINE_WIDTH}+2,x
-*         stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
-
-*         ldx   USER_TILE_ADDR
-*         lda:  {]line*4}+32,x                      ; Save the inverted mask
-*         eor   #$FFFF
-*         sta   USER_TEMP_1
-
-*         ldy:  {]line*4},x                         ; Load the tile data lookup value
-*         db    LDA_IND_LONG_IDX,USER_FREE_SPACE      ; Insert the actual tile data
-
-*         ldx   USER_SCREEN_ADDR
-*         eorl  $010000+{]line*SHR_LINE_WIDTH},x
-*         sta   USER_TEMP_0
-
-*         ldal  $010000+{]line*SHR_LINE_WIDTH},x
-*         bit   #$F000
-*         beq   *+5
-*         ora   #$F000
-*         bit   #$0F00
-*         beq   *+5
-*         ora   #$0F00
-*         bit   #$00F0
-*         beq   *+5
-*         ora   #$00F0
-*         bit   #$000F
-*         beq   *+5
-*         ora   #$000F
-*         eor   #$FFFF
-*         and   USER_TEMP_0
-*         and   USER_TEMP_1
-
-*         eorl  $010000+{]line*SHR_LINE_WIDTH},x
-*         stal  $010000+{]line*SHR_LINE_WIDTH},x
-
-* ]line   equ   ]line+1
-*         --^
-
-*         plb
-*         plb                        ; Restore initial data bank
-*         rts
-
-* :drawPriorityToScreenV
-* ]line   equ   0
-*         lup   8
-*         ldx   USER_TILE_ADDR
-*         lda:  {]line*4}+32+2,x                      ; Save the inverted mask
-*         eor   #$FFFF
-*         sta   USER_TEMP_1
-
-*         ldy:  {]line*4}+2,x                         ; Load the tile data lookup value
-*         db    LDA_IND_LONG_IDX,USER_FREE_SPACE      ; Insert the actual tile data
-
-*         ldx   USER_SCREEN_ADDR
-*         eorl  $010000+{{7-]line}*SHR_LINE_WIDTH}+2,x
-*         sta   USER_TEMP_0
-
-* ; Convert the screen data to a mask.  Zero in screen = zero in mask, else $F
-*         ldal  $010000+{{7-]line}*SHR_LINE_WIDTH}+2,x
-*         bit   #$F000
-*         beq   *+5
-*         ora   #$F000
-*         bit   #$0F00
-*         beq   *+5
-*         ora   #$0F00
-*         bit   #$00F0
-*         beq   *+5
-*         ora   #$00F0
-*         bit   #$000F
-*         beq   *+5
-*         ora   #$000F
-*         eor   #$FFFF
-*         and   USER_TEMP_0
-*         and   USER_TEMP_1
-
-*         eorl  $010000+{{7-]line}*SHR_LINE_WIDTH}+2,x
-*         stal  $010000+{{7-]line}*SHR_LINE_WIDTH}+2,x
-
-*         ldx   USER_TILE_ADDR
-*         lda:  {]line*4}+32,x                      ; Save the inverted mask
-*         eor   #$FFFF
-*         sta   USER_TEMP_1
-
-*         ldy:  {]line*4},x                         ; Load the tile data lookup value
-*         db    LDA_IND_LONG_IDX,USER_FREE_SPACE      ; Insert the actual tile data
-
-*         ldx   USER_SCREEN_ADDR
-*         eorl  $010000+{{7-]line}*SHR_LINE_WIDTH},x
-*         sta   USER_TEMP_0
-
-*         ldal  $010000+{{7-]line}*SHR_LINE_WIDTH},x
-*         bit   #$F000
-*         beq   *+5
-*         ora   #$F000
-*         bit   #$0F00
-*         beq   *+5
-*         ora   #$0F00
-*         bit   #$00F0
-*         beq   *+5
-*         ora   #$00F0
-*         bit   #$000F
-*         beq   *+5
-*         ora   #$000F
-*         eor   #$FFFF
-*         and   USER_TEMP_0
-*         and   USER_TEMP_1
-
-*         eorl  $010000+{{7-]line}*SHR_LINE_WIDTH},x
-*         stal  $010000+{{7-]line}*SHR_LINE_WIDTH},x
-* ]line   equ   ]line+1
-*         --^
-
-*         plb
-*         plb                        ; Restore initial data bank
-*         rts
-
-* ; Assume that when the tile is updated, it includes a full 10-bit value with the 
-* ; palette bits included with the lookup bits
-* ;
-* ; If we could compile all of the tiles, then the code becomes
-* ; 
-* ; ldy  #DATA
-* ; lda  [USER_FREE_SPACE],y
-* ; sta: code,x
-* ;
-* ; And we save _at_least_ 11 cycles / word. 6 + 7 + 4 + 4 + 6 = 27 vs 16.
-* ;
-* ; Also, by exposing/short-circuiting the draw_tile stuff to avoid the GTE tile queue, we significantly
-* ; reduce overhead and probably solve the tile column bug.
-* NESTileBlitter
-*         lda  USER_TILE_ID
-*         and  #$0600                        ; Select the tile palette from the tile id
-*         clc
-*         adcl SwizzlePtr
-*         sta  USER_FREE_SPACE
-*         lda  #^AT1_T0
-*         sta  USER_FREE_SPACE+2
-
-*         ldx  USER_TILE_ADDR                ; Get the address of the tile (base only)
-* ]line   equ  0
-*         lup  8
-*         ldy: {]line*4},x
-*         db   LDA_IND_LONG_IDX,USER_FREE_SPACE
-*         sta  tmp_tile_data+{]line*4}
-*         ldy: {]line*4}+2,x
-*         db   LDA_IND_LONG_IDX,USER_FREE_SPACE
-*         sta  tmp_tile_data+{]line*4}+2
-* ]line   equ  ]line+1
-*         --^
-*         lda  #1                            ; Request tmp_tile_data be copied to tile store
-*         rtl
+          plb
+          plb
+          jmp   draw_rtn

@@ -206,10 +206,9 @@ DrawCompiledTile
         pha
         lda  CompileBank             ; This can be done once in startup
         sta  :patch+3
-        rep  #$20
+        rep  #$21                    ; 16-bit and clear the carry
 
         lda  BTableLow,y
-        clc
         adc  Col2CodeOffset+2,x      ; Due to reverse order, the address has to be the second column of the tile
         tax
 
