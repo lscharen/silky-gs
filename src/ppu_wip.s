@@ -143,7 +143,7 @@ PPUFlushQueues
         ora  tmp1
 
         ldx  nt_queue_front
-        cpx  #{NT_QUEUE_SIZE-16}*2    ; fatal errors for now
+        cpx  #{NT_QUEUE_SIZE-16}*2    ; fatal errors for now (This gets hit going into a warp zone)
         bcc  *+4
         brk  $97
 
@@ -1101,9 +1101,8 @@ oam_loop
         sta  tmp0
 
         lda  OAM_COPY+3,x
+        and  #$00FE          ; Mask before the shift so that we know a 0 goes into the carry
         lsr
-        and  #$007F
-        clc
         adc  tmp0
         tay
 
@@ -1200,7 +1199,7 @@ mul160  mac
 * USER_TEMP_0        equ  192
 * USER_TEMP_1        equ  194
 
-* LDA_IND_LONG_IDX equ $B7
+LDA_IND_LONG_IDX equ $B7
 * ORA_IND_LONG_IDX equ $17
 
 * SHR_LINE_WIDTH equ 160
@@ -1229,14 +1228,38 @@ mul160  mac
 *         rtl
 
 drawTileToScreen
-          tyx
-          lda   #$ffff
+          bit    #$0040
+          beq    :no_prio
+          jmp    drawPriorityToScreen
+
+:no_prio
+          stx   tmp0        ; tiledata address
+          sty   tmp1        ; screen address
+
+          phb
+          pea   #^tiledata
+          plb
+
 ]line     equ   0
           lup   8
-          stal  $010000+{]line*SHR_LINE_WIDTH}+0,x
+
+          ldx   tmp0
+          ldy:  {]line*4},x
+          ldx   tmp1
+          db    LDA_IND_LONG_IDX,SwizzlePtr
+          stal  $010000+{]line*SHR_LINE_WIDTH},x
+
+          ldx   tmp0
+          ldy:  {]line*4}+2,x
+          ldx   tmp1
+          db    LDA_IND_LONG_IDX,SwizzlePtr
           stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+
 ]line     equ   ]line+1
           --^
+
+          plb
+          plb
           rts
 
 *         pha
@@ -1367,6 +1390,72 @@ drawTileToScreen
 *         plb
 *         plb                        ; Restore initial data bank
 *         rts
+
+drawPriorityToScreen
+          tyx
+
+]line     equ   0
+          lup   8
+          lda   #$FFFF                                 ; data
+          eorl  $010000+{]line*SHR_LINE_WIDTH}+0,x     ; save a blended value
+          sta   tmp0
+
+; Alternative to use a full branching network to shave a few cycles off
+;          bit   #$F000
+;          beq   :m0xxx
+;          bit   #$0F00
+;          beq   :mF0xx
+;          bit   #$00F0
+;          beq   :mFF0x
+;          bit   #$000F
+;          beq   :mFFF0
+;          lda   #$0000 1.5 * 16 = saves 24 cycles per sprite
+;          bra   :out     ; 6 / 5 = ~ 5.5 cycles per pixel + 3 for branch, but can save EOR instruction, so a wash
+
+
+          ldal  $010000+{]line*SHR_LINE_WIDTH}+0,x     ; create mask where F = !0 and 0 = 0.
+          bit   #$F000
+          beq   *+5
+          ora   #$F000     ; 3+3 / 3+2+3 = 6 / 8 = ~7 cycles per pixel average
+          bit   #$0F00
+          beq   *+5
+          ora   #$0F00
+          bit   #$00F0
+          beq   *+5
+          ora   #$00F0
+          bit   #$000F
+          beq   *+5
+          ora   #$000F
+          eor   #$FFFF
+          and   tmp0                                   ; set background pixels to zero
+          eorl  $010000+{]line*SHR_LINE_WIDTH}+0,x     ; flip tile pixels back to original value and let sprite pixels show
+          stal  $010000+{]line*SHR_LINE_WIDTH}+0,x
+
+          lda   #$FFFF                                 ; data
+          eorl  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; save a blended value
+          sta   tmp0
+
+          ldal  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; create mask where F = !0 and 0 = 0.
+          bit   #$F000
+          beq   *+5
+          ora   #$F000
+          bit   #$0F00
+          beq   *+5
+          ora   #$0F00
+          bit   #$00F0
+          beq   *+5
+          ora   #$00F0
+          bit   #$000F
+          beq   *+5
+          ora   #$000F
+          eor   #$FFFF
+          and   tmp0                                   ; set background pixels to zero
+          eorl  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; flip tile pixels back to original value and let sprite pixels show
+          stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+
+]line     equ   ]line+1
+          --^
+          rts
 
 * :drawPriorityToScreen
 * ]line   equ   0

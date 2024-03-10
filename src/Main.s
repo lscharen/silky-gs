@@ -13,6 +13,7 @@
             mx    %00
 
 x_offset    equ   16                      ; number of bytes from the left edge
+tiledata    ext
 
             phk
             plb
@@ -21,14 +22,7 @@ x_offset    equ   16                      ; number of bytes from the left edge
             bcc   *+5
             brl   Fail
 
-;            stz   LastScroll
-;            stz   TileX
-;            stz   TileY
-;            stz   ROMScreenEdge
-;            stz   ROMScrollEdge
-;            stz   ROMScrollDelta
-;            stz   OldROMScrollEdge
-            stz   LastAreaType
+            stz   LastAreaType            ; Check if the palettes need to be updates
             stz   ShowFPS
             stz   YOrigin
 
@@ -67,38 +61,6 @@ x_offset    equ   16                      ; number of bytes from the left edge
             jsr   StartUp
             bcc   *+5
             jmp   Fail
-
-; Install a custom sprite renderer that will read directly off of the OAM table
-;            pea   extSpriteRenderer
-;            pea   #^drawOAMSprites
-;            pea   #drawOAMSprites
-;            pea   #^nesRenderWithVOC
-;            pea   #nesRenderWithVOC
-;            _GTESetAddress
-
-; Install a custom callback to update the tile store as the screen scrolls
-;            pea   extBG0TileUpdate
-;            pea   #^UpdateFromPPU
-;            pea   #UpdateFromPPU
-;            _GTESetAddress
-
-; Install a custom tile blitter to merge PPU attributes with the extracted tile data
-;            pea   userTileCallback
-;            pea   #^NESTileBlitter
-;            pea   #NESTileBlitter
-;            _GTESetAddress
-
-; Install a custom tile callback to draw tiles directly on the screen w/proper palettes
-;            pea   userTileDirectCallback
-;            pea   #^NESDirectTileBlitter
-;            pea   #NESDirectTileBlitter
-;            _GTESetAddress
-
-;            pea   #liteBlitter
-;            _GTEGetAddress                  ; Need the bank that the lite blitter is in
-;            pla
-;            pla
-;            sta   LiteBank
 
 ; Convert the CHR ROM from the cart into GTE tiles
 
@@ -512,6 +474,39 @@ LoadTilesFromROM
 
             cpx  #16*512         ; Have we done the last background tile?
             bcc  :tloop
+
+; Second loop is to convert the sprite tiles (tile numbers 0 to 255)
+
+            ldx  #0
+            ldy  #0
+
+:sloop
+            phx
+            phy
+
+            lda  #TileBuff
+            jsr  ConvertROMTile2 ; Convert the tile, extract the mask and create horizontally flipped versions
+
+            ldy  #0              ; Copy the converted tile data into the  tiledata bank
+            plx
+:cploop
+            lda  TileBuff,y
+            stal tiledata,x
+            iny
+            iny
+            inx
+            inx
+            cpy  #128
+            bcc  :cploop
+
+            txy
+            pla
+            clc
+            adc  #16             ; NES tiles are 16 bytes
+            tax
+
+            cpx  #16*256         ; Have we done the last sprite tile?
+            bcc  :sloop
             rts
 
 ; Helper to initialize the GTE playfield based on the selected VideoMode
@@ -603,57 +598,6 @@ InitPlayfield
 
 ; Helper to perform the essential functions of rendering a frame
 RenderFrame
-
-; Get the current global coordinates
-
-;            sei
-;            lda   nt_queue_end      ; Freeze the end of the queue that contains updates up until "now"
-;            sta   CurrNTQueueEnd
-;            lda   ROMScrollEdge     ; This is set in the VBL IRQ
-;            sta   CurrScrollEdge    ; Freeze it, then we can let the IRQs continue
-;            cli
-
-;            lsr
-;            lsr
-;            lsr
-;            sta   ROMScreenEdge
-
-; Calculate how many blocks have been scrolled into view
-
-;            lda   CurrScrollEdge
-;            sec
-;            sbc   OldROMScrollEdge
-;            sta   tmp1             ; This is the raw number of pixels moved
-
-;            lda   OldROMScrollEdge ; This is the number of partial pixels the old scroll position occupied
-;            and   #7
-;            sta   tmp0
-;            lda   #7
-;            sec
-;            sbc   tmp0             ; This account for situations where going from 8 -> 9 reveals a new column
-;            clc
-;            adc   tmp1
-;            lsr
-;            lsr
-;            lsr
-;            sta   ROMScrollDelta   ; This many columns have been revealed
-
-;            lda   CurrScrollEdge
-;            sta   OldROMScrollEdge ; Stash a copy for the next round through
-;            lsr
-;            pha
-
-; Get the player's Y coordinate and determine of we need to adjust the camera based on the physical play field size
-
-;            ldx   ROMZeroPg
-;            ldal  $0000b5,x      ; Player_Y_Page      ; 0 = above screen, 1 = on screen, 2 = below
-;            and   #$00FF
-;            beq   :max_clamp
-;            cmp   #2
-;            beq   :min_clamp
-
-;            ldal  $0000ce,x      ; Player_Y_Position
-;            and   #$00FF
 
 ; The "full screen" size is 200 lines that cover NES rows 16 through 216.  If the
 ; size of the playfield is less, then we adjust the origin a bit.
@@ -1652,7 +1596,7 @@ ConvertROMTile3
 :loop
             lda   (:DPtr),y           ; Load the index for this tile byte
             tax
-            lda   DLUT2_shft,x       ; Look up the two, 2-bit pixel values for this quad of bits.  This remains a 4-bit value
+            lda   DLUT2_shft,x        ; Look up the two, 2-bit pixel values for this quad of bits.  This remains a 4-bit value
             sta   tmp3
 
             iny
@@ -1717,7 +1661,7 @@ ConvertROMTile2
             lda   (:DPtr),y
             tax
             lda   DLUT2,x             ; Look up the two, 2-bit pixel values for next quad of bits
-            ora   tmp3                ; Move it int othe top nibble since it will decode to the top-byte on the SHR screen
+            ora   tmp3                ; Move it into the top nibble since it will decode to the top-byte on the SHR screen
 
             dey
             sta   (:DPtr),y           ; Put in low byte
@@ -1731,7 +1675,6 @@ ConvertROMTile2
             iny
             cpy   #32
             bcc   :loop
-
 
 ; Reverse and shift the data
 
@@ -2034,14 +1977,6 @@ MLUT4       db    $FF,$F0,$0F,$00
 
 ; Extracted tiles
 TileBuff    ds    128
-
-; X, Y
-SetBG0Origin
-            phy
-            txa
-            jsr     _SetBG0XPos
-            pla
-            jmp     _SetBG0YPos
 
 StartUp
             lda   UserId

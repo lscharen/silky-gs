@@ -34,24 +34,6 @@ lite_base          EXT
 ; put it at the beginning so the rest of the bank can be replicated line templates.
                    jml   blt_return_lite            ; Full exit (must be at address $0000)
 
-; This is a table of logical lookup values used for blitting in order to handle wrap-around seamlessly. We
-; don't need a full double-sized array, just enough for the maximum sprite width.
-;
-; lite_loop[y] + h_tbl[x] = address of PEA operand
-h_tbl              ENT
-]step              equ  81
-                   lup  82
-                   dw   {]step*3}+1          ; (]step * PER_TILE_SIZE) + 1
-]step              equ  ]step-1
-                   --^
-]step              equ  81
-                   lup  2
-                   dw   {]step*3}+1          ; (]step * PER_TILE_SIZE) + 1
-]step              equ  ]step-1
-                   --^
-
-                   ds    \,$00                ; pad to the next page boundary ($0100)
-
 ; Start of the template code.  This code contains two sets of 64 PEA instructions to
 ; represent two nametables set up in vertical mirroring mode.  These lines are
 ; replicated 120 times over 2 banks to cover the full 240 lines of the NES PPU.
@@ -59,7 +41,7 @@ h_tbl              ENT
 ; The lite blitter is crafted to allow the accumulator to be in 8-bit mode and avoid any
 ; need for rep/sep instructions to handle the odd-aligned case
 
-                   ds    $100-15  ; pad so that the PEA code aligned on the page boundary
+                   ds    $200-15-4                  ; pad so that the PEA code aligned on the page boundary
 lite_base_2        ENT
 lite_entry_1       ldx   #0000                      ; Sets screen address (right edge)
                    txs

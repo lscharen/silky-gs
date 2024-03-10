@@ -20,7 +20,13 @@
             KND   #$1100
             SNA   PPU2
 
-; Segment #4 -- ROM
+; Segment #4 -- Converted Tile Storage
+
+            ASM   core/static/TileData.s
+            KND   #$1100
+            SNA   CHRDATA
+
+; Segment #5 -- ROM
 
             ASM   rom2.s
             KND   #$1100

@@ -70,7 +70,6 @@ CompileTile
         lda  blttmp,x
         sta  :copy             ; keep a copy of the word
 
-
         phx                   ; save the current index
 :loop2
         inx                   ; advance to the next word
