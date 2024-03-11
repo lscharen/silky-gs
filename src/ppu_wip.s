@@ -754,6 +754,7 @@ scanOAMSprites
 
 :loop
          ldal   ROMBase+$0200,x    ; Copy the low word
+         inc                       ; Increment the y-coordinate to match the PPU delay
          sta    OAM_COPY,y
 
          eor    #$FC00             ; Is the tile == $FC? This is a blank tile in this ROM
@@ -1095,8 +1096,6 @@ oam_loop
 ; First, calculate the physical location on the SHR screen at which to draw the sprite
 
         lda   OAM_COPY,x              ; Y-coordinate
-;        inc                          ; Compensate for PPU delayed scanline
-
         and   #$00FF
         mul160 tmp0
         clc
