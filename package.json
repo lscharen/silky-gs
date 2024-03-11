@@ -17,6 +17,7 @@
     "archive": "%npm_package_config_cadius% EXTRACTFILE ./emu/Target.2mg /GTEDev/Tool160.SHK .",
     "test": "npm run build:smb && npm run build-image && %npm_package_config_gsport%",
     "build:smb": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/SMB.s",
+    "build:bf": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/BF.s",
     "build:debug": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/Debug.s",
     "debug": "cd src && %npm_package_config_crossrunner% SuperMarioGS -source SuperMarioGS_S02__Output.txt SuperMarioGS_S03__Output.txt SuperMarioGS_S04__Output.txt SuperMarioGS_S05__Output.txt -map SMB.s -Debug -CompatibilityLayer",
     "install:header": "copy .\\ORCACDefs\\gte.h C:\\ProgramData\\GoldenGate\\Libraries\\ORCACDefs\\gte.h",
