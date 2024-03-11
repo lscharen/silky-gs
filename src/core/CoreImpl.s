@@ -1,6 +1,5 @@
 ; Feature flags
-NO_INTERRUPTS     equ       1                   ; turn off for crossrunner debugging
-NO_MUSIC          equ       1                   ; turn music + tool loading off
+NO_INTERRUPTS     equ       0                   ; turn off for crossrunner debugging
 
 ; Sprite plane data and mask banks are provided as an external segment
 ;
@@ -93,7 +92,9 @@ _CoreStartUp
 ;                  jsr       InitTiles           ; Initialize the tile subsystem
 
 ;                  jsr       InitTimers          ; Initialize the timer subsystem
+                  rts
 :core_err
+                  brk $ee
                   rts
 
 _CoreShutDown
@@ -126,8 +127,11 @@ IntStartUp
                   PushLong  #VBLTASK            ; Also register a Heart Beat Task
                   _SetHeartBeat
                   bcs       :error
-:no_interrupts
+                  bra       :done
 :error
+                  brk        $e0
+:done
+:no_interrupts
                   rts
 
 IntShutDown
@@ -150,22 +154,28 @@ IntShutDown
 
 ; Interrupt handlers. We install a heartbeat (1/60th second and a 1-second timer)
 OneSecHandler     mx        %11
-                  phb
-                  pha
 
-                  rep       #$20
-                  ldal      OneSecondCounter
-                  inc
-                  stal      OneSecondCounter
-                  sep       #$20
-
-                  ldal      $E0C032
-                  and       #%10111111          ;clear IRQ source
+                  lda       #%10111111          ;clear IRQ source
                   stal      $E0C032
-
-                  pla
                   clc
                   rtl
+
+;                  phb
+;                  pha
+
+;                  rep       #$20
+;                  ldal      OneSecondCounter
+;                  inc
+;                  stal      OneSecondCounter
+;                  sep       #$20
+
+;                  ldal      $E0C032
+;                  and       #%10111111          ;clear IRQ source
+;                  stal      $E0C032
+
+;                  pla
+;                  clc
+;                  rtl
                   mx        %00
 
 ; This is OK, it's referenced by a long address
@@ -231,27 +241,27 @@ EngineReset
                   sta       STATE_REG_R1W1
                   rep       #$20
 
-; Insert jumps to the interrupt enable code every 16 lines
+; Insert jumps to the interrupt enable code every 16 lines. There are 120 lines in each bank, so
+; only 7 loops needed.  Interrups are set at the mid-point lines -- 4, 20, 36, 52, 68, 84, 100, 116
 
-                  lda       #12
+                  lda       #7
                   sta       tmp15
 
-;                  ldx       #_EXIT_EVEN+{_LINE_SIZE*15}+1            ; Patch the JMP operand here
-;                  ldy       #_LINE_BASE+_ENTRY_INT+{_LINE_SIZE*16}   ; Jump to this address on the next line
-;:lloop
-;                  tya
-;                  stal      lite_base,x
-;                  clc
-;                  adc       #{_LINE_SIZE*16}
-;                  tay
+                  ldx       #_EXIT_EVEN+{_LINE_SIZE*4}+1      ; Patch the JMP operand here
+:lloop
+                  sep       #$20
+                  lda       #_ENTRY_INT
+                  stal      lite_base,x
+                  stal      lite_base_2,x
+                  rep       #$20
 
-;                  txa
-;                  clc
-;                  adc       #{_LINE_SIZE*16}
-;                  tax
+                  txa
+                  clc
+                  adc       #{_LINE_SIZE*16}
+                  tax
 
-;                  dec       tmp15
-;                  bne       :lloop
+                  dec       tmp15
+                  bne       :lloop
 
 :done
                   clc

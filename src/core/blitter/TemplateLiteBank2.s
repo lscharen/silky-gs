@@ -34,6 +34,22 @@ lite_base          EXT
 ; put it at the beginning so the rest of the bank can be replicated line templates.
                    jml   blt_return_lite            ; Full exit (must be at address $0000)
 
+                   ds    $200-15-16-4               ; pad so that the PEA code aligned on the page boundary
+
+
+; Pre-code area that holds optional entry points for enabling interrups, reading the
+; joystick and other operations that may need to be interwoven with the PEA field
+; execution
+
+lite_enable_int_2  tyx
+                   txs                              ; restore the stack. No 2-layer support, so B and D point to useful data
+                   lda   STATE_REG_R0W0             ; we are in 8-bit mode the whole time...
+                   stal  STATE_REG
+                   cli
+                   sei
+                   lda   STATE_REG_BLIT             ; External values 
+                   stal  STATE_REG                  ; = 16 bytes
+
 ; Start of the template code.  This code contains two sets of 64 PEA instructions to
 ; represent two nametables set up in vertical mirroring mode.  These lines are
 ; replicated 120 times over 2 banks to cover the full 240 lines of the NES PPU.
@@ -41,7 +57,6 @@ lite_base          EXT
 ; The lite blitter is crafted to allow the accumulator to be in 8-bit mode and avoid any
 ; need for rep/sep instructions to handle the odd-aligned case
 
-                   ds    $200-15-4                  ; pad so that the PEA code aligned on the page boundary
 lite_base_2        ENT
 lite_entry_1       ldx   #0000                      ; Sets screen address (right edge)
                    txs
@@ -88,7 +103,17 @@ lite_even_exit     jmp   $0400-15                   ; Jump to the next line.
 
 ]page              equ   $400
                    lup   118
-                   ds    43-15
+
+                   ds    43-15-16                     ; More padding
+                   tyx
+                   txs
+                   lda   STATE_REG_R0W0
+                   stal  STATE_REG
+                   cli
+                   sei
+                   lda   STATE_REG_BLIT
+                   stal  STATE_REG
+
                    ldx   #0000
                    txs
                    dfb   $82,$00,$00
@@ -261,7 +286,16 @@ lite_even_exit     jmp   $0400-15                   ; Jump to the next line.
 ]page              equ   ]page+$200
                    --^
 
-                   ds    43-15                     ; More padding
+                   ds    43-15-16                     ; More padding
+                   tyx
+                   txs
+                   lda   STATE_REG_R0W0
+                   stal  STATE_REG
+                   cli
+                   sei
+                   lda   STATE_REG_BLIT
+                   stal  STATE_REG
+
                    ldx   #0000
                    txs
                    brl   *+3
@@ -292,17 +326,3 @@ lite_odd_exit2     lda   #0                         ; get the high byte of the s
                    pha
 lite_even_exit2    jml   lite_base                  ; Jump to the next bank
                    dfb   $F4,$00
-
-; The even_exit JMP from the previous line will jump here every 8 or 16 lines in order to give
-; the system time to handle interrupts.
-;
-; This code is placed here to allow it to fall-through and avoid an extra branch
-lite_enable_int    tyx
-                   txs                              ; restore the stack. No 2-layer support, so B and D point to useful data
-                   lda   STATE_REG_R0W0             ; we are in 8-bit mode the whole time...
-                   stal  STATE_REG
-                   cli
-                   sei
-                   lda   STATE_REG_BLIT             ; External values 
-                   stal  STATE_REG
-;                   bra   lite_entry_1               ; (18 bytes)

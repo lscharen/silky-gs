@@ -69,7 +69,6 @@ LastTick               equ   118
 ForceSpriteFlag        equ   120
 RenderFlags            equ   124         ; Flags passed to the Render() function
 
-
 ShowFPS                equ   126
 YOrigin                equ   128
 VideoMode              equ   130
@@ -209,22 +208,12 @@ NO_TIMERS_AVAILABLE  equ  10
 PER_TILE_SIZE equ 3
 
 ; Offsets for the Lite blitter
-;_ENTRY_1   equ 0
-;_ENTRY_JMP equ 4
-;_ENTRY_ODD equ 11
-;_ENTRY_INT equ 14
-;_LOOP      equ 38
-;_EXIT_ODD  equ 290
-;_EXIT_EVEN equ 293
-;_LOW_SAVE  equ 296
-
-;_LINE_BASE equ 4                        ; header size
-
 _ENTRY_JMP  equ  4                       ; the jump (brl, actually) is 4 bytes after the entry point
 _ENTRY_ODD  equ  12                      ; the brl for the odd entry is a bit further in
 _EXIT_ODD   equ  475                     ; the odd enty point is just 3 bytes of code to load and push the edge byte
 _EXIT_EVEN  equ  478                     ; in the second page of the blitter line
 _LOW_SAVE   equ  {_EXIT_EVEN+4}          ; space to save the code field opcodes is right after the return jmp/jml
+_ENTRY_INT  equ  $E1                     ; pre-code area of the next line -- just change the bottom byte of the JMP
 _LINE_SIZE  equ  512                     ; number of bytes for each blitter line
 
 _CODE_TOP   equ  21                      ; number of bytes from the base address of each blitter line to the first PEA instruction
