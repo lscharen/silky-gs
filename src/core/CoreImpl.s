@@ -1,5 +1,5 @@
 ; Feature flags
-NO_INTERRUPTS     equ       0                   ; turn off for crossrunner debugging
+NO_INTERRUPTS     equ       1                   ; turn off for crossrunner debugging
 
 ; Sprite plane data and mask banks are provided as an external segment
 ;
@@ -154,6 +154,9 @@ IntShutDown
 
 ; Interrupt handlers. We install a heartbeat (1/60th second and a 1-second timer)
 OneSecHandler     mx        %11
+                  ldal      OneSecondCounter
+                  inc
+                  stal      OneSecondCounter
 
                   lda       #%10111111          ;clear IRQ source
                   stal      $E0C032
@@ -263,7 +266,34 @@ EngineReset
                   dec       tmp15
                   bne       :lloop
 
-:done
+; If the even mode is turned on, adjust all of the even lines in the PEA field to skip their next line
+
+                  lda       GTEControlBits
+                  bit       #CTRL_EVEN_RENDER
+                  beq       :no_even
+
+                  lda       #60                   ; There are 120 lines in each bank, we update half of them
+                  sta       tmp15
+
+                  ldx       #_EXIT_EVEN+2
+                  ldy       #5                    ; The first even line jumps to $3xx, needs to go to $5xx
+:eloop
+                  sep       #$20
+                  tya
+                  stal      lite_base,x
+                  stal      lite_base_2,x
+                  rep       #$20
+
+                  txa
+                  clc
+                  adc       #{_LINE_SIZE*2}      ; Step to the next even line
+                  tax
+
+                  dec       tmp15
+                  bne       :lloop
+:no_even
+
+; Done initializing the engine
                   clc
                   rts
 

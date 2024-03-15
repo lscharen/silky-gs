@@ -7,11 +7,26 @@
 
 ; This should only be called from _Render when it is determined to be safe
                 mx    %00
+
 _BltRangeLite
 :exit_ptr       equ   tmp0
 :jmp_low_save   equ   tmp2
 
 ;                phb
+                lda   GTEControlBits
+                bit   #CTRL_EVEN_RENDER
+                bne   :normal
+
+                txa
+                inc
+                and  #$FFFE
+                tax
+
+                tya                         ; Alternative entry that only renders even lines. This,
+                inc                         ; combined with a setup that forces each PEA field row
+                and   #$FFFE                ; to skip the next one results in just half the screen
+                tay                         ; being updated
+:normal
 
                 sty   tmp0           ; Range check
                 cpx   tmp0

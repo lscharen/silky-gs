@@ -32,6 +32,11 @@
             KND   #$1100
             SNA   SMBROM
 
+; Segment #6 -- PPU memory and PPU shadow storage
+
+            ASM   core/static/PPU.s
+            KND   #$1100
+            SNA   PPURAM
 
 
 

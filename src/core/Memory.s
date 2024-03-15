@@ -8,6 +8,11 @@
                mx        %00
 
 InitMemory
+; We will use ALTZP to put the NES ROM stack and zero pack in  the IIgs Bank 01 (aux).  Unfortunately,
+; this area of IIgs rame is reserved by the system since allowing anytone to write onto the auxbank
+; zero page and stack and text page could cause problems.  But we're bold and not contrained by the rules,
+; so we'll just trample over the memory as we see fit.
+
 ;               PushLong  #0                          ; space for result
 ;               PushLong  #$000800                    ; size (2k)
 ;               PushWord  UserId

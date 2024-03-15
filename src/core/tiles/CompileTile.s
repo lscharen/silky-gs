@@ -182,8 +182,6 @@ DrawCompiledTile
         clc
         adc  SwizzlePtr
         sta  ActivePtr
-        lda  SwizzlePtr+2
-        sta  ActivePtr+2
 
         sty  :patch+1     ; patch in the address
 

@@ -6,14 +6,14 @@
             use   Misc.Macs
             use   Util.Macs
             use   EDS.GSOS.Macs
-            use   Externals.s
             use   GTE.Macs.s
-            use   core/Defs.s
+
+            put   Externals.s
+            put   core/Defs.s
 
             mx    %00
 
 x_offset    equ   16                      ; number of bytes from the left edge
-tiledata    ext
 
             phk
             plb
@@ -62,6 +62,12 @@ tiledata    ext
             bcc   *+5
             jmp   Fail
 
+; Initialize the PPU 
+
+            jsr   PPUStartUp
+            bcc   *+5
+            jmp   Fail
+
 ; Convert the CHR ROM from the cart into GTE tiles
 
             jsr   LoadTilesFromROM
@@ -72,60 +78,28 @@ tiledata    ext
             jsr   SetAreaType
 
 ; Fill the buffer with tiles
+            php
+            sep   #$20
 
-            ldx   #0
-            ldy   #0
+            ldx   #$2000
             lda   #0
 :drawloop
             pha
             phx
-            phy
-            jsr   DrawCompiledTile
 
-            clc
-            pla
-            adc   #$0100
-            tay
+            and   #$03
+            asl
+            stal  PPU_MEM+$4000,x               ; force palette selection
+            lda   3,s
 
+            jsr   DrawPPUTile
+
+            plx
+            inx
             pla
             inc
-            bit   #32
-            beq   :drawloop1
-            clc
-            adc   #$0100
-            and   #$FF00
-:drawloop1  tax
-
-            pla
-            adc   #$0200
-            and   #$0600
-
-            cpy   #0
             bne   :drawloop
-
-;            ldy   #129
-;:tloop
-;            phy
-;            tya
-;            jsr   _SetBG0XPos
-;            lda   #0
-;            jsr   _SetBG0YPos
-;            jsr   _ApplyBG0YPosPreLite
-;            jsr   _ApplyBG0YPosLite       ; Set up the code field
-;            jsr   _ApplyBG0XPosLite       ; Set up the code field
-;            ldx   #0
-;            ldy   #200
-;            jsr   _BltRangeLite
-;            
-;            lda   StartYMod240            ; Restore the fields back to their original state
-;            ldx   ScreenHeight
-;            jsr   _RestoreBG0OpcodesLite
-;            stz   LastPatchOffset
-;
-;            jsr   WaitForKey
-;            ply
-;            iny
-;            bra   :tloop
+            plp
 
 ; Render again, just to make sure it works
 
@@ -191,24 +165,25 @@ EvtLoop
 ;            bne   :skip_render
 ;            jsr   RenderFrame
 
-;            lda   ShowFPS
-;            beq   :no_fps
+            lda   ShowFPS
+            beq   :no_fps
 
-;            ldal  OneSecondCounter
-;            cmp   OldOneSec
-;            beq   :skip_render
-;            sta   OldOneSec
+            ldal  OneSecondCounter
+            cmp   OldOneSec
+            beq   :skip_render
+            sta   OldOneSec
             
-;            ldx   #0
-;            ldy   #$FFFF
-;            lda   frameCount
+            ldx   #0
+            ldy   #$FFFF
+            lda   frameCount
 
-;            jsr   DrawByte
-;            lda   frameCount
-;            stz   frameCount
+            jsr   DrawByte
+            lda   frameCount
+            stz   frameCount
 :no_fps
 :skip_render
-            jsr   readInput             ; Read the IIgs keyboard / gamepad and place in NES memory and return keycodes
+
+            lda   LastRead
             bit   #PAD_KEY_DOWN
             beq   EvtLoop
 
@@ -634,6 +609,20 @@ RenderScreen
             stz   LastPatchOffset
             rts
 
+; Initialize the swizzle pointer to the set of palette maps.  The pointer must
+;
+; 1. Be page-aligned
+; 2. Point to 8 2kb remapping tables
+; 3. The first 4 tables are for background tiles and second are for sprites
+;
+; A = high word, X = low word
+SetPaletteMap
+            sta   SwizzlePtr+2
+            sta   ActivePtr+2
+            stx   SwizzlePtr
+            stx   ActivePtr
+            rts
+
 SetAreaType
             cmp   #5
             bcs   :out
@@ -641,14 +630,15 @@ SetAreaType
             asl
             tay
             ldx   AreaPalettes,y      ; First parameter to NESColorToIIgs
+            phx
 
             asl
             tay
-            lda   SwizzleTables,y
-            sta   SwizzlePtr
             lda   SwizzleTables+2,y
-            sta   SwizzlePtr+2
-
+            ldx   SwizzleTables,y
+            jsr   SetPaletteMap
+            
+            plx
             lda   #TmpPalette
             jsr   NESColorToIIgs
 
@@ -878,36 +868,40 @@ CopyStatusToScreen
             sbc   #160*16
             sta   tmp0
 
-            ldx   #0
+            ldy   #0
 :loop
-            phx                             ; preserve x
-            ldy   MemOffsets,x
-            lda   PPU_MEM+$2000,y
+            phy                             ; preserve reg
+            ldx   MemOffsets,y
+            ldal  PPU_MEM+$2000,x
 ;            and   #$00FF
 ;            ora   #$0100+TILE_USER_BIT
 ;            pha
 
-            lda   ScreenOffsets,x
+            lda   ScreenOffsets,y
             clc
             adc   tmp0
 ;            pha
 
             lda   #$8002
-            cpy   #107                      ; This one is palette 3
+            cpx   #107                      ; This one is palette 3
             bne   *+5
             ora   #$0001
 ;            pha
 ;            _GTEDrawTileToScreen           ; call NESTileBlitter
 
-            plx
-            inx
-            inx
-            cpx   #30*2
+            ply
+            iny
+            iny
+            cpy   #30*2
             bcc   :loop
             rts
 
 ; Trigger an NMI in the ROM
 triggerNMI
+
+; If the audio engine is not running off of its own ESQ interrups at 240Hz or 120Hz, then it must be manually drive
+; at 60Hz from the VBL/NMI handler
+
 ;            lda   AudioMode
 ;            bne   :good_audio
 ;            sep   #$30
@@ -926,18 +920,8 @@ triggerNMI
             ldx   #NonMaskableInterrupt
             jsr   romxfer
 
-; Immediately after the NMI returns, freeze some of the global state variables so we can sync up with this frame when
-; we render the next frame.  Since we're in an interrupt handler here, no change of the variables changing under
-; our nose
-
-;            sep   #$20
-;            ldal  ROMBase+$071a
-;            xba
-;            ldal  ROMBase+$071c
-;            rep   #$20
-;            sta   ROMScrollEdge
-
-:skip       rts
+:skip
+            rts
 
 ; Expose joypad bits from GTE to the ROM: A-B-Select-Start-Up-Down-Left-Right
 native_joy  ENT
@@ -1191,13 +1175,13 @@ ROMTileToLookup
 
 ; Top two bits from each byte defines the two left-most pixels
 
-            lda   CHR_ROM,x          ; Load the low bits
+            ldal  CHR_ROM,x          ; Load the low bits
             and   #$C0
             lsr
             lsr
             sta   tmp0
 
-            lda   CHR_ROM+8,x        ; Load the high bits
+            ldal  CHR_ROM+8,x        ; Load the high bits
             and   #$C0
             ora   tmp0
             lsr
@@ -1209,13 +1193,13 @@ ROMTileToLookup
 
 ; Repeat for bits 4 & 5
 
-            lda   CHR_ROM,x
+            ldal  CHR_ROM,x
             and   #$30
             lsr
             lsr
             sta   tmp0
 
-            lda   CHR_ROM+8,x
+            ldal  CHR_ROM+8,x
             and   #$30
             ora   tmp0
             lsr
@@ -1225,13 +1209,13 @@ ROMTileToLookup
 
 ; Repeat for bits 2 & 3
 
-            lda   CHR_ROM,x
+            ldal  CHR_ROM,x
             and   #$0C
             lsr
             lsr
             sta   tmp0
 
-            lda   CHR_ROM+8,x
+            ldal  CHR_ROM+8,x
             and   #$0C
             ora   tmp0               ; Combine the two and create a lookup value
             sta   (:DPtr),y
@@ -1239,11 +1223,11 @@ ROMTileToLookup
 
 ; Repeat for bits 0 & 1
 
-            lda   CHR_ROM,x          ; Load the high bits
+            ldal  CHR_ROM,x          ; Load the high bits
             and   #$03
             sta   tmp0
 
-            lda   CHR_ROM+8,x
+            ldal  CHR_ROM+8,x
             and   #$03
             asl
             asl
@@ -1356,6 +1340,7 @@ MLUT4       db    $FF,$F0,$0F,$00
 TileBuff    ds    128
 
 StartUp
+            jsr   PPUResetQueues
             lda   UserId
             jmp   _CoreStartUp
 
@@ -1484,6 +1469,7 @@ nmiTask
 
 readInput
             jsr   _ReadControl
+            sta   LastRead
 
 ; Map the GTE field to the NES controller format: A-B-Select-Start-Up-Down-Left-Right
 
@@ -1535,10 +1521,6 @@ readInput
             put   ppu_wip.s
 
             ds    \,$00                      ; pad to the next page boundary
-PPU_MEM
-CHR_ROM     put   chr2.s         ; 8K of CHR-ROM at PPU memory $0000 - $2000
-PPU_NT      ds    $2000          ; Nametable memory from $2000 - $3000, $3F00 - $3F14 is palette RAM
-PPU_OAM     ds    256            ; 256 bytes of separate OAM RAM
 
 ; Mapping tables to take a nametable address and return the appropriate attribute memory location.  This is a table with
 ; 960 entries.  This table is just the 64 offsets above address $2xC0 stored as bytes to keep the table size reasonably

@@ -48,7 +48,7 @@ GTEControlBits         equ   30          ; Enable / disable things
 
 SpriteBanks            equ   32          ; Bank bytes for the sprite data and sprite mask
 LastRender             equ   34          ; Record which render function was last executed
-CompileBankTop         equ   36          ; First free byte i nthe compile bank.  Grows upward in memeory.
+CompileBankTop         equ   36          ; First free byte in the compile bank.  Grows upward in memeory.
 
 DirtyBits              equ   38
 OldStartX              equ   40
@@ -59,6 +59,8 @@ SwizzlePtr             equ   44          ; Pointer to a table of 8 swizzle table
 ActivePtr              equ   48          ; Work pointer to point at the active swizzle table
 shadowBitmap           equ   50          ; Provide enough space for the full ppu range (240 lines) + 16 since the y coordinate can be off-screen
 _next                  equ   shadowBitmap+32
+
+LastRead               equ   104
 
 TileStoreBankAndBank01 equ   106
 TileStoreBankAndTileDataBank equ 108
@@ -174,9 +176,12 @@ PAD_BUTTON_B           equ   $0100
 PAD_BUTTON_A           equ   $0200
 PAD_KEY_DOWN           equ   $0400
 
-; GTE Control Bits
+; Rendering Control Bits
 CTRL_SPRITE_DISABLE    equ   $0001
 CTRL_BKGND_DISABLE     equ   $0002
+CTRL_GREYSCALE         equ   $4000           ; Use a fixed greyscale palette. This is not related to the NES greyscale bit
+CTRL_EVEN_RENDER       equ   $8000           ; Only render half the scanlines for speed
+
 
 ; Tile constants
 TILE_DAMAGED_BIT       equ   $8000                  ; Mark a tile as damaged (internal only)

@@ -269,27 +269,6 @@ SetScreenRect      sty   ScreenHeight               ; Save the screen height and
                    clc
                    adc   ScreenX0
 
-;                   ldx   #0
-;                   ldy   #0
-;:tsloop
-;                   sta   TileStore+TS_SCREEN_ADDR,x
-;
-;                   clc
-;                   adc   #4                         ; Go to the next tile
-;
-;                   iny
-;                   cpy   #41                        ; If we've done 41 columns, move to the next line
-;                   bcc   :nohop
-;                   ldy   #0
-;                   clc
-;                   adc   #{8*160}-{4*41}
-;:nohop
-
-;                   inx
-;                   inx
-;                   cpx   #TILE_STORE_SIZE-2
-;                   bcc   :tsloop
-
                    rts
 
 ; Clear the SHR screen and then infill the defined field

@@ -326,3 +326,14 @@ lite_odd_exit2     lda   #0                         ; get the high byte of the s
                    pha
 lite_even_exit2    jml   lite_base                  ; Jump to the next bank
                    dfb   $F4,$00
+
+                   ds    43-15-16                   ; More padding
+                   tyx
+                   txs
+                   lda   STATE_REG_R0W0
+                   stal  STATE_REG
+                   cli
+                   sei
+                   lda   STATE_REG_BLIT
+                   stal  STATE_REG
+                   jml   lite_base                 ; A catch-all in case anyone tries to go past the end

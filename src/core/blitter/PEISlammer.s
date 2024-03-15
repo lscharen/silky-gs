@@ -6,9 +6,7 @@
 ; slammer, note that page-aligned addresses repeat every 8 scan lines and some lines would need
 ; to be split into two slams to keep the direct page aligned.
 ;
-; At best, this saves 1 cycles per word, or 80 cycles for a full scanline -- which is only about
-; 12 additional instructions, so this is an optimization that is unlikely to lead to a net
-; improvement.
+; At best, this saves 1 cycle per word, or 80 cycles for a full scanline
 ;
 ; X = first line (inclusive), valid range of 0 to 199
 ; Y = last line  (exclusive), valid range >X up to 200
@@ -23,12 +21,39 @@ _PEISlam
             brk   $15
 ;                 rts
 
-            tya                    ; x must be less than y
-            sta   :screen_width_1
-            txa
-            cmp   :screen_width_1
-            bcc   *+3
+            stx   :screen_width_1       ; x must be less than y
+            cpy   :screen_width_1
+            bcs   *+3
             rts
+
+            lda   GTEControlBits
+            bit   #CTRL_EVEN_RENDER
+            bne   :normal
+
+            txa                            ; force starting line to the next even line, rounded up
+            inc
+            and  #$FFFE
+            sta  :screen_width_1
+            tax
+
+            tya
+            sec
+            sbc  :screen_width_1
+            inc                            ; y = (lines + 1) / 2, so if x = 0 and y = 1, then at least one iteration
+            lsr
+            tay
+            lda   #320
+            sta   :step+1                  ; double steps
+
+            bra   :begin
+:normal
+            tya
+            sec
+            sbc   :screen_width_1
+            tay                    ; get the number of lines in the y register. This changes if we're in even mode
+            lda   #160
+            sta   :step+1
+:begin
 
 ; Patch values because Direct Page is not available
 
@@ -48,13 +73,6 @@ _PEISlam
             sec
             sbc   ScreenWidth
             sta   :inner+1
-
-            phx
-            tya
-            sec
-            sbc   1,s
-            ply
-            tay                    ; get the number of lines in the y register
 
             txa
             asl
@@ -81,7 +99,7 @@ _PEISlam
             --^
 :pei_end
             tdc                    ; Move to the next line
-            adc   #160
+:step       adc   #160
             tcd
             adc   :screen_width_1
             tcs

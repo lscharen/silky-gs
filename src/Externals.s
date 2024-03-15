@@ -6,3 +6,8 @@ ROMBase              EXT
 ; Addresses in the blitter banks
 lite_base            EXT
 lite_base_2          EXT
+
+; Addresses in the other static memory banks
+tiledata             EXT
+PPU_MEM              EXT
+CHR_ROM              EXT
