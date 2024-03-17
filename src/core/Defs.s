@@ -60,6 +60,7 @@ ActivePtr              equ   48          ; Work pointer to point at the active s
 shadowBitmap           equ   50          ; Provide enough space for the full ppu range (240 lines) + 16 since the y coordinate can be off-screen
 _next                  equ   shadowBitmap+32
 
+RenderCount            equ   102         ; 8-bit value tracking the number of times the PPU queues have been rendered to the PEA field
 LastRead               equ   104
 
 TileStoreBankAndBank01 equ   106

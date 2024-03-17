@@ -15,7 +15,7 @@ _BltRangeLite
 ;                phb
                 lda   GTEControlBits
                 bit   #CTRL_EVEN_RENDER
-                bne   :normal
+                beq   :normal
 
                 txa
                 inc

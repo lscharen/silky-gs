@@ -28,7 +28,7 @@ _PEISlam
 
             lda   GTEControlBits
             bit   #CTRL_EVEN_RENDER
-            bne   :normal
+            beq   :normal
 
             txa                            ; force starting line to the next even line, rounded up
             inc

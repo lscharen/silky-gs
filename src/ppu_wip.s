@@ -54,7 +54,8 @@ PPUStartUp
         lda   CompileBank0+1            ; Patch some dispatch addresses with the tile compilation bank
         sta   patch0+2
 
-        jsr   _InitPPUTileMapping
+        jsr   _InitPPUTileMapping       ; Set up the lookup tables in the PPU shadow RAM
+
         clc
         rts
 
@@ -277,7 +278,7 @@ PPUFlushQueues
 :at_loop
         ldx  at_queue,y          ; Load the PPU attribute address
 
-        lda  frameCount
+        lda  RenderCount
         cmpl PPU_MEM+$6000,x     ; Check to see if this byte has already been processed on this frame
         bne  *+5                 ; No, mark it and continue
         brl  :at_loop_chk        ; Yes, already done -- move along
@@ -440,13 +441,13 @@ PPUFlushQueues
 ; tile, if needed
 
         ldy  :nt_head
+        lda  RenderCount               ; Load the frame count here to skip the load on duplicates
         brl  :nt_loop_chk
 
 :nt_loop
         ldx  nt_queue,y
 
-        lda  frameCount                ; Verify that this tile has not been updated yet
-        cmpl PPU_MEM+$6000,x
+        cmpl PPU_MEM+$6000,x            ; Verify that this tile has not been updated yet
         beq  :nt_loop_chk
         stal PPU_MEM+$6000,x
 
@@ -456,6 +457,7 @@ PPUFlushQueues
         phy                            ; Save the Y-register
         jsr  DrawPPUTile
         ply
+        lda  RenderCount
 
 :nt_loop_chk
         cpy  nt_queue_tail
@@ -473,7 +475,7 @@ PPUFlushQueues
 ; we simply exhaust it
 
         ldy  tmp_queue_idx
-        lda  frameCount                ; Load the frame count here to skip the load on duplicates
+        lda  RenderCount               ; Load the frame count here to skip the load on duplicates
         bra  :tmp_next
 
 :tmp_loop
@@ -485,12 +487,15 @@ PPUFlushQueues
         phy                            ; Save the Y-register
         jsr  DrawPPUTile
         ply
-        lda  frameCount                ; Reload the frame count to maintain the invariance
+        lda  RenderCount               ; Reload the frame count to maintain the invariance
 
 :tmp_next
         dey
         dey
         bpl  :tmp_loop
+
+; Increment the render count so he next iteration through we cna track the locations that change on that interation
+        inc  RenderCount
 
         rep  #$30                      ; Restore 16-bit mode
         rts
@@ -732,6 +737,8 @@ PPUDATA_READ ENT
 NT_QUEUE_LEN      equ 2048                 ; Enough space for _every_ tile over multiple frames
 NT_ELEM_SIZE      equ 4                    ; Each entry is 4 bytes
 NT_QUEUE_SIZE     equ {NT_ELEM_SIZE*NT_QUEUE_LEN}
+NT_QUEUE_MASK     equ {NT_QUEUE_SIZE-1}    ; Must be power of 2
+NT_QUEUE_MAX      equ {NT_ELEM_SIZE*{NT_QUEUE_LEN-1}}
 nt_queue_tail     dw  0
 nt_queue_head     dw  0
 nt_queue          ds  NT_QUEUE_SIZE        ; Each entry is a PPU address + byte
@@ -742,6 +749,8 @@ nt_queue          ds  NT_QUEUE_SIZE        ; Each entry is a PPU address + byte
 AT_QUEUE_LEN      equ 256                  ; Enough space for _every_ attribute byte
 AT_ELEM_SIZE      equ 4
 AT_QUEUE_SIZE     equ {AT_ELEM_SIZE*AT_QUEUE_LEN}
+AT_QUEUE_MASK     equ {AT_QUEUE_SIZE-1}    ; Must be power of 2
+AT_QUEUE_MAX      equ {AT_ELEM_SIZE*{AT_QUEUE_LEN-1}}
 at_queue_tail     dw  0
 at_queue_head     dw  0
 at_queue          ds  AT_QUEUE_SIZE
@@ -762,33 +771,47 @@ PPUResetQueues
         stz   nt_queue_tail
         rts
 
+; X = PPU address
+; Y = PPU data
 ATQueuePush mac
-        ldx  at_queue_head
-        txy
-        inx
-        inx
-        cpx  #AT_QUEUE_SIZE
-        bcc  *+5
-        ldx  #0
-        cpx  at_queue_tail
-        beq  is_full
-        stx  at_queue_head
+        sec
+        lda  at_queue_head          ; Calculate the number of elements in the queue
+        sbc  at_queue_tail
+        and  #AT_QUEUE_MASK
+        cmp  #AT_QUEUE_MAX          ; Are we at the queue's maximum?
+        bcs  is_full
+
+        tya
+        ldy  at_queue_head
+        sta  at_queue+2,y
+        txa
         sta  at_queue,y
+
+        lda  at_queue_head
+        adc  #AT_ELEM_SIZE          ; Carry is clear from is_full test
+        and  #AT_QUEUE_MASK
+        sta  at_queue_head
 is_full
         <<<
 
 NTQueuePush mac
-        ldx  nt_queue_head
-        txy
-        inx
-        inx
-        cpx  #NT_QUEUE_SIZE
-        bcc  *+5
-        ldx  #0
-        cpx  nt_queue_tail
-        beq  is_full
-        stx  nt_queue_head
+        sec
+        lda  nt_queue_head          ; Calculate the number of element in the queue
+        sbc  nt_queue_tail
+        and  #NT_QUEUE_MASK
+        cmp  #NT_QUEUE_MAX          ; Are we at the queue's maximum?
+        bcs  is_full
+
+        tya
+        ldy  nt_queue_head
+        sta  nt_queue+2,y
+        txa
         sta  nt_queue,y
+
+        lda  nt_queue_head
+        adc  #NT_ELEM_SIZE          ; Carry is clear from is_full test
+        and  #NT_QUEUE_MASK
+        sta  nt_queue_head
 is_full
         <<<
 
@@ -816,14 +839,15 @@ PPUDATA_WRITE ENT
         ldx  ppuaddr
 
         cpx  #$2000                   ; Restrict to the valid memory range.  May be able to remove
-        bcc  :nochange                ; these checks if we put PPU memory into its own bank
+        bcc  :hop                     ; these checks if we put PPU memory into its own bank
         cpx  #$4000
-        bcs  :nochange
+        bcs  :hop
 
         cmpl PPU_MEM,x                ; Skip updating the underlying graphics if there is no change
-        beq  :nochange                ; Separate exit point because we need 16-bit acc to update PPU address
+        beq  :hop                     ; Separate exit point because we need 16-bit acc to update PPU address
 
         stal PPU_MEM,x                ; Update PPU memory (8-bit write)
+        tay                           ; Keep a copy of the value in the Y-register
 
         rep  #$31                     ; Clear the carry, too
         txa
@@ -844,6 +868,7 @@ PPUDATA_WRITE ENT
         cpx  #$3F00                   ; Is it within the PPU palette area?
         bcc  :done                    ; Nope, it's in no-man's land. Nothing to do.
         brl  :extra                   ; Yep, do the palette updates in a game-specific manner
+:hop    bra  :nochange
 
 ; The PPU wrote to some location in the Nametable RAM ($2000 - $2FFF).  Now we need to determine if it
 ; wrote to the nametable tile data area or the tile attribute area.  There are separate queues for each
@@ -863,7 +888,6 @@ PPUDATA_WRITE ENT
         bra  :done
 
 :not_attr
-        txa                        ; This is a nametable value that's been changed, so
         NTQueuePush
         bra   :done
 
@@ -885,21 +909,11 @@ PPUDATA_WRITE ENT
 
         mx   %00
 
-* setborder
-*         php
-*         sep  #$20
-*         eorl $E0C034
-*         and  #$0F
-*         eorl $E0C034
-*         stal $E0C034
-*         plp
-*         rts
-
 ; Do some extra work to keep palette data in sync
 ;
 ; Based on the palette data that SMB uses, we remap the NES palette entries
 ; based on the AreaType, so most of the PPU writes are ignored.  However,
-; we do update some specific palette entries
+; we do update some specific palette entries to support some color cycling effects
 ;
 ; BG0,0 maps to IIgs Palette index 0    (Background color)
 ; BG3,1 maps to IIgs Palette index 1    (Color cycle for blocks)
@@ -928,7 +942,7 @@ ppu_3F00
         ldx  #0
         brl  extra_out
 
-; Shadow for background color
+; Mirror for background color
 ppu_3F10
         ldal PPU_MEM+$3F10
         ldx  #0

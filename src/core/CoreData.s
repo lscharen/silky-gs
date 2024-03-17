@@ -207,6 +207,5 @@ ScreenAddr        ENT
 
 ; Table of addresses for the right edge of the current screen rectangle.  This is not the same size as
 ; the physical screen and will be double the length of the ScreenHeight, up to a maximum of 200 lines
-RTable            ENT
-                  ds    400
+RTable            ds    400
                   ds    400

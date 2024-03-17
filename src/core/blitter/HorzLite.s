@@ -286,8 +286,8 @@ _ApplyBG0XPosAltLite
 :draw_count_x6      equ   blttmp+2
 :entry_jmp_addr     equ   blttmp+4
 :low_save_addr      equ   blttmp+6
-:draw_count_x3      equ   blttmp+8
-:draw_count_x6      equ   blttmp+10
+;:draw_count_x3      equ   blttmp+8
+;:draw_count_x6      equ   blttmp+10
 :entry_odd_addr     equ   blttmp+12
 :exit_odd_addr      equ   blttmp+14
 
@@ -357,7 +357,7 @@ _ApplyBG0XPosAltLite
                     tax                              ; Draw to the bottom of the bank
                     jsr   :one_pass_even
 
-                    lda   #{_LINES_PER_BANK-1}*2         ; Set the virtual line to the top of the next bank (0 or 120)
+                    lda   #{_LINES_PER_BANK-1}*2     ; Set the virtual line to the top of the next bank (0 or 120)
                     cmp   :virt_line_x2
                     lda   #0
                     bcc   *+5
@@ -424,10 +424,12 @@ _ApplyBG0XPosAltLite
                     stal  :do_setopcode_e+1
                     stal  :do_set_rel_e+1   ; This is too short
 
+;--- This is probably not needed (always uses a BRL opcode)
                     sep   #$20
                     ldy   :entry_jmp_addr
                     lda   #$82
 :do_setopcode_e     jsr   $0000                       ; Copy in the BRL opcode into the entry point
+;--- End
 
                     ldx   :exit_address
                     inx

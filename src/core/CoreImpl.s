@@ -86,8 +86,18 @@ _CoreStartUp
                   bcs       :core_err
 
                   jsr       EngineReset         ; All of the resources are allocated, put the engine in a known state
-
                   jsr       InitGraphics        ; Initialize all of the graphics-related data
+
+; Once the graphics arrays and core engine data is set up, prep the PEA field as if a render has already
+; happened.  This is to put everything in a valid state because other wise if the code tried to render
+; it would see that the x and p positions did not change from zero and some critical dispatch information
+; would not get filled in.
+
+                  jsr       _ApplyBG0YPosLite
+                  jsr       _ApplyBG0XPosLite
+                  clc
+
+
 ;                  jsr       InitSprites         ; Initialize the sprite subsystem
 ;                  jsr       InitTiles           ; Initialize the tile subsystem
 
@@ -218,8 +228,9 @@ EngineReset
                   stz       StartYMod240
 
                   stz       DirtyBits
-                  stz       LastRender             ; Initialize as is a full render was performed
+                  stz       LastRender             ; Initialize as if a full render was performed
                   stz       LastPatchOffset
+                  stz       RenderCount
 
                   stz       GTEControlBits
 
