@@ -26,7 +26,7 @@ x_offset    equ   16                      ; number of bytes from the left edge
             stz   ShowFPS
             stz   YOrigin
 
-            lda   #4                           ; Default to "Best" mode
+            lda   #4                      ; Default to "Best" mode
             sta   VideoMode
             sta   AudioMode
 
@@ -40,9 +40,6 @@ x_offset    equ   16                      ; number of bytes from the left edge
 
             lda   #1
             sta   ActiveBank
-
-;            lda   #$6000                 ; Stack at $00/6000 to save graphics data when drawing sprites
-;            sta   SpriteStack
 
 ; The next two direct pages will be used by the engine, so get another 2 pages beyond that for the ROM.  We get
 ; 4K of DP/Stack space by default, so there is plenty to share
@@ -68,9 +65,18 @@ x_offset    equ   16                      ; number of bytes from the left edge
             bcc   *+5
             jmp   Fail
 
+; Clear the IIgs screen and initialize the rendering parameters.
+
+            lda   #0
+            jsr   ClearScreen
+            jsr   InitPlayfield
+
 ; Convert the CHR ROM from the cart into GTE tiles
 
             jsr   LoadTilesFromROM
+
+; Show the configuration screen
+;            jsr   ShowConfig
 
 ; Set the palettes and swizzle tables
 
@@ -78,9 +84,8 @@ x_offset    equ   16                      ; number of bytes from the left edge
             jsr   SetAreaType
 
 ; Fill the buffer with tiles
-            php
-            sep   #$20
 
+            sep   #$20
             ldx   #$2000
             lda   #0
 :drawloop
@@ -99,37 +104,31 @@ x_offset    equ   16                      ; number of bytes from the left edge
             pla
             inc
             bne   :drawloop
-            plp
+            rep   #$20
 
 ; Render again, just to make sure it works
 
-            jsr   _ApplyBG0YPosLite       ; Set up the code field
-            jsr   _ApplyBG0XPosLite       ; Set up the code field
-            ldx   #0
-            ldy   #200
-            jsr   _BltRangeLite
-            lda   StartYMod240            ; Restore the fields back to their original state
-            ldx   ScreenHeight
-            jsr   _RestoreBG0OpcodesLite
-            stz   LastPatchOffset
+;            jsr   _ApplyBG0YPosLite       ; Set up the code field
+;            jsr   _ApplyBG0XPosLite       ; Set up the code field
+;            ldx   #0
+;            ldy   #200
+;            jsr   _BltRangeLite
+;            lda   StartYMod240            ; Restore the fields back to their original state
+;            ldx   ScreenHeight
+;            jsr   _RestoreBG0OpcodesLite
+;            stz   LastPatchOffset
 
+            jsr   RenderScreen
             jsr   WaitForKey
-;            brl   Exit
 
 ; Start the FPS counter
             ldal  OneSecondCounter
             sta   OldOneSec
 
-; Show the configuration screen
-;            jsr   ShowConfig
-            lda   #0
-            jsr   ClearScreen
-            jsr   InitPlayfield
-
 ; Initialize the sound hardware for APU emulation
 
-            lda   #0
-            jsr   APUStartUp              ; 0 = 240Hz, 1 = 120Hz, 2 = 60Hz (external)
+;            lda   #0
+;            jsr   APUStartUp              ; 0 = 240Hz, 1 = 120Hz, 2 = 60Hz (external)
 
 ; Set an internal flag to tell the VBL interrupt handler that it is
 ; ok to start invoking the game logic.  The ROM code has to be run
@@ -138,7 +137,7 @@ x_offset    equ   16                      ; number of bytes from the left edge
 ;
 ; Call the boot code in the ROM
 
-            ldx   #SMBStart
+            ldx   #ROMReset
             jsr   romxfer
 
 ; Apply hacks
@@ -158,8 +157,13 @@ x_offset    equ   16                      ; number of bytes from the left edge
             jsr   _ApplyBG0YPosLite       ; Set up the code field
 
 EvtLoop
-;            jsr   triggerNMI
+            jsr   readInput
+            jsr   triggerNMI
             jsr   RenderFrame
+
+;            jsr   RenderScreen
+;            jsr   WaitForKey
+;            brl   Exit
 
 ;            lda   singleStepMode
 ;            bne   :skip_render
@@ -419,7 +423,7 @@ LoadTilesFromROM
             bcc  :sloop
             rts
 
-; Helper to initialize the GTE playfield based on the selected VideoMode
+; Helper to initialize the playfield based on the selected VideoMode
 InitPlayfield
             lda   #16            ; We render starting at line 16 in the NES video buffer
             sta   NesTop
@@ -477,7 +481,7 @@ InitPlayfield
 
             ldx   #128
             ldy   ScreenHeight
-            jsr   _SetScreenMode
+            jsr   _SetScreenMode                 ; This is also called in the Init
 
             lda   ScreenY0
             asl

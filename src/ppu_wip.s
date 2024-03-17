@@ -271,7 +271,7 @@ PPUFlushQueues
 ;    a. Test if this nametable byte was updated on this frame. If not
 ;       ii. Draw the tile (the nametable data is already correct, just the attribure (palette) changed)
 
-        sep  #$10                ; 8-bit acc, 16-bit idx
+        sep  #$20                ; 8-bit acc, 16-bit idx
         ldy  :at_head            ; Start at the end of the queue (most recent data item) 
         brl  :at_loop_chk        ; This is a do-while loop
 
@@ -884,7 +884,7 @@ PPUDATA_WRITE ENT
 ; For the tile attributes, we store the EOR between the old and new value so that, when the
 ; queue is processed, only the metatiles that actually changes will be re-rendered
 
-        ATQueuePush
+;        ATQueuePush
         bra  :done
 
 :not_attr
