@@ -224,3 +224,14 @@ _LINE_SIZE  equ  512                     ; number of bytes for each blitter line
 
 _CODE_TOP   equ  21                      ; number of bytes from the base address of each blitter line to the first PEA instruction
 _LINES_PER_BANK equ 120
+
+; Set up some symbols to reference the different shadow memory in the PPU static bank. All of these
+; shadow areas are meant to be accessed using indexed addressed with a Nametable address ($2000 - $2FFF)
+; e.g. lda TILE_SHADOW,x
+TILE_SHADOW  equ $2000          ; shadowed values of the nametable tiles
+ATTR_SHADOW  equ $3000          ; pre-calculated attribute values derived from the attribute bytes in $2nC0 PPU RAM
+TILE_BANK    equ $4000          ; pre-calculated data bank value for the location of the associated PEA field tile
+TILE_ADDR_LO equ $5000          ; pre-calculated address (low byte) of the location of the PEA field tile
+TILE_ADDR_HI equ $6000          ; pre-calculated address (high byte) of the location of the PEA field tile
+TILE_VERSION equ $7000          ; version count of nametable byte (incremented on each PPUDATA_WRITE)
+TILE_TARGET  equ $8000          ; value of last rendered byte. If TILE_VERSION == TILE_TARGET, then no update

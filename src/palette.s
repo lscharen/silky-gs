@@ -1,6 +1,6 @@
 ; NES Palette (52 entries)
 nesPalette
-    dw  $0888
+    dw  $0777
     dw  $004A
     dw  $001B
     dw  $0409

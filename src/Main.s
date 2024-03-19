@@ -94,7 +94,7 @@ x_offset    equ   16                      ; number of bytes from the left edge
 
             and   #$03
             asl
-            stal  PPU_MEM+$4000,x               ; force palette selection
+            stal  PPU_MEM+ATTR_SHADOW,x               ; force palette selection
             lda   3,s
 
             jsr   DrawPPUTile
@@ -127,8 +127,8 @@ x_offset    equ   16                      ; number of bytes from the left edge
 
 ; Initialize the sound hardware for APU emulation
 
-;            lda   #0
-;            jsr   APUStartUp              ; 0 = 240Hz, 1 = 120Hz, 2 = 60Hz (external)
+            lda   #2
+            jsr   APUStartUp              ; 0 = 240Hz, 1 = 120Hz, 2 = 60Hz (external)
 
 ; Set an internal flag to tell the VBL interrupt handler that it is
 ; ok to start invoking the game logic.  The ROM code has to be run
@@ -157,8 +157,9 @@ x_offset    equ   16                      ; number of bytes from the left edge
             jsr   _ApplyBG0YPosLite       ; Set up the code field
 
 EvtLoop
-            jsr   readInput
-            jsr   triggerNMI
+;            jsr   readInput              ; Uncomment if interrupts are off
+;            jsr   triggerNMI
+
             jsr   RenderFrame
 
 ;            jsr   RenderScreen
@@ -876,7 +877,7 @@ CopyStatusToScreen
 :loop
             phy                             ; preserve reg
             ldx   MemOffsets,y
-            ldal  PPU_MEM+$2000,x
+            ldal  PPU_MEM+TILE_SHADOW,x
 ;            and   #$00FF
 ;            ora   #$0100+TILE_USER_BIT
 ;            pha
@@ -908,9 +909,9 @@ triggerNMI
 
 ;            lda   AudioMode
 ;            bne   :good_audio
-;            sep   #$30
-;            jsl   quarter_speed_driver
-;            rep   #$30
+            sep   #$30
+            jsl   quarter_speed_driver
+            rep   #$30
 ;:good_audio
 
             ldal  ppuctrl               ; If the ROM has not enabled VBL NMI, also skip

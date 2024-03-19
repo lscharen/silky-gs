@@ -53,6 +53,10 @@ wrep8    mac
 PPUStartUp
         lda   CompileBank0+1            ; Patch some dispatch addresses with the tile compilation bank
         sta   patch0+2
+        sta   patch1+2
+        sta   patch2+2
+        sta   patch3+2
+        sta   patch4+2
 
         jsr   _InitPPUTileMapping       ; Set up the lookup tables in the PPU shadow RAM
 
@@ -131,17 +135,215 @@ _InitPPUTileMapping
         adc  Col2CodeOffset+2,x      ; Combine with the current column (get the left half of the tile)
         ldx  :ppuaddr
 
-        sep  #$20                    ; Switch to 8-bit mode to store the values
-        stal PPU_MEM+$A000,x         ; Store the low byte of the PEA tile address
-        stal PPU_MEM+$A800,x
+        sep  #$20                         ; Switch to 8-bit mode to store the values
+        stal PPU_MEM+TILE_ADDR_LO+$000,x  ; Store the low byte of the PEA tile address
+        stal PPU_MEM+TILE_ADDR_LO+$800,x
         xba
-        stal PPU_MEM+$C000,x         ; Store the high byte of the PEA tile address
-        stal PPU_MEM+$C800,x
+        stal PPU_MEM+TILE_ADDR_HI+$000,x  ; Store the high byte of the PEA tile address
+        stal PPU_MEM+TILE_ADDR_HI+$800,x
 
-        lda  BTableHigh,y            ; Load the bank byte
-        stal PPU_MEM+$8000,x         ; Store it in the PPU bank (Nametable 1)
-        stal PPU_MEM+$8800,x         ; Store it in the PPU bank (Nametable 3)
+        lda  BTableHigh,y              ; Load the bank byte
+        stal PPU_MEM+TILE_BANK+$000,x  ; Store it in the PPU bank (Nametable 1)
+        stal PPU_MEM+TILE_BANK+$800,x  ; Store it in the PPU bank (Nametable 3)
+
         rep  #$21
+        rts
+
+; Sync a metatile value to the PPU data bank and to the code field
+;
+; This is called "sync" instead of "draw" because this routine takes care
+; of updating the various shadow values in the PPU data base as well as
+; actually drawing the tiles to the PEA field.
+;
+; There's a bit of nuance, too, because the bottow row of metatiles that corresponds
+; to the top 4 bits of the PPU Attribute bytes does not actually exist and must
+; be skipped.  This is detected by storing a zero in the TILE_BANK shadow memory
+; since the PEA fields will never be allocated in Bank 00.
+;
+; X = PPU address of the top-left corner of the metatile
+; A = Palette select value for all tiles
+        mx    %10
+SyncPPUMetatile
+
+        stal PPU_MEM+ATTR_SHADOW+$00,x     ; Store the palette select bits in the shadow page of the PPU MEM bank ($6000 - $7FFF)
+        stal PPU_MEM+ATTR_SHADOW+$01,x
+        stal PPU_MEM+ATTR_SHADOW+$20,x
+        stal PPU_MEM+ATTR_SHADOW+$21,x
+
+        clc
+        adc   SwizzlePtr+1                 ; Set the palette selection (used for all 4 tiles)
+        sta   ActivePtr+1
+
+;        ldal PPU_MEM+TILE_VERSION+$00,x    ; Sync up the version to mark these tiles as current
+;        stal PPU_MEM+TILE_TARGET+$00,x
+;        ldal PPU_MEM+TILE_VERSION+$01,x
+;        stal PPU_MEM+TILE_TARGET+$01,x
+;        ldal PPU_MEM+TILE_VERSION+$20,x
+;        stal PPU_MEM+TILE_TARGET+$20,x
+;        ldal PPU_MEM+TILE_VERSION+$21,x
+;        stal PPU_MEM+TILE_TARGET+$21,x
+
+;        ldal  PPU_MEM+TILE_SHADOW+0,x
+        ldal  PPU_MEM,x
+        sta   patch1+2
+;        ldal  PPU_MEM+TILE_SHADOW+1,x
+        ldal  PPU_MEM+1,x
+        sta   patch2+2
+;        ldal  PPU_MEM+TILE_SHADOW+32,x
+        ldal  PPU_MEM+32,x
+        sta   patch3+2
+;        ldal  PPU_MEM+TILE_SHADOW+33,x
+        ldal  PPU_MEM+33,x
+        sta   patch4+2
+
+        ldal  PPU_MEM+TILE_BANK,x     ; The tiles in the same row will have the same bank
+        beq   bad_row2                ; The bottom metatile row is not defined
+
+        phb                           ; Save the current bank
+
+        pha                           ; Point to the PEA code bank
+        plb
+
+; Calculate a few values for the next row
+
+        ldal  PPU_MEM+TILE_BANK+32,x
+        pha
+
+        ldal  PPU_MEM+TILE_ADDR_HI+32,x
+        pha
+        ldal  PPU_MEM+TILE_ADDR_LO+32,x
+        pha                                ; Push the address onto the stack directly instead of going through a 16-bit register
+
+; Now get the values for the top two tiles
+
+        ldal  PPU_MEM+TILE_ADDR_HI,x  ; Load the high byte for this tile address
+        xba
+        ldal  PPU_MEM+TILE_ADDR_LO,x  ; Load the low byte for this tile address
+        tax
+
+        rep   #$21                    ; 16-bit mode for the tile copy
+
+patch1  jsl   $000000
+
+        txa
+        sec
+        sbc   #6                      ; Move to the next PEA tile address
+        tax
+
+patch2  jsl   $000000
+
+        plx                             ; Load up for the next row
+        plb
+
+patch3  jsl   $000000
+
+        txa
+        sec
+        sbc   #6                      ; Move the the next PEA tile address
+        tax
+
+patch4  jsl   $000000
+
+        plb                            ; Restore the original bank
+        sep   #$20
+bad_row2
+        rts
+
+; Draw an attribute from the PPU into the code field by updating any changed metatiles
+;
+; X = PPU attribute address
+; A = Attribute value
+; B = Attribute EOR value
+;
+; A = 8 bit, X/Y = 16bit on entry
+        mx    %10
+DrawPPUAttribute
+        bra  :enter
+:attr_diff ds 2
+:attr_copy ds 2
+:mt_base0    ds 2
+:mt_base2    ds 2
+:mt_base64   ds 2
+:mt_base66   ds 2
+
+:enter
+        sta  :attr_copy             ; Keep a copy of the actual value
+        xba
+        sta  :attr_diff
+
+; Since we are going to assume at least one of the metatile attributes have changed, caculate the PPU address
+; of the upper-left tile of the metatiles corresponding to this attribute byte.
+
+        rep  #$20
+        txa                         ; Get the PPU attribute address ($2{n}C0 - $2{n+3}FF)
+        and  #$003F                 ; Isolate the attribute offset
+        asl                         ; x2 for indexing
+        tay
+
+        txa
+        and  #$2C00                 ; Keep the nametable bits
+        ora  :corner,y              ; Insert the relative offset within the nametable
+        tax                         ; This is constant for the ATTR_SHADOW updates
+        adc  #$0002                 ; adc #2 faster than two increments
+        sta  :mt_base2              ; Calculate the other offsets while it's fast to do so
+        adc  #$003E
+        sta  :mt_base64
+        adc  #$0002
+        sta  :mt_base66
+        sep  #$20
+
+        lda  :attr_diff
+        bit  #$03
+        beq  :not_top_left
+
+        lda  :attr_copy
+        and  #$03
+        asl
+        jsr  SyncPPUMetatile
+
+        lda  :attr_diff
+
+:not_top_left
+        bit  #$0C
+        beq  :not_top_right
+
+        ldx  :mt_base2
+        lda  :attr_copy
+        and  #$0C
+        lsr
+        jsr  SyncPPUMetatile
+
+        lda  :attr_diff
+
+:not_top_right
+        bit  #$30
+        beq  :not_bot_left
+
+        ldx  :mt_base64
+        lda  :attr_copy
+        and  #$30
+        lsr
+        lsr
+        lsr
+        jsr  SyncPPUMetatile
+
+        lda  :attr_diff
+
+:not_bot_left
+        bit  #$C0
+        beq  :not_bot_right
+
+        ldx  :mt_base66
+        lda  :attr_copy
+        and  #$C0                 ; This could be done with 4 ROL instructions instead
+        lsr
+        lsr
+        lsr
+        lsr
+        lsr
+        jsr  SyncPPUMetatile
+
+:not_bot_right
         rts
 
 ; Draw a tile from the PPU into the code field
@@ -155,63 +357,57 @@ DrawPPUTile
         sta   patch0+2                ; Put the tile ID into the page byte of the address
 
         clc
-        ldal  PPU_MEM+$4000,x         ; Load the palette select byte from shadow memory
+        ldal  PPU_MEM+ATTR_SHADOW,x   ; Load the palette select byte from shadow memory
         adc   SwizzlePtr+1
         sta   ActivePtr+1             ; Update the high byte of the active palette pointer
 
+        ldal  PPU_MEM+TILE_BANK,x    ; Load the bank byte for tile
+        beq   bad_tile               ; If the PPU address is in Attribute range, abort
+
         phb
-        ldal  PPU_MEM+$8000,x         ; Load the bank byte for tile
         pha
         plb
 
-        ldal  PPU_MEM+$C000,x         ; Load the high byte for this tile address
+        ldal  PPU_MEM+TILE_ADDR_HI,x ; Load the high byte for this tile address
         xba
-        ldal  PPU_MEM+$A000,x         ; Load the low byte for this tile address
+        ldal  PPU_MEM+TILE_ADDR_LO,x ; Load the low byte for this tile address
         tax
 
         rep   #$21
 patch0  jsl   $000000
         sep   #$20
         plb
+
+bad_tile
         rts
-        mx    %11
+        mx    %00
 
-; Draw a tile from the PPU into the code field
-;
-; X = PPU address
-; A = Tile value
-XDrawPPUTile
-        clc
-        ldal  PPU_MEM+$4000-1,x       ; Load the palette select for this tile into the high byte
-        and   #$FF00
-        adc   SwizzlePtr
-        sta   ActivePtr
-        lda   SwizzlePtr+2            ; This can be removed
-        sta   ActivePtr+2
+; Forward scan to copy tile data from the queue into the TILE_SHADOW table
+_UpdateShadowTiles
+:nt_head   equ tmp3
 
-        ldal  PPU_MEM-1,x             ; load the tile id into the high byte
-        and   #$FF00                  ; because tiles are page-aligned
-        sta   :patch+1
+        ldy  nt_queue_tail
+        cpy  :nt_head                ; Are there any items on the queue?
+        beq  :done                   ; No, so early exit
 
-        txa                           ; Use a large lookup table to map from a nametable address to an address
-        and   #$0FFF                  ; in the PEA field.  The lookup table is initialized differently depending
-        asl                           ; on how the NES mirroring is set up.
-        tax
+:loop
+        ldx  nt_queue,y              ; Load the PPU address
+        lda  nt_queue+2,y            ; Load the tile value
+        stal PPU_MEM+TILE_SHADOW,x   ; Update the shadow memory
+        lda  #1
+        stal PPU_MEM+TILE_VERSION,x  ; Set a flag to track the render status of all potential tiles
 
-;        sep   #$20
-;        lda   ppu2bank,x              ; Load the bank that this tile lives in
-;        pha
-;        lda   CompileBank             ; This can be done once in startup
-;        sta   :patch+3
-;        rep   #$21                    ; 16-bit and clear the carry
+        iny                          ; Go to the next queue entry (wish this could be faster...)
+        iny
+        iny
+        iny
+        cpy  #NT_QUEUE_SIZE
+        bcc  *+5
+        ldy  #0
+        cpy  :nt_head
+        bne  :loop
 
-        
-;        lda   ppu2pea,x
-;        tax
-
-        plb                          ; pop the bank for the tile that we're rendering
-:patch  jsl   $000000
-        plb
+:done
         rts
 
 ; Render and clear the queues
@@ -243,8 +439,10 @@ PPUFlushQueues
 :attr_copy equ tmp6
 :mt_base   equ tmp7              ; metatile base PPU address
 :ppu_addr  equ tmp8
+:index     equ tmp9
 
-; Prevent an inopportune interrupt from causing the AT and NT queues to get out of sync
+; Prevent an inopportune interrupt from causing the AT and NT queues to get out of sync. The 
+; NMI / Interrupt code does not use any of the temporary direct page locations.
 
         php
         sei
@@ -254,108 +452,87 @@ PPUFlushQueues
         sta  :at_head
         plp
 
-; Now start processing the queues.  There's an interdependent order in how this had to happen in order
-; to prevent redundent tile drawing.
-;
-; 1. Walk the Attribute queue and for each attribute value
-;    a. Test if this attribute byte was updated on this frame. If not
-;       i.  Write the value to the PPU Attribute shadow data
-;       ii. For each changed attribute, put the impacted nametable addresses on a separate queue (address only)
-;
-; 2. Walk the Nametable queue and for each tile value
-;    a. Test if this nametable byte was updated on this frame. If not
-;       i.  Write the value to the PPU Nametable shadow data
-;       ii. Draw the tile (since the attribute byte is updated)
-;
-; 3. Walk the address-only queue populated in (1)
-;    a. Test if this nametable byte was updated on this frame. If not
-;       ii. Draw the tile (the nametable data is already correct, just the attribure (palette) changed)
+; First, do a fast forward scan through the nametable queue and get all of the
+; tiles in the TILE_SHADOW table in sync with the PPU tiles up through the current
+; frame.
 
-        sep  #$20                ; 8-bit acc, 16-bit idx
-        ldy  :at_head            ; Start at the end of the queue (most recent data item) 
-        brl  :at_loop_chk        ; This is a do-while loop
+        jsr  _UpdateShadowTiles
+
+; Second, do a reverse scan through the attribute queue and update the attribute
+; bytes in the TILE_SHADOW table and render the metatiles.  Also, mark which tiles
+; are updated so we (a) don't update any uneccessary attributes and (b) don't draw
+; tiles later that were already updated as part of the metatile update.
+
+        ldy  :at_head               ; Start at the end of the queue (most recent data item)
+        sep  #$20                   ; Start off in 8-bit mode
+        brl  :at_loop_chk
 
 :at_loop
-        ldx  at_queue,y          ; Load the PPU attribute address
+        ldx  at_queue,y             ; Load the PPU attribute address
 
-        lda  RenderCount
-        cmpl PPU_MEM+$6000,x     ; Check to see if this byte has already been processed on this frame
-        bne  *+5                 ; No, mark it and continue
-        brl  :at_loop_chk        ; Yes, already done -- move along
-        stal PPU_MEM+$6000,x
+        ldal PPU_MEM+TILE_VERSION,x ; Load the version byte for this
+        beq  *+5                    ; If it has not been marked, continue processing
+        brl  :at_loop_chk           ; Otherwise skip to the next iteration
+        inc
+        stal PPU_MEM+TILE_VERSION,x ; Mark this attribute byte as having been processed
 
-        stx  :ppu_addr           ; Save it
-
-; Since we are going to assume at least one of the metatile attributes have changesd, so a little bit
-; of pre-work to caculate the PPU address of the upper-left tile of the metatile corresponding to this
-; attribute byte.
-
-        rep  #$10
-        txa                 ; Get the PPU attribute address ($2{n+3}C0 - $2{n+3}FF)
-        and  #$003F         ; Isolate the attribute offset
-        tax
-        lda  :corner,x      ; Get the offset, relative to the nametable we're on
-        eor  at_queue,y
-        and  #$03FF
-        eor  :corner,x      ; Combine with the nametable bits
-        sta  :mt_base
-        sep  #$10
-
-; Now, continue with the processing
-
-        ldx  :ppu_addr
-        lda  at_queue+2,y        ; Load the PPU attribute value
-        sta  :attr_copy          ; Keep a copy of the actual value
-
-; Figure out which metatiles actually changed their palette assignments
-
-        eorl PPU_MEM+$2000,x     ; Get the bit difference from the previous applied value
+        lda  at_queue+2,y           ; Load the PPU attribute value
+        sta  :attr_copy             ; Keep a copy of the actual value
+        eorl PPU_MEM+TILE_SHADOW,x  ; Get the bit difference from the previous applied value
         sta  :attr_diff
+
+; Store the attribute into the shadow ram
+
+        lda  :attr_copy
+        stal PPU_MEM+TILE_SHADOW,x  ; Now that we have the diff, put the actual value into the TILE_SHADOW
+
+;        stx  :ppu_addr              ; Save the PPU address for later
+        sty  :index                 ; Save the Y-register for later
+
+; Since we are going to assume at least one of the metatile attributes have changed, caculate the PPU address
+; of the upper-left tile of the metatiles corresponding to this attribute byte.
+
+        rep  #$20
+        txa                         ; Get the PPU attribute address ($2{n}C0 - $2{n+3}FF)
+        and  #$003F                 ; Isolate the attribute offset
+        asl                         ; x2 for indexing
+        tay
+
+;        lda  :ppu_addr
+        txa
+        and  #$2C00                 ; Keep the nametable bits
+        ora  :corner,y              ; Insert the relative offset within the nametable
+;        sta  :mt_base
+        tax                         ; This is constant for the ATTR_SHADOW updates
+        sep  #$20
+
+; Put the corner value onto a metatile list so we can come back and fill in any PPU tiles
+; that need to be updated that weren't already caught by the Nametable queue
 
 ; First, check the metatile bits in the attribute byte to see if a given metatile has changed its value
 ; from what is currently in the PPU Nametable RAM and what was last rendered into the PEA field.
 
+        lda  :attr_diff
         bit  #$03
         beq  :not_top_left
 
 ; We are going to process this metatile, so load the PPU address of the metatile that is impacts.
 
-        ldx  :mt_base
+;        ldx  :mt_base
 
 ; The first step is to calculate the tile select value and store that into the appropriate locations
 ; in a shadow table that is used by the low-level tile drawing code.
 
         lda  :attr_copy
         and  #$03
-        asl                      ; This clears the carry bit
-        stal PPU_MEM+$4000,x     ; Store the palette select bits in the shadow page of the PPU MEM bank ($6000 - $7FFF)
-        stal PPU_MEM+$4001,x
-        stal PPU_MEM+$4020,x
-        stal PPU_MEM+$4021,x
-
-; Now, we need to add these four PPU addresses to a queue so that, if they are not already on the Nametable
-; queue, they will be redrawn into the PEA field later in this function.
-
-        rep  #$21                ; 16-bit accumulator and clear the carry bit
-        txa                      ; Put the PPU address in the accumulator
-
-        ldx  tmp_queue_idx       ; Get the current index for the temporary queue (make this a local stack later)
-        sta  tmp_queue,x         ; Insert these four PPU tile addresses into the queue
-        inc
-        sta  tmp_queue+2,x
-        adc  #32-1
-        sta  tmp_queue+4,x
-        inc
-        sta  tmp_queue+6,x
-
-        txa                      ; Advance the queue index
-        adc  #8
-        sta  tmp_queue_idx
-        sep  #$20
+        asl
+        stal PPU_MEM+ATTR_SHADOW+$00,x
+        stal PPU_MEM+ATTR_SHADOW+$01,x
+        stal PPU_MEM+ATTR_SHADOW+$20,x
+        stal PPU_MEM+ATTR_SHADOW+$21,x
 
 ; Reload the attribute difference and proceed to the next metatile
 
-        ldx  :ppu_addr
         lda  :attr_diff
 
 :not_top_left
@@ -365,12 +542,11 @@ PPUFlushQueues
         lda  :attr_copy
         and  #$0C
         lsr
-        stal PPU_MEM+$4002,x
-        stal PPU_MEM+$4003,x
-        stal PPU_MEM+$4022,x
-        stal PPU_MEM+$4023,x
+        stal PPU_MEM+ATTR_SHADOW+$02,x
+        stal PPU_MEM+ATTR_SHADOW+$03,x
+        stal PPU_MEM+ATTR_SHADOW+$22,x
+        stal PPU_MEM+ATTR_SHADOW+$23,x
 
-        ldx  :ppu_addr
         lda  :attr_diff
 
 :not_top_right
@@ -382,12 +558,11 @@ PPUFlushQueues
         lsr
         lsr
         lsr
-        stal PPU_MEM+$4040,x
-        stal PPU_MEM+$4041,x
-        stal PPU_MEM+$4060,x
-        stal PPU_MEM+$4061,x
+        stal PPU_MEM+ATTR_SHADOW+$40,x
+        stal PPU_MEM+ATTR_SHADOW+$41,x
+        stal PPU_MEM+ATTR_SHADOW+$60,x
+        stal PPU_MEM+ATTR_SHADOW+$61,x
 
-        ldx  :ppu_addr
         lda  :attr_diff
 
 :not_bot_left
@@ -401,18 +576,16 @@ PPUFlushQueues
         lsr
         lsr
         lsr
-        stal PPU_MEM+$4042,x
-        stal PPU_MEM+$4043,x
-        stal PPU_MEM+$4062,x
-        stal PPU_MEM+$4063,x
+        stal PPU_MEM+ATTR_SHADOW+$42,x
+        stal PPU_MEM+ATTR_SHADOW+$43,x
+        stal PPU_MEM+ATTR_SHADOW+$62,x
+        stal PPU_MEM+ATTR_SHADOW+$63,x
 
-        ldx  :ppu_addr
 :not_bot_right
 
-; Store the attribute into the shadow ram
+; Restore the queue index
 
-        lda  :attr_copy
-        stal PPU_MEM+$2000,x
+        ldy  :index
 
 ; This is where the loop starts.  If the queue is empty, then the first check will find that the
 ; front and back are equal, and do nothing.  Otherwise, the back must be beyond the front, so
@@ -420,6 +593,7 @@ PPUFlushQueues
 :at_loop_chk
         cpy  at_queue_tail       ; Have we reached the end of the attribute queue?
         beq  :at_done
+
         dey
         dey
         dey
@@ -436,28 +610,29 @@ PPUFlushQueues
         ldy  :at_head
         sty  at_queue_tail
 
+
+
 ; Now, scan through the Nametable queue.  This routine is almost exactly the same as processing
 ; the Attribute queue, except there is much less bookkeeping since we are simply drawing each
 ; tile, if needed
 
         ldy  :nt_head
-        lda  RenderCount               ; Load the frame count here to skip the load on duplicates
         brl  :nt_loop_chk
 
 :nt_loop
         ldx  nt_queue,y
 
-        cmpl PPU_MEM+$6000,x            ; Verify that this tile has not been updated yet
-        beq  :nt_loop_chk
-        stal PPU_MEM+$6000,x
+        ldal PPU_MEM+TILE_VERSION,x    ; If this byte is already marked, then continue
+        bne  :nt_loop_chk
+        inc
+        stal PPU_MEM+TILE_VERSION,x    ; Mark it with a non-zero value
 
         lda  nt_queue+2,y              ; Load the new PPU tile value
-        stal PPU_MEM+$2000,x           ; Store it into shadow memory
+        stal PPU_MEM+TILE_SHADOW,x     ; Store it into shadow memory
 
         phy                            ; Save the Y-register
         jsr  DrawPPUTile
         ply
-        lda  RenderCount
 
 :nt_loop_chk
         cpy  nt_queue_tail
@@ -470,32 +645,39 @@ PPUFlushQueues
         ldy  #NT_QUEUE_SIZE-NT_ELEM_SIZE
         brl  :nt_loop
 :nt_done
+        ldy  :nt_head                  ; Move the tail of the queue up to the head
+        sty  nt_queue_tail
 
-; Final phase.  Run through the temporary queue. This is even simpler, because it's local to this routine, so
-; we simply exhaust it
+; Finally, scan all of the metadata tiles that were queued and draw any tiles that were not draw by the
+; nametable scan.  We do this separately, because there are some efficiencies when we know that a 
+; metatile is being drawn -- specifically, the palette byte is the same and the tiles do not
+; cross the PEA field boundary.
 
-        ldy  tmp_queue_idx
-        lda  RenderCount               ; Load the frame count here to skip the load on duplicates
-        bra  :tmp_next
 
-:tmp_loop
-        ldx  tmp_queue,y               ; Load the PPU address
-        cmpl PPU_MEM+$6000,x           ; No need to update the value because this queue cannot have duplicates
-        beq  :tmp_next
+; Third phase.  Run through the metadata queue. This is even simpler, because it's local to this routine, so
+; we simply exhaust it.
 
-        ldal PPU_MEM+$2000,x           ; Load the tile index from PPU shadow memory
-        phy                            ; Save the Y-register
-        jsr  DrawPPUTile
-        ply
-        lda  RenderCount               ; Reload the frame count to maintain the invariance
+*         ldy  tmp_queue_idx
+*         bra  :tmp_next
 
-:tmp_next
-        dey
-        dey
-        bpl  :tmp_loop
+* :tmp_loop
+*         ldx  tmp_queue,y               ; Load the PPU address
 
-; Increment the render count so he next iteration through we cna track the locations that change on that interation
-        inc  RenderCount
+*         ldal PPU_MEM+TILE_VERSION,x
+*         cmpl PPU_MEM+TILE_TARGET,x
+*         beq  :tmp_next
+*         stal PPU_MEM+TILE_TARGET,x
+
+*         ldal PPU_MEM+TILE_SHADOW,x     ; Load the tile index from PPU shadow memory
+*         phy                            ; Save the Y-register
+*         jsr  DrawPPUTile
+*         ply
+*         jsr  incborder
+
+* :tmp_next
+*         dey
+*         dey
+*         bpl  :tmp_loop
 
         rep  #$30                      ; Restore 16-bit mode
         rts
@@ -779,7 +961,10 @@ ATQueuePush mac
         sbc  at_queue_tail
         and  #AT_QUEUE_MASK
         cmp  #AT_QUEUE_MAX          ; Are we at the queue's maximum?
-        bcs  is_full
+        bcc  not_full
+        jsr  incborder
+        bra  is_full
+not_full
 
         tya
         ldy  at_queue_head
@@ -796,19 +981,21 @@ is_full
 
 NTQueuePush mac
         sec
-        lda  nt_queue_head          ; Calculate the number of element in the queue
+        lda  nt_queue_head          ; Calculate the number of elements in the queue
         sbc  nt_queue_tail
         and  #NT_QUEUE_MASK
         cmp  #NT_QUEUE_MAX          ; Are we at the queue's maximum?
-        bcs  is_full
-
+        bcc  not_full
+        jsr  incborder
+        bra  is_full
+not_full
         tya
         ldy  nt_queue_head
         sta  nt_queue+2,y
         txa
         sta  nt_queue,y
 
-        lda  nt_queue_head
+        tya
         adc  #NT_ELEM_SIZE          ; Carry is clear from is_full test
         and  #NT_QUEUE_MASK
         sta  nt_queue_head
@@ -831,7 +1018,7 @@ PPUDATA_WRITE ENT
         phb
         phk
         plb
-        pha
+        pha                           ; We will abuse this location shortly...
         phx
         phy
 
@@ -843,11 +1030,16 @@ PPUDATA_WRITE ENT
         cpx  #$4000
         bcs  :hop
 
-        cmpl PPU_MEM,x                ; Skip updating the underlying graphics if there is no change
-        beq  :hop                     ; Separate exit point because we need 16-bit acc to update PPU address
+        ldal PPU_MEM,x                ; Load the old data byte
+        eor  3,s                      ; Compare it to the new data byte
+        beq  :hop                     ; Skip updating the underlying graphics if there is no change (A xor A = 0)
 
+        xba                           ; Stash the XOR in the high byte of the accumulator (for attribute updates)
+        lda  3,s                      ; Reload the original accumulator value
         stal PPU_MEM,x                ; Update PPU memory (8-bit write)
-        tay                           ; Keep a copy of the value in the Y-register
+
+        cpx  #$3000                   ; Is it within the PPU nametables memory range?
+        bcc  :in_nt
 
         rep  #$31                     ; Clear the carry, too
         txa
@@ -862,33 +1054,52 @@ PPUDATA_WRITE ENT
 ; 2. In the range $2{x+3}C0 to $2{x+3}FF -- this is tile attribute data and should be put on a separate queue
 ; 3. In the range $3F00-$3FFF -- this is the palette range and executes a callback function to take a game-specific action
 
-        cpx  #$3000                   ; Is it within the PPU nametables memory range?
-        bcc  :in_nt
-
         cpx  #$3F00                   ; Is it within the PPU palette area?
-        bcc  :done                    ; Nope, it's in no-man's land. Nothing to do.
+        bcc  :hop2                    ; Nope, it's in no-man's land. Nothing to do.
         brl  :extra                   ; Yep, do the palette updates in a game-specific manner
 :hop    bra  :nochange
-
+:hop2   brl  :done
 ; The PPU wrote to some location in the Nametable RAM ($2000 - $2FFF).  Now we need to determine if it
 ; wrote to the nametable tile data area or the tile attribute area.  There are separate queues for each
 ; of these pieces of memory since each attribute byte afftect 16 tiles, it's important to process the
 ; attribute changes first to avoid having to redraw tiles since the IIgs does not have enough colors
 ; to direct support the palette indexes and has to redraw tiles when their palette changes.
 :in_nt
+        tay                           ; Keep a copy of the value in the Y-register (moved all 16-bits, even in 8-bit acc mode)
+
+;        ldal PPU_MEM+TILE_VERSION,x
+;        inc
+;        stal PPU_MEM+TILE_VERSION,x
+
+        rep  #$31                     ; Clear the carry, too
+        txa
+        adc  ppuincr
+        and  #$3FFF
+        sta  ppuaddr                  ; Advance to the new ppu address
+
+        phd                           ; Need some direct page info for rendering
+        lda   DPSave
+        pha
+        pld
+
         txa
         and  #$03C0                   ; Is this in the tile attribute space?
         cmp  #$03C0
         bcc  :not_attr
 
-; For the tile attributes, we store the EOR between the old and new value so that, when the
-; queue is processed, only the metatiles that actually changes will be re-rendered
-
+        tya
+        sep  #$20
+        jsr  DrawPPUAttribute
 ;        ATQueuePush
+        pld
         bra  :done
 
 :not_attr
-        NTQueuePush
+        tya                           ; Get the tile value back into the accumulator
+        sep  #$20
+        jsr  DrawPPUTile
+;        NTQueuePush
+        pld
         bra   :done
 
 :nochange
@@ -1445,7 +1656,16 @@ oam_loop
         adc  #$2000-{y_offset*160}+x_offset
         sta  tmp0
 
+; Convert the x-coordinate.  There is a bit of work here.  The NES screen is 256 piels wide, which
+; matches the area of the IIgs screen we are rendering to.  However, for speed we can only render
+; on myte boundarding, which correspondes to even NES pixels.  The issue, is that if the NES internal
+; scroll is on an odd pixel and the sprite is drawn on an odd pixel, simply clamping the value causes
+; the sprite to be drawn one byte to the left.
+
+;        lda  ppuscroll+1              ; Load the scroll position
+;        lsr                           ; Put the LSB into the carry
         lda  OAM_COPY+3,x             ; X-coordinate (In NES pixels, need to convert to IIgs bytes)
+;        adc  #0
         and  #$00FE                   ; Mask before the shift so that we know a 0 goes into the carry
         lsr
         adc  tmp0                     ; Add to the base address calculated fom the Y-coordinate
@@ -1717,3 +1937,15 @@ drawTileToScreenP
           plb
           plb
           jmp   draw_rtn
+
+incborder
+        php
+        sep  #$20
+        ldal $E0C034
+        inc
+        eorl $E0C034
+        and  #$0F
+        eorl $E0C034
+        stal $E0C034
+        plp
+        rts
