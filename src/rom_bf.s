@@ -246,12 +246,30 @@
 ;  $07FA = Audio related?
 ;  $07FA = "HAL" Reset Check
 
-    org $c000
+; ----------------------
+;  IIgs shim code
+; ----------------------
+ROMBase ENT
+    ds  $c000-14
+;    org $c000
+
+; Enter via a JML. X = target address, Stack and Direct page set up properly. B = ROM bank. Called in 16-bit native mode
+            mx    %00
+
+ExtRtn      EXT
+ExtIn       ENT
+            stx  :patch+1
+            sep  #$30
+:patch      jsr  $0000
+            rep  #$30
+            jml  ExtRtn
 
 ; ----------------------
 ;  RESET code
 ; ----------------------
 
+    mx    %11
+ROMReset ENT
 lc000_reset
     lda #$00	;  \
     sta $2000	;  | Initialize PPU registers
@@ -349,6 +367,7 @@ lc085	;  Default High Scores
 ;  NMI code
 ; ----------------------
 
+NonMaskableInterrupt ENT
 lc094_nmi
     pha			;  \
     txa			;  |
@@ -2486,7 +2505,7 @@ ld08e
     bne ld070
     lda $40
     beq ld0a8
-    lda $006b
+    lda: $006b              ; IIgs: ??? why absolute
     cmp #$24
     bne ld070
 ld0a8
