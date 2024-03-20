@@ -156,19 +156,17 @@ x_offset    equ   16                      ; number of bytes from the left edge
             jsr   _ApplyBG0YPosPreLite
             jsr   _ApplyBG0YPosLite       ; Set up the code field
 
+; Start in single step mode
+;            lda   #1
+;            sta   singleStepMode
+
 EvtLoop
 ;            jsr   readInput              ; Uncomment if interrupts are off
 ;            jsr   triggerNMI
 
+            lda   singleStepMode
+            bne   :skip_render
             jsr   RenderFrame
-
-;            jsr   RenderScreen
-;            jsr   WaitForKey
-;            brl   Exit
-
-;            lda   singleStepMode
-;            bne   :skip_render
-;            jsr   RenderFrame
 
             lda   ShowFPS
             beq   :no_fps
@@ -186,8 +184,11 @@ EvtLoop
             lda   frameCount
             stz   frameCount
 :no_fps
+            bra   :chkkey
 :skip_render
+            jsr   readInput              ; Manual read in single-step mode
 
+:chkkey
             lda   LastRead
             bit   #PAD_KEY_DOWN
             beq   EvtLoop
@@ -196,14 +197,20 @@ EvtLoop
             pha
 
 ; Put the game in single-step mode
-;            cmp   #'s'
-;            bne   :not_s
+            cmp   #'s'
+            bne   :not_s
 
-;            lda   #1                         ; Stop the VBL interrupt from running the game logic
-;            sta   singleStepMode
-
-;            brl   EvtLoop
-;:not_s
+            lda   singleStepMode
+            bne   :do_step
+            lda   #1                         ; Stop the VBL interrupt from running the game logic
+            sta   singleStepMode
+            brl   EvtLoop
+:do_step
+            jsr   triggerNMI
+            jsr   drawStats                  ; Show information about the internal state before rendering
+            jsr   RenderFrame
+            brl   EvtLoop
+:not_s
             pla
             cmp   #'f'
             bne   :not_f
@@ -305,6 +312,25 @@ Greyscale   dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
 
 Fail        brk   $FE
+
+drawStats
+            ldx   #0
+            ldy   #$FFFF
+            sec
+            lda  at_queue_head          ; Calculate the number of elements in the queue
+            sbc  at_queue_tail
+            and  #AT_QUEUE_MASK
+            jsr  DrawWord
+
+            ldx   #8*160
+            ldy   #$FFFF
+            sec
+            lda  nt_queue_head          ; Calculate the number of elements in the queue
+            sbc  nt_queue_tail
+            and  #NT_QUEUE_MASK
+            jsr  DrawWord
+
+            rts
 
 TmpPalette  ds    32
 
