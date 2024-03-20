@@ -425,8 +425,8 @@ lc0f1
     pla			;  | Pull A, X, Y
     tax			;  |
     pla			;  /
-    rti
-
+;    rti
+    rts
 
 ; ----------------------
 ;  BRK code
