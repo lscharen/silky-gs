@@ -250,8 +250,258 @@
 ;  IIgs shim code
 ; ----------------------
 ROMBase ENT
-    ds  $c000-14
+    ds  $be00
 ;    org $c000
+
+; External wrapper is responsible for setting the stack
+PPUCTRL_WRITE    EXT
+PPUMASK_WRITE    EXT
+PPUSTATUS_READ   EXT
+PPUSTATUS_READ_X EXT
+OAMADDR_WRITE    EXT
+PPUSCROLL_WRITE  EXT
+PPUADDR_WRITE    EXT
+PPUDATA_READ     EXT
+PPUDATA_WRITE    EXT
+PPUDMA_WRITE     EXT
+
+APU_PULSE1_REG1_WRITE EXT
+APU_PULSE1_REG2_WRITE EXT
+APU_PULSE1_REG3_WRITE EXT
+APU_PULSE1_REG4_WRITE EXT
+APU_PULSE2_REG1_WRITE EXT
+APU_PULSE2_REG2_WRITE EXT
+APU_PULSE2_REG3_WRITE EXT
+APU_PULSE2_REG4_WRITE EXT
+APU_TRIANGLE_REG1_WRITE EXT
+;APU_TRIANGLE_REG2_WRITE EXT
+APU_TRIANGLE_REG3_WRITE EXT
+APU_TRIANGLE_REG4_WRITE EXT
+APU_NOISE_REG1_WRITE EXT
+;APU_NOISE_REG2_WRITE EXT
+APU_NOISE_REG3_WRITE EXT
+APU_NOISE_REG4_WRITE EXT
+
+APU_STATUS_WRITE EXT
+
+STA_4000_Y
+            php
+            phy
+            pea  :rtn-1
+            tyx
+            jmp  (:reg_tbl,x)
+:reg_tbl    dw   APU_PULSE1_REG1_W,APU_PULSE1_REG1_W
+            dw   APU_PULSE2_REG1_W,APU_PULSE2_REG1_W,
+            dw   APU_TRIANGLE_REG1_W,APU_TRIANGLE_REG1_W
+            dw   NO_OP,NO_OP
+:rtn        ply
+            plp
+            rts
+
+; Hooks to call back to the runtime harness for APU register access
+STA_4002_X
+; x is 0, 4 or 8 -- dispatch to the correct underlying routine
+            jmp  (:reg_tbl,x)
+:reg_tbl    dw   APU_PULSE1_REG3_W,APU_PULSE1_REG3_W
+            dw   APU_PULSE2_REG3_W,APU_PULSE2_REG3_W,
+            dw   APU_TRIANGLE_REG3_W,APU_TRIANGLE_REG3_W
+            dw   NO_OP,NO_OP
+
+STA_4003_X
+            jmp  (:reg_tbl,x)
+:reg_tbl    dw   APU_PULSE1_REG4_W,APU_PULSE1_REG4_W
+            dw   APU_PULSE2_REG4_W,APU_PULSE2_REG4_W,
+            dw   APU_TRIANGLE_REG4_W,APU_TRIANGLE_REG4_W
+            dw   NO_OP,NO_OP
+
+STA_4000
+APU_PULSE1_REG1_W
+            jsl  APU_PULSE1_REG1_WRITE
+NO_OP
+            rts
+APU_PULSE1_REG1_WX
+            phx
+            pha
+            txa
+            jsl  APU_PULSE1_REG1_WRITE
+            pla
+            plx
+            rts
+STA_4001
+APU_PULSE1_REG2_W
+            jsl  APU_PULSE1_REG2_WRITE
+            rts
+APU_PULSE1_REG2_WY
+            phy
+            pha
+            tya
+            jsl  APU_PULSE1_REG2_WRITE
+            pla
+            ply
+            rts
+
+STA_4002
+APU_PULSE1_REG3_W
+            jsl  APU_PULSE1_REG3_WRITE
+            rts
+APU_PULSE1_REG4_W
+            jsl  APU_PULSE1_REG4_WRITE
+            rts
+
+STA_4004
+APU_PULSE2_REG1_W
+            jsl  APU_PULSE2_REG1_WRITE
+            rts
+APU_PULSE2_REG1_WX
+            phx
+            pha
+            txa
+            jsl  APU_PULSE2_REG1_WRITE
+            pla
+            plx
+            rts
+STA_4005
+APU_PULSE2_REG2_W
+            jsl  APU_PULSE2_REG2_WRITE
+            rts
+APU_PULSE2_REG2_WY
+            phy
+            pha
+            tya
+            jsl  APU_PULSE2_REG2_WRITE
+            pla
+            ply
+            rts
+APU_PULSE2_REG2_WX
+            phx
+            pha
+            txa
+            jsl  APU_PULSE2_REG2_WRITE
+            pla
+            plx
+            rts
+
+STA_4006
+APU_PULSE2_REG3_W
+            jsl  APU_PULSE2_REG3_WRITE
+            rts
+APU_PULSE2_REG4_W
+            jsl  APU_PULSE2_REG4_WRITE
+            rts
+
+STA_4008
+APU_TRIANGLE_REG1_W
+            jsl  APU_TRIANGLE_REG1_WRITE
+            rts
+;APU_TRIANGLE_REG2_W
+;            jsl  APU_TRIANGLE_REG2_WRITE
+;            rts
+APU_TRIANGLE_REG3_W
+            jsl  APU_TRIANGLE_REG3_WRITE
+            rts
+APU_TRIANGLE_REG4_W
+            jsl  APU_TRIANGLE_REG4_WRITE
+            rts
+
+STA_400c
+APU_NOISE_REG1_W
+            jsl  APU_NOISE_REG1_WRITE
+            rts
+;APU_TRIANGLE_REG2_W
+;            jsl  APU_TRIANGLE_REG2_WRITE
+;            
+STA_400e
+APU_NOISE_REG3_W
+            jsl  APU_NOISE_REG3_WRITE
+            rts
+APU_NOISE_REG3_WX
+            phx
+            pha
+            txa
+            jsl  APU_NOISE_REG3_WRITE
+            pla
+            plx
+            rts
+
+STA_400f
+APU_NOISE_REG4_W
+            jsl  APU_NOISE_REG4_WRITE
+            rts
+
+APU_NOISE_REG4_WY
+            phy
+            pha
+            tya
+            jsl  APU_NOISE_REG4_WRITE
+            pla
+            ply
+            rts
+
+STA_4011
+            rts
+STA_4015
+            jsl   APU_STATUS_WRITE
+            rts
+APU_STATUS_WX
+            phx
+            pha
+            txa
+            jsl   APU_STATUS_WRITE
+            pla
+            plx
+            rts
+; Hooks to call back to the GTE harness for PPU memory-mapped accesses
+            mx    %11
+STA_2000
+            jsl  PPUCTRL_WRITE
+            rts
+STA_2001
+            jsl  PPUMASK_WRITE
+            rts
+LDA_2002
+            jsl  PPUSTATUS_READ
+            rts
+STA_2003
+            jsl  OAMADDR_WRITE
+            rts
+STA_2005
+            jsl  PPUSCROLL_WRITE
+            rts
+STA_2006
+            jsl  PPUADDR_WRITE
+            rts
+STY_2006
+            php
+            phy
+            pha
+            tya
+            jsl  PPUADDR_WRITE
+            pla
+            ply
+            plp
+            rts
+LDA_2007
+            jsl  PPUDATA_READ
+            rts
+STA_2007
+            jsl  PPUDATA_WRITE
+            rts
+STX_2007
+            php
+            phx
+            pha
+            txa
+            jsl  PPUDATA_WRITE
+            pla
+            plx
+            plp
+            rts
+STA_4014
+            jsl  PPUDMA_WRITE
+            rts
+
+STA_4017
+            rts
 
 ; Enter via a JML. X = target address, Stack and Direct page set up properly. B = ROM bank. Called in 16-bit native mode
             mx    %00
@@ -263,6 +513,7 @@ ExtIn       ENT
 :patch      jsr  $0000
             rep  #$30
             jml  ExtRtn
+            ds   \,$00   ; pad to next page
 
 ; ----------------------
 ;  RESET code
@@ -272,16 +523,16 @@ ExtIn       ENT
 ROMReset ENT
 lc000_reset
     lda #$00	;  \
-    sta $2000	;  | Initialize PPU registers
-    sta $2001	;  /
+    jsr STA_2000	;  | Initialize PPU registers
+    jsr STA_2001	;  /
 lc008
-    lda $2002	;  \
+    jsr LDA_2002	;  \
     bpl lc008	;  |
 lc00d
-    lda $2002	;  | Get to next V-Blank
+    jsr LDA_2002	;  | Get to next V-Blank
     bmi lc00d	;  |
 lc012
-    lda $2002	;  |
+    jsr LDA_2002	;  |
     bpl lc012	;  /
 
     sei			;  Disable Interrupts
@@ -375,9 +626,9 @@ lc094_nmi
     tya			;  |
     pha			;  /
     lda #$00	;  \
-    sta $2003	;  | Upload OAM Buffer
+    jsr STA_2003	;  | Upload OAM Buffer
     lda #$02	;  | $0200 - $02FF to OAM (via DMA)
-    sta $4014	;  /
+    jsr STA_4014	;  /
     lda $52						;  \ Check for PPU Buffer Upload
     cmp $53						;  |
     beq lc0ac					;  | If Position in buffer != Buffer Size
@@ -387,12 +638,12 @@ lc0ac
     jsr ld798_updatestatusbar	;  Update Status Bar
     inc $19		;  Increment Frame Counter
     lda #$20	;  \
-    sta $2006	;  | PPUADDR = $2000
+    jsr STA_2006	;  | PPUADDR = $2000
     lda #$00	;  | (Nametable 0)
-    sta $2006	;  /
+    jsr STA_2006	;  /
     lda #$00	;  \
-    sta $2005	;  | PPUSCROLL = X:0, Y:0
-    sta $2005	;  /
+    jsr STA_2005	;  | PPUSCROLL = X:0, Y:0
+    jsr STA_2005	;  /
     jsr lfff7_audiomain	;  Manage Audio
     lda #$01	;  \ Set Video Frame Done Flag
     sta $02		;  /
@@ -400,7 +651,7 @@ lc0ac
     lda $16		;  \ If Game Mode is Balloon Fight mode
     beq lc0f1	;  / then end NMI
 lc0d1
-    lda $2002	;  \ Wait for V-Blank End
+    jsr LDA_2002	;  \ Wait for V-Blank End
     bmi lc0d1	;  /
 
     ldx #$04	;  \
@@ -413,11 +664,11 @@ lc0da
 
     lda $18		;  \
     ora $00		;  | PPUCTRL = [$0018] | [$0000]
-    sta $2000	;  /
+    jsr STA_2000	;  /
     lda $17		;  \
-    sta $2005	;  | Input X scroll value
+    jsr STA_2005	;  | Input X scroll value
     lda #$00	;  | PPUSCROLL = X:[$17], Y:0
-    sta $2005	;  /
+    jsr STA_2005	;  /
 
 lc0f1
     pla			;  \
@@ -444,7 +695,7 @@ lc0fa_disablenmi
     lda $00		;  \
     and #$7f	;  / Disable NMI
 lc0fe
-    sta $2000	;  \
+    jsr STA_2000	;  \
     sta $00		;  | Update PPUCTRL
     rts			;  /
 
@@ -459,7 +710,7 @@ lc10c_writeppumask
     pha
     jsr lf465_clearframeflag
     pla
-    sta $2001	;  Update PPUMASK
+    jsr STA_2001	;  Update PPUMASK
     rts
 
 lc115
@@ -552,16 +803,16 @@ lc188
     lda $0300,x	;  \
     inx			;  |
     sta $50		;  |
-    sta $2006	;  | Get PPU Address
+    jsr STA_2006	;  | Get PPU Address
     lda $0300,x	;  | And Set PPUADDR
     inx			;  |
-    sta $2006	;  /
+    jsr STA_2006	;  /
     ldy $0300,x	;  Get Upload Size to Y
     inx
 lc19e
     lda $0300,x	;  \
     inx			;  |
-    sta $2007	;  | Upload Y bytes to PPU
+    jsr STA_2007	;  | Upload Y bytes to PPU
     dey			;  |
     bne lc19e	;  /
 
@@ -569,11 +820,11 @@ lc19e
     cmp #$3f	;  | If Upload Address != $3FXX (Palette Data)
     bne lc1be	;  / Then Skip this section
     lda #$3f	;  \
-    sta $2006	;  |
+    jsr STA_2006	;  |
     lda #$00	;  | PPUADDR = $3F00
-    sta $2006	;  | PPUADDR = $0000
-    sta $2006	;  | ???
-    sta $2006	;  /
+    jsr STA_2006	;  | PPUADDR = $0000
+    jsr STA_2006	;  | ???
+    jsr STA_2006	;  /
 lc1be
     stx $52		;  \
     cpx $53		;  | If PPU Buffer Position != PPU Buffer Size
@@ -2702,9 +2953,9 @@ ld246_clearppu    ; Clear PPU?
     jsr lc10a_clearppumask
     jsr lc0fa_disablenmi
     lda #$20	;  \
-    sta $2006	;  | PPUADDR = $2000
+    jsr STA_2006	;  | PPUADDR = $2000
     lda #$00	;  | Nametable 0 Address
-    sta $2006	;  /
+    jsr STA_2006	;  /
     jsr ld275_clearnametable	;  \ Clear Nametable 0
     jsr ld275_clearnametable	;  / Clear Nametable 1
     jsr lc104_enablenmi
@@ -2728,17 +2979,17 @@ ld275_clearnametable
     ldx #$f0	;  \
     lda #$24	;  |
 ld279
-    sta $2007	;  |
-    sta $2007	;  | Fill PPU Nametable with empty tiles
-    sta $2007	;  | $3C0 bytes
-    sta $2007	;  |
+    jsr STA_2007	;  |
+    jsr STA_2007	;  | Fill PPU Nametable with empty tiles
+    jsr STA_2007	;  | $3C0 bytes
+    jsr STA_2007	;  |
     dex			;  |
     bne ld279	;  /
 
     ldx #$40	;  \
     lda #$00	;  |
 ld28c
-    sta $2007	;  | Fill rest of nametable with Tile 00
+    jsr STA_2007	;  | Fill rest of nametable with Tile 00
     dex			;  | $40 bytes
     bne ld28c	;  /
     rts			;  Total: $400 bytes
@@ -2772,7 +3023,7 @@ ld2c1
     sta $12						;  | Render Cloud
     lda ld493,y					;  | to the screen
 ld2cb
-    sta $2007					;  |
+    jsr STA_2007					;  |
     clc							;  |
     adc #$04					;  |
     dec $12						;  |
@@ -3006,9 +3257,9 @@ ld4a4
     tax
     beq ld497_uploadbackground
     and #$7f
-    sta $2006
+    jsr STA_2006
     jsr ld4f0_getbytefromgfxpointer
-    sta $2006
+    jsr STA_2006
     jsr ld4f0_getbytefromgfxpointer
     sta $12
     txa
@@ -3019,20 +3270,20 @@ ld4a4
     lsr
     lsr
     ora $00
-    sta $2000
+    jsr STA_2000
     txa
     and #$40
     bne ld4d8
 ld4cc
     jsr ld4f0_getbytefromgfxpointer
-    sta $2007
+    jsr STA_2007
     dec $12
     bne ld4cc
     beq ld4a4
 ld4d8
     jsr ld4f0_getbytefromgfxpointer
 ld4db
-    sta $2007
+    jsr STA_2007
     dec $12
     bne ld4db
     beq ld4a4
@@ -3072,11 +3323,11 @@ ld4fb_setppuaddr_render
     asl $12
     rol
     ora #$20
-    sta $2006
+    jsr STA_2006
     sta $13
     lda $12
     ora $54
-    sta $2006
+    jsr STA_2006
     rts
 ; -----------------------
 
@@ -3105,20 +3356,20 @@ ld51c
 
 ld53c
     lda #$23
-    sta $2006
+    jsr STA_2006
     jsr ld51c
-    sta $2006
-    lda $2007
-    lda $2007
+    jsr STA_2006
+    jsr LDA_2007
+    jsr LDA_2007
     and ld564,y
     ora ld568,y
     pha
     lda #$23
-    sta $2006
+    jsr STA_2006
     jsr ld51c
-    sta $2006
+    jsr STA_2006
     pla
-    sta $2007
+    jsr STA_2007
     rts
 ; -----------------------
 
@@ -3145,12 +3396,12 @@ ld572    		;  Initialize Balloon Trip Game Mode
     inc $c8
     jmp ld3e1
 ld593
-    sty $2006
-    sta $2006
+    jsr STY_2006
+    jsr STA_2006
     ldx #0
 ld59b
     lda ldcae,x
-    sta $2007
+    jsr STA_2007
     inx
     cpx #8
     bne ld59b
@@ -3160,15 +3411,15 @@ ld59b
     lda #$aa
     ldx #$10
 ld5b1
-    sta $2007
+    jsr STA_2007
     dex
     bne ld5b1
     rts
 ; -----------------------
 
 ld5b8
-    sty $2006
-    sta $2006
+    jsr STY_2006
+    jsr STA_2006
     ldx #$20
     lda #$58
     jsr ld5c9
@@ -3181,7 +3432,7 @@ ld5cb
     and #3
     eor #3
     ora $12
-    sta $2007
+    jsr STA_2007
     dex
     bne ld5cb
     rts
@@ -3205,11 +3456,11 @@ ld5db
 
 ld5f1
     lda $51
-    sta $2006
+    jsr STA_2006
     lda $50
-    sta $2006
-    lda $2007
-    lda $2007
+    jsr STA_2006
+    jsr LDA_2007
+    jsr LDA_2007
     cmp #$24
     bne ld60c
     txa
@@ -3232,11 +3483,11 @@ ld60d_updatestarbganim
     tax			;  /
     jsr ld651	;  \
     lda $51		;  |
-    sta $2006	;  | Set PPU Address for Star Tile
+    jsr STA_2006 ;  | Set PPU Address for Star Tile
     lda $50		;  |
-    sta $2006	;  /
-    lda $2007	;  \
-    lda $2007	;  |
+    jsr STA_2006	;  /
+    jsr LDA_2007	;  \
+    jsr LDA_2007	;  |
     ldy #$03	;  | Check if Tile is part of
 ld632
     cmp ld64c,y	;  | Star Animation tiles
@@ -3248,11 +3499,11 @@ ld63a
 
 ld63b
     lda $51			;  \
-    sta $2006		;  |
+    jsr STA_2006		;  |
     lda $50			;  | Write Next Star Tile
-    sta $2006		;  |
+    jsr STA_2006		;  |
     lda ld64c+1,y	;  |
-    sta $2007		;  /
+    jsr STA_2007		;  /
     rts
 
 ld64c    ; Star Tile Animation Frames
@@ -3409,41 +3660,41 @@ ld798_updatestatusbar
 
 ld7a0
     lda #$20	;  \
-    sta $2006	;  | PPUADDR = $2043
+    jsr STA_2006	;  | PPUADDR = $2043
     lda #$43	;  |
-    sta $2006	;  /
+    jsr STA_2006	;  /
     lda #$8e	;  \ Upload I- to PPU
-    sta $2007	;  /
+    jsr STA_2007	;  /
 
     ldx #$04	;  \
 ld7b1
     lda $03,x	;  | Upload Player 1 Score to PPU
-    sta $2007	;  |
+    jsr STA_2007	;  |
     dex			;  |
     bpl ld7b1	;  |
     lda #$00	;  |
-    sta $2007	;  /
+    jsr STA_2007	;  /
 
     lda #$24	;  \
-    sta $2007	;  | Upload 2 empty spaces to PPU
-    sta $2007	;  /
+    jsr STA_2007	;  | Upload 2 empty spaces to PPU
+    jsr STA_2007	;  /
     ldx #$8c	;  \
-    stx $2007	;  | Upload TOP- to PPU
+    jsr STX_2007	;  | Upload TOP- to PPU
     inx			;  |
-    stx $2007	;  /
+    jsr STX_2007	;  /
 
     ldx #$04	;  \
 ld7d1
     lda $0d,x	;  | Upload Top Score to PPU
-    sta $2007	;  |
+    jsr STA_2007	;  |
     dex			;  |
     bpl ld7d1	;  |
     lda #0		;  |
-    sta $2007	;  /
+    jsr STA_2007	;  /
 
     lda #$24	;  \
-    sta $2007	;  | Upload 2 empty spaces to PPU
-    sta $2007	;  /
+    jsr STA_2007	;  | Upload 2 empty spaces to PPU
+    jsr STA_2007	;  /
 
     lda $16		;  \ If Game Mode is Balloon Trip Mode
     bne ld854	;  / then render RANK 
@@ -3451,16 +3702,16 @@ ld7d1
     beq ld802	;  / then don't render Player 2 Score
 
     lda #$8f	;  \ Upload II- to PPU
-    sta $2007	;  /
+    jsr STA_2007	;  /
 
     ldx #$04	;  \
 ld7f5
     lda $08,x	;  | Upload Player 2 Score to PPU
-    sta $2007	;  |
+    jsr STA_2007	;  |
     dex			;  |
     bpl ld7f5	;  |
     lda #0		;  |
-    sta $2007	;  /
+    jsr STA_2007	;  /
 ld802
     dec $46
     rts
@@ -3469,17 +3720,17 @@ ld802
 ld805
     dec $46
     lda #$20	;  \
-    sta $2006	;  | PPUADDR = $2062
+    jsr STA_2006	;  | PPUADDR = $2062
     lda #$62	;  | GAME OVER Player 1 Status Bar
-    sta $2006	;  /
+    jsr STA_2006	;  /
     lda $41		;  \ If Player 1 Lives is negative
     jsr ld826	;  / Then upload GAME OVER
     lda $40		;  \ If Single Player
     beq ld83a	;  / then return
     lda #$20	;  \
-    sta $2006	;  | PPUADDR = $2075
+    jsr STA_2006	;  | PPUADDR = $2075
     lda #$75	;  | GAME OVER Player 2 Status Bar
-    sta $2006	;  /
+    jsr STA_2006	;  /
     lda $42		;  \ If Player 2 Lives is negative
 ld826
     bmi ld83b	;  / Then upload GAME OVER
@@ -3492,7 +3743,7 @@ ld82c
     bcs ld834	;  |
     lda #$2a	;  |
 ld834
-    sta $2007	;  |
+    jsr STA_2007	;  |
     dex			;  |
     bpl ld82c	;  /
 ld83a
@@ -3504,7 +3755,7 @@ ld83b
     ldx #$08	;  \
 ld841
     lda ld84b,x	;  | Upload GAME OVER to PPU
-    sta $2007	;  |
+    jsr STA_2007	;  |
     dex			;  |
     bpl ld841	;  /
     rts
@@ -3516,13 +3767,13 @@ ld854
     ldy #$04	;  \
 ld856
     lda ld86c,y	;  | Upload RANK- to PPU
-    sta $2007	;  |
+    jsr STA_2007	;  |
     dey			;  |
     bpl ld856	;  /
     lda $4a		;  \
-    sta $2007	;  | Upload Rank Number to PPU
+    jsr STA_2007	;  | Upload Rank Number to PPU
     lda $49		;  |
-    sta $2007	;  /
+    jsr STA_2007	;  /
     dec $46
     rts
 
@@ -3696,7 +3947,7 @@ ldaf1
     inc $3a		;  Set Demo Flag
     inc $40		;  Set to 2 Players
     lda #$00	;  \ Disable All Sound Channels
-    sta $4015	;  /
+    jsr STA_4015	;  /
     sta $16		;  Set Game Mode to 00 (Balloon Fight)
     jsr lf1f2
     lda #$00
@@ -5852,7 +6103,7 @@ lf1d9
     inc $41		;  +1 Life to Player 1
     jsr ld6de_scoreadd	;  Update Player Score
     lda #$0f	;  \ Enable Sound Channels
-    sta $4015	;  /
+    jsr STA_4015	;  /
     lda #$01	;  \ Stop All Sounds
     sta $f0		;  /
     lda #$02
@@ -6210,14 +6461,14 @@ lf470_pause
     sta $f2		;  /
     lda $01		;  \
     and #$ef	;  | Hide Sprites
-    sta $2001	;  /
+    jsr STA_2001	;  /
 lf489
     jsr lf465_clearframeflag	;  \
     jsr le768_polljoypad0		;  |
     and #$10					;  | If START is not pressed
     beq lf489					;  / then loop
     lda $01		;  \
-    sta $2001	;  / Show Sprites
+    jsr STA_2001	;  / Show Sprites
     ldy #$04	;  \
     lda $c8		;  | Play Pause jingle if
     ora $16		;  | it's a Normal Phase in Balloon Fight Game Mode
@@ -6348,10 +6599,10 @@ lf587
     ldx $fd
     lda lf601,y
     beq lf599
-    sta $4002,x
+    jsr STA_4002_X
     lda lf600,y
     ora #8
-    sta $4003,x
+    jsr STA_4003_X
 lf599
     tay
     pla
@@ -6369,7 +6620,7 @@ lf5aa
 lf5ac
     tya
     ldy $fd
-    sta $4000,y
+    jsr STA_4000_Y
 lf5b2
     lda $d4,x
     sta $d0,x
@@ -6396,7 +6647,7 @@ lf5ce
     bcc lf5d9
     lda #$3c
 lf5d9
-    sta $4008
+    jsr STA_4008
     sta $de
     jmp lf575
 lf5e1
@@ -6404,11 +6655,11 @@ lf5e1
     cmp #2
     beq lf5f9
     lda lf700,y
-    sta $400c
+    jsr STA_400c
     lda lf700+1,y
-    sta $400e
+    jsr STA_400e
     lda lf700+2,y
-    sta $400f
+    jsr STA_400f
 lf5f9
     jmp lf5b2
     db $16,$ff,$10,$c5
@@ -6502,8 +6753,8 @@ lf700
     db $04,$07,$40
 lf712
     lda #$7f	;  \ Set Pulse Channels
-    sta $4001	;  | No Sweep
-    sta $4005	;  /
+    jsr STA_4001	;  | No Sweep
+    jsr STA_4005	;  /
 lf71a
     stx $dc
     sty $dd
@@ -6552,7 +6803,7 @@ lf749
 
 lf758
     lda #$c0	;  \ Set Frame Counter
-    sta $4017	;  / to 4-step sequence, clear frame interrupt flag
+    jsr STA_4017	;  / to 4-step sequence, clear frame interrupt flag
     jsr lfb25_music
     jsr lf90a
     jsr lfa38
@@ -6595,9 +6846,9 @@ lf79f
     bne lf7c7
 lf7a5
     lda #$10	;  \ Constant volume on
-    sta $400c	;  | - Noise Channel
-    sta $4000	;  | - Pulse 1 Channel
-    sta $4004	;  / - Pulse 2 Channel
+    jsr STA_400c	;  | - Noise Channel
+    jsr STA_4000	;  | - Pulse 1 Channel
+    jsr STA_4004	;  / - Pulse 2 Channel
     lda #$00
     sta $f4
 lf7b4
@@ -6605,16 +6856,16 @@ lf7b4
     sta $f6		;  Clear Current Music/Jingle
     sta $07fa
     sta $f7
-    sta $4008	;  Clear Triangle Channel Linear Counter
-    sta $4011	;  Clear DMC Channel Load Counter
+    jsr STA_4008	;  Clear Triangle Channel Linear Counter
+    jsr STA_4011	;  Clear DMC Channel Load Counter
     sta $07f0
     rts
 ; -----------------------
 
 lf7c7
     lda #$10	;  \ Constant volume on
-    sta $4004	;  | - Pulse 2 Channel
-    sta $400c	;  / - Noise Channel
+    jsr STA_4004	;  | - Pulse 2 Channel
+    jsr STA_400c	;  / - Noise Channel
     lda #$00
     beq lf7b4
 lf7d3
@@ -6732,7 +6983,7 @@ lf87d
     cmp #$10
     bne lf8a2
     lda #$10
-    sta $400c
+    jsr STA_400c
 lf89b
     lda $f4
     and #$f0
@@ -6742,7 +6993,7 @@ lf8a1
 ; -----------------------
 
 lf8a2
-    sta $400e
+    jsr STA_400e
     rts
 ; -----------------------
 
@@ -6766,8 +7017,8 @@ lf8bf
     bne lf8e8
 lf8ca
     lda #$10
-    sta $4000
-    sta $4004
+    jsr STA_4000
+    jsr STA_4004
     lda #0
     sta $f7
     lda $f4
@@ -6788,7 +7039,7 @@ lf8e8
     jsr lf683
     lda $1b
     and #$0f
-    sta $4002
+    jsr STA_4002
     ldx #$f9
     ldy #$f6
     jsr lf68f
@@ -6796,7 +7047,7 @@ lf8e8
     lsr
     lsr
     and #$0f
-    sta $4006
+    jsr STA_4006
     rts
 ; -----------------------
 
@@ -6907,9 +7158,9 @@ lf9b1
     inc $07fe
 lf9bd
     lda $07fd
-    sta $4006
+    jsr STA_4006
     lda $07fe
-    sta $4002
+    jsr STA_4002
     rts
 ; -----------------------
 
@@ -6943,9 +7194,9 @@ lfa0c
     cmp #7
     bne lfa26
     lda #$7f
-    sta $4005
+    jsr STA_4005
     lda #$10
-    sta $4004
+    jsr STA_4004
     lda $f5
     and #$e0
     sta $f5
@@ -7004,7 +7255,7 @@ lfa64
     lda $1b
     and #$3f
     ora #$10
-    sta $4006
+    jsr STA_4006
     rts
 ; -----------------------
 
@@ -7071,12 +7322,12 @@ lfae2
     ora #$40
     sta $f5
     lda #0
-    sta $4008
+    jsr STA_4008
     sta $f6
     sta $07f6
     lda #$10
-    sta $4004
-    sta $400c
+    jsr STA_4004
+    jsr STA_400c
     ldx #$8e
     ldy #$fa
 lfb00
@@ -7175,9 +7426,9 @@ lfb86
 lfb8d
     jsr lf71a
     lda #$83	;  \ Pulse 1 Channel
-    sta $4001	;  / Sweep, Shift = 3
+    jsr STA_4001	;  / Sweep, Shift = 3
     lda #$7f	;  \ Pulse 2 Channel
-    sta $4005	;  / No Sweep
+    jsr STA_4005	;  / No Sweep
     bne lfbaf
     jsr lf6a8_loadsndseq
     ldx #$04
@@ -7196,7 +7447,7 @@ lfbaf
     and #$20
     beq lfb49
     lda #$d5
-    sta $4001
+    jsr STA_4001
     bne lfb49
 lfbc1
     jsr lf6a8_loadsndseq

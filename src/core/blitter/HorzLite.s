@@ -147,7 +147,7 @@ _RestoreBG0OpcodesCallback
                     sep   #$20
                     lda   BTableHigh,y               ; BTableHigh has the standard bank in the high word
                     pha                              ; Push two bytes
-                    rep   #$20
+                    rep   #$21
 
                     lda   BTableLow,y
                     adc   :exit_offset               ; Add some offsets to get the base address in the code field line
@@ -286,10 +286,8 @@ _ApplyBG0XPosAltLite
 :draw_count_x6      equ   blttmp+2
 :entry_jmp_addr     equ   blttmp+4
 :low_save_addr      equ   blttmp+6
-;:draw_count_x3      equ   blttmp+8
-;:draw_count_x6      equ   blttmp+10
-:entry_odd_addr     equ   blttmp+12
-:exit_odd_addr      equ   blttmp+14
+:entry_odd_addr     equ   blttmp+8
+:exit_odd_addr      equ   blttmp+10
 
                     and   #$00FF
                     bit   #$0001

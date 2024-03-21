@@ -232,7 +232,9 @@ EngineReset
                   stz       LastPatchOffset
                   stz       RenderCount
 
-                  stz       GTEControlBits
+                  lda       #CTRL_EVEN_RENDER
+                  sta       GTEControlBits
+;                  stz       GTEControlBits
 
                   stz       CompileBankTop
 
@@ -287,7 +289,7 @@ EngineReset
                   sta       tmp15
 
                   ldx       #_EXIT_EVEN+2
-                  ldy       #5                    ; The first even line jumps to $3xx, needs to go to $5xx
+                  ldy       #5                    ; The first even line jumps to $3F1, needs to go to $5xx
 :eloop
                   sep       #$20
                   tya
@@ -295,13 +297,18 @@ EngineReset
                   stal      lite_base_2,x
                   rep       #$20
 
+                  tya
+                  clc
+                  adc       #4                   ; Move this many pages up
+                  tay
+
                   txa
                   clc
                   adc       #{_LINE_SIZE*2}      ; Step to the next even line
                   tax
 
                   dec       tmp15
-                  bne       :lloop
+                  bne       :eloop
 :no_even
 
 ; Done initializing the engine

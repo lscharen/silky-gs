@@ -13,25 +13,35 @@ _BltRangeLite
 :jmp_low_save   equ   tmp2
 
 ;                phb
+
+                sty   tmp0           ; Range check
+                cpx   tmp0
+                bcc   *+3
+                rts
+
                 lda   GTEControlBits
                 bit   #CTRL_EVEN_RENDER
                 beq   :normal
 
                 txa
                 inc
-                and  #$FFFE
+                and   #$FFFE
                 tax
+                stx   tmp0
 
-                tya                         ; Alternative entry that only renders even lines. This,
-                inc                         ; combined with a setup that forces each PEA field row
-                and   #$FFFE                ; to skip the next one results in just half the screen
-                tay                         ; being updated
-:normal
+                tya                         ; Examples:
+                dec                         ;   (0, 200) -> (0, 199)
+                and   #$FFFE                ;   (1, 100) -> (2, 99)
+                inc                         ;   (1, 99)  -> (2, 99)
+                tay
 
-                sty   tmp0           ; Range check
-                cpx   tmp0
-                bcc   *+3
+; If the original X was odd and Y = X+1, then the values are reversed and we can skip
+
+                cpy   tmp0
+                bcs   *+3
                 rts
+
+:normal
 
                 clc
                 dey

@@ -12,6 +12,8 @@
 ; Y = last line  (exclusive), valid range >X up to 200
             mx     %00
 _PEISlam
+:tmp        equ   tmp0
+
             cpx   #200
             bcc   *+4
             brk   $14
@@ -21,8 +23,8 @@ _PEISlam
             brk   $15
 ;                 rts
 
-            stx   :screen_width_1       ; x must be less than y
-            cpy   :screen_width_1
+            stx   :tmp       ; x must be less than y
+            cpy   :tmp
             bcs   *+3
             rts
 
@@ -33,15 +35,25 @@ _PEISlam
             txa                            ; force starting line to the next even line, rounded up
             inc
             and  #$FFFE
-            sta  :screen_width_1
+            sta  :tmp
             tax
 
-            tya
+            tya                         ; Examples:
+            dec                         ;   (0, 200) -> (0, 199)
+            and   #$FFFE                ;   (1, 100) -> (2, 99)
+            inc                         ;   (1, 99)  -> (2, 99)
+
             sec
-            sbc  :screen_width_1
-            inc                            ; y = (lines + 1) / 2, so if x = 0 and y = 1, then at least one iteration
+            sbc   :tmp                  ; This is the adjusted difference
+
+            bcs   *+3                   ; Can go negative when Y = X+1 and X is odd
+            rts
+
             lsr
+            inc                         ; Halve the number of iterations
+
             tay
+
             lda   #320
             sta   :step+1                  ; double steps
 
@@ -49,7 +61,7 @@ _PEISlam
 :normal
             tya
             sec
-            sbc   :screen_width_1
+            sbc   :tmp
             tay                    ; get the number of lines in the y register. This changes if we're in even mode
             lda   #160
             sta   :step+1
@@ -139,7 +151,7 @@ _PEISlam
 :outer
             sei
             txs                    ; set the stack address to the right edge
-            ldx   #8               ; Enable interrupts at least once every 8 lines
+            ldx   #8               ; Enable interrupts at least once every 8 iterations
             sep   #$20
 :r1w1_p1    lda   #00             ; _R1W1
             stal  STATE_REG

@@ -118,6 +118,9 @@ x_offset    equ   16                      ; number of bytes from the left edge
 ;            jsr   _RestoreBG0OpcodesLite
 ;            stz   LastPatchOffset
 
+            lda   #0
+            jsr   ClearScreen
+
             jsr   RenderScreen
             jsr   WaitForKey
 
@@ -603,7 +606,7 @@ RenderScreen
             sta   tmp2                    ; lines_left_x2
             lda   #0                      ; Xmod256
             jsr   _ApplyBG0XPosAltLite
-            sta   nesTopOffset            ; cache the :exit_offset value returned form this function
+            sta   nesTopOffset            ; cache the :exit_offset value returned from this function
 
 ; Next render the remaining lines
 
@@ -943,10 +946,6 @@ triggerNMI
             ldal  ppuctrl               ; If the ROM has not enabled VBL NMI, also skip
             bit   #$80
             beq   :skip
-
-            ldal  ppustatus             ; Set the bit that the VBL has started
-            ora   #$80
-            stal  ppustatus
 
             ldx   #NonMaskableInterrupt
             jsr   romxfer
@@ -1471,6 +1470,10 @@ nmiTask
             plb
             lda   DPSave
             tcd
+
+            ldal  ppustatus             ; Set the bit that the VBL has started
+            ora   #$80
+            stal  ppustatus
 
             jsr   readInput
 
