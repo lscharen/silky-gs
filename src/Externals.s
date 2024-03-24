@@ -11,3 +11,4 @@ lite_base_2          EXT
 tiledata             EXT
 PPU_MEM              EXT
 CHR_ROM              EXT
+PPU_OAM              EXT

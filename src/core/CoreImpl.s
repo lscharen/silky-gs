@@ -234,7 +234,7 @@ EngineReset
 
                   lda       #CTRL_EVEN_RENDER
                   sta       GTEControlBits
-;                  stz       GTEControlBits
+                  stz       GTEControlBits
 
                   stz       CompileBankTop
 

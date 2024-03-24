@@ -541,7 +541,33 @@ InitPlayfield
             rts
 
 ; Helper to perform the essential functions of rendering a frame
+_ppuctrl    ds  2
+_ppuscroll  ds  2
+
 RenderFrame
+:nt_head    equ tmp3
+:at_head    equ tmp4
+
+; First, disable interrupts and perform the most essential functions to copy any critical NES data and
+; registers into local memory so that the rendering is consistent and not affected if a VBL interrupt
+; occures between here and the actual screen blit
+
+            php
+            sei
+
+            jsr   scanOAMSprites          ; Filter out any sprites that don't need to be drawn and mark occupied lines
+
+            lda  nt_queue_head            ; These are used in PPUFlushQueues, so using tmp locations is OK
+            sta  :nt_head
+            lda  at_queue_head
+            sta  :at_head
+
+            lda  ppuctrl                  ;  Cache these values that are used to set the view port
+            sta  _ppuctrl
+            lda  ppuscroll
+            sta  _ppuscroll
+
+            plp
 
 ; Apply all of the tile updates that were made during the previous frame(s).  The color attribute bytes are always set
 ; in the PPUDATA hook, but then the appropriate tiles are queued up.  These tiles, the tiles written to by PPUDATA in
@@ -589,9 +615,9 @@ RenderScreen
 ; Do the basic setup
 
             sep   #$20
-            lda   ppuctrl                 ; Bit 0 is the high bit of the X scroll position
+            lda   _ppuctrl                ; Bit 0 is the high bit of the X scroll position
             lsr                           ; put in the carry bit
-            lda   ppuscroll+1             ; load the scroll value
+            lda   _ppuscroll+1             ; load the scroll value
             ror                           ; put the high bit and divide by 2 for the engine
             rep   #$20
             and   #$00FF                  ; make sure nothing is in the high byte

@@ -460,17 +460,6 @@ PPUFlushQueues
 :mt_base66 equ tmp11
 :mt_base   equ tmp12
 
-; Prevent an inopportune interrupt from causing the AT and NT queues to get out of sync. The 
-; NMI / Interrupt code does not use any of the temporary direct page locations.
-
-        php
-        sei
-        lda  nt_queue_head
-        sta  :nt_head
-        lda  at_queue_head
-        sta  :at_head
-        plp
-
 ; First, do a fast forward scan through the nametable and attribute queue and get all of the
 ; tiles in the TILE_SHADOW table in sync with the PPU tiles up through the current
 ; frame.
@@ -1275,23 +1264,25 @@ no_pal
 
 * ; Trigger a copy from a page of memory to OAM.  Since this is a DMA operation, we can cheat and do a 16-bit copy
 PPUDMA_WRITE ENT
-        rtl                         ; Cheat like crazy and pretend it didn't happen.  Read from $0200 directly when we render
+;        rtl                         ; Cheat like crazy and pretend it didn't happen.  Read from $0200 directly when we render
 
-;        php
-;        pha
+        php
+        pha
 
-;        rep  #$30                   ; Only copy from $202 because we always skip sprite 0
-;]n      equ   0
-;        lup   127
-;        lda   ROMBase+$200+2+]n
-;        stal  PPU_OAM+2+]n
-;]n      =     ]n+2
-;        --^
-;        sep #$30
+        rep  #$30                   ; Only copy from 63 sprites because we always skip sprite 0
+]n      equ   1
+        lup   63
+        lda   ROMBase+$200+{]n*4}
+        stal  PPU_OAM+{]n*4}
+        lda   ROMBase+$202+{]n*4}
+        stal  PPU_OAM+2+{]n*4}
+]n      =     ]n+1
+        --^
+        sep #$30
 
-;        pla
-;        plp
-;        rtl
+        pla
+        plp
+        rtl
 
 y_offset_rows equ 2
 y_height_rows equ 25
@@ -1322,7 +1313,8 @@ scanOAMSprites
          ldy   #0                  ; This is the destination index
 
 :loop
-         ldal   ROMBase+$0200,x    ; Copy the low word
+;         ldal   ROMBase+$0200,x    ; Copy the low word
+         ldal   PPU_OAM,x
          inc                       ; Increment the y-coordinate to match the PPU delay
          sta    OAM_COPY,y
 
@@ -1349,7 +1341,8 @@ scanOAMSprites
          ply
          plx
 
-         ldal   ROMBase+$0202,x    ; Copy the high word
+;         ldal   ROMBase+$0202,x    ; Copy the high word
+         ldal   PPU_OAM+2,x
          sta    OAM_COPY+2,y
 
          iny
@@ -1623,13 +1616,11 @@ drawOAMSprites
 ; Step 1: Scan the OAM sprite information.  Since we're reading NES RAM, we disable interrupts so that
 ;         a VBL cannot fire while we sync the data.
 
-         sei
-         jsr   scanOAMSprites              ; Filter out any sprites that don't need to be drawn and mark occupied lines
-         cli
+; This step was done at the start of RenderFrame
 
 ; Step 2: Convert the bitmap to a list of (top, bottom) pairs in order to update the screen
 
-         jmp   shadowBitmapToList
+        jmp   shadowBitmapToList
 
 ; Render the prepared frame date
 drawScreen
@@ -1647,6 +1638,31 @@ drawScreen
 ; Step 3: Reveal the sprites and background using alternating render and PEI slams
 
         jmp   exposeShadowList
+_DebugFlower
+        phx
+        phy
+
+        lda  OAM_COPY+3,x
+        and  #$00FF
+        ldx  #8*160
+        ldy  #$FFFF
+        jsr  DrawByte
+
+        lda  _ppuscroll+1
+        and  #$00FF
+        ldx  #0
+        ldy  #$FFFF
+        jsr  DrawByte
+
+        lda  tmp1
+        and  #$00FF
+        ldx  #16*160
+        ldy  #$FFFF
+        jsr  DrawByte
+
+        ply
+        plx
+        rts
 
 drawSprites
 :tmp    equ   tmp0
@@ -1671,20 +1687,34 @@ oam_loop
         adc  #$2000-{y_offset*160}+x_offset
         sta  tmp0
 
-; Convert the x-coordinate.  There is a bit of work here.  The NES screen is 256 piels wide, which
-; matches the area of the IIgs screen we are rendering to.  However, for speed we can only render
-; on myte boundarding, which correspondes to even NES pixels.  The issue, is that if the NES internal
-; scroll is on an odd pixel and the sprite is drawn on an odd pixel, simply clamping the value causes
-; the sprite to be drawn one byte to the left.
+; Convert the x-coordinate.
 
-;        lda  ppuscroll+1              ; Load the scroll position
-;        lsr                           ; Put the LSB into the carry
-        lda  OAM_COPY+3,x             ; X-coordinate (In NES pixels, need to convert to IIgs bytes)
-;        adc  #0
-        and  #$00FE                   ; Mask before the shift so that we know a 0 goes into the carry
-        lsr
+        sep  #$20
+        lda  _ppuscroll+1
+        and  #$01
+        clc
+        adc  OAM_COPY+3,x             ; X-coordinate (In NES pixels, need to convert to IIgs bytes)
+        and  #$FE                     ; Mask before the shift so that we know a 0 goes into the carry
+        ror
+        rep  #$20
+        and  #$00FF
+
+;        lda  OAM_COPY+3,x
+;        and  #$00FE
+;        lsr
+
+        sta  tmp1
         adc  tmp0                     ; Add to the base address calculated fom the Y-coordinate
         tay                           ; This is the SHR address at which to draw the sprite
+
+; Debug data for sprite tile $D6 (fire flower)
+
+        lda  OAM_COPY+1,x
+        and  #$00FF
+        cmp  #$00D6
+        bne  :nodebug
+        jsr  _DebugFlower
+:nodebug
 
 ; Set the palette pointer for this sprite
 
