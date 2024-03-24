@@ -45,6 +45,10 @@ wrep8    mac
         dw     ]1
         <<<
 
+; Helper to perform the essential functions of rendering a frame
+_ppuctrl    ds  2
+_ppuscroll  ds  2
+
         mx    %00
 
 ; Initialize any data structure and internal state for emulating the NES PPU

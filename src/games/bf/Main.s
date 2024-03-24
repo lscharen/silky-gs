@@ -8,8 +8,8 @@
             use   EDS.GSOS.Macs
             use   GTE.Macs.s
 
-            put   Externals.s
-            put   core/Defs.s
+            put   ../../Externals.s
+            put   ../../core/Defs.s
 
             mx    %00
 
@@ -41,16 +41,12 @@ x_offset    equ   16                      ; number of bytes from the left edge
             lda   #1
             sta   ActiveBank
 
-; The next two direct pages will be used by the engine, so get another 2 pages beyond that for the ROM.  We get
-; 4K of DP/Stack space by default, so there is plenty to share
+; The next two direct pages will be used by the engine
 
             tdc
             sta   DPSave
-            clc
-            adc   #$300
-            sta   ROMZeroPg
-            clc
-            adc   #$1FF                   ; Stack starts at the top of the page
+
+            lda   #$01FF                  ; Stack starts at the top of the page
             sta   ROMStk
 
 ; Start up the engine
@@ -80,8 +76,7 @@ x_offset    equ   16                      ; number of bytes from the left edge
 
 ; Set the palettes and swizzle tables
 
-            lda   #1
-            jsr   SetAreaType
+            jsr   SetDefaultPalette
 
 ; Fill the buffer with tiles
 
@@ -130,8 +125,8 @@ x_offset    equ   16                      ; number of bytes from the left edge
 
 ; Initialize the sound hardware for APU emulation
 
-            lda   #2
-            jsr   APUStartUp              ; 0 = 240Hz, 1 = 120Hz, 2 = 60Hz (external)
+;            lda   #2
+;            jsr   APUStartUp              ; 0 = 240Hz, 1 = 120Hz, 2 = 60Hz (external)
 
 ; Set an internal flag to tell the VBL interrupt handler that it is
 ; ok to start invoking the game logic.  The ROM code has to be run
@@ -140,7 +135,8 @@ x_offset    equ   16                      ; number of bytes from the left edge
 ;
 ; Call the boot code in the ROM
 
-            ldx   #ROMReset
+            ldal  ROMBase+$FFFC         ; Reset Vector
+            tax
             jsr   romxfer
 
 ; Apply hacks
@@ -343,6 +339,7 @@ singleStepMode    dw  0
 OneSecondCounter  dw  0
 OldOneSecVec      ds  4
 DPSave            dw  0
+StkSave           dw  0
 LastAreaType      dw  0
 frameCount        dw  0
 show_vbl_cpu      dw  0
@@ -540,30 +537,8 @@ InitPlayfield
 
             rts
 
+; Helper to perform the essential functions of rendering a frame
 RenderFrame
-:nt_head    equ tmp3
-:at_head    equ tmp4
-
-; First, disable interrupts and perform the most essential functions to copy any critical NES data and
-; registers into local memory so that the rendering is consistent and not affected if a VBL interrupt
-; occures between here and the actual screen blit
-
-            php
-            sei
-
-            jsr   scanOAMSprites          ; Filter out any sprites that don't need to be drawn and mark occupied lines
-
-            lda  nt_queue_head            ; These are used in PPUFlushQueues, so using tmp locations is OK
-            sta  :nt_head
-            lda  at_queue_head
-            sta  :at_head
-
-            lda  ppuctrl                  ;  Cache these values that are used to set the view port
-            sta  _ppuctrl
-            lda  ppuscroll
-            sta  _ppuscroll
-
-            plp
 
 ; Apply all of the tile updates that were made during the previous frame(s).  The color attribute bytes are always set
 ; in the PPUDATA hook, but then the appropriate tiles are queued up.  These tiles, the tiles written to by PPUDATA in
@@ -588,17 +563,7 @@ RenderFrame
             jsr   RenderScreen
 
 ; Game specific post-render logic
-;
-; Check the AreaType and see if the palette needs to be changed. We do this after the screen is blitted
-; so the palette does not get changed too early while old pixels are still on the screen.
 
-            ldal  ROMBase+$074E
-            and   #$00FF
-            cmp   LastAreaType
-            beq   :no_area_change
-            sta   LastAreaType
-            jsr   SetAreaType
-:no_area_change
 
             inc   frameCount       ; Tick over to a new frame
             rts
@@ -611,9 +576,9 @@ RenderScreen
 ; Do the basic setup
 
             sep   #$20
-            lda   _ppuctrl                ; Bit 0 is the high bit of the X scroll position
+            lda   ppuctrl                 ; Bit 0 is the high bit of the X scroll position
             lsr                           ; put in the carry bit
-            lda   _ppuscroll+1             ; load the scroll value
+            lda   ppuscroll+1             ; load the scroll value
             ror                           ; put the high bit and divide by 2 for the engine
             rep   #$20
             and   #$00FF                  ; make sure nothing is in the high byte
@@ -679,10 +644,8 @@ SetPaletteMap
             stx   ActivePtr
             rts
 
-SetAreaType
-            cmp   #5
-            bcs   :out
-
+SetDefaultPalette
+            lda   #0
             asl
             tay
             ldx   AreaPalettes,y      ; First parameter to NESColorToIIgs
@@ -693,26 +656,26 @@ SetAreaType
             lda   SwizzleTables+2,y
             ldx   SwizzleTables,y
             jsr   SetPaletteMap
-            
+
             plx
             lda   #TmpPalette
             jsr   NESColorToIIgs
 
-; Special copy routine; do not touch color indices 0, 1, 14 or 15 -- we let the NES PPU handle those
+; Special copy routine; do not touch color index 0 -- we let the NES PPU handle that
 
-            ldx   #4
+            ldx   #2
 :loop
             lda   TmpPalette,x
             stal  $E19E00,x
             inx
             inx
-            cpx   #2*14
+            cpx   #2*16
             bcc   :loop
 :out
             rts
 
-AreaPalettes  dw   WaterPalette,Area1Palette,Area2Palette,Area3Palette,Area2Palette
-SwizzleTables adrl AT0_T0,AT1_T0,AT2_T0,AT3_T0,AT2_T0
+AreaPalettes  dw   Area1Palette
+SwizzleTables adrl AT1_T0
 
 ClearScreen
             ldx  #$7CFE
@@ -746,8 +709,8 @@ _PutStr     mac
             <<<
 
 ShowConfig
-            lda #1
-            jsr SetAreaType
+;            lda #1
+;            jsr SetAreaType
 
             lda #$0000
             stal $E19E00
@@ -960,17 +923,19 @@ triggerNMI
 
 ;            lda   AudioMode
 ;            bne   :good_audio
-            sep   #$30
-            jsl   quarter_speed_driver
-            rep   #$30
+;            sep   #$30
+;            jsl   quarter_speed_driver
+;            rep   #$30
 ;:good_audio
 
             ldal  ppuctrl               ; If the ROM has not enabled VBL NMI, also skip
             bit   #$80
             beq   :skip
 
-            ldx   #NonMaskableInterrupt
+            ldal  ROMBase+$FFFA         ; NMI Vector
+            tax
             jsr   romxfer
+            jsr   resume               ; Yield control back to the ROM until it is waiting for the next VBL
 
 :skip
             rts
@@ -1451,38 +1416,141 @@ ShutDown
 *                  plb
 *                  rts
 
+; Balloon fight rom is a bit difficult to deal with because the game logic runs from the reset vector
+; code, not the interrupt code.
+;
+; So, to get control back, we insert a JML yield into the ROM to return when it busy-waits for the
+; next VBL signal in the PPU registers
+;
+; The control sequence is
+;
+; 0. Set up the yield continuation address to point at ExtRnt
+; 1. Perform a romxfer to the reset vector address ($c000)
+; 2. The ROM code will call yield at some point
+; 3. Control is passed back to ExtRtn and the romxfer function returns normally
+;
+; 4. VBL interrupts are now enabled
+; 5. Execute normal code
+; 6. In the VBL interrupt handler
+;    a. call the NMI routine in the ROM
+;    b. call continue to return control to the ROM
+; 7. When yield is called again, return control to the VBL interrupt handler
+; 8. Goto 5
 
 
-; Transfer control to the ROM.  This function is trampoline that is responsible for
-; setting up the direct page and stack for the ROM and then passing control into
-; the ROM wrapped in a JSL/RTL vector stashed in the ROM space.
+
+; Simple rom control transfer.  Just calls into the ROM like a subroutine.  We do
+; save the stack since the we set up the ROM stack before passing control.
 ;
 ; X = ROM Address
-romxfer     phb                             ; Save the bank and direct page
-            phd
-            tsc
-            sta   StkSave+1                 ; Save the current stack in the main program
-            pea   #^ExtIn                   ; Set the bank to the ROM
-            plb
+romxfer     tsc
+            sta   StkSave                   ; Save the current stack in the main program
+            lda   ROMStk
+            sta   :patch+1
 
-            lda   ROMStk                    ; Set the ROM stack address
+            sep   #$20
+            lda   #$01
+            pha
+
+            lda   STATE_REG_R1W1            ; Set bank 01 read / write for stack and direct page
+            ora   #$80                      ; ALTZP on
+            plb
+            stal  STATE_REG
+            rep   #$20
+
+:patch      lda   #$0000                    ; Set the ROM stack address
             tcs
-            lda   ROMZeroPg                 ; Set the ROM zero page
+            lda   #$0000                    ; Set the ROM zero page
             tcd
 
             jml   ExtIn
 ExtRtn      ENT
             tsx                             ; Copy the stack address returned by the emulator
-StkSave     lda   #$0000
+            ldal  StkSave
             tcs
 
-            pld
+            phk
             plb
             stx   ROMStk                    ; Keep an updated copy of the stack address
+
+            lda   DPSave
+            tcd
+            sep   #$20
+            lda   STATE_REG_R0W0            ; Get back to Bank 0 R/W
+            stal  STATE_REG
+            rep   #$20
+
             rts
 
-nmiTask
+; yield - allow the ROM to give up control.  Only one yield may be active at a given time. This
+;         must be called from the NES ROM code, so 8-bit execution and the relevant softswitch
+;         states are assumed and not specifically saved.
+yield_a     ds    1
+yield_x     ds    1
+yield_y     ds    1
+yield_p     ds    1
+yield_s     ds    1
+
             mx    %11
+yield       ENT
+
+; First, preserve the state from the ROM code
+
+            phk
+            plb                             ; Reset the bank register.  NES ROM is always B=01, so no need to save
+
+            php
+            sta   yield_a                   ; Save all of the volatile registers
+            pla
+            sta   yield_p
+            stx   yield_x
+            sty   yield_y
+            tsx
+            stx   yield_s
+
+; Now, switch back to 16-bit mode and return control to the native code
+
+            rep   #$30
+            lda   DPSave
+            tcd
+            sep   #$20
+            lda   STATE_REG_R0W0            ; Get back to Bank 0 R/W
+            stal  STATE_REG
+            rep   #$30
+            lda   StkSave
+            tcs
+            rts
+
+; resume - return control to the NES rom
+            mx    %11
+resume
+            tcs
+            sta   StkSave                  ; Save the current stack location
+
+            pea   #$0000                   ; prep direct page and stack addresses
+            ldx   #$0100
+
+            sep   #$30                     ; Enter 8-bit mode
+            lda   STATE_REG_R1W1
+            ora   #$80                     ; ALTZP on
+            pld                            ; Set the direct page just before we switch to Bank 1 R/W
+            stal  STATE_REG
+            txs                            ; Set the stack to page 1
+
+            ldx   yield_s
+            txs
+            ldy   yield_y
+            lda   yield_p
+            pha
+            lda   #$01
+            pha
+            lda   yield_a
+            plb
+            plp
+            rtl                            ; JSL return address should still be on the stack
+
+            mx    %11
+nmiTask
             php
             rep   #$30
             phb
@@ -1571,10 +1639,10 @@ readInput
             pla
             rts
 
-            put   App.Msg.s
-            put   font.s
-            put   palette.s
-            put   ppu_wip.s
+            put   ../../App.Msg.s
+            put   ../../font.s
+            put   ../../palette.s
+            put   ../../ppu_wip.s
 
             ds    \,$00                      ; pad to the next page boundary
 
@@ -1601,36 +1669,25 @@ PPU_ATTR_MASK
             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
 
-; If AreaStyle is 1 then load an alternate palette 'b'
-;
 ; Palettes of NES color indexes
-Area1Palette dw     $22, $00, $29, $1A, $0F, $36, $17, $30, $21, $27, $1A, $16, $00, $00, $16, $18
-
-; Underground
-Area2Palette dw     $0F, $00, $29, $1A, $09, $3C, $1C, $30, $21, $17, $27, $36, $16, $1D, $16, $18
-
-; Castle
-Area3Palette dw     $0F, $00, $30, $10, $00, $16, $17, $27, $1C, $36, $1D, $00, $00, $00, $16, $18
-
-; Water
-WaterPalette dw     $22, $00, $15, $12, $25, $3A, $1A, $0F, $30, $12, $27, $10, $16, $00, $16, $18
+Area1Palette dw     $0F, $2A, $09, $07, $30, $27, $15, $02, $21, $00, $10, $16, $12, $37, $35, $2B
 
 ; Palette remapping
-            put   pal_w11.s
-            put   apu/apu.s
+            put   palettes.s
+            put   ../../apu/apu.s
 
 ; Core code
-            put   core/CoreData.s
-            put   core/CoreImpl.s
-            put   core/ControlBits.s
-            put   core/Memory.s
-            put   core/Graphics.s
-            put   core/Math.s
-            put   core/blitter/BlitterLite.s
-            put   core/blitter/PEISlammer.s
-            put   core/blitter/HorzLite.s
-            put   core/blitter/VertLite.s
-            put   core/tiles/CompileTile.s
+            put   ../../core/CoreData.s
+            put   ../../core/CoreImpl.s
+            put   ../../core/ControlBits.s
+            put   ../../core/Memory.s
+            put   ../../core/Graphics.s
+            put   ../../core/Math.s
+            put   ../../core/blitter/BlitterLite.s
+            put   ../../core/blitter/PEISlammer.s
+            put   ../../core/blitter/HorzLite.s
+            put   ../../core/blitter/VertLite.s
+            put   ../../core/tiles/CompileTile.s
 
 
 ; Fixed tile
@@ -1659,52 +1716,3 @@ TileConst
             sta:  $E01,x
             sta:  $E04,x
             rts
-
-; Compiled Tile template
-; Bank is set, X = tile corner, A = palette select in bits 9 and 10: 00000ppw wxxyyzz0
-; Swizzle Ptr is aligned to a 2048-byte boundary
-;DrawTile
-;            sta   SwizzlePtr
-;            ldy   #DATA             ; %0000_000w_wxxy_yzz0
-
-;            lda   #MASK
-;            and:  $001,x
-;            ora   [SwizzlePtr],y
-;            sta:  $001,x
-
-;            lda   #MASK             ; Skip ldy for repeating data
-;            and:  $004,x
-;            ora   [SwizzlePtr],y
-;            sta:  $004,x
-
-;            ldy   #DATA             ; No mask for solid words
-;            lda   [SwizzlePtr],y
-;            sta:  $201,x
-;            sta:  $204,x            ; Repeat solid, unmasked values
-;            sta:  $401,x
-;            sta:  $404,x
-;            rts
-
-; Compiles sprites for "normal" sprites -- have a fallback routine for sprites that
-; cross the nametable boundary
-; CompiledSpriteTemplate
-;            sta   SwizzlePtr
-
-;            ldy   #DATA             ; No mask for solid words
-;            lda:  $201,x
-;            pha                     ; stash the data
-;            lda   [SwizzlePtr],y
-;            sta:  $201,x
-
-;            ldy   #DATA 
-;            lda:  $204,x
-;            pha
-;            and   #MASK
-;            ora   [SwizzlePtr],y
-;            sta:  $001,x
-
-;            pea   %1101_1100_0011_111           ; push bitfield of which words to restore (expect sprites to be dense)
-
-* ; and  #MASK                ; 3
-* ; ora  [USER_FREE_SPACE],y  ; 7 lookup and merge in swizzled tile data = *(SwizzlePtr + palbits)
-* ; sta: 0,x                  ; 6 = 25 cycles / word; 13 bytes

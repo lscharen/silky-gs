@@ -1,5 +1,5 @@
 ; Feature flags
-NO_INTERRUPTS     equ       0                   ; turn off for crossrunner debugging
+NO_INTERRUPTS     equ       1                   ; turn off for crossrunner debugging
 
 ; Sprite plane data and mask banks are provided as an external segment
 ;

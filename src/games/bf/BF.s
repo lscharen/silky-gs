@@ -12,29 +12,29 @@
 
 ; Segment #2 & #3 -- PPU blitter
 
-            ASM   core/blitter/TemplateLiteBank1.s
+            ASM   ../../core/blitter/TemplateLiteBank1.s
             KND   #$1100
             SNA   PPU1
 
-            ASM   core/blitter/TemplateLiteBank2.s
+            ASM   ../../core/blitter/TemplateLiteBank2.s
             KND   #$1100
             SNA   PPU2
 
 ; Segment #4 -- Converted Tile Storage
 
-            ASM   core/static/TileData.s
+            ASM   ../../core/static/TileData.s
             KND   #$1100
             SNA   CHRDATA
 
 ; Segment #5 -- ROM
 
-            ASM   rom_bf.s
+            ASM   rom.s
             KND   #$1100
             SNA   BFROM
 
 ; Segment #6 -- PPU memory and PPU shadow storage
 
-            ASM   core/static/PPU.s
+            ASM   PPU.s
             KND   #$1100
             SNA   PPURAM
 
