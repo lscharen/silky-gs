@@ -46,8 +46,10 @@ x_offset    equ   16                      ; number of bytes from the left edge
             tdc
             sta   DPSave
 
-            lda   #$01FF                  ; Stack starts at the top of the page
-            sta   ROMStk
+            sep   #$20
+            lda   #$FF                  ; Stack starts at the top of the page (technically not needed because calling the reset vector should initialize the stack)
+            sta   yield_s
+            rep   #$20
 
 ; Start up the engine
 
@@ -101,17 +103,7 @@ x_offset    equ   16                      ; number of bytes from the left edge
             bne   :drawloop
             rep   #$20
 
-; Render again, just to make sure it works
-
-;            jsr   _ApplyBG0YPosLite       ; Set up the code field
-;            jsr   _ApplyBG0XPosLite       ; Set up the code field
-;            ldx   #0
-;            ldy   #200
-;            jsr   _BltRangeLite
-;            lda   StartYMod240            ; Restore the fields back to their original state
-;            ldx   ScreenHeight
-;            jsr   _RestoreBG0OpcodesLite
-;            stz   LastPatchOffset
+; Get into the main code
 
             lda   #0
             jsr   ClearScreen
@@ -161,7 +153,7 @@ x_offset    equ   16                      ; number of bytes from the left edge
 
 EvtLoop
 ;            jsr   readInput              ; Uncomment if interrupts are off
-;            jsr   triggerNMI
+            jsr   triggerNMI
 
             lda   singleStepMode
             bne   :skip_render
@@ -539,6 +531,29 @@ InitPlayfield
 
 ; Helper to perform the essential functions of rendering a frame
 RenderFrame
+:nt_head    equ tmp3
+:at_head    equ tmp4
+
+; First, disable interrupts and perform the most essential functions to copy any critical NES data and
+; registers into local memory so that the rendering is consistent and not affected if a VBL interrupt
+; occures between here and the actual screen blit
+
+            php
+            sei
+
+            jsr   scanOAMSprites          ; Filter out any sprites that don't need to be drawn and mark occupied lines
+
+            lda  nt_queue_head            ; These are used in PPUFlushQueues, so using tmp locations is OK
+            sta  :nt_head
+            lda  at_queue_head
+            sta  :at_head
+
+            lda  ppuctrl                  ;  Cache these values that are used to set the view port
+            sta  _ppuctrl
+            lda  ppuscroll
+            sta  _ppuscroll
+
+            plp
 
 ; Apply all of the tile updates that were made during the previous frame(s).  The color attribute bytes are always set
 ; in the PPUDATA hook, but then the appropriate tiles are queued up.  These tiles, the tiles written to by PPUDATA in
@@ -1439,13 +1454,17 @@ ShutDown
 
 
 
-; Simple rom control transfer.  Just calls into the ROM like a subroutine.  We do
-; save the stack since the we set up the ROM stack before passing control.
+; Simple rom control transfer. This acts like an interrupt to the ROM code in the sense
+; that we do restore the ROM stack pointer, but jump to an absolute address and
+; the registers can be any value.
 ;
 ; X = ROM Address
 romxfer     tsc
             sta   StkSave                   ; Save the current stack in the main program
-            lda   ROMStk
+
+            lda   yield_s                   ; Set the stacak to watever the ROM is currently at
+            and   #$00FF
+            ora   #$0100
             sta   :patch+1
 
             sep   #$20
@@ -1471,14 +1490,14 @@ ExtRtn      ENT
 
             phk
             plb
-            stx   ROMStk                    ; Keep an updated copy of the stack address
 
             lda   DPSave
             tcd
-            sep   #$20
+            sep   #$30
+            stx   yield_s                   ; Keep an updated copy of the stack address
             lda   STATE_REG_R0W0            ; Get back to Bank 0 R/W
             stal  STATE_REG
-            rep   #$20
+            rep   #$30
 
             rts
 
@@ -1522,23 +1541,25 @@ yield       ENT
             rts
 
 ; resume - return control to the NES rom
-            mx    %11
+            mx    %00
 resume
-            tcs
+            tsc
             sta   StkSave                  ; Save the current stack location
 
             pea   #$0000                   ; prep direct page and stack addresses
-            ldx   #$0100
+            lda   yield_s
+            and   #$00FF
+            ora   #$0100
+            tax
 
-            sep   #$30                     ; Enter 8-bit mode
+            sep   #$20                     ; Enter 8-bit mode
             lda   STATE_REG_R1W1
             ora   #$80                     ; ALTZP on
             pld                            ; Set the direct page just before we switch to Bank 1 R/W
             stal  STATE_REG
-            txs                            ; Set the stack to page 1
+            txs                            ; Restore the stack
 
-            ldx   yield_s
-            txs
+            sep   #$10                     ; Set registers to 8-bit
             ldy   yield_y
             lda   yield_p
             pha
