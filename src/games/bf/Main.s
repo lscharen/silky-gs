@@ -115,6 +115,13 @@ x_offset    equ   16                      ; number of bytes from the left edge
             ldal  OneSecondCounter
             sta   OldOneSec
 
+            ldx   #0
+            ldy   #$FFFF
+            lda   frameCount
+            jsr   DrawByte
+            jsr   WaitForKey
+;            inc   frameCount
+
 ; Initialize the sound hardware for APU emulation
 
 ;            lda   #2
@@ -129,7 +136,9 @@ x_offset    equ   16                      ; number of bytes from the left edge
 
             ldal  ROMBase+$FFFC         ; Reset Vector
             tax
-            jsr   romxfer
+            sei
+            jsr   romxfer               ; Cannot allow interrupts within the rom dispatch
+            cli
 
 ; Apply hacks
 ;WorldNumber           = $075f
@@ -153,30 +162,48 @@ x_offset    equ   16                      ; number of bytes from the left edge
 
 EvtLoop
 ;            jsr   readInput              ; Uncomment if interrupts are off
-            jsr   triggerNMI
 
-            lda   singleStepMode
-            bne   :skip_render
-            jsr   RenderFrame
-
-            lda   ShowFPS
-            beq   :no_fps
-
-            ldal  OneSecondCounter
-            cmp   OldOneSec
-            beq   :skip_render
-            sta   OldOneSec
-            
             ldx   #0
             ldy   #$FFFF
             lda   frameCount
-
             jsr   DrawByte
+
+            jsr   WaitForKey
+
+            sei
+            jsr   triggerNMI
+            cli
+
+            jsr   RenderFrame
+
+
             lda   frameCount
-            stz   frameCount
-:no_fps
-            bra   :chkkey
-:skip_render
+            cmp   #30
+            bcc   :cont
+            jmp   Exit
+:cont
+;            lda   singleStepMode
+;            bne   :skip_render
+;            jsr   RenderFrame
+
+;            lda   ShowFPS
+;            beq   :no_fps
+
+;            ldal  OneSecondCounter
+;            cmp   OldOneSec
+;            beq   :skip_render
+;            sta   OldOneSec
+            
+;            ldx   #0
+;            ldy   #$FFFF
+;            lda   frameCount
+
+;            jsr   DrawByte
+;            lda   frameCount
+;            stz   frameCount
+;:no_fps
+;            bra   :chkkey
+;:skip_render
             jsr   readInput              ; Manual read in single-step mode
 
 :chkkey
@@ -949,8 +976,8 @@ triggerNMI
 
             ldal  ROMBase+$FFFA         ; NMI Vector
             tax
-            jsr   romxfer
-            jsr   resume               ; Yield control back to the ROM until it is waiting for the next VBL
+            jsr   romxfer               ; Execute NMI handler
+            jsr   resume                ; Yield control back to the ROM until it is waiting for the next VBL
 
 :skip
             rts
@@ -1459,6 +1486,7 @@ ShutDown
 ; the registers can be any value.
 ;
 ; X = ROM Address
+; Interrupts must be disabled
 romxfer     tsc
             sta   StkSave                   ; Save the current stack in the main program
 
@@ -1468,12 +1496,12 @@ romxfer     tsc
             sta   :patch+1
 
             sep   #$20
-            lda   #$01
+            lda   #^ExtIn                   ; Set the bank to the ROM
             pha
-
-            lda   STATE_REG_R1W1            ; Set bank 01 read / write for stack and direct page
-            ora   #$80                      ; ALTZP on
             plb
+
+            ldal  STATE_REG
+            ora   #$80                      ; ALTZP on
             stal  STATE_REG
             rep   #$20
 
@@ -1484,6 +1512,7 @@ romxfer     tsc
 
             jml   ExtIn
 ExtRtn      ENT
+
             tsx                             ; Copy the stack address returned by the emulator
             ldal  StkSave
             tcs
@@ -1495,7 +1524,8 @@ ExtRtn      ENT
             tcd
             sep   #$30
             stx   yield_s                   ; Keep an updated copy of the stack address
-            lda   STATE_REG_R0W0            ; Get back to Bank 0 R/W
+            ldal  STATE_REG                 ; Get back to Bank 0 R/W
+            and   #$7F
             stal  STATE_REG
             rep   #$30
 
@@ -1528,14 +1558,15 @@ yield       ENT
             stx   yield_s
 
 ; Now, switch back to 16-bit mode and return control to the native code
+;            clc
+;            xce
+            ldal  STATE_REG                 ; Get back to Bank 0 R/W
+            and   #$7F
+            stal  STATE_REG
 
             rep   #$30
             lda   DPSave
             tcd
-            sep   #$20
-            lda   STATE_REG_R0W0            ; Get back to Bank 0 R/W
-            stal  STATE_REG
-            rep   #$30
             lda   StkSave
             tcs
             rts
@@ -1546,24 +1577,26 @@ resume
             tsc
             sta   StkSave                  ; Save the current stack location
 
-            pea   #$0000                   ; prep direct page and stack addresses
+            lda   #$0000                   ; set direct page and stack addresses
+            tcd
+
             lda   yield_s
             and   #$00FF
             ora   #$0100
-            tax
+            tcs
 
-            sep   #$20                     ; Enter 8-bit mode
-            lda   STATE_REG_R1W1
+            sep   #$30                     ; Enter 8-bit mode
+            ldal  STATE_REG
             ora   #$80                     ; ALTZP on
-            pld                            ; Set the direct page just before we switch to Bank 1 R/W
             stal  STATE_REG
-            txs                            ; Restore the stack
 
-            sep   #$10                     ; Set registers to 8-bit
+;            sec
+;            xce
+
             ldy   yield_y
             lda   yield_p
             pha
-            lda   #$01
+            lda   #^ExtIn                   ; Set the bank to the ROM
             pha
             lda   yield_a
             plb
