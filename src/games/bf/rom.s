@@ -250,7 +250,7 @@
 ;  IIgs shim code
 ; ----------------------
 ROMBase ENT
-    ds  $be00
+    ds  $bd00
 ;    org $c000
 
 ; External wrapper is responsible for setting the stack
@@ -292,6 +292,7 @@ yield EXT
 STA_4000_Y
             php
             phy
+            phx
             pea  :rtn-1
             tyx
             jmp  (:reg_tbl,x)
@@ -299,7 +300,8 @@ STA_4000_Y
             dw   APU_PULSE2_REG1_W,APU_PULSE2_REG1_W,
             dw   APU_TRIANGLE_REG1_W,APU_TRIANGLE_REG1_W
             dw   NO_OP,NO_OP
-:rtn        ply
+:rtn        plx
+            ply
             plp
             rts
 
@@ -519,6 +521,78 @@ ExtIn       ENT
 :patch      jsr  $0000
             rep  #$30
             jml  ExtRtn
+
+; Include a bunch of routines to patch out the use of abs,y addressing modes and convert to load
+; from the actual direct page
+tmp_byte    ds   1
+LDA_ABS_Y   mac
+            pha           ; space for result
+            phx
+            tyx
+            lda  ]1,x
+            sta  2,s
+            plx
+            pla
+            rts
+            <<<
+
+STA_ABS_Y   mac
+            php
+            phx
+            tyx
+            sta  ]1,x
+            plx
+            plp
+            rts
+            <<<
+
+CMP_ABS_Y   mac
+            pha
+            phx
+            tyx
+            lda  ]1,x
+            stal tmp_byte
+            plx
+            pla
+            cmpl tmp_byte
+            rts
+            <<<
+
+SBC_ABS_Y   mac
+            pha                ; make sure none of these instructions disturbs the carry flag
+            phx
+            tyx
+            lda  ]1,x
+            stal tmp_byte
+            plx
+            pla
+            sbcl tmp_byte
+            rts
+            <<<
+
+LDA_00B5_Y  LDA_ABS_Y $b5
+LDA_0057_Y  LDA_ABS_Y $57
+LDA_0003_Y  LDA_ABS_Y $03
+LDA_00B2_Y  LDA_ABS_Y $b2
+LDA_007F_Y  LDA_ABS_Y $7f
+LDA_0088_Y  LDA_ABS_Y $88
+LDA_0091_Y  LDA_ABS_Y $91
+LDA_009A_Y  LDA_ABS_Y $9a
+LDA_00BD_Y  LDA_ABS_Y $bd
+LDA_00F0_Y  LDA_ABS_Y $f0
+CMP_0003_Y  CMP_ABS_Y $03
+CMP_0088_Y  CMP_ABS_Y $88
+CMP_0091_Y  CMP_ABS_Y $91
+CMP_009A_Y  CMP_ABS_Y $9a
+SBC_0091_Y  SBC_ABS_Y $91
+SBC_009A_Y  SBC_ABS_Y $9a
+STA_000D_Y  STA_ABS_Y $0d
+STA_005A_Y  STA_ABS_Y $5a
+STA_0088_Y  STA_ABS_Y $9a
+STA_007F_Y  STA_ABS_Y $7f
+STA_00C1_Y  STA_ABS_Y $c1
+STA_00F0_Y  STA_ABS_Y $f0
+
             ds   \,$00   ; pad to next page
 
 ; ----------------------
@@ -526,7 +600,6 @@ ExtIn       ENT
 ; ----------------------
 
     mx    %11
-ROMReset ENT
 lc000_reset
     lda #$00	;  \
     jsr STA_2000	;  | Initialize PPU registers
@@ -706,7 +779,7 @@ lc0f7_brk
 
 
 ; ----------------------
-;  NMI/PPU Management code
+;  NMI/PPU Management codez
 ; ----------------------
 
 lc0fa_disablenmi
@@ -738,7 +811,8 @@ lc119
     jsr lc154_newppublock
     ldy #$00	;  \
 lc11e
-    lda $0057,y	;  | Put PPU Data
+;    lda $0057,y	;  | Put PPU Data
+    jsr LDA_0057_Y
     sta $0300,x	;  | to upload to Nametable 1
     inx			;  |
     iny			;  |
@@ -1284,7 +1358,9 @@ lc53d
     ldy #$04	;  \
 lc54b
     lda ($1d),y	;  | Check each digit
-    cmp $0003,y	;  | If P1 Score Digit < Rank Score
+;    cmp $0003,y	;  | If P1 Score Digit < Rank Score
+    jsr CMP_0003_Y
+
     bcc lc563	;  | then stop
     bne lc559	;  | If >= then check next Rank Score
     dey			;  |
@@ -1345,7 +1421,9 @@ lc5a1
 lc5ac
     ldy #$04	;  \
 lc5ae
-    lda $0003,y	;  | Copy current score
+;    lda $0003,y	;  | Copy current score
+    jsr LDA_0003_Y
+
     sta ($1d),y	;  | to current Score Rank
     dey			;  |
     bpl lc5ae	;  /
@@ -1633,9 +1711,13 @@ lc7b4
     sta $04cc,x
     lda #$00
     sta $0530,x
-    lda $00b2,y
+;    lda $00b2,y
+    jsr LDA_00B2_Y
+
     sta $0490,x
-    lda $00b5,y
+;    lda $00b5,y
+    jsr LDA_00B5_Y
+
     sta $04a4,x
     ldy $ba
     jsr lf1b3_rng
@@ -2056,30 +2138,39 @@ lcb18
 lcb1c_bolt_playercollision    	;  Lightning Bolt Player Collision
     ldy #$01
 lcb1e
-    lda $0088,y	;  \
+;    lda $0088,y	;  \
+    jsr LDA_0088_Y
     bmi lcb70	;  | If Player Y has balloons...
     beq lcb70	;  /
-    lda $00bd,y	;  \ and if Player Y is not invincible...
+;    lda $00bd,y	;  \ and if Player Y is not invincible...
+    jsr LDA_00BD_Y
     bne lcb70	;  /
     lda $0490,x		;  \
     sec				;  | If Player Y's X position
-    sbc $0091,y		;  | is within the X position
+;    sbc $0091,y		;  | is within the X position
+    jsr SBC_0091_Y
+
     jsr lf08e_abs	;  | of Lightning Bolt X
     cmp #$08		;  | (size 8 pixels)
     bcs lcb70		;  /
     lda $04a4,x		;  \
     sec				;  |
-    sbc $009a,y		;  | If Player Y's Y position
+;    sbc $009a,y		;  | If Player Y's Y position
+    jsr SBC_009A_Y
     sec				;  | is within the Y position
     sbc #$08		;  | of Lightning Bolt X
     jsr lf08e_abs	;  | (size 12 pixels high
     cmp #$0c		;  | to take balloons into account)
     bcs lcb70		;  /
     lda #$00
-    sta $0088,y	;  Player Y's balloons = 00
+;    sta $0088,y	;  Player Y's balloons = 00
+    jsr STA_0088_Y
     lda #$01
-    sta $007f,y	;  Player Y's status = 01 
-    sta $00c1,y	;  Player Y's freeze flag = 01
+;    sta $007f,y	;  Player Y's status = 01 
+    jsr STA_007F_Y
+;    sta $00c1,y	;  Player Y's freeze flag = 01
+    jsr STA_00C1_Y
+
     lda #$0b
     sta $0451,y	;  Player Y's type = 0B
     lda #$20
@@ -2136,7 +2227,8 @@ lcba8
     bne lcbb2
     jmp lcc3a
 lcbb2
-    lda $0088,y
+;    lda $0088,y
+    jsr LDA_0088_Y
     bmi lcc2f
     beq lcc2f
     cpy #2
@@ -2144,7 +2236,8 @@ lcbb2
     cmp #1
     beq lcc2f
 lcbc1
-    lda $0091,y
+;    lda $0091,y
+    jsr LDA_0091_Y
     clc
     adc #8
     sec
@@ -2153,7 +2246,8 @@ lcbc1
     jsr lf08e_abs
     cmp #$12
     bcs lcc2f
-    lda $009a,y
+;    lda $009a,y
+    jsr LDA_009A_Y
     clc
     adc #$0c
     sec
@@ -2207,7 +2301,8 @@ lcc33
     rts
 
 lcc3a
-    lda $0088,y
+;    lda $0088,y
+    jsr LDA_0088_Y
     bmi lccb8
     beq lccb8
     cpy #2
@@ -2218,29 +2313,35 @@ lcc3a
     lda $05d2,x
     sec
     sbc #$0a
-    cmp $0091,y
+;    cmp $0091,y
+    jsr CMP_0091_Y
     bcs lcc73
     adc #4
-    cmp $0091,y
+;    cmp $0091,y
+    jsr CMP_0091_Y
     bcc lcc73
     lda $05dc,x
     sec
     sbc #$1c
-    cmp $009a,y
+;    cmp $009a,y
+    jsr CMP_009A_Y
     bcs lcc73
     adc #4
-    cmp $009a,y
+;    cmp $009a,y
+    jsr CMP_009A_Y
     bcc lcc73
     jsr lccbf
 lcc73
-    lda $0091,y
+;    lda $0091,y
+    jsr LDA_0091_Y
     clc
     adc #8
     sec
     sbc $05d2,x
     jsr lf08e_abs
     sta $12
-    lda $009a,y
+;    lda $009a,y
+    jsr LDA_009A_Y
     clc
     adc #$0c
     sec
@@ -2546,12 +2647,14 @@ lcebd
 lcece_ballooncollision
     ldy #$01
 lced0
-    lda $0088,y
+;    lda $0088,y
+    jsr LDA_0088_Y
     bmi lcf0f
     beq lcf0f
     lda $055d,x
     bmi lcf12
-    lda $009a,y
+;    lda $009a,y
+    jsr LDA_009A_Y
     cmp #$c0
     bcs lcf0f
     sec
@@ -2559,7 +2662,8 @@ lced0
     jsr lf08e_abs
     cmp #$18
     bcs lcf0f
-    lda $0091,y
+;    lda $0091,y
+    jsr LDA_0091_Y
     sec
     sbc $0567,x
     jsr lf08e_abs
@@ -3228,7 +3332,8 @@ ld421
     bne ld40d	;  / then stop and copy PPU Temp Block as is
 ld42d
     lda ($1d),y	;  \ Copy First Palette Data
-    sta $005a,y	;  | to Background Palette 1
+;    sta $005a,y	;  | to Background Palette 1
+    jsr STA_005A_Y
     dey			;  | to PPU Temp Block
     bpl ld42d	;  /
     bmi ld40d
@@ -3631,7 +3736,8 @@ ld765
     ldy #$04	;  \
 ld767
     lda ($21),y	;  | Copy Highest Top Score
-    sta $000d,y	;  | back to Current Top Score
+;    sta $000d,y	;  | back to Current Top Score
+    jsr STA_000D_Y
     dey			;  | 
     bpl ld767	;  /
     inc $46		;  Status Bar Update Flag
@@ -3829,12 +3935,14 @@ ld88c
     lda ld8d7,y
     sta $02f5,x
     ldy $13
-    lda $009a,y
+;    lda $009a,y
+    jsr LDA_009A_Y
     sec
     sbc #8
     sta $02f0,x
     sta $02f4,x
-    lda $0091,y
+;    lda $0091,y
+    jsr LDA_0091_Y
     sta $02f3,x
     clc
     adc #8
@@ -3895,7 +4003,7 @@ ld90f_uploadtitlescreen
     jsr lc0fa_disablenmi
     lda #ld92c
     sta $1d
-    lda #^ld92c
+    lda #>ld92c
     sta $1e
     jsr ld497_uploadbackground
     jsr lc104_enablenmi
@@ -4614,13 +4722,16 @@ le712
     eor $12
     and #$01
     tay
-    lda $0088,y
+;    lda $0088,y
+    jsr LDA_0088_Y
     bmi le749
-    lda $00bd,y
+;    lda $00bd,y
+    jsr LDA_00BD_Y
     bne le749
     lda #$00
     sta $31,x
-    lda $009a,y
+;    lda $009a,y
+    jsr LDA_009A_Y
     sec
     sbc #$04
     cmp $9a,x
@@ -4630,7 +4741,8 @@ le749
     sta $31,x
 le74d
     lda $91,x
-    cmp $0091,y
+;    cmp $0091,y
+    jsr CMP_0091_Y
     bcs le75b
     lda $31,x
     ora #$01
@@ -5353,9 +5465,11 @@ lec7e
     bcc lec93
     iny
 lec93
-    lda $00f0,y
+;    lda $00f0,y
+    jsr LDA_00F0_Y
     ora #$10
-    sta $00f0,y
+;    sta $00f0,y
+    jsr STA_00F0_Y
     lda $0412,x
     sec
     ldy $0451,x
@@ -5392,18 +5506,21 @@ lecdb
     pha
     ldy #1
 lecdf
-    lda $0088,y
+;    lda $0088,y
+    jsr LDA_0088_Y
     beq led22
     bmi led22
     lda $9a,x
     sec
-    sbc $009a,y
+;    sbc $009a,y
+    jsr SBC_009A_Y
     jsr lf08e_abs
     cmp #$18
     bcs led22
     lda $91,x
     sec
-    sbc $0091,y
+;    sbc $0091,y
+    jsr SBC_0091_Y
     jsr lf08e_abs
     cmp #$10
     bcs led22
@@ -5595,12 +5712,14 @@ lee31
     lda $88,x	;  \ If Object(x).Balloon <= 0
     bmi lee2e	;  | then skip
     beq lee2e	;  /
-    lda $0088,y	;  \ If Object(y).Balloon <= 0
+;    lda $0088,y	;  \ If Object(y).Balloon <= 0
+    jsr LDA_0088_Y
     bmi lee2e	;  | then skip
     beq lee2e	;  /
     lda #$00
     sta $cc
-    lda $009a,y		;  \
+;    lda $009a,y		;  \
+    jsr LDA_009A_Y
     sec				;  | 
     sbc $9a,x		;  | If abs(Object(y).Y - Object(x).Y)
     jsr lf08e_abs	;  | <= #$18
@@ -5610,7 +5729,8 @@ lee31
     clc				;  | If
     adc #$18		;  | abs((Object(y).Y + 7)
     sta $12			;  |   - (Object(x).Y + #$18))
-    lda $009a,y		;  | >= 4 then
+;    lda $009a,y		;  | >= 4 then
+    jsr LDA_009A_Y
     clc				;  |
     adc #$07		;  |
     sec				;  |
@@ -5621,7 +5741,8 @@ lee31
     lda #$01
     bne lee7c
 lee6a
-    lda $009a,y		;  \
+;    lda $009a,y		;  \
+    jsr LDA_009A_Y
     clc				;  | If abs(Object(y).Y + #$11 - Object(x).Y)
     adc #$11		;  | >= 4 then
     sec				;  |
@@ -5632,7 +5753,8 @@ lee6a
     lda #$02
 lee7c
     sta $cc
-    lda $0091,y		;  \
+;    lda $0091,y		;  \
+    jsr LDA_0091_Y
     sec				;  | If abs(Object(y).X - Object(x).X)
     sbc $91,x		;  | < #$10 then
     jsr lf08e_abs	;  |
@@ -5645,7 +5767,8 @@ lee8f
     clc				;  |
     adc #$10		;  | If abs((Object(y).X + 7)
     sta $12			;  |      - (Object(x).X + #$10))
-    lda $0091,y		;  | >= 4 then
+;    lda $0091,y		;  | >= 4 then
+    jsr LDA_0091_Y
     clc				;  |
     adc #$07		;  |
     sec				;  |
@@ -5656,7 +5779,8 @@ lee8f
     lda #$04
     bne leebc
 leeaa
-    lda $0091,y		;  \
+;    lda $0091,y		;  \
+    jsr LDA_0091_Y
     clc				;  | If abs(Object(y).X + 9 - Object(x).X)
     adc #$09		;  | >= 4 then
     sec				;  |
@@ -5763,7 +5887,8 @@ lef61
     lda #$01
     sta $0487
 lef72
-    lda $009a,y
+;    lda $009a,y
+    jsr LDA_009A_Y
     clc
     adc #$04
     cmp $9a,x
@@ -5776,7 +5901,8 @@ lef7f
     sta $0436,x
     cpy #$02
     bcc lef97
-    lda $0088,y
+;    lda $0088,y
+    jsr LDA_0088_Y
     cmp #$02
     beq lef97
     jmp lf043	;  Skip
@@ -5946,11 +6072,13 @@ lf0bd
     bcs lf0dd	;  |
     cpy #$02	;  | If 1 - Object(x).Balloons - 2 < 0
     bcc lf0dd	;  /
-    lda $007f,y	;  \ If Object(y).Status < 2
+;    lda $007f,y	;  \ If Object(y).Status < 2
+    jsr LDA_007F_Y
     cmp #$02	;  |
     bcc lf0dd	;  /
     lda #$01	;  \ If 1 - Object(y).Balloons
-    cmp $0088,y	;  /
+;    cmp $0088,y	;  /
+    jsr CMP_0088_Y
 lf0dd
     rts
 ; -----------------------
