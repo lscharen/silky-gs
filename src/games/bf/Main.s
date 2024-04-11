@@ -13,119 +13,83 @@
 
             mx    %00
 
+; Define all of the macros that are used to callback into this
+; code.  Defining an empty macro will result in no callback
+
+; Callback before entering the main event loop
+PRE_EVT_LOOP mac
+;
+             <<<
+
+POST_EVT_LOOP mac
+;
+             <<<
+
+EVT_LOOP_BEGIN mac
+;
+             <<<
+
+EVT_LOOP_END mac
+;
+             <<<
+
+PRE_RENDER   mac
+;
+             <<<
+
+; For this ROM, we check the NES RAM after each rendered frame to see if the
+; mapped palette needs to be updated
+POST_RENDER  mac
+            ldal  $0100c8               ; ROM zero page, $00C8 = Phase Type (00 = Regular, 01 = Bonus)
+            and   #$00FF
+            bne   bonus
+
+            ldal  $01003c               ; $003B = Current Phase
+            and   #$000C	            ;  | Select Palette based
+            lsr
+            lsr
+            inc                         ; +1 because palette index 0 is the title screen
+            bra   apply_pal
+bonus
+            lda   #0
+apply_pal
+            cmp   LastAreaType
+            beq   no_area_change
+            sta   LastAreaType
+            jsr   SetPalette
+no_area_change
+            <<<
+
+; Define which PPU address has the background and sprite tiles
+PPU_BG_TILE_ADDR  equ #$1000
+PPU_SPR_TILE_ADDR equ #$0000
+
 x_offset    equ   16                      ; number of bytes from the left edge
 
             phk
             plb
-            sta   UserId                  ; GS/OS passes the memory manager user ID for the application into the program
-            _MTStartUp                    ; Require the miscellaneous toolset to be running
-            bcc   *+5
-            brl   Fail
+
+; Call startup immediately after entering the application: A = memory manager user ID
+
+            jsr   NES_StartUp
+
+; Initialize the game-specific variables
 
             stz   LastAreaType            ; Check if the palettes need to be updates
-            stz   ShowFPS
-            stz   YOrigin
-
-            lda   #4                      ; Default to "Best" mode
-            sta   VideoMode
-            sta   AudioMode
-
-            lda   #1
-            sta   BGToggle
-
-            lda   #$0008
-            sta   LastEnable
-
-            stz   LastStatusUdt
-
-            lda   #1
-            sta   ActiveBank
-
-; The next two direct pages will be used by the engine
-
-            tdc
-            sta   DPSave
-
-            sep   #$20
-            lda   #$FF                  ; Stack starts at the top of the page (technically not needed because calling the reset vector should initialize the stack)
-            sta   yield_s
-            rep   #$20
-
-; Start up the engine
-
-            jsr   StartUp
-            bcc   *+5
-            jmp   Fail
-
-; Initialize the PPU 
-
-            jsr   PPUStartUp
-            bcc   *+5
-            jmp   Fail
-
-; Clear the IIgs screen and initialize the rendering parameters.
-
-            lda   #0
-            jsr   ClearScreen
-            jsr   InitPlayfield
-
-; Convert the CHR ROM from the cart into GTE tiles
-
-            jsr   LoadTilesFromROM
 
 ; Show the configuration screen
+
 ;            jsr   ShowConfig
 
 ; Set the palettes and swizzle tables
 
             jsr   SetDefaultPalette
 
-; Fill the buffer with tiles
-
-            sep   #$20
-            ldx   #$2000
-            lda   #0
-:drawloop
-            pha
-            phx
-
-            and   #$03
-            asl
-            stal  PPU_MEM+ATTR_SHADOW,x               ; force palette selection
-            lda   3,s
-
-            jsr   DrawPPUTile
-
-            plx
-            inx
-            pla
-            inc
-            bne   :drawloop
-            rep   #$20
-
-; Get into the main code
-
-            lda   #0
-            jsr   ClearScreen
-
-            jsr   RenderScreen
-            jsr   WaitForKey
 
 ; Start the FPS counter
+
             ldal  OneSecondCounter
             sta   OldOneSec
-
-            ldx   #0
-            ldy   #$FFFF
-            lda   frameCount
-            jsr   DrawByte
-            jsr   WaitForKey
-;            inc   frameCount
-
-; Initialize the sound hardware for APU emulation
-
-;            lda   #2
-;            jsr   APUStartUp              ; 0 = 240Hz, 1 = 120Hz, 2 = 60Hz (external)
 
 ; Set an internal flag to tell the VBL interrupt handler that it is
 ; ok to start invoking the game logic.  The ROM code has to be run
@@ -134,202 +98,43 @@ x_offset    equ   16                      ; number of bytes from the left edge
 ;
 ; Call the boot code in the ROM
 
-            ldal  ROMBase+$FFFC         ; Reset Vector
-            tax
-            sei
-            jsr   romxfer               ; Cannot allow interrupts within the rom dispatch
-            cli
-
-; Apply hacks
-;WorldNumber           = $075f
-;LevelNumber           = $075c
-;AreaNumber            = $0760
-;OffScr_WorldNumber    = $0766
-;OffScr_AreaNumber     = $0767
-;OffScr_LevelNumber    = $0763
+            jsr   NES_ColdBoot
 
 ; We _never_ scroll vertically, so just set it once.  This is to make sure these kinds of optimizations
 ; can be set up in the generic structure
 
-            lda   #16
+            lda   #24
             jsr   _SetBG0YPos
             jsr   _ApplyBG0YPosPreLite
-            jsr   _ApplyBG0YPosLite       ; Set up the code field
+            jsr   _ApplyBG0YPosLite
 
-; Start in single step mode
-;            lda   #1
-;            sta   singleStepMode
+; Start up the NES
+:start
+            jsr   NES_EvtLoop
 
-EvtLoop
-;            jsr   readInput              ; Uncomment if interrupts are off
+            cmp   #USER_SAYS_QUIT
+            beq   :quit
 
-            ldx   #0
-            ldy   #$FFFF
-            lda   frameCount
-            jsr   DrawByte
+            cmp   #USER_SAYS_RESET
+            bne   :quit
 
-            jsr   WaitForKey
+            jsr   NES_WarmBoot
+            bra   :start
 
-            sei
-            jsr   triggerNMI
-            cli
+; The user has existed the runtime
+:quit
+            jsr   NES_ShutDown
 
-            jsr   RenderFrame
+; Exit the application
 
-
-            lda   frameCount
-            cmp   #30
-            bcc   :cont
-            jmp   Exit
-:cont
-;            lda   singleStepMode
-;            bne   :skip_render
-;            jsr   RenderFrame
-
-;            lda   ShowFPS
-;            beq   :no_fps
-
-;            ldal  OneSecondCounter
-;            cmp   OldOneSec
-;            beq   :skip_render
-;            sta   OldOneSec
-            
-;            ldx   #0
-;            ldy   #$FFFF
-;            lda   frameCount
-
-;            jsr   DrawByte
-;            lda   frameCount
-;            stz   frameCount
-;:no_fps
-;            bra   :chkkey
-;:skip_render
-            jsr   readInput              ; Manual read in single-step mode
-
-:chkkey
-            lda   LastRead
-            bit   #PAD_KEY_DOWN
-            beq   EvtLoop
-
-            and   #$007F
-            pha
-
-; Put the game in single-step mode
-            cmp   #'s'
-            bne   :not_s
-
-            lda   singleStepMode
-            bne   :do_step
-            lda   #1                         ; Stop the VBL interrupt from running the game logic
-            sta   singleStepMode
-            brl   EvtLoop
-:do_step
-            jsr   triggerNMI
-            jsr   drawStats                  ; Show information about the internal state before rendering
-            jsr   RenderFrame
-            brl   EvtLoop
-:not_s
-            pla
-            cmp   #'f'
-            bne   :not_f
-            lda   #1
-            eor   ShowFPS
-            sta   ShowFPS
-            bne   :no_clear
-            ldx   #0
-            jsr   ClearWord
-:no_clear
-            brl   EvtLoop
-:not_f
-
-            cmp   #'b'                       ; Toggle background flag
-            bne   :not_b
-            lda   BGToggle
-            eor   #$0001
-            sta   BGToggle
-            jsr   EnableBackground
-            brl   EvtLoop
-:not_b
-
-            cmp   #'g'                       ; Re-enable VBL-drive game logic
-            bne   :not_g
-            stz   singleStepMode
-            brl   EvtLoop
-:not_g
-
-            cmp   #'a'                       ; Show how much time APU simulation is taking
-            bne   :not_a
-            lda   show_border
-            eor   #$0001
-            sta   show_border
-            brl   EvtLoop
-:not_a
-
-            cmp   #'0'
-            bne   :not_0
-            stz   APU_FORCE_OFF
-            brl   EvtLoop
-:not_0
-
-            cmp   #'1'
-            bne   :not_1
-            lda   #$01
-            jsr   ToggleAPUChannel
-            brl   EvtLoop
-:not_1
-
-            cmp   #'2'
-            bne   :not_2
-            lda   #$02
-            jsr   ToggleAPUChannel
-            brl   EvtLoop
-:not_2
-
-            cmp   #'3'
-            bne   :not_3
-            lda   #$04
-            jsr   ToggleAPUChannel
-            brl   EvtLoop
-:not_3
-
-            cmp   #'4'
-            bne   :not_4
-            lda   #$08
-            jsr   ToggleAPUChannel
-            brl   EvtLoop
-:not_4
-            cmp   #'t'             ; show VBL interrupt time
-            bne   :not_t
-            lda   show_vbl_cpu
-            eor   #1
-            sta   show_vbl_cpu
-            brl   EvtLoop
-:not_t
-
-            cmp   #'x'             ; break
-            bne   :not_x
-            lda   #1
-            sta   user_break
-            brl   EvtLoop
-:not_x
-
-            cmp   #'q'
-            beq   Exit
-            brl   EvtLoop
-
-Exit
-            jsr   APUShutDown
-            jsr   ShutDown
-Quit
             _QuitGS    qtRec
 qtRec       adrl  $0000
             da    $00
+
 Greyscale   dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
-
-Fail        brk   $FE
 
 drawStats
             ldx   #0
@@ -355,9 +160,7 @@ TmpPalette  ds    32
 ; Program variables
 singleStepMode    dw  0
 ; nmiCount    dw    0
-OneSecondCounter  dw  0
 OldOneSecVec      ds  4
-DPSave            dw  0
 StkSave           dw  0
 LastAreaType      dw  0
 frameCount        dw  0
@@ -369,19 +172,6 @@ DefaultPalette   dw    $0000,$0777,$0841,$072C
                  dw    $000F,$0080,$0F70,$0D00
                  dw    $0FA9,$0FF0,$00E0,$04DF
                  dw    $0DAF,$078F,$0CCC,$0FFF
-
-; Toggle an APU control bit
-ToggleAPUChannel
-            pha
-            lda   #$0001
-            stal  APU_FORCE_OFF
-            pla
-
-            sep   #$30
-            eorl  APU_STATUS
-            jsl   APU_STATUS_FORCE
-            rep   #$30
-            rts
 
 ; Convert NES palette entries to IIgs
 ; X = NES palette (16 color indices)
@@ -407,71 +197,10 @@ NESColorToIIgs
             bcc   :loop
             rts
 
-; Loop through the tiles and convert them from the NES ROM format into a custom
-; internal format.
-LoadTilesFromROM
-
-; First loop is to convert the background tiles (tile numbers 256 to 511)
-
-            ldx  #256*16
-            ldy  #0
-
-:tloop
-            phx
-            phy
-
-            lda  #TileBuff
-            jsr  ConvertROMTile3
-
-            clc
-            pla
-            adc  #$0100          ; Put the next compiled tile on the next page
-            tay
-
-            pla
-            adc  #16             ; NES tiles are 16 bytes
-            tax
-
-            cpx  #16*512         ; Have we done the last background tile?
-            bcc  :tloop
-
-; Second loop is to convert the sprite tiles (tile numbers 0 to 255)
-
-            ldx  #0
-            ldy  #0
-
-:sloop
-            phx
-            phy
-
-            lda  #TileBuff
-            jsr  ConvertROMTile2 ; Convert the tile, extract the mask and create horizontally flipped versions
-
-            ldy  #0              ; Copy the converted tile data into the  tiledata bank
-            plx
-:cploop
-            lda  TileBuff,y
-            stal tiledata,x
-            iny
-            iny
-            inx
-            inx
-            cpy  #128
-            bcc  :cploop
-
-            txy
-            pla
-            clc
-            adc  #16             ; NES tiles are 16 bytes
-            tax
-
-            cpx  #16*256         ; Have we done the last sprite tile?
-            bcc  :sloop
-            rts
-
 ; Helper to initialize the playfield based on the selected VideoMode
 InitPlayfield
-            lda   #16            ; We render starting at line 16 in the NES video buffer
+;            lda   #16            ; We render starting at line 16 in the NES video buffer
+            lda   #24
             sta   NesTop
 
             lda   VideoMode
@@ -488,7 +217,8 @@ InitPlayfield
             bra   :common
 
 :better
-            lda   #16            ; Keep the GTE playfield below the status bar in PPU RAM
+;            lda   #16            ; Keep the GTE playfield below the status bar in PPU RAM
+            lda   #24
             sta   MinYScroll
 
             lda   #160           ; 160 lines high for 'better'
@@ -496,7 +226,8 @@ InitPlayfield
             bra   :common
 
 :good
-            lda   #16            ; Keep the GTE playfield below the status bar in PPU RAM
+;            lda   #16            ; Keep the GTE playfield below the status bar in PPU RAM
+            lda   #24
             sta   MinYScroll
 
             lda   #128           ; Only 128 lines tall for speed
@@ -546,7 +277,7 @@ InitPlayfield
 
 ; Set a default palette for the title screen
 
-            ldx   #Area1Palette
+            ldx   #TitleScreen
             lda   #TmpPalette
             jsr   NESColorToIIgs
 
@@ -554,60 +285,6 @@ InitPlayfield
             ldx   #TmpPalette
             jsr   _SetPalette
 
-            rts
-
-; Helper to perform the essential functions of rendering a frame
-RenderFrame
-:nt_head    equ tmp3
-:at_head    equ tmp4
-
-; First, disable interrupts and perform the most essential functions to copy any critical NES data and
-; registers into local memory so that the rendering is consistent and not affected if a VBL interrupt
-; occures between here and the actual screen blit
-
-            php
-            sei
-
-            jsr   scanOAMSprites          ; Filter out any sprites that don't need to be drawn and mark occupied lines
-
-            lda  nt_queue_head            ; These are used in PPUFlushQueues, so using tmp locations is OK
-            sta  :nt_head
-            lda  at_queue_head
-            sta  :at_head
-
-            lda  ppuctrl                  ;  Cache these values that are used to set the view port
-            sta  _ppuctrl
-            lda  ppuscroll
-            sta  _ppuscroll
-
-            plp
-
-; Apply all of the tile updates that were made during the previous frame(s).  The color attribute bytes are always set
-; in the PPUDATA hook, but then the appropriate tiles are queued up.  These tiles, the tiles written to by PPUDATA in
-; the range ($2{n+0}00 - $2{n+3}C0)
-;
-; The queue is set up as a Set, so if the same tile is affected by more than one action, it will only be drawn once.
-; Practically, most NES games already try to minimize the number of tiles to update per frame.
-
-            jsr   PPUFlushQueues
-
-; Now that the PEA field is in sync with the PPU Nametable data, we can setup the current frame's sprites.  No
-; sprites are actually drawn here, but the PPU OAM memory if scanned and copied into a more efficient internal
-; representation.
-
-            jsr   drawOAMSprites
-
-; Finally, render the PEA field to the Super Hires screen.  The performance of the runtime is limited by this
-; step and it is important to keep the high-level rendering code generalized so that optimizations, like falling
-; back to a dirty-rectangle mode when the NES PPUSCROLL does not change, will be important to support good performance
-; in some games -- especially early games that do not use a scrolling playfield.
-
-            jsr   RenderScreen
-
-; Game specific post-render logic
-
-
-            inc   frameCount       ; Tick over to a new frame
             rts
 
 ; Make the screen appear
@@ -629,7 +306,8 @@ RenderScreen
 ; Now render the top 16 lines to show the status bar area
 
             clc
-            lda   #16*2
+;            lda   #16*2
+            lda   #24*2
             sta   tmp1                    ; virt_line_x2
             lda   #16*2
             sta   tmp2                    ; lines_left_x2
@@ -639,7 +317,8 @@ RenderScreen
 
 ; Next render the remaining lines
 
-            lda   #32*2
+;            lda   #32*2
+            lda   #40*2
             sta   tmp1                ; virt_line_x2
             lda   ScreenHeight
             sec
@@ -656,7 +335,7 @@ RenderScreen
 
 ; Restore the buffer
 
-            lda   #16                     ; virt_line
+            lda   #24                     ; virt_line
             ldx   #16                     ; lines_left
             ldy   nesTopOffset            ; offset to patch
             jsr   _RestoreBG0OpcodesAltLite
@@ -665,7 +344,7 @@ RenderScreen
             sec
             sbc   #16
             tax                           ; lines_left
-            lda   #32                     ; virt_line
+            lda   #40                     ; virt_line
             ldy   nesBottomOffset         ; offset to patch
             jsr   _RestoreBG0OpcodesAltLite
 
@@ -688,6 +367,8 @@ SetPaletteMap
 
 SetDefaultPalette
             lda   #0
+SetPalette
+            and   #$0001              ; only two palettes defined right now...
             asl
             tay
             ldx   AreaPalettes,y      ; First parameter to NESColorToIIgs
@@ -714,10 +395,16 @@ SetDefaultPalette
             cpx   #2*16
             bcc   :loop
 :out
+
+; Redraw the whole
             rts
 
-AreaPalettes  dw   Area1Palette
-SwizzleTables adrl AT1_T0
+AreaPalettes  dw   TitleScreen,LevelHeader1
+SwizzleTables adrl TS_T0,L1_T0
+
+; Palettes of NES color indexes
+TitleScreen  dw    $0F, $30, $27, $2A, $15, $02, $21, $00, $10, $16, $12, $37, $21, $17, $11, $2B
+LevelHeader1 dw    $0F, $2A, $09, $07, $30, $27, $16, $11, $21, $00, $10, $12, $37, $17, $35, $2B
 
 ClearScreen
             ldx  #$7CFE
@@ -910,827 +597,20 @@ VOCTitle    str  'ENABLE VOC ACCELERATION'
 YesStr      str  'YES'
 NoStr       str  'NO'
 
-
-; Copy just the tiles that change directly to the graphics screen
-
-MemOffsets    dw    67, 68, 69, 70, 71,                        82, 83, 84, 85, 86,  89, 90, 91, 92
-              dw    99,100,101,102,103,104,  107,108,109,110,     115,116,117,         122,123,124
-
-ScreenOffsets dw    12, 16, 20, 24, 28,                        72, 76, 80, 84, 88,  100,104,108,112
-              dw    ROW_STEP+12,ROW_STEP+16,ROW_STEP+20,ROW_STEP+24,ROW_STEP+28,ROW_STEP+32
-              dw    ROW_STEP+44,ROW_STEP+48,ROW_STEP+52,ROW_STEP+56
-              dw    ROW_STEP+76,ROW_STEP+80,ROW_STEP+84
-              dw    ROW_STEP+104,ROW_STEP+108,ROW_STEP+112
-
-CopyStatusToScreen
-
-            lda   ScreenBase
-            sec
-            sbc   #160*16
-            sta   tmp0
-
-            ldy   #0
-:loop
-            phy                             ; preserve reg
-            ldx   MemOffsets,y
-            ldal  PPU_MEM+TILE_SHADOW,x
-;            and   #$00FF
-;            ora   #$0100+TILE_USER_BIT
-;            pha
-
-            lda   ScreenOffsets,y
-            clc
-            adc   tmp0
-;            pha
-
-            lda   #$8002
-            cpx   #107                      ; This one is palette 3
-            bne   *+5
-            ora   #$0001
-;            pha
-;            _GTEDrawTileToScreen           ; call NESTileBlitter
-
-            ply
-            iny
-            iny
-            cpy   #30*2
-            bcc   :loop
-            rts
-
-; Trigger an NMI in the ROM
-triggerNMI
-
-; If the audio engine is not running off of its own ESQ interrups at 240Hz or 120Hz, then it must be manually drive
-; at 60Hz from the VBL/NMI handler
-
-;            lda   AudioMode
-;            bne   :good_audio
-;            sep   #$30
-;            jsl   quarter_speed_driver
-;            rep   #$30
-;:good_audio
-
-            ldal  ppuctrl               ; If the ROM has not enabled VBL NMI, also skip
-            bit   #$80
-            beq   :skip
-
-            ldal  ROMBase+$FFFA         ; NMI Vector
-            tax
-            jsr   romxfer               ; Execute NMI handler
-            jsr   resume                ; Yield control back to the ROM until it is waiting for the next VBL
-
-:skip
-            rts
-
-; Expose joypad bits from GTE to the ROM: A-B-Select-Start-Up-Down-Left-Right
-native_joy  ENT
-            db   0,0
-
-; X = address in the rom file
-; A = address to write
-;
-; This keeps the tile in 2-bit mode in a format that makes it easy to look up pixel data
-; based on a dynamic palette selection
-;
-; Tiles are stored in a pre-shifted, 16-bit format (2 bits per pixel): 0000000w wxxyyzz0
-; When rendered, the 2-bit palette selection is passed in bits 9 and 10 and ORed with
-; the palette data to create a single word of 00000ppw wxxyyzz0.  This value is used
-; to index directly into a 2048-byte swizzel table that will load the appropriate
-; pixel data for the word.  There are 2 swizzle tables, one for tiles and one for sprites
-; that take care of mapping the 25 possible on-screen colors to a 16-color palette.
-ConvertROMTile3
-:DPtr       equ   tmp1
-:save       equ   tmp2
-
-; This routine is used for background tiles, so there is no need to create masks or
-; to provide alternative vertically and horizontally flipped variants.  Instead,
-; we leverage this to create optimized, compiled representations of the background tiles
-
-            phy                        ; Save y -- this is the compiled address location to use
-            jsr   ROMTileToLookup      ; A = address to write, X = address in CHR ROM
-
-; The :DPtr is set to point at the data buffer, so now convert the lookup values to data nibbles
-
-            sep   #$30                ; 8-bit mode
-            ldy   #0
-:loop
-            lda   (:DPtr),y           ; Load the index for this tile byte
-            tax
-            lda   DLUT2_shft,x        ; Look up the two, 2-bit pixel values for this quad of bits.  This remains a 4-bit value
-            sta   tmp3
-
-            iny
-            lda   (:DPtr),y
-            tax
-            lda   DLUT2,x             ; Look up the two, 2-bit pixel values for next quad of bits
-            ora   tmp3                ; Move it int othe top nibble since it will decode to the top-byte on the SHR screen
-
-            dey
-            asl
-            sta   (:DPtr),y
-            iny
-            lda   #0
-            rol
-            sta   (:DPtr),y
-
-            iny
-            cpy   #32
-            bcc   :loop
-            rep    #$30
-
-; Now we have the NES pixel data in a more linear format that matches the IIgs screen
-
-            ply
-            lda   #TileBuff
-            ldx   #^TileBuff
-            jmp   CompileTile
-
-ConvertROMTile2
-:DPtr       equ   tmp1
-:MPtr       equ   tmp2
-
-            jsr   ROMTileToLookup
-
-; Now we have 32 bytes (4 x 8) with each byte being a 4-bit value that holds two pairs of bits
-; from the PPU pattern table.  We use these 4-bit values as lookup indices into tables
-; that decode the values differently depending on the use case.
-
-            sta   :DPtr
-            clc
-            adc   #32                ; Move to the mask
-            sta   :MPtr
-
-            lda   #0                 ; Zero out high byte
-            sep   #$30               ; 8-bit mode
-            ldy   #0
-
-:loop
-            lda   (:DPtr),y           ; Load the index for the initial high nibble
-            tax
-            lda   MLUT4,x             ; Look up the mask value for this byte. This table decodes the 4 bits into an 8-bit mask
-            sta   (:MPtr),y
-
-            lda   DLUT2,x             ; Look up the two, 2-bit pixel values for this quad of bits.  This remains a 4-bit value
-            asl
-            asl
-            asl
-            asl
-            sta   tmp3
-
-            iny
-            lda   (:DPtr),y
-            tax
-            lda   DLUT2,x             ; Look up the two, 2-bit pixel values for next quad of bits
-            ora   tmp3                ; Move it into the top nibble since it will decode to the top-byte on the SHR screen
-
-            dey
-            sta   (:DPtr),y           ; Put in low byte
-            iny
-            lda   #0
-            sta   (:DPtr),y           ; Zero high byte
-
-            lda   MLUT4,x
-            sta   (:MPtr),y
-
-            iny
-            cpy   #32
-            bcc   :loop
-
-; Reverse and shift the data
-
-            rep    #$30
-            ldy    #8
-            ldx    :DPtr
-
-:rloop
-            lda:   0,x              ; Load the word: xx00
-            jsr    reverse2         ; Reverse the bottom byte in chunks of 2 bits
-            asl                     ; Shift by 1 for indexing
-            sta:   66,x
-            asl:   0,x              ; Shift the original word, too
-
-            lda:   2,x
-            jsr    reverse2
-            asl
-            sta:   64,x
-            asl:   2,x
-
-            lda:   32,x
-            jsr    reverse4
-            sta:   98,x
-            lda:   34,x
-            jsr    reverse4
-            sta:   96,x
-
-            inx
-            inx
-            inx
-            inx
-            dey
-            bne    :rloop
-            rts
-
-; X = address in the rom file
-; A = address to write
-
-ConvertROMTile
-:DPtr        equ   tmp1
-:MPtr        equ   tmp2
-
-            jsr   ROMTileToLookup
-
-            sta   :DPtr
-            clc
-            adc   #32                ; Move to the mask
-            sta   :MPtr
-
-            sep   #$30               ; 8-bit mode
-            ldy   #0
-
-:loop
-            lda   (:DPtr),y           ; Load the index for this tile byte
-            tax
-            lda   DLUT4,x             ; Look up the two, 4-bit pixel values for this quad of bits
-            sta   (:DPtr),y
-            lda   MLUT4,x             ; Look up the mask value for this byte
-            sta   (:MPtr),y
-            iny
-            cpy   #32
-            bcc   :loop
-
-; Switch back to 16-bit mode and flip the tile data before returning
-
-            rep    #$20
-            ldy    #16
-            ldx    :DPtr
-
-:rloop
-            lda:   0,x
-            jsr    reverse4
-            sta:   66,x
-            lda:   2,x
-            jsr    reverse4
-            sta:   64,x
-            inx
-            inx
-            inx
-            inx
-            dey
-            bne    :rloop
-            rts
-
-; Build a table of index values for the ROM tile data.  The different routines
-; can mix and match the lookup table information as they see fit
-;
-; X = address in the rom file
-; A = address to write
-;
-; For each byte of pattern table memory, we create two bytes in the DPtr with
-; a lookup value for the pixels corresponding to bits in that location
-;
-; Example:
-;   Tile 0: $03,$0F,$1F,$1F,$1C,$24,$26,$66, $00,$00,$00,$00,$1F,$3F,$3F,$7F
-;
-;                                      0,1  2,3  4,5  6,7
-;
-;   $03 | 00000011 | 00000000 | $00 -> 0000 0000 0000 0011 -> 00 00 05 00 
-;   $0F | 00001111 | 00000000 | $00 -> 0000 0000 0011 0011 -> 00 00 55 00
-;   $1F | 00011111 | 00000000 | $00 -> 0000 0001 0011 0011 -> 01 00 55 00
-;   $1F | 00011111 | 00000000 | $00 -> 0000 0001 0011 0011 -> 01 00 55 00
-;   $1C | 00011100 | 00011111 | $1F -> 0000 0101 1111 1100 -> 03 00 FA 00
-;   $24 | 00100100 | 00111111 | $3F -> 0000 1110 1101 1100 -> 0E 00 BA 00
-;   $26 | 00100110 | 00111111 | $3F -> 0000 1110 1101 1110 -> 0E 00 BE 00
-;   $66 | 01100110 | 01111111 | $7F -> 0101 1110 1101 1110 -> 3E 00 BE 00
-;
-;   
-; e.g. Plane 0   = 0101 0001 (LSB)
-;      Plane 1   = 1001 0001 (MSB)
-;
-;      For speed, use a table and convert one pair at a time
-;
-;      Pair 1 = 1001 -> 1001
-;      Pair 2 = 0101 -> 0011
-;      Pair 3 = 0000 -> 0000
-;      Pair 4 = 0101 -> 0011
-;
-;      Lookup[0] = 10 01 00 11
-;      Lookup[1] = 00 00 00 11
-;
-;      Tile Data  = 63 00 03 00
-;      Pixel Data = 12 03 00 03
-            mx   %00
-ROMTileToLookup
-:DPtr       equ   tmp1
-            pha
-            phx
-
-            sta   :DPtr
-            lda   #0                 ; Clear A and B
-
-            sep   #$20               ; 8-bit mode
-            ldy   #0
-
-:loop
-
-; Top two bits from each byte defines the two left-most pixels
-
-            ldal  CHR_ROM,x          ; Load the low bits
-            and   #$C0
-            lsr
-            lsr
-            sta   tmp0
-
-            ldal  CHR_ROM+8,x        ; Load the high bits
-            and   #$C0
-            ora   tmp0
-            lsr
-            lsr
-            lsr
-            lsr
-            sta   (:DPtr),y          ; First byte
-            iny
-
-; Repeat for bits 4 & 5
-
-            ldal  CHR_ROM,x
-            and   #$30
-            lsr
-            lsr
-            sta   tmp0
-
-            ldal  CHR_ROM+8,x
-            and   #$30
-            ora   tmp0
-            lsr
-            lsr
-            sta   (:DPtr),y
-            iny
-
-; Repeat for bits 2 & 3
-
-            ldal  CHR_ROM,x
-            and   #$0C
-            lsr
-            lsr
-            sta   tmp0
-
-            ldal  CHR_ROM+8,x
-            and   #$0C
-            ora   tmp0               ; Combine the two and create a lookup value
-            sta   (:DPtr),y
-            iny
-
-; Repeat for bits 0 & 1
-
-            ldal  CHR_ROM,x          ; Load the high bits
-            and   #$03
-            sta   tmp0
-
-            ldal  CHR_ROM+8,x
-            and   #$03
-            asl
-            asl
-            ora   tmp0                ; Combine the two and create a lookup value
-            sta   (:DPtr),y
-            iny
-
-            inx
-            cpy   #32
-            bcc   :loop
-
-            rep    #$20
-            plx
-            pla
-            rts
-
-; Reverse the 2-bit fields in a byte
-            mx   %00
-reverse2
-            php
-            sta  tmp0
-            stz  tmp1
-
-            sep  #$20
-
-            and  #$C0
-            lsr
-            lsr
-            lsr
-            lsr
-            lsr
-            lsr
-            tsb  tmp1
-
-            lda  tmp0
-            and  #$30
-            lsr
-            lsr
-            tsb  tmp1
-
-            lda  tmp0
-            and  #$0C
-            asl
-            asl
-            tsb  tmp1
-
-            lda  tmp0
-            and  #$03
-            asl
-            asl
-            asl
-            asl
-            asl
-            asl
-            ora  tmp1
-
-            plp
-            rts
-
-; Reverse the nibbles in a word
-            mx   %00
-reverse4
-            xba
-            sta   tmp0
-            and   #$0F0F
-            asl
-            asl
-            asl
-            asl
-            sta   tmp1
-            lda   tmp0
-            and   #$F0F0
-            lsr
-            lsr
-            lsr
-            lsr
-            ora   tmp1
-            rts
-
-; Look up the 2-bit indexes for the data words
-DLUT2       db    $00,$01,$04,$05    ; CHR_ROM[0] = xy, CHR_ROM[8] = 00 -> 0x0y
-            db    $02,$03,$06,$07    ; CHR_ROM[0] = xy, CHR_ROM[8] = 01 -> 0x1y
-            db    $08,$09,$0C,$0D    ; CHR_ROM[0] = xy, CHR_ROM[8] = 10 ->
-            db    $0A,$0B,$0E,$0F    ; CHR_ROM[0] = xy, CHR_ROM[8] = 11
-
-; Shifted version of the table
-DLUT2_shft  db    $00,$10,$40,$50    ; CHR_ROM[0] = xy, CHR_ROM[8] = 00 -> 0x0y
-            db    $20,$30,$60,$70    ; CHR_ROM[0] = xy, CHR_ROM[8] = 01 -> 0x1y
-            db    $80,$90,$C0,$D0    ; CHR_ROM[0] = xy, CHR_ROM[8] = 10 ->
-            db    $A0,$B0,$E0,$F0    ; CHR_ROM[0] = xy, CHR_ROM[8] = 11
-
-; Look up the 4-bit indexes for the data words
-DLUT4       db    $00,$01,$10,$11    ; CHR_ROM[0] = xx, CHR_ROM[8] = 00
-            db    $02,$03,$12,$13    ; CHR_ROM[0] = xx, CHR_ROM[8] = 01
-            db    $20,$21,$30,$31    ; CHR_ROM[0] = xx, CHR_ROM[8] = 10
-            db    $22,$23,$32,$33    ; CHR_ROM[0] = xx, CHR_ROM[8] = 11
-
-MLUT4       db    $FF,$F0,$0F,$00
-            db    $F0,$F0,$00,$00
-            db    $0F,$00,$0F,$00
-            db    $00,$00,$00,$00
-
-; Inverted mask for using eor/and/eor rendering
-;MLUT4       db    $00,$0F,$F0,$FF
-;            db    $0F,$0F,$FF,$FF
-;            db    $F0,$FF,$F0,$FF
-;            db    $FF,$FF,$FF,$FF
-
-; Extracted tiles
-TileBuff    ds    128
-
-StartUp
-            jsr   PPUResetQueues
-            lda   UserId
-            jmp   _CoreStartUp
-
-ShutDown
-            jmp   _CoreShutDown
-
-* ; Store sprite and tile data as 0000000w wxxyyzz0 to facilitate swizzle loads
-
-* ; sprite high priority (8-bit acc, compiled)
-*             ldy   #PPU_DATA
-*             lda   screen
-*             andl  tilemask,x
-*             ora   (palptr),y          ; 512 byte lookup table per palette
-*             sta   screen
-
-* ; sprite low (this is just slow) ....
-*             lda   screen
-*             beq   empty
-*             ; do 4 bits to figure out a mask and then
-
-
-*             bit   #$FF00
-*             ...
-*             ...
-*             ldy   #PPU_DATA
-*             lda   (palptr),y
-*             eor   screen
-*             andl  tilemask,x
-*             and   bgmask
-*             eor   screen
-*             sta   screen
-
-* ; tile
-*             ldy   tiledata,x
-*             lda   (palptr),y
-*             ldy   tmp
-*             sta   abs,y
-
-
-* ; Custom tile renderer that swizzles the tile data based on the PPU attribute tables. This
-* ; is more complicate than just combining the palette select bits with the tile index bits
-* ; because the NES can have >16 colors on screen at once, we remap the possible colors
-* ; onto a smaller set of indices.
-* SwizzleTile
-*                  tax
-* ]line            equ             0
-*                  lup             8
-*                  ldal            tiledata+{]line*4},x     ; Tile data is 00ww00xx 00yy00zz
-*                  ora             metatile                 ; Pre-calculated metatile mask
-*                  and             tilemask+{]line*4},x     ; Set any zero indices to actual zero
-*                  sta:            $0004+{]line*$1000},y
-*                  ldal            tiledata+{]line*4}+2,x
-*                  sta:            $0001+{]line*$1000},y
-* ]line            equ             ]line+1
-*                  --^
-*                  plb
-*                  rts
-
-; Balloon fight rom is a bit difficult to deal with because the game logic runs from the reset vector
-; code, not the interrupt code.
-;
-; So, to get control back, we insert a JML yield into the ROM to return when it busy-waits for the
-; next VBL signal in the PPU registers
-;
-; The control sequence is
-;
-; 0. Set up the yield continuation address to point at ExtRnt
-; 1. Perform a romxfer to the reset vector address ($c000)
-; 2. The ROM code will call yield at some point
-; 3. Control is passed back to ExtRtn and the romxfer function returns normally
-;
-; 4. VBL interrupts are now enabled
-; 5. Execute normal code
-; 6. In the VBL interrupt handler
-;    a. call the NMI routine in the ROM
-;    b. call continue to return control to the ROM
-; 7. When yield is called again, return control to the VBL interrupt handler
-; 8. Goto 5
-
-
-
-; Simple rom control transfer. This acts like an interrupt to the ROM code in the sense
-; that we do restore the ROM stack pointer, but jump to an absolute address and
-; the registers can be any value.
-;
-; X = ROM Address
-; Interrupts must be disabled
-romxfer     tsc
-            sta   StkSave                   ; Save the current stack in the main program
-
-            lda   yield_s                   ; Set the stacak to watever the ROM is currently at
-            and   #$00FF
-            ora   #$0100
-            sta   :patch+1
-
-            sep   #$20
-            lda   #^ExtIn                   ; Set the bank to the ROM
-            pha
-            plb
-
-            ldal  STATE_REG
-            ora   #$80                      ; ALTZP on
-            stal  STATE_REG
-            rep   #$20
-
-:patch      lda   #$0000                    ; Set the ROM stack address
-            tcs
-            lda   #$0000                    ; Set the ROM zero page
-            tcd
-
-            jml   ExtIn
-ExtRtn      ENT
-
-            tsx                             ; Copy the stack address returned by the emulator
-            ldal  StkSave
-            tcs
-
-            phk
-            plb
-
-            lda   DPSave
-            tcd
-            sep   #$30
-            stx   yield_s                   ; Keep an updated copy of the stack address
-            ldal  STATE_REG                 ; Get back to Bank 0 R/W
-            and   #$7F
-            stal  STATE_REG
-            rep   #$30
-
-            rts
-
-; yield - allow the ROM to give up control.  Only one yield may be active at a given time. This
-;         must be called from the NES ROM code, so 8-bit execution and the relevant softswitch
-;         states are assumed and not specifically saved.
-yield_a     ds    1
-yield_x     ds    1
-yield_y     ds    1
-yield_p     ds    1
-yield_s     ds    1
-
-            mx    %11
-yield       ENT
-
-; First, preserve the state from the ROM code
-
-            phk
-            plb                             ; Reset the bank register.  NES ROM is always B=01, so no need to save
-
-            php
-            sta   yield_a                   ; Save all of the volatile registers
-            pla
-            sta   yield_p
-            stx   yield_x
-            sty   yield_y
-            tsx
-            stx   yield_s
-
-; Now, switch back to 16-bit mode and return control to the native code
-;            clc
-;            xce
-            ldal  STATE_REG                 ; Get back to Bank 0 R/W
-            and   #$7F
-            stal  STATE_REG
-
-            rep   #$30
-            lda   DPSave
-            tcd
-            lda   StkSave
-            tcs
-            rts
-
-; resume - return control to the NES rom
-            mx    %00
-resume
-            tsc
-            sta   StkSave                  ; Save the current stack location
-
-            lda   #$0000                   ; set direct page and stack addresses
-            tcd
-
-            lda   yield_s
-            and   #$00FF
-            ora   #$0100
-            tcs
-
-            sep   #$30                     ; Enter 8-bit mode
-            ldal  STATE_REG
-            ora   #$80                     ; ALTZP on
-            stal  STATE_REG
-
-;            sec
-;            xce
-
-            ldy   yield_y
-            lda   yield_p
-            pha
-            lda   #^ExtIn                   ; Set the bank to the ROM
-            pha
-            lda   yield_a
-            plb
-            plp
-            rtl                            ; JSL return address should still be on the stack
-
-            mx    %11
-nmiTask
-            php
-            rep   #$30
-            phb
-            phd
-
-            phk
-            plb
-            lda   DPSave
-            tcd
-
-            ldal  ppustatus             ; Set the bit that the VBL has started
-            ora   #$80
-            stal  ppustatus
-
-            jsr   readInput
-
-            ldal  singleStepMode
-            bne   :no_nmi
-
-            ldal  show_vbl_cpu
-            beq   :no_show_1
-;            jsr   incborder
-:no_show_1
-
-            jsr   triggerNMI
-
-            ldal  show_vbl_cpu
-            beq   :no_nmi
-;            jsr   decborder
-
-:no_nmi
-            pld
-            plb
-            plp
-:skip
-            rtl
-            mx    %00
-
-
-
-readInput
-            jsr   _ReadControl
-            sta   LastRead
-
-; Map the GTE field to the NES controller format: A-B-Select-Start-Up-Down-Left-Right
-
-            pha
-            and   #PAD_BUTTON_A+PAD_BUTTON_B        ; bits 0x200 and 0x100
-            lsr
-            lsr
-            sta  native_joy
-
-            sep   #$20
-            lda   1,s
-            cmp   #9           ; TAB, was 'n' mapped to Select
-            bne   *+6
-            lda   #$20
-            bra   :nes_merge
-            cmp   #13          ; RETURN, was 'm' mapped to Start
-            bne   *+6
-            lda   #$10
-            bra   :nes_merge
-            cmp   #UP_ARROW
-            bne   *+6
-            lda   #$08
-            bra   :nes_merge
-            cmp   #DOWN_ARROW
-            bne   *+6
-            lda   #$04
-            bra   :nes_merge
-            cmp   #LEFT_ARROW
-            bne   *+6
-            lda   #$02
-            bra   :nes_merge
-            cmp   #RIGHT_ARROW
-            bne   *+6
-            lda   #$01
-            bra   :nes_merge
-            lda   #0
-:nes_merge  ora  native_joy 
-            sta  native_joy
-            sta  native_joy+1
-
-:nes_done
-            rep   #$20
-            pla
-            rts
-
             put   ../../App.Msg.s
             put   ../../font.s
             put   ../../palette.s
             put   ../../ppu_wip.s
-
-            ds    \,$00                      ; pad to the next page boundary
-
-; Mapping tables to take a nametable address and return the appropriate attribute memory location.  This is a table with
-; 960 entries.  This table is just the 64 offsets above address $2xC0 stored as bytes to keep the table size reasonably
-; conpact
-PPU_ATTR_ADDR
-]row        =     0
-            lup   30
-            db    $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1,
-            db    $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3,
-            db    $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5,
-            db    $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7,
-]row        =     ]row+1
-            --^
-            
-PPU_ATTR_MASK
-            lup   7
-            db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-            db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-            db    $30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0
-            db    $30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0
-            --^
-            db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-            db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-
-; Palettes of NES color indexes
-Area1Palette dw     $0F, $2A, $09, $07, $30, $27, $15, $02, $21, $00, $10, $16, $12, $37, $35, $2B
 
 ; Palette remapping
             put   palettes.s
             put   ../../apu/apu.s
 
 ; Core code
+            put   ../../scaffold.s
+            put   ../../rom_helpers.s
+            put   ../../rom_input.s
+            put   ../../rom_exec.s
             put   ../../core/CoreData.s
             put   ../../core/CoreImpl.s
             put   ../../core/ControlBits.s
@@ -1742,31 +622,3 @@ Area1Palette dw     $0F, $2A, $09, $07, $30, $27, $15, $02, $21, $00, $10, $16, 
             put   ../../core/blitter/HorzLite.s
             put   ../../core/blitter/VertLite.s
             put   ../../core/tiles/CompileTile.s
-
-
-; Fixed tile
-; Bank is set, X = tile corner, A = palette select in bits 9 and 10: 00000ppw wxxyyzz0
-Tile1
-            ora  #%0000_0000_1010_1010
-            bra  TileConst
-Tile0
-TileConst
-            tay
-            lda   [SwizzlePtr],y
-            sta:  $001,x
-            sta:  $004,x
-            sta:  $201,x
-            sta:  $204,x
-            sta:  $401,x
-            sta:  $404,x
-            sta:  $601,x
-            sta:  $604,x
-            sta:  $801,x
-            sta:  $804,x
-            sta:  $A01,x
-            sta:  $A04,x
-            sta:  $C01,x
-            sta:  $C04,x
-            sta:  $E01,x
-            sta:  $E04,x
-            rts

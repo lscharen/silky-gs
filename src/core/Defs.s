@@ -235,3 +235,7 @@ TILE_ADDR_LO equ $5000          ; pre-calculated address (low byte) of the locat
 TILE_ADDR_HI equ $6000          ; pre-calculated address (high byte) of the location of the PEA field tile
 TILE_VERSION equ $7000          ; version count of nametable byte (incremented on each PPUDATA_WRITE)
 TILE_TARGET  equ $8000          ; value of last rendered byte. If TILE_VERSION == TILE_TARGET, then no update
+
+; Return codes from the Event Loop harness
+USER_SAYS_QUIT equ 'q'
+USER_SAYS_RESET equ 'r'

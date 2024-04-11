@@ -524,6 +524,7 @@ ExtIn       ENT
 
 ; Include a bunch of routines to patch out the use of abs,y addressing modes and convert to load
 ; from the actual direct page
+            mx   %11
 tmp_byte    ds   1
 LDA_ABS_Y   mac
             pha           ; space for result
@@ -570,6 +571,17 @@ SBC_ABS_Y   mac
             rts
             <<<
 
+JMP_IND_25
+            php
+            pha
+            lda  $25
+            sta  :patch+1
+            lda  $26
+            sta  :patch+2
+            pla
+            plp
+:patch      jmp  $0000
+
 LDA_00B5_Y  LDA_ABS_Y $b5
 LDA_0057_Y  LDA_ABS_Y $57
 LDA_0003_Y  LDA_ABS_Y $03
@@ -592,6 +604,69 @@ STA_0088_Y  STA_ABS_Y $9a
 STA_007F_Y  STA_ABS_Y $7f
 STA_00C1_Y  STA_ABS_Y $c1
 STA_00F0_Y  STA_ABS_Y $f0
+
+; This is an alternate version of the copyppublock function.  The issue is that the routine
+; uses indirect addressing to access zero page locations.  Since the data bank and the zero
+; page are in different bakns, this fails to work propertly.
+_copyppublock
+    sta $21		;  \ Update Pointer
+    sty $22		;  / [$21] = $YYAA
+
+    cpy #1      ; IIgs -- check to see if the code is trying to load from zero page
+    bcc :altcopy
+
+    txa
+    pha
+    ldy #$02	;  \
+    lda ($21),y	;  | Get Data Size + 3
+    clc			;  | to include Address and Size info
+    adc #$03	;  |
+    sta $12		;  /
+    ldx $53		;  Get PPU Buffer Size
+    ldy #$00	;  \
+:lc144
+    lda ($21),y	;  | Copy PPU Upload Block
+    sta $0300,x	;  |
+    inx			;  |
+    iny			;  |
+    cpy $12		;  |
+    bne :lc144	;  /
+    stx $53		;  Update PPU Buffer Size
+    pla
+    tax
+    rts
+
+:altcopy
+    phx         ; use 65c02 / 65816 opcodes
+
+    tax
+    lda $02,x   ; load directly from zero page
+
+    clc			;  | to include Address and Size info
+    adc #$03	;  |
+    sta $12		;  /
+
+    txa
+    clc
+    adc $12
+    sta :p1+1
+
+;    ldx $53		;  Get PPU Buffer Size
+;    ldy #$00	;  \
+    ldy  $53
+
+:lc144x
+    lda $00,x	;  | Copy PPU Upload Block
+    sta $0300,y	;  |
+    inx			;  |
+    iny			;  |
+:p1 cpx #$00		;  |
+    bne :lc144x	;  /
+    sty $53		;  Update PPU Buffer Size
+
+    plx
+    txa
+    rts
 
             ds   \,$00   ; pad to next page
 
@@ -708,8 +783,8 @@ lc094_nmi
     tya			;  |
     pha			;  /
 ; PPU harness will read directly from $0200 to get the OAM information
-    bra  :skip
-;    lda #$00	;  \
+;    bra  :skip
+    lda #$00	;  \
     jsr STA_2003	;  | Upload OAM Buffer
     lda #$02	;  | $0200 - $02FF to OAM (via DMA)
     jsr STA_4014	;  /
@@ -826,9 +901,10 @@ lc12d_copypputempblock
     lda #$57	;  \
     ldy #$00	;  / [$21] = $0057
 lc131_copyppublock
+    jmp _copyppublock
     sta $21		;  \ Update Pointer
-    sty $22		;  / [$21] = $YYAA
-    txa
+;    sty $22		;  / [$21] = $YYAA
+;    txa
     pha
     ldy #$02	;  \
     lda ($21),y	;  | Get Data Size + 3
@@ -1182,7 +1258,8 @@ lc3a1
     sta $f2		;  /
     jmp lf36a	;  Put Game Over on Screen
 lc3b2
-    jmp ($0025)
+;    jmp ($0025)
+    jmp JMP_IND_25
 
 lc3b5    ;  Screen Layout Subroutines
     dw lc3c9, lc3f7, lc43e, lc45f, lc45e
@@ -3785,7 +3862,8 @@ ld798_updatestatusbar
 ld7a0
     lda #$20	;  \
     jsr STA_2006	;  | PPUADDR = $2043
-    lda #$43	;  |
+;    lda #$43	;  |
+    lda #$63        ; IIgs -- move score down one tile to fit the screen better
     jsr STA_2006	;  /
     lda #$8e	;  \ Upload I- to PPU
     jsr STA_2007	;  /
@@ -4761,15 +4839,19 @@ le762
 ; ----------------------
 ;  Joypad Code
 ; ----------------------
-
+native_joy    EXT
 le768_polljoypad0
     ldx #$00	;  Read Controller 0
 le76a_polljoypadx
-    lda #$01	;  \
-    sta $4016	;  | Output Strobe to both controllers
-    lda #$00	;  |
+    ldal  native_joy,x
+    sta   $061c,x
+    bra   native_done
+
+;    lda #$01	;  \
+;    sta $4016	;  | Output Strobe to both controllers
+;    lda #$00	;  |
     sta $4016	;  /
-    ldy #$07
+;    ldy #$07                 ; comment out enough bytes to displace the native read code
 le776
     lda $4016,x	;  \
     sta $12		;  |
@@ -4779,6 +4861,8 @@ le776
     rol $061c,x	;  |
     dey			;  |
     bpl le776	;  /
+
+native_done
     ldy $061e,x	;  \
     lda $061c,x	;  |
     sta $061e,x	;  | Check for pressed buttons
@@ -6535,9 +6619,11 @@ lf3ee
     ldy #$f4				;  | Copy Empty PPU Block
     jmp lc131_copyppublock	;  /
 lf3f5    ;  $206C - $08 - "PHASE-  "
-    db $20,$6c,$08,$19,$11,$0a,$1c,$0e,$25,$00,$00
+;    db $20,$6c,$08,$19,$11,$0a,$1c,$0e,$25,$00,$00
+    db $20,$8c,$08,$19,$11,$0a,$1c,$0e,$25,$00,$00    ; IIgs - modify and push text down
 lf400    ;  $206C - $08 - "        "
-    db $20,$6c,$08,$24,$24,$24,$24,$24,$24,$24,$24
+;    db $20,$6c,$08,$24,$24,$24,$24,$24,$24,$24,$24
+    db $20,$8c,$08,$24,$24,$24,$24,$24,$24,$24,$24    ; IIgs - modify and push text down
 
 lf40b_uploadgameovertext
     jsr lf465_clearframeflag
@@ -6591,7 +6677,7 @@ lf465_clearframeflag
 lf469_waitnextframe
 ; IIgs -- take back control here while the ROM busy-waits for the next VBL
 ;    lda $02
-;    beq lf469_waitnextframe
+;    beq lf469_waitnextframe     ; $02 is incremente din the NMI interupt handler
     jsl yield
     dec $02
 lf46f
