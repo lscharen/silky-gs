@@ -12,16 +12,17 @@
   },
   "scripts": {
     "gsport": "%npm_package_config_gsport%",
+    "cr": "%npm_package_config_crossrunner%",
     "build:image": "npm run build:smb && npm run build-image.bat %npm_package_config_cadius%",
     "build:docs": "cd docs && bundle exec jekyll serve",
     "archive": "%npm_package_config_cadius% EXTRACTFILE ./emu/Target.2mg /GTEDev/Tool160.SHK .",
-    "test": "npm run build:smb && npm run build-image && %npm_package_config_gsport%",
+    "test": "npm run build-image && %npm_package_config_gsport%",
+    "build": "npm run build:smb && npm run build:bf",
     "build:smb": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/SMB.s",
     "build:bf": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/games/bf/BF.s",
     "build:debug": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/Debug.s",
     "debug:smb": "cd src && %npm_package_config_crossrunner% SuperMarioGS -source SuperMarioGS_S02__Output.txt SuperMarioGS_S03__Output.txt SuperMarioGS_S04__Output.txt SuperMarioGS_S05__Output.txt -map SMB.s -Debug -CompatibilityLayer",
-    "debug:bf": "cd src/games/bf && %npm_package_config_crossrunner% BalloonFgtGS -source BalloonFgtGS_S02__Output.txt BalloonFgtGS_S03__Output.txt BalloonFgtGS_S04__Output.txt BalloonFgtGS_S05__Output.txt -map BF.s -Debug -CompatibilityLayer",
-    "install:header": "copy .\\ORCACDefs\\gte.h C:\\ProgramData\\GoldenGate\\Libraries\\ORCACDefs\\gte.h",
+    "debug:bf": "cd src/games/bf && %npm_package_config_crossrunner% BalloonFgtGS -source BalloonFgtGS_S02__Output.txt BalloonFgtGS_S03__Output.txt BalloonFgtGS_S04__Output.txt BalloonFgtGS_S05__Output.txt BalloonFgtGS_S06__Output.txt -map BF.s -Debug -CompatibilityLayer",
     "build-image": "build-image.bat %npm_package_config_cadius% .\\emu\\Target.2mg /GTEDEV/Toolbox"
   },
   "repository": {

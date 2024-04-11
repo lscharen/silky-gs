@@ -188,6 +188,9 @@ triggerNMI
             ldal  ROMBase+$FFFA         ; NMI Vector
             tax
             jsr   romxfer               ; Execute NMI handler
+
+            DO    ROM_DRIVER_MODE
             jsr   resume                ; Yield control back to the ROM until it is waiting for the next VBL
+            FIN
 :skip
             rts

@@ -40,29 +40,35 @@ PRE_RENDER   mac
 ; For this ROM, we check the NES RAM after each rendered frame to see if the
 ; mapped palette needs to be updated
 POST_RENDER  mac
-            ldal  $0100c8               ; ROM zero page, $00C8 = Phase Type (00 = Regular, 01 = Bonus)
-            and   #$00FF
-            bne   bonus
+;            ldal  $0100c8               ; ROM zero page, $00C8 = Phase Type (00 = Regular, 01 = Bonus)
+;            and   #$00FF
+;            bne   bonus
 
-            ldal  $01003c               ; $003B = Current Phase
-            and   #$000C	            ;  | Select Palette based
-            lsr
-            lsr
-            inc                         ; +1 because palette index 0 is the title screen
-            bra   apply_pal
-bonus
-            lda   #0
-apply_pal
-            cmp   LastAreaType
-            beq   no_area_change
-            sta   LastAreaType
-            jsr   SetPalette
-no_area_change
+;            ldal  $01003c               ; $003B = Current Phase
+;            and   #$000C	            ;  | Select Palette based
+;            lsr
+;            lsr
+;            inc                         ; +1 because palette index 0 is the title screen
+;            bra   apply_pal
+;bonus
+;            lda   #0
+;apply_pal
+;            cmp   LastAreaType
+;            beq   no_area_change
+;            sta   LastAreaType
+;            jsr   SetPalette
+;no_area_change
             <<<
 
 ; Define which PPU address has the background and sprite tiles
 PPU_BG_TILE_ADDR  equ #$1000
 PPU_SPR_TILE_ADDR equ #$0000
+
+; Define what kind of execution harness to use
+;
+; 0 = Reset code drops into an infinite loop
+; 1 = Reset code is the game code
+ROM_DRIVER_MODE   equ 1
 
 x_offset    equ   16                      ; number of bytes from the left edge
 
@@ -167,36 +173,6 @@ frameCount        dw  0
 show_vbl_cpu      dw  0
 user_break        dw  0
 
-; From the IIgs ref 
-DefaultPalette   dw    $0000,$0777,$0841,$072C
-                 dw    $000F,$0080,$0F70,$0D00
-                 dw    $0FA9,$0FF0,$00E0,$04DF
-                 dw    $0DAF,$078F,$0CCC,$0FFF
-
-; Convert NES palette entries to IIgs
-; X = NES palette (16 color indices)
-; A = 32 byte array to write results
-NESColorToIIgs
-            sta   tmp0
-            stz   tmp1
-
-:loop       lda:  0,x
-            asl
-            tay
-            lda   nesPalette,y
-            ldy   tmp1
-            sta   (tmp0),y
-
-            inx
-            inx
-
-            iny
-            iny
-            sty   tmp1
-            cpy   #32
-            bcc   :loop
-            rts
-
 ; Helper to initialize the playfield based on the selected VideoMode
 InitPlayfield
 ;            lda   #16            ; We render starting at line 16 in the NES video buffer
@@ -279,7 +255,7 @@ InitPlayfield
 
             ldx   #TitleScreen
             lda   #TmpPalette
-            jsr   NESColorToIIgs
+            jsr   NES_PaletteToIIgs
 
             lda   #0
             ldx   #TmpPalette
@@ -382,7 +358,7 @@ SetPalette
 
             plx
             lda   #TmpPalette
-            jsr   NESColorToIIgs
+            jsr   NES_PaletteToIIgs
 
 ; Special copy routine; do not touch color index 0 -- we let the NES PPU handle that
 

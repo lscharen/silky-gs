@@ -5,7 +5,7 @@ InitGraphics
                  jsr   _GrafOn
                  lda   #0
                  jsr   _SetSCBs
-                 ldx   #DefaultPalette
+                 ldx   #SystemPalette
                  lda   #0
                  jsr   _SetPalette
 
@@ -16,6 +16,12 @@ InitGraphics
 ;                 jsr   _InitBG0             ; Initialize the background layer
                  clc
                  rts
+
+; From the IIgs ref 
+SystemPalette   dw    $0000,$0777,$0841,$072C
+                dw    $000F,$0080,$0F70,$0D00
+                dw    $0FA9,$0FF0,$00E0,$04DF
+                dw    $0DAF,$078F,$0CCC,$0FFF
 
 ; Allow the user to dynamically select one of the pre-configured screen sizes, or pass
 ; in a specific width and height.  The screen is automatically centered.  If this is
