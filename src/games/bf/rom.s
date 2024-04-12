@@ -668,7 +668,7 @@ _copyppublock
     txa
     rts
 
-            ds   \,$00   ; pad to next page
+    ds   \,$00   ; pad to next page
 
 ; ----------------------
 ;  RESET code
@@ -3923,7 +3923,8 @@ ld805
     dec $46
     lda #$20	;  \
     jsr STA_2006	;  | PPUADDR = $2062
-    lda #$62	;  | GAME OVER Player 1 Status Bar
+;    lda #$62	;  | GAME OVER Player 1 Status Bar
+    lda #$82        ; IIgs -- move row down
     jsr STA_2006	;  /
     lda $41		;  \ If Player 1 Lives is negative
     jsr ld826	;  / Then upload GAME OVER
@@ -3931,7 +3932,8 @@ ld805
     beq ld83a	;  / then return
     lda #$20	;  \
     jsr STA_2006	;  | PPUADDR = $2075
-    lda #$75	;  | GAME OVER Player 2 Status Bar
+;    lda #$75	;  | GAME OVER Player 2 Status Bar
+    lda #$95        ; IIgs -- move row down
     jsr STA_2006	;  /
     lda $42		;  \ If Player 2 Lives is negative
 ld826

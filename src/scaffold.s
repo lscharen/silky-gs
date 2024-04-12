@@ -120,6 +120,18 @@ NES_WarmBoot
             PRE_EVT_LOOP
 NES_EvtLoop
             EVT_LOOP_BEGIN
+
+; If interrupts are disabled, then the ROM NMI interrupt needs to
+; driven manually
+
+            DO    NO_INTERRUPTS
+            jsr   NES_ReadInput
+            jsr   NES_TriggerNMI
+            FIN
+
+; When this code has control the ROM is not executing, so render the
+; current frame
+
             jsr   NES_RenderFrame
 
 ; The input is read from the VBL interrupt handler.  If no

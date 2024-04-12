@@ -68,6 +68,7 @@ PPU_SPR_TILE_ADDR equ #$0000
 ;
 ; 0 = Reset code drops into an infinite loop
 ; 1 = Reset code is the game code
+
 ROM_DRIVER_MODE   equ 1
 
 ; Flag whether the backend should use the OAMDMA to get the sprite information,
@@ -82,6 +83,11 @@ DIRECT_OAM_READ   equ 0
 ; special sprite 0 collision behavior, which is not supported in this runtime
 
 ALLOW_SPRITE_0    equ 1   ; Sprite 0 is the lightning spark
+
+; Flag to turn off interupts.  This will run the ROM code with no sound and
+; the frames will be driven sychronously by the event loop.  Useful for debugging.
+
+NO_INTERRUPTS     equ 0
 
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 3 

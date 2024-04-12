@@ -112,6 +112,7 @@ resume
             stal  STATE_REG
 
             ldy   yield_y
+            ldx   yield_x
             lda   yield_p
             pha
             lda   #^ExtIn                   ; Set the bank to the ROM
@@ -150,7 +151,7 @@ nmiTask
             beq   :no_show_1
 ;            jsr   incborder
 :no_show_1
-            jsr   triggerNMI
+            jsr   NES_TriggerNMI
 
             ldal  show_vbl_cpu
             beq   :no_nmi
@@ -170,7 +171,7 @@ nmiTask
 ; data into the PPU and the program code runs from the reset vector, or the reset vector code enters into an
 ; infinite loop and the NMI interrupt drives all of the game logic and display work.
              mx    %00
-triggerNMI
+NES_TriggerNMI
 
 ; If the audio engine is not running off of its own ESQ interrups at 240Hz or 120Hz, then it must be manually drive
 ; at 60Hz from the VBL/NMI handler

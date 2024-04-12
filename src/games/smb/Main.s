@@ -56,11 +56,18 @@ ROM_DRIVER_MODE   equ 0
 ;
 ; 0  = use OAM DMA
 ; >0 = read $100 bytes directly from NES RAM
+
 DIRECT_OAM_READ   equ 0
 
 ; Flag whether to ignore Sprite 0.  Somce games use this sprite only for the 
 ; special sprite 0 collision behavior, which is not supported in this runtime
+
 ALLOW_SPRITE_0   equ 0
+
+; Flag to turn off interupts.  This will run the ROM code with no sound and
+; the frames will be driven sychronously by the event loop.  Useful for debugging.
+
+NO_INTERRUPTS    equ 0
 
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 2
