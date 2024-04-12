@@ -38,8 +38,8 @@ PRE_RENDER   mac
              <<<
 
 POST_RENDER  mac
-;
-            <<<
+             jsr  CheckForPaletteChange
+             <<<
 
 ; Define which PPU address has the background and sprite tiles
 PPU_BG_TILE_ADDR  equ #$1000
@@ -263,57 +263,10 @@ InitPlayfield
 
             rts
 
-RenderFrame
-:nt_head    equ tmp3
-:at_head    equ tmp4
-
-; First, disable interrupts and perform the most essential functions to copy any critical NES data and
-; registers into local memory so that the rendering is consistent and not affected if a VBL interrupt
-; occures between here and the actual screen blit
-
-            php
-            sei
-
-            jsr   scanOAMSprites          ; Filter out any sprites that don't need to be drawn and mark occupied lines
-
-            lda  nt_queue_head            ; These are used in PPUFlushQueues, so using tmp locations is OK
-            sta  :nt_head
-            lda  at_queue_head
-            sta  :at_head
-
-            lda  ppuctrl                  ;  Cache these values that are used to set the view port
-            sta  _ppuctrl
-            lda  ppuscroll
-            sta  _ppuscroll
-
-            plp
-
-; Apply all of the tile updates that were made during the previous frame(s).  The color attribute bytes are always set
-; in the PPUDATA hook, but then the appropriate tiles are queued up.  These tiles, the tiles written to by PPUDATA in
-; the range ($2{n+0}00 - $2{n+3}C0)
-;
-; The queue is set up as a Set, so if the same tile is affected by more than one action, it will only be drawn once.
-; Practically, most NES games already try to minimize the number of tiles to update per frame.
-
-            jsr   PPUFlushQueues
-
-; Now that the PEA field is in sync with the PPU Nametable data, we can setup the current frame's sprites.  No
-; sprites are actually drawn here, but the PPU OAM memory if scanned and copied into a more efficient internal
-; representation.
-
-            jsr   drawOAMSprites
-
-; Finally, render the PEA field to the Super Hires screen.  The performance of the runtime is limited by this
-; step and it is important to keep the high-level rendering code generalized so that optimizations, like falling
-; back to a dirty-rectangle mode when the NES PPUSCROLL does not change, will be important to support good performance
-; in some games -- especially early games that do not use a scrolling playfield.
-
-            jsr   RenderScreen
-
-; Game specific post-render logic
-;
 ; Check the AreaType and see if the palette needs to be changed. We do this after the screen is blitted
 ; so the palette does not get changed too early while old pixels are still on the screen.
+
+CheckForPaletteChange
 
             ldal  ROMBase+$074E
             and   #$00FF
@@ -322,8 +275,6 @@ RenderFrame
             sta   LastAreaType
             jsr   SetAreaPalette
 :no_area_change
-
-            inc   frameCount       ; Tick over to a new frame
             rts
 
 ; Make the screen appear
@@ -388,20 +339,6 @@ RenderScreen
             stz   LastPatchOffset
             rts
 
-; Initialize the swizzle pointer to the set of palette maps.  The pointer must
-;
-; 1. Be page-aligned
-; 2. Point to 8 2kb remapping tables
-; 3. The first 4 tables are for background tiles and second are for sprites
-;
-; A = high word, X = low word
-SetPaletteMap
-            sta   SwizzlePtr+2
-            sta   ActivePtr+2
-            stx   SwizzlePtr
-            stx   ActivePtr
-            rts
-
 SetDefaultPalette
             lda   #0
 SetAreaPalette
@@ -417,7 +354,7 @@ SetAreaPalette
             tay
             lda   SwizzleTables+2,y
             ldx   SwizzleTables,y
-            jsr   SetPaletteMap
+            jsr   NES_SetPaletteMap
             
             plx
             lda   #TmpPalette

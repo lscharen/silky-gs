@@ -351,6 +351,7 @@ ROMTileToLookup
             rts
 
 ; Reverse the 2-bit fields in a byte
+            mx   %00
 reverse2
             php
             sta  tmp0
@@ -393,6 +394,7 @@ reverse2
             rts
 
 ; Reverse the nibbles in a word
+            mx   %00
 reverse4
             xba
             sta   tmp0
@@ -544,4 +546,19 @@ NES_PaletteToIIgs
             sty   tmp1
             cpy   #32
             bcc   :loop
+            rts
+
+
+; Initialize the swizzle pointer to the set of palette maps.  The pointer must
+;
+; 1. Be page-aligned
+; 2. Point to 8 2kb remapping tables
+; 3. The first 4 tables are for background tiles and second are for sprites
+;
+; A = high word, X = low word
+NES_SetPaletteMap
+            sta   SwizzlePtr+2
+            sta   ActivePtr+2
+            stx   SwizzlePtr
+            stx   ActivePtr
             rts

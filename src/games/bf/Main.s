@@ -347,20 +347,6 @@ RenderScreen
             stz   LastPatchOffset
             rts
 
-; Initialize the swizzle pointer to the set of palette maps.  The pointer must
-;
-; 1. Be page-aligned
-; 2. Point to 8 2kb remapping tables
-; 3. The first 4 tables are for background tiles and second are for sprites
-;
-; A = high word, X = low word
-SetPaletteMap
-            sta   SwizzlePtr+2
-            sta   ActivePtr+2
-            stx   SwizzlePtr
-            stx   ActivePtr
-            rts
-
 SetDefaultPalette
             lda   #0
 SetPalette
@@ -374,7 +360,7 @@ SetPalette
             tay
             lda   SwizzleTables+2,y
             ldx   SwizzleTables,y
-            jsr   SetPaletteMap
+            jsr   NES_SetPaletteMap
 
             plx
             lda   #TmpPalette

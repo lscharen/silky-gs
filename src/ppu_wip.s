@@ -937,13 +937,13 @@ at_queue_head     dw  0
 at_queue          ds  AT_QUEUE_SIZE
 
 ; This is a temporary queue used while process Attribute writes.  When an attribute changes, up to 
-; 16 tiles may be impacted.  The queue is set up to capture the set of affected tiles and makes sure
-; that they are updates after the Nametable queue has been processed.
-TMP_QUEUE_LEN     equ 960                  ; The attributes can affect at most this many tiles
-TMP_ELEM_SIZE     equ 2                    ; We only save the PPU address
-TMP_QUEUE_SIZE    equ {TMP_ELEM_SIZE*TMP_QUEUE_LEN}
-tmp_queue_idx     dw  0
-tmp_queue         ds  TMP_QUEUE_SIZE
+; 16 tiles may be impacted.  This queue is set up to capture the set of affected tiles and makes sure
+; that they are updated after the Nametable queue has been processed.
+;TMP_QUEUE_LEN     equ 960                  ; The attributes can affect at most this many tiles
+;TMP_ELEM_SIZE     equ 2                    ; We only save the PPU address
+;TMP_QUEUE_SIZE    equ {TMP_ELEM_SIZE*TMP_QUEUE_LEN}
+;tmp_queue_idx     dw  0
+;tmp_queue         ds  TMP_QUEUE_SIZE
 
 PPUResetQueues
         stz   at_queue_head
@@ -1067,17 +1067,14 @@ PPUDATA_WRITE ENT
         brl  :extra                   ; Yep, do the palette updates in a game-specific manner
 :hop    brl  :nochange
 :hop2   brl  :done
+
 ; The PPU wrote to some location in the Nametable RAM ($2000 - $2FFF).  Now we need to determine if it
 ; wrote to the nametable tile data area or the tile attribute area.  There are separate queues for each
 ; of these pieces of memory since each attribute byte afftect 16 tiles, it's important to process the
 ; attribute changes first to avoid having to redraw tiles since the IIgs does not have enough colors
-; to direct support the palette indexes and has to redraw tiles when their palette changes.
+; to directly support the palette indexes and has to redraw tiles when their palette assignment changes.
 :in_nt
-        tay                           ; Keep a copy of the value in the Y-register (moved all 16-bits, even in 8-bit acc mode)
-
-;        ldal PPU_MEM+TILE_VERSION,x
-;        inc
-;        stal PPU_MEM+TILE_VERSION,x
+        tay                           ; Keep a copy of the value in the Y-register (moves all 16-bits, even in 8-bit acc mode)
 
         rep  #$31                     ; Clear the carry, too
         txa
@@ -1085,29 +1082,16 @@ PPUDATA_WRITE ENT
         and  #$3FFF
         sta  ppuaddr                  ; Advance to the new ppu address
 
-;        phd                           ; Need some direct page info for rendering
-;        lda   DPSave
-;        pha
-;        pld
-
         txa
         and  #$03C0                   ; Is this in the tile attribute space?
         cmp  #$03C0
         bcc  :not_attr
 
-;        tya
-;        sep  #$20
-;        jsr  DrawPPUAttribute
         ATQueuePush
-;        pld
         bra  :done
 
 :not_attr
-;        tya                           ; Get the tile value back into the accumulator
-;        sep  #$20
-;        jsr  DrawPPUTile
         NTQueuePush
-;        pld
         bra   :done
 
 :nochange
