@@ -53,6 +53,7 @@ ExtRtn      ENT
 
             rts
 
+StkSave     dw    0
 
 ; yield - allow the ROM to give up control.  Only one yield may be active at a given time. This
 ;         must be called from the NES ROM code, so 8-bit execution and the relevant softswitch

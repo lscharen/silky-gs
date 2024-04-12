@@ -13,7 +13,8 @@ REM Cadius does not overwrite files, so clear the root folder first
 %CADIUS% CREATEFOLDER %IMAGE% %FOLDER%
 
 REM Now copy files and folders as needed
-%CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\SuperMarioGS
+REM %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\SuperMarioGS
+%CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\smb\SuperMarioGS
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\bf\BalloonFgtGS
 
 REM Copy in the image assets
