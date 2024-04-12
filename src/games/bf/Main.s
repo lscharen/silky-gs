@@ -70,7 +70,28 @@ PPU_SPR_TILE_ADDR equ #$0000
 ; 1 = Reset code is the game code
 ROM_DRIVER_MODE   equ 1
 
-x_offset    equ   16                      ; number of bytes from the left edge
+; Flag whether the backend should use the OAMDMA to get the sprite information,
+; or if it can scan the NES RAM area directly
+;
+; 0  = use OAM DMA
+; >0 = read $100 bytes directly from NES RAM at this address (typically $200)
+
+DIRECT_OAM_READ   equ 0
+
+; Flag whether to ignore Sprite 0.  Somce games use this sprite only for the 
+; special sprite 0 collision behavior, which is not supported in this runtime
+
+ALLOW_SPRITE_0    equ 1   ; Sprite 0 is the lightning spark
+
+; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
+y_offset_rows equ 3 
+y_height_rows equ 25
+y_offset      equ {y_offset_rows*8}
+y_height      equ {y_height_rows*8}
+min_nes_y     equ 24
+max_nes_y     equ min_nes_y+y_height
+
+x_offset      equ 16                      ; number of bytes from the left edge
 
             phk
             plb

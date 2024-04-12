@@ -577,7 +577,7 @@ PPUFlushQueues
         beq  :not_top_left
 
 ; Metatile address is already in the X-register, so mark these tiles as
-; being updates
+; being updated
 
         ldx  :mt_base
         lda  #0
@@ -1268,12 +1268,21 @@ no_pal
 
 * ; Trigger a copy from a page of memory to OAM.  Since this is a DMA operation, we can cheat and do a 16-bit copy
 PPUDMA_WRITE ENT
+        DO DIRECT_OAM_READ
 ;        rtl                         ; Cheat like crazy and pretend it didn't happen.  Read from $0200 directly when we render
+        ELSE
 
         php
         pha
 
-        rep  #$30                   ; Only copy from 63 sprites because we always skip sprite 0
+        rep #$30
+        DO  ALLOW_SPRITE_0
+        lda   ROMBase+$200
+        stal  PPU_OAM
+        lda   ROMBase+$202
+        stal  PPU_OAM+2
+        FIN
+
 ]n      equ   1
         lup   63
         lda   ROMBase+$200+{]n*4}
@@ -1287,18 +1296,11 @@ PPUDMA_WRITE ENT
         pla
         plp
         rtl
-
-y_offset_rows equ 2
-y_height_rows equ 25
-y_offset equ {y_offset_rows*8}
-y_height equ {y_height_rows*8}
-; max_nes_y equ {y_height+y_offset-8}
-max_nes_y equ 216
-min_nes_y equ 16
+        FIN
 
 * ; Scan the OAM memory and copy the values of the sprites that need to be drawn. There are two reasons to do this
 * ;
-* ; 1. Freeze the OAM memory at this instanct so that the NES ISR can keep running without changing values
+* ; 1. Freeze the OAM memory at this instant so that the NES ISR can keep running without changing values
 * ; 2. We have to scan this list twice -- once to build up the shadow list and once to actually render the sprites
 OAM_COPY    ds 256
 spriteCount dw 0
@@ -1313,7 +1315,7 @@ scanOAMSprites
 ]n       =     ]n+2
          --^
 
-         ldx   #4                  ; Always skip sprite 0
+         ldx   #{1-ALLOW_SPRITE_0}*4
          ldy   #0                  ; This is the destination index
 
 :loop
@@ -1326,8 +1328,8 @@ scanOAMSprites
          cmp    #$0100
          bcc    :skip
 
-         and    #$00FF            ; Isolate the Y-coordinate
-         cmp    #{max_nes_y-8}+1      ; Skip anything that is beyond this line
+         and    #$00FF              ; Isolate the Y-coordinate
+         cmp    #{max_nes_y-8}+1    ; Skip anything that is beyond this line
          bcs    :skip
          cmp    #y_offset
          bcc    :skip
@@ -1642,31 +1644,7 @@ drawScreen
 ; Step 3: Reveal the sprites and background using alternating render and PEI slams
 
         jmp   exposeShadowList
-_DebugFlower
-        phx
-        phy
 
-        lda  OAM_COPY+3,x
-        and  #$00FF
-        ldx  #8*160
-        ldy  #$FFFF
-        jsr  DrawByte
-
-        lda  _ppuscroll+1
-        and  #$00FF
-        ldx  #0
-        ldy  #$FFFF
-        jsr  DrawByte
-
-        lda  tmp1
-        and  #$00FF
-        ldx  #16*160
-        ldy  #$FFFF
-        jsr  DrawByte
-
-        ply
-        plx
-        rts
 
 drawSprites
 :tmp    equ   tmp0
@@ -1710,15 +1688,6 @@ oam_loop
         sta  tmp1
         adc  tmp0                     ; Add to the base address calculated fom the Y-coordinate
         tay                           ; This is the SHR address at which to draw the sprite
-
-; Debug data for sprite tile $D6 (fire flower)
-
-        lda  OAM_COPY+1,x
-        and  #$00FF
-        cmp  #$00D6
-        bne  :nodebug
-        jsr  _DebugFlower
-:nodebug
 
 ; Set the palette pointer for this sprite
 
