@@ -527,13 +527,14 @@ ExtIn       ENT
             mx   %11
 tmp_byte    ds   1
 LDA_ABS_Y   mac
-            pha           ; space for result
+            php
             phx
             tyx
             lda  ]1,x
-            sta  2,s
+            sta  tmp_byte
             plx
-            pla
+            plp
+            lda  tmp_byte
             rts
             <<<
 
@@ -548,6 +549,7 @@ STA_ABS_Y   mac
             <<<
 
 CMP_ABS_Y   mac
+            php
             pha
             phx
             tyx
@@ -555,11 +557,13 @@ CMP_ABS_Y   mac
             stal tmp_byte
             plx
             pla
+            plp
             cmpl tmp_byte
             rts
             <<<
 
 SBC_ABS_Y   mac
+            php
             pha                ; make sure none of these instructions disturbs the carry flag
             phx
             tyx
@@ -567,6 +571,7 @@ SBC_ABS_Y   mac
             stal tmp_byte
             plx
             pla
+            plp
             sbcl tmp_byte
             rts
             <<<
@@ -600,7 +605,7 @@ SBC_0091_Y  SBC_ABS_Y $91
 SBC_009A_Y  SBC_ABS_Y $9a
 STA_000D_Y  STA_ABS_Y $0d
 STA_005A_Y  STA_ABS_Y $5a
-STA_0088_Y  STA_ABS_Y $9a
+STA_0088_Y  STA_ABS_Y $88
 STA_007F_Y  STA_ABS_Y $7f
 STA_00C1_Y  STA_ABS_Y $c1
 STA_00F0_Y  STA_ABS_Y $f0
