@@ -1308,8 +1308,7 @@ scanOAMSprites
          inc                       ; Increment the y-coordinate to match the PPU delay
          sta    OAM_COPY,y
 
-         eor    #$FC00             ; Is the tile == $FC? This is a blank tile in this ROM
-         cmp    #$0100
+         SCAN_OAM_XTRA_FILTER
          bcc    :skip
 
          and    #$00FF              ; Isolate the Y-coordinate
@@ -1525,16 +1524,16 @@ shadowBitmapToList
 
         ldx  #y_offset_rows               ; Start at the third row (y_offset = 16) walk the bitmap for 25 bytes (200 lines of height)
         lda  #0
-        sta  shadowListCount  ; zero out the shadow list count
+        sta  shadowListCount              ; zero out the shadow list count
 
 ; This loop is called when we are not tracking a sprite range
 :zero_loop
         ldy  shadowBitmap,x
         beq  :zero_next
 
-        lda  {mul8-y_offset_rows},x           ; This is the scanline we're on (offset by the starting byte)
+        lda  {mul8-y_offset_rows},x       ; This is the scanline we're on (offset by the starting byte)
         clc
-        adc  offset,y                         ; This is the first line defined by the bit pattern
+        adc  offset,y                     ; This is the first line defined by the bit pattern
         sta  :top
         bra  :one_next
 

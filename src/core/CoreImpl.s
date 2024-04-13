@@ -1,6 +1,3 @@
-; Feature flags
-NO_INTERRUPTS     equ       1                   ; turn off for crossrunner debugging
-
 ; Sprite plane data and mask banks are provided as an external segment
 ;
 ; The sprite data holds a set of pre-rendered sprites that are optimized to support the rendering pipeline.  There
@@ -116,8 +113,8 @@ _CoreShutDown
 ; one-second timer is generally just used for counters and as a handy 
 ; frames-per-second trigger.
 IntStartUp
-                  lda       #NO_INTERRUPTS
-                  bne       :no_interrupts
+                  DO        NO_INTERRUPTS
+                  ELSE
 
                   PushLong  #0
                   pea       $0015               ; Get the existing 1-second interrupt handler and save
@@ -141,12 +138,12 @@ IntStartUp
 :error
                   brk        $e0
 :done
-:no_interrupts
+                  FIN
                   rts
 
 IntShutDown
-                  lda       #NO_INTERRUPTS
-                  bne       :no_interrupts
+                  DO        NO_INTERRUPTS
+                  ELSE
 
                   pea       $0007               ; disable 1-second interrupts
                   _IntSource
@@ -158,7 +155,7 @@ IntShutDown
                   PushLong  OldOneSecVec        ; Reset the interrupt vector
                   _SetVector
 
-:no_interrupts
+                  FIN
                   rts
 
 

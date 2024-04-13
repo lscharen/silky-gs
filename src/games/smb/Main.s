@@ -41,6 +41,15 @@ POST_RENDER  mac
              jsr  CheckForPaletteChange
              <<<
 
+; Put in additional conditions to skip sprites when scanning the OAM table to decide what to
+; render.  Set the carry flag to keep, clear the carry flag to skip
+;
+; Input: The accumulator holds the first two OAM bytes (y-position and tile id)
+SCAN_OAM_XTRA_FILTER mac
+            eor    #$FC00             ; Is the tile == $FC? This is a blank tile in this ROM
+            cmp    #$0100
+            <<<
+
 ; Define which PPU address has the background and sprite tiles
 PPU_BG_TILE_ADDR  equ #$1000
 PPU_SPR_TILE_ADDR equ #$0000
@@ -619,10 +628,10 @@ CopyStatusToScreen
             bcc   :loop
             rts
 
-            put   ../../App.Msg.s
-            put   ../../font.s
-            put   ../../palette.s
-            put   ../../ppu_wip.s
+            put   ../../misc/App.Msg.s
+            put   ../../misc/font.s
+;            put   ../../palette.s
+            put   ../../ppu/ppu.s
 
             ds    \,$00                      ; pad to the next page boundary
 
@@ -668,10 +677,10 @@ WaterPalette dw     $22, $00, $15, $12, $25, $3A, $1A, $0F, $30, $12, $27, $10, 
             put   ../../apu/apu.s
 
 ; Core code
-            put   ../../scaffold.s
-            put   ../../rom_helpers.s
-            put   ../../rom_input.s
-            put   ../../rom_exec.s
+            put   ../../rom/scaffold.s
+            put   ../../rom/rom_helpers.s
+            put   ../../rom/rom_input.s
+            put   ../../rom/rom_exec.s
 
             put   ../../core/CoreData.s
             put   ../../core/CoreImpl.s
@@ -684,80 +693,3 @@ WaterPalette dw     $22, $00, $15, $12, $25, $3A, $1A, $0F, $30, $12, $27, $10, 
             put   ../../core/blitter/HorzLite.s
             put   ../../core/blitter/VertLite.s
             put   ../../core/tiles/CompileTile.s
-
-
-; Fixed tile
-; Bank is set, X = tile corner, A = palette select in bits 9 and 10: 00000ppw wxxyyzz0
-Tile1
-            ora  #%0000_0000_1010_1010
-            bra  TileConst
-Tile0
-TileConst
-            tay
-            lda   [SwizzlePtr],y
-            sta:  $001,x
-            sta:  $004,x
-            sta:  $201,x
-            sta:  $204,x
-            sta:  $401,x
-            sta:  $404,x
-            sta:  $601,x
-            sta:  $604,x
-            sta:  $801,x
-            sta:  $804,x
-            sta:  $A01,x
-            sta:  $A04,x
-            sta:  $C01,x
-            sta:  $C04,x
-            sta:  $E01,x
-            sta:  $E04,x
-            rts
-
-; Compiled Tile template
-; Bank is set, X = tile corner, A = palette select in bits 9 and 10: 00000ppw wxxyyzz0
-; Swizzle Ptr is aligned to a 2048-byte boundary
-;DrawTile
-;            sta   SwizzlePtr
-;            ldy   #DATA             ; %0000_000w_wxxy_yzz0
-
-;            lda   #MASK
-;            and:  $001,x
-;            ora   [SwizzlePtr],y
-;            sta:  $001,x
-
-;            lda   #MASK             ; Skip ldy for repeating data
-;            and:  $004,x
-;            ora   [SwizzlePtr],y
-;            sta:  $004,x
-
-;            ldy   #DATA             ; No mask for solid words
-;            lda   [SwizzlePtr],y
-;            sta:  $201,x
-;            sta:  $204,x            ; Repeat solid, unmasked values
-;            sta:  $401,x
-;            sta:  $404,x
-;            rts
-
-; Compiles sprites for "normal" sprites -- have a fallback routine for sprites that
-; cross the nametable boundary
-; CompiledSpriteTemplate
-;            sta   SwizzlePtr
-
-;            ldy   #DATA             ; No mask for solid words
-;            lda:  $201,x
-;            pha                     ; stash the data
-;            lda   [SwizzlePtr],y
-;            sta:  $201,x
-
-;            ldy   #DATA 
-;            lda:  $204,x
-;            pha
-;            and   #MASK
-;            ora   [SwizzlePtr],y
-;            sta:  $001,x
-
-;            pea   %1101_1100_0011_111           ; push bitfield of which words to restore (expect sprites to be dense)
-
-* ; and  #MASK                ; 3
-* ; ora  [USER_FREE_SPACE],y  ; 7 lookup and merge in swizzled tile data = *(SwizzlePtr + palbits)
-* ; sta: 0,x                  ; 6 = 25 cycles / word; 13 bytes

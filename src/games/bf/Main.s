@@ -60,6 +60,14 @@ POST_RENDER  mac
 ;no_area_change
             <<<
 
+; Put in additional conditions to skip sprites when scanning the OAM table to decide what to
+; render.  Set the carry flag to keep, clear the carry flag to skip
+;
+; Input: The accumulator holds the first two OAM bytes (y-position and tile id)
+SCAN_OAM_XTRA_FILTER mac
+            sec
+            <<<
+
 ; Define which PPU address has the background and sprite tiles
 PPU_BG_TILE_ADDR  equ #$1000
 PPU_SPR_TILE_ADDR equ #$0000
@@ -201,7 +209,7 @@ user_break        dw  0
 
 ; Helper to initialize the playfield based on the selected VideoMode
 InitPlayfield
-;            lda   #16            ; We render starting at line 16 in the NES video buffer
+;            lda   #16
             lda   #24
             sta   NesTop
 
@@ -292,6 +300,7 @@ InitPlayfield
 ; Make the screen appear
 nesTopOffset    ds 2
 nesBottomOffset ds 2
+
 RenderScreen
 
 ; Do the basic setup
@@ -585,26 +594,25 @@ VOCTitle    str  'ENABLE VOC ACCELERATION'
 YesStr      str  'YES'
 NoStr       str  'NO'
 
-            put   ../../App.Msg.s
-            put   ../../font.s
-            put   ../../palette.s
-            put   ../../ppu_wip.s
+            put   ../../misc/App.Msg.s
+            put   ../../misc/font.s
+            put   ../../ppu/ppu.s
 
 ; Palette remapping
             put   palettes.s
             put   ../../apu/apu.s
 
 ; Core code
-            put   ../../scaffold.s
-            put   ../../rom_helpers.s
-            put   ../../rom_input.s
-            put   ../../rom_exec.s
+            put   ../../rom/scaffold.s
+            put   ../../rom/rom_helpers.s
+            put   ../../rom/rom_input.s
+            put   ../../rom/rom_exec.s
+            put   ../../core/ControlBits.s
             put   ../../core/CoreData.s
             put   ../../core/CoreImpl.s
-            put   ../../core/ControlBits.s
-            put   ../../core/Memory.s
             put   ../../core/Graphics.s
             put   ../../core/Math.s
+            put   ../../core/Memory.s
             put   ../../core/blitter/BlitterLite.s
             put   ../../core/blitter/PEISlammer.s
             put   ../../core/blitter/HorzLite.s
