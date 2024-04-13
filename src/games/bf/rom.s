@@ -278,68 +278,96 @@ APU_TRIANGLE_REG1_WRITE EXT
 APU_TRIANGLE_REG3_WRITE EXT
 APU_TRIANGLE_REG4_WRITE EXT
 APU_NOISE_REG1_WRITE EXT
-;APU_NOISE_REG2_WRITE EXT
+APU_NOISE_REG2_WRITE EXT
 APU_NOISE_REG3_WRITE EXT
 APU_NOISE_REG4_WRITE EXT
 
 APU_STATUS_WRITE EXT
 
-; Cooperative multitasking return vactor.  Allows the non-interrupt ROM code to yield
+; Cooperative multitasking return vector.  Allows the non-interrupt ROM code to yield
 ; control back to the IIgs runtime.  Control will be returning the the caller of the
 ; yield at a later point with all registers intact.
 yield EXT
 
+; Table of routines used when reading from the APU registers ($4000 - $4017).
+; Assumed reading in the accumulator
+apu_read_tbl
+;            dw   APU_PULSE1_REG1,APU_PULSE1_REG2,APU_PULSE1_REG3,APU_PULSE1_REG4
+;            dw   APU_PULSE2_REG1,APU_PULSE2_REG2,APU_PULSE2_REG3,APU_PULSE2_REG4
+;            dw   APU_TRIANGLE_REG1,NO_OP,APU_TRIANGLE_REG3,APU_TRIANGLE_REG4
+;            dw   APU_NOISE_REG1,NO_OP,APU_NOISE_REG3,APU_NOISE_REG4
+;            dw   APU_DMC_REG1,APU_DMC_REG2,APU_DMC_REG3,APU_DMC_REG4
+;            dw   NO_OP,APU_STATUS,NO_OP,LDA_4017
+
+; Table of routines used then writing to the APU registers ($4000 - $4017)
+; Assumed writing the accumulator
+apu_write_tbl
+            dw   STA_4000, STA_4001, STA_4002, STA_4003
+            dw   STA_4004, STA_4005, STA_4006, STA_4007
+            dw   STA_4008, NO_OP,    STA_400a, STA_400b
+            dw   STA_400c, NO_OP,    STA_400e, STA_400f
+            dw   STA_4010, STA_4011, STA_4012, STA_4013
+            dw   NO_OP,    STA_4015, NO_OP,    STA_4017
+
+            mx    %11
+
 STA_4000_Y
             php
-            phy
             phx
             pea  :rtn-1
-            tyx
-            jmp  (:reg_tbl,x)
-:reg_tbl    dw   APU_PULSE1_REG1_W,APU_PULSE1_REG1_W
-            dw   APU_PULSE2_REG1_W,APU_PULSE2_REG1_W,
-            dw   APU_TRIANGLE_REG1_W,APU_TRIANGLE_REG1_W
-            dw   NO_OP,NO_OP
+            pha
+            tya
+            asl
+            tax
+            pla
+            jmp  (apu_write_tbl,x)
 :rtn        plx
-            ply
             plp
             rts
 
-; Hooks to call back to the runtime harness for APU register access
 STA_4002_X
-; x is 0, 4 or 8 -- dispatch to the correct underlying routine
-            jmp  (:reg_tbl,x)
-:reg_tbl    dw   APU_PULSE1_REG3_W,APU_PULSE1_REG3_W
-            dw   APU_PULSE2_REG3_W,APU_PULSE2_REG3_W,
-            dw   APU_TRIANGLE_REG3_W,APU_TRIANGLE_REG3_W
-            dw   NO_OP,NO_OP
+            php
+            phx
+            pea  :rtn-1
+            pha
+            txa
+            asl
+            tax
+            pla
+            jmp  (apu_write_tbl+4,x)
+:rtn        plx
+            plp
+            rts
 
 STA_4003_X
-            jmp  (:reg_tbl,x)
-:reg_tbl    dw   APU_PULSE1_REG4_W,APU_PULSE1_REG4_W
-            dw   APU_PULSE2_REG4_W,APU_PULSE2_REG4_W,
-            dw   APU_TRIANGLE_REG4_W,APU_TRIANGLE_REG4_W
-            dw   NO_OP,NO_OP
-
-STA_4000
-APU_PULSE1_REG1_W
-            jsl  APU_PULSE1_REG1_WRITE
-NO_OP
-            rts
-APU_PULSE1_REG1_WX
+            php
             phx
+            pea  :rtn-1
+            pha
+            txa
+            asl
+            tax
+            pla
+            jmp  (apu_write_tbl+6,x)
+:rtn        plx
+            plp
+            rts
+
+STA_4000    jsl  APU_PULSE1_REG1_WRITE
+NO_OP       rts
+
+STX_4000    phx
             pha
             txa
             jsl  APU_PULSE1_REG1_WRITE
             pla
             plx
             rts
-STA_4001
-APU_PULSE1_REG2_W
-            jsl  APU_PULSE1_REG2_WRITE
+
+STA_4001    jsl  APU_PULSE1_REG2_WRITE
             rts
-APU_PULSE1_REG2_WY
-            phy
+
+STY_4001    phy
             pha
             tya
             jsl  APU_PULSE1_REG2_WRITE
@@ -347,40 +375,35 @@ APU_PULSE1_REG2_WY
             ply
             rts
 
-STA_4002
-APU_PULSE1_REG3_W
-            jsl  APU_PULSE1_REG3_WRITE
-            rts
-APU_PULSE1_REG4_W
-            jsl  APU_PULSE1_REG4_WRITE
+STA_4002    jsl  APU_PULSE1_REG3_WRITE
             rts
 
-STA_4004
-APU_PULSE2_REG1_W
-            jsl  APU_PULSE2_REG1_WRITE
+STA_4003    jsl  APU_PULSE1_REG4_WRITE
             rts
-APU_PULSE2_REG1_WX
-            phx
+
+STA_4004    jsl  APU_PULSE2_REG1_WRITE
+            rts
+
+STX_4004    phx
             pha
             txa
             jsl  APU_PULSE2_REG1_WRITE
             pla
             plx
             rts
-STA_4005
-APU_PULSE2_REG2_W
-            jsl  APU_PULSE2_REG2_WRITE
+
+STA_4005    jsl  APU_PULSE2_REG2_WRITE
             rts
-APU_PULSE2_REG2_WY
-            phy
+
+STY_4005    phy
             pha
             tya
             jsl  APU_PULSE2_REG2_WRITE
             pla
             ply
             rts
-APU_PULSE2_REG2_WX
-            phx
+
+STX_4005    phx
             pha
             txa
             jsl  APU_PULSE2_REG2_WRITE
@@ -388,41 +411,28 @@ APU_PULSE2_REG2_WX
             plx
             rts
 
-STA_4006
-APU_PULSE2_REG3_W
-            jsl  APU_PULSE2_REG3_WRITE
-            rts
-APU_PULSE2_REG4_W
-            jsl  APU_PULSE2_REG4_WRITE
+STA_4006    jsl  APU_PULSE2_REG3_WRITE
             rts
 
-STA_4008
-APU_TRIANGLE_REG1_W
-            jsl  APU_TRIANGLE_REG1_WRITE
-            rts
-;APU_TRIANGLE_REG2_W
-;            jsl  APU_TRIANGLE_REG2_WRITE
-;            rts
-APU_TRIANGLE_REG3_W
-            jsl  APU_TRIANGLE_REG3_WRITE
-            rts
-APU_TRIANGLE_REG4_W
-            jsl  APU_TRIANGLE_REG4_WRITE
+STA_4007    jsl  APU_PULSE2_REG4_WRITE
             rts
 
-STA_400c
-APU_NOISE_REG1_W
-            jsl  APU_NOISE_REG1_WRITE
+STA_4008    jsl  APU_TRIANGLE_REG1_WRITE
             rts
-;APU_TRIANGLE_REG2_W
-;            jsl  APU_TRIANGLE_REG2_WRITE
-;            
-STA_400e
-APU_NOISE_REG3_W
-            jsl  APU_NOISE_REG3_WRITE
+
+STA_400a    jsl  APU_TRIANGLE_REG3_WRITE
             rts
-APU_NOISE_REG3_WX
-            phx
+
+STA_400b    jsl  APU_TRIANGLE_REG4_WRITE
+            rts
+
+STA_400c    jsl  APU_NOISE_REG1_WRITE
+            rts
+
+STA_400e    jsl  APU_NOISE_REG3_WRITE
+            rts
+
+STX_400e    phx
             pha
             txa
             jsl  APU_NOISE_REG3_WRITE
@@ -430,13 +440,10 @@ APU_NOISE_REG3_WX
             plx
             rts
 
-STA_400f
-APU_NOISE_REG4_W
-            jsl  APU_NOISE_REG4_WRITE
+STA_400f    jsl  APU_NOISE_REG4_WRITE
             rts
 
-APU_NOISE_REG4_WY
-            phy
+STY_400f    phy
             pha
             tya
             jsl  APU_NOISE_REG4_WRITE
@@ -444,21 +451,24 @@ APU_NOISE_REG4_WY
             ply
             rts
 
+STA_4010
 STA_4011
+STA_4012
+STA_4013
             rts
-STA_4015
-            jsl   APU_STATUS_WRITE
+
+STA_4015    jsl   APU_STATUS_WRITE
             rts
-APU_STATUS_WX
-            phx
+
+STX_4015    phx
             pha
             txa
             jsl   APU_STATUS_WRITE
             pla
             plx
             rts
-; Hooks to call back to the GTE harness for PPU memory-mapped accesses
-            mx    %11
+
+; Hooks to call back to the harness for PPU memory-mapped accesses
 STA_2000
             jsl  PPUCTRL_WRITE
             rts
@@ -507,6 +517,7 @@ STA_4014
             jsl  PPUDMA_WRITE
             rts
 
+LDA_4017
 STA_4017
             rts
 
@@ -609,6 +620,27 @@ STA_0088_Y  STA_ABS_Y $88
 STA_007F_Y  STA_ABS_Y $7f
 STA_00C1_Y  STA_ABS_Y $c1
 STA_00F0_Y  STA_ABS_Y $f0
+
+; This is part of an APU copy routine. $f9 is $0, $4, $8 or $c and $fa = $40
+; $fb is a pointer to some memory block in ROM
+LDA_FB_Y__STA_F9_Y
+    phy              ; Save the index register
+
+    lda ($fb),y      ; Load the original value
+    php              ; Save the status registers
+    pha              ; Save the value
+
+    clc
+    tya
+    adc $f9
+    tay
+
+    pla
+    plp
+    jsr STA_4000_Y   ; Effective sta ($f9),y
+
+    ply
+    rts
 
 ; This is an alternate version of the copyppublock function.  The issue is that the routine
 ; uses indirect addressing to access zero page locations.  Since the data bank and the zero
@@ -6939,8 +6971,10 @@ lf691
     sty $fc
     ldy #0
 lf69d
-    lda ($fb),y
-    sta ($f9),y
+;    lda ($fb),y
+;    sta ($f9),y         ; ; IIgs -- this indirect store goes to the APU registers.
+    nop
+    jsr LDA_FB_Y__STA_F9_Y
     iny
     tya
     cmp #4
