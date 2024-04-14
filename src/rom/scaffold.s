@@ -66,8 +66,11 @@ NES_StartUp
 
 ; Initialize the sound hardware for APU emulation
 
+            DO    NO_INTERRUPTS
+            ELSE
             lda   #1
             jsr   APUStartUp              ; 0 = 240Hz, 1 = 120Hz, 2 = 60Hz (external)
+            FIN
 
 ; Clear the IIgs screen and initialize the rendering infrastrucure
 
@@ -210,7 +213,10 @@ NES_EvtLoop
 
 ; Clean up the runtime
 NES_ShutDown
+            DO    NO_INTERRUPTS
+            ELSE
             jsr   APUShutDown
+            FIN
             jsr   ShutDown
             rts
 

@@ -12,8 +12,6 @@ _BltRangeLite
 :exit_ptr       equ   tmp0
 :jmp_low_save   equ   tmp2
 
-;                phb
-
                 sty   tmp0           ; Range check
                 cpx   tmp0
                 bcc   *+3
@@ -42,6 +40,10 @@ _BltRangeLite
                 rts
 
 :normal
+                lda   GTEControlBits 
+                bit   #CTRL_BKGND_DISABLE
+                beq   *+5
+                brl   :no_background
 
                 clc
                 dey
@@ -99,7 +101,7 @@ blt_return_lite ENT
                 stal  STATE_REG
                 tyx
                 txs                       ; restore the stack
-                plp                       ; re-enable interrupts (maybe, if interrupts disabled when we are called, they are not re-endabled)
+                plp                       ; re-enable interrupts (maybe, if interrupts disabled when we are called, they are not re-enabled)
 
 :exit_ptr       equ   tmp0
 :jmp_low_save   equ   tmp2
@@ -109,5 +111,61 @@ blt_return_lite ENT
                 lda   :jmp_low_save
                 sta   [:exit_ptr],y
 
-;                plb
+                rts
+
+; Special mode to use when the background is disabled.  Just slam a bunch of $0000 values
+;
+; This is simpler because X and Y are logical values.  Because we're not invoking the PEA
+; table, there is no need to offset by the StartYMod240 value
+:no_background
+                bit   #CTRL_EVEN_RENDER     ; Need to check this again -- X and Y are already set correctly, though
+                bne   :even_only
+                lda   #2
+                bra   *+5
+:even_only      lda   #4
+
+                sta   tmp1                  ; Increment for Y
+
+; Calculate the index of the first physical line in the
+
+                tya
+                asl
+                sta   tmp0                ; Loop end
+
+                txa
+                asl
+                tay                       ; Use Y for the loop counter
+
+                tsc
+                dec
+                sta   :patch+1            ; save the stack once (compensate for the PHP below)
+
+:no_bg_loop
+                sep   #$20                ; 8-bit mode
+                php                       ; save the current processor flags
+                ldx   RTable,y            ; This is the right edge
+
+                sei                       ; disable interrupts
+                lda   STATE_REG_BLIT
+                stal  STATE_REG           ; Write to Bank $01
+                txs                       ; set the stack to the right edge
+
+                ldx   #0                  ; Blank out the line (16-bit pushes)
+                lup   64
+                phx
+                --^
+
+                lda   STATE_REG_R0W0
+                stal  STATE_REG
+:patch          ldx   #0000               ; stack save
+                txs                       ; restore the stack
+                plp                       ; re-enable interrupts
+                rep   #$21                ; 16-bit and clear carry
+
+                tya
+                adc   tmp1
+                tay
+                cpy   tmp0
+                bcc   :no_bg_loop
+
                 rts
