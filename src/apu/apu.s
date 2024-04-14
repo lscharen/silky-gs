@@ -32,6 +32,7 @@ access_doc_ram_no_inc   = *
 
 APUStartUp
                         stal apu_mode
+                        php
                         sei
                         phd
                         pea $c000
@@ -40,10 +41,11 @@ APUStartUp
                         jsr setup_doc_registers
                         jsr setup_interrupt
                         pld
-                        cli
+                        plp
                         rts
 
 APUShutDown             = *
+                        php
                         sei
                         phd
 
@@ -62,8 +64,8 @@ APUShutDown             = *
                         stal  sound_interrupt_ptr+2
 
 :no_doc_interrupts
-                        cli
                         pld
+                        plp
                         clc
                         rts
 

@@ -1282,30 +1282,44 @@ PPUDMA_WRITE ENT
         rtl
         FIN
 
-* ; Scan the OAM memory and copy the values of the sprites that need to be drawn. There are two reasons to do this
-* ;
-* ; 1. Freeze the OAM memory at this instant so that the NES ISR can keep running without changing values
-* ; 2. We have to scan this list twice -- once to build up the shadow list and once to actually render the sprites
-OAM_COPY    ds 256
-spriteCount dw 0
+; Scan the OAM copy and start to build up the data structures for rendering the screen.
+;
+; The first step is building a bitmap of lines with sprites, which are used to segment
+; the screen in the "sprite" and "background" runs.
+;
+; There are actually two bitmaps that are used on alternating calls.  If the screen is
+; scrolling, or otherwise needs to be completely drawn, just the "current" bitmap is used.
+; But if we the background is not changing, then the runtime can render only lines that
+; have changes from one call to the next.
+
+OAM_COPY      ds 256
+spriteCount   dw 0
+shadowBitmap0 ds 32                ; Bitmap to use when frameCount & 1 == 0
+shadowBitmap1 ds 32                ; Bitmap to use when frameCount & 1 == 1
 
          mx   %00
 scanOAMSprites
 
-; zero out the shadow bitmap (16-bit writes)
+         lda   frameCount          ; Determine which bitmap to use for this frame
+         bit   #$0001
+         beq   *+5
+         brl   useOtherBitmap
+
+; This is the code path using shadowBitmap0
+
 ]n       equ   0
          lup   15
-         stz   shadowBitmap+]n
+         stz   shadowBitmap0+]n
 ]n       =     ]n+2
          --^
 
-         ldx   #{1-ALLOW_SPRITE_0}*4
-         ldy   #0                  ; This is the destination index
+         ldx   #{1-ALLOW_SPRITE_0}*4  ; Select 0 or 1 as the starting point
+         ldy   #0                     ; This is the destination index
 
 :loop
-;         ldal   ROMBase+$0200,x    ; Copy the low word
+;         ldal   ROMBase+$0200,x      ; Copy the low word
          ldal   PPU_OAM,x
-         inc                       ; Increment the y-coordinate to match the PPU delay
+         inc                          ; Increment the y-coordinate to match the PPU delay
          sta    OAM_COPY,y
 
          SCAN_OAM_XTRA_FILTER
@@ -1324,8 +1338,68 @@ scanOAMSprites
          tay                      ; We are drawing this sprite, so mark it in the shadow list
          ldx    y2idx,y           ; Get the index into the shadowBitmap array for this y coordinate (y -> blk_y)
          lda    y2bits,y          ; Get the bit pattern for the first byte
-         ora    shadowBitmap,x
-         sta    shadowBitmap,x
+         ora    shadowBitmap0,x
+         sta    shadowBitmap0,x
+
+         ply
+         plx
+
+;         ldal   ROMBase+$0202,x    ; Copy the high word
+         ldal   PPU_OAM+2,x
+         sta    OAM_COPY+2,y
+
+         iny
+         iny
+         iny
+         iny
+
+:skip
+         inx
+         inx
+         inx
+         inx
+         cpx  #$0100
+         bcc  :loop
+
+         sty   spriteCount           ; spriteCount * 4 for easy comparison later
+         rts
+
+; This is identical to the code aove, but we're using shadowBitmap1 instead
+useOtherBitmap
+
+]n       equ   0
+         lup   15
+         stz   shadowBitmap1+]n
+]n       =     ]n+2
+         --^
+
+         ldx   #{1-ALLOW_SPRITE_0}*4  ; Select 0 or 1 as the starting point
+         ldy   #0                     ; This is the destination index
+
+:loop
+;         ldal   ROMBase+$0200,x      ; Copy the low word
+         ldal   PPU_OAM,x
+         inc                          ; Increment the y-coordinate to match the PPU delay
+         sta    OAM_COPY,y
+
+         SCAN_OAM_XTRA_FILTER
+         bcc    :skip
+
+         and    #$00FF              ; Isolate the Y-coordinate
+         cmp    #{max_nes_y-8}+1    ; Skip anything that is beyond this line
+         bcs    :skip
+         cmp    #y_offset
+         bcc    :skip
+
+         phx
+         phy
+
+         asl
+         tay                      ; We are drawing this sprite, so mark it in the shadow list
+         ldx    y2idx,y           ; Get the index into the shadowBitmap array for this y coordinate (y -> blk_y)
+         lda    y2bits,y          ; Get the bit pattern for the first byte
+         ora    shadowBitmap1,x
+         sta    shadowBitmap1,x
 
          ply
          plx
@@ -1519,52 +1593,61 @@ shadowBitmapToList
 :top      equ  tmp0
 :bottom   equ  tmp2
 :bitfield equ  tmp4
+:bitmap   equ  tmp6
+
+        ldx  #shadowBitmap0              ; select the bitmap array for this frame
+        lda  frameCount
+        bit  #$0001
+        beq  *+5
+        ldx  #shadowBitmap1
+        stx  :bitmap
 
         sep  #$30
 
-        ldx  #y_offset_rows               ; Start at the third row (y_offset = 16) walk the bitmap for 25 bytes (200 lines of height)
+        ldy  #y_offset_rows               ; Start at the third row (y_offset = 16) walk the bitmap for 25 bytes (200 lines of height)
         lda  #0
         sta  shadowListCount              ; zero out the shadow list count
 
 ; This loop is called when we are not tracking a sprite range
 :zero_loop
-        ldy  shadowBitmap,x
+        lda  (:bitmap),y
         beq  :zero_next
+        tax
 
-        lda  {mul8-y_offset_rows},x       ; This is the scanline we're on (offset by the starting byte)
+        lda  {mul8-y_offset_rows},y       ; This is the scanline we're on (offset by the starting byte)
         clc
-        adc  offset,y                     ; This is the first line defined by the bit pattern
+        adc  offset,x                     ; This is the first line defined by the bit pattern
         sta  :top
         bra  :one_next
 
 :zero_next
-        inx
-        cpx  #y_height_rows+y_offset_rows ; +1              ; End at byte 27
+        iny
+        cpy  #y_height_rows+y_offset_rows ; +1              ; End at byte 27
         bcc  :zero_loop
         bra  :exit           ; ended while not tracking a sprite, so exit the function
 
 :one_loop
-        lda  shadowBitmap,x  ; if the next byte is all sprite, just continue
+        lda  (:bitmap),y     ; if the next byte is all sprite, just continue
         cmp  #$FF
         beq  :one_next
 
 * ; The byte has to look like 1..10..0  The first step is to mask off the high bits and store the result
 * ; back into the shadowBitmap
 
-        tay
-        and  offsetMask,y
-        sta  shadowBitmap,x
+        tax
+        and  offsetMask,x
+        sta  (:bitmap),y
 
-        lda  {mul8-y_offset_rows},x
+        lda  {mul8-y_offset_rows},y
         clc
-        adc  invOffset,y
+        adc  invOffset,x
 
-        ldy  shadowListCount
-        sta  shadowListBot,y
+        ldx  shadowListCount
+        sta  shadowListBot,x
         lda  :top
-        sta  shadowListTop,y
-        iny
-        sty  shadowListCount
+        sta  shadowListTop,x
+        inx
+        stx  shadowListCount
 
 ; Loop back to check if there is more sprite data on this byte
 
@@ -1572,19 +1655,19 @@ shadowBitmapToList
 
 
 :one_next
-        inx
-        cpx  #y_height_rows+y_offset_rows+1
+        iny
+        cpy  #y_height_rows+y_offset_rows+1
         bcc  :one_loop
 
 ; If we end while tracking a sprite, add to the list as the last item
 
-        ldx  shadowListCount
+        ldy  shadowListCount
         lda  :top
-        sta  shadowListTop,x
+        sta  shadowListTop,y
         lda  #y_height
-        sta  shadowListBot,x
-        inx
-        stx  shadowListCount
+        sta  shadowListBot,y
+        iny
+        sty  shadowListCount
 
 :exit
         rep  #$30
@@ -1592,7 +1675,6 @@ shadowBitmapToList
         cmp  #64
         bcc  *+4
         brk  $13
-
 
         rts
 

@@ -295,3 +295,6 @@ NES_RenderFrame
 
             inc   frameCount       ; Tick over to a new frame
             rts
+
+; Tracks the number of times NES_RenderFrame has been called
+frameCount   dw  0

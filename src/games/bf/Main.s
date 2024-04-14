@@ -199,11 +199,7 @@ TmpPalette  ds    32
 
 ; Program variables
 singleStepMode    dw  0
-; nmiCount    dw    0
-OldOneSecVec      ds  4
-; StkSave           dw  0
 LastAreaType      dw  0
-frameCount        dw  0
 show_vbl_cpu      dw  0
 user_break        dw  0
 

@@ -158,6 +158,7 @@ IntShutDown
                   FIN
                   rts
 
+OldOneSecVec      ds   4
 
 ; Interrupt handlers. We install a heartbeat (1/60th second and a 1-second timer)
 OneSecHandler     mx        %11
