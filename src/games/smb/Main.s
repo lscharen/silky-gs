@@ -305,6 +305,10 @@ RenderScreen
             and   #$00FF                  ; make sure nothing is in the high byte
             jsr   _SetBG0XPos
 
+            lda   ppumask
+            and   #$08
+            jsr   EnableBackground
+
 ; Now render the top 16 lines to show the status bar area
 
             clc
