@@ -76,7 +76,7 @@ ShowFPS                equ   126
 YOrigin                equ   128
 VideoMode              equ   130
 AudioMode              equ   132
-BGToggle               equ   134
+; BGToggle               equ   134
 LastEnable             equ   136
 LastStatusUdt          equ   138
 ActiveBank             equ   140
@@ -178,11 +178,10 @@ PAD_BUTTON_A           equ   $0200
 PAD_KEY_DOWN           equ   $0400
 
 ; Rendering Control Bits
-CTRL_SPRITE_DISABLE    equ   $0001
-CTRL_BKGND_DISABLE     equ   $0002
+CTRL_SPRITE_ENABLE     equ   $0001
+CTRL_BKGND_ENABLE      equ   $0002
 CTRL_GREYSCALE         equ   $4000           ; Use a fixed greyscale palette. This is not related to the NES greyscale bit
 CTRL_EVEN_RENDER       equ   $8000           ; Only render half the scanlines for speed
-
 
 ; Tile constants
 TILE_DAMAGED_BIT       equ   $8000                  ; Mark a tile as damaged (internal only)
@@ -239,3 +238,7 @@ TILE_TARGET  equ $8000          ; value of last rendered byte. If TILE_VERSION =
 ; Return codes from the Event Loop harness
 USER_SAYS_QUIT equ 'q'
 USER_SAYS_RESET equ 'r'
+
+; NES Register definitions
+NES_PPUMASK_BG  equ $08
+NES_PPUMASK_SPR equ $10

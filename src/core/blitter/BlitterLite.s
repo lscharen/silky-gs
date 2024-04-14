@@ -41,8 +41,8 @@ _BltRangeLite
 
 :normal
                 lda   GTEControlBits 
-                bit   #CTRL_BKGND_DISABLE
-                beq   *+5
+                bit   #CTRL_BKGND_ENABLE
+                bne   *+5
                 brl   :no_background
 
                 clc

@@ -38,9 +38,6 @@ NES_StartUp
             sta   VideoMode
             sta   AudioMode
 
-            lda   #1
-            sta   BGToggle
-
             lda   #$0008
             sta   LastEnable
 
@@ -149,18 +146,26 @@ NES_EvtLoop
 ; handlers.
 
             and   #$007F
-            pha
 
 ; 'b': force the NES Background bit to be toggled
 
             cmp   #'b'
             bne   :not_b
-            lda   BGToggle
-            eor   #$0001
-            sta   BGToggle
-            jsr   EnableBackground
+            lda   ppumask_override
+            eor   #NES_PPUMASK_BG
+            sta   ppumask_override
             brl   NES_EvtLoop
 :not_b
+
+; 's': force the NES Sprite bit to be toggled
+
+            cmp   #'s'
+            bne   :not_s
+            lda   ppumask_override
+            eor   #NES_PPUMASK_SPR
+            sta   ppumask_override
+            brl   NES_EvtLoop
+:not_s
 
 ; '0': force all of the APU channels to be turned off
             cmp   #'0'

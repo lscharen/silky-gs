@@ -712,6 +712,9 @@ ppustatus dw 0
 oamaddr   dw 0     ; Typically this will always be 0
 ppuscroll dw 0     ; Y X coordinates
 
+; Value to mask with ppumask to allow the runtime to override some bits
+ppumask_override dw $FFFF
+
 ntbase    db $20,$24,$28,$2c
 
 assert_lt mac
@@ -1316,6 +1319,12 @@ scanOAMSprites
          ldx   #{1-ALLOW_SPRITE_0}*4  ; Select 0 or 1 as the starting point
          ldy   #0                     ; This is the destination index
 
+; Check if sprites are disabled
+
+         lda   GTEControlBits
+         and   #CTRL_SPRITE_ENABLE
+         beq   :disabled
+
 :loop
 ;         ldal   ROMBase+$0200,x      ; Copy the low word
          ldal   PPU_OAM,x
@@ -1361,6 +1370,7 @@ scanOAMSprites
          cpx  #$0100
          bcc  :loop
 
+:disabled
          sty   spriteCount           ; spriteCount * 4 for easy comparison later
          rts
 
@@ -1375,6 +1385,10 @@ useOtherBitmap
 
          ldx   #{1-ALLOW_SPRITE_0}*4  ; Select 0 or 1 as the starting point
          ldy   #0                     ; This is the destination index
+
+         lda   GTEControlBits
+         and   #CTRL_SPRITE_ENABLE
+         beq   :disabled
 
 :loop
 ;         ldal   ROMBase+$0200,x      ; Copy the low word

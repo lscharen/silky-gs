@@ -311,8 +311,14 @@ RenderScreen
             jsr   _SetBG0XPos
 
             lda   ppumask
-            and   #$08
+            and   ppumask_override
+            and   #NES_PPUMASK_BG
             jsr   EnableBackground
+
+            lda   ppumask
+            and   ppumask_override
+            and   #NES_PPUMASK_SPR
+            jsr   EnableSprites
 
 ; Now render the top 16 lines to show the status bar area
 
