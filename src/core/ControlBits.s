@@ -1,5 +1,5 @@
 ; A = 0 turn off background
-; A = 1 turn on background
+; A > 0 turn on background
 EnableBackground
     cmp   #0
     beq   :turn_off
