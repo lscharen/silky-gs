@@ -85,7 +85,7 @@ ROM_DRIVER_MODE   equ 1
 ; 0  = use OAM DMA
 ; >0 = read $100 bytes directly from NES RAM at this address (typically $200)
 
-DIRECT_OAM_READ   equ 0
+DIRECT_OAM_READ   equ $200
 
 ; Flag whether to ignore Sprite 0.  Somce games use this sprite only for the 
 ; special sprite 0 collision behavior, which is not supported in this runtime

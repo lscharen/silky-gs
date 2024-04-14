@@ -1253,10 +1253,10 @@ no_pal
         plp
         rtl
 
-* ; Trigger a copy from a page of memory to OAM.  Since this is a DMA operation, we can cheat and do a 16-bit copy
+* ; Trigger a copy from a page of memory to OAM.  Since this is a DMA operation, we can cheat a little and do a 16-bit copy
 PPUDMA_WRITE ENT
         DO DIRECT_OAM_READ
-;        rtl                         ; Cheat like crazy and pretend it didn't happen.  Read from $0200 directly when we render
+        rtl                         ; Cheat a lot and pretend it didn't happen.  Read from NES RAM directly when we render
         ELSE
 
         php
@@ -1326,8 +1326,11 @@ scanOAMSprites
          beq   :disabled
 
 :loop
-;         ldal   ROMBase+$0200,x      ; Copy the low word
+         DO     DIRECT_OAM_READ
+         ldal   ROMBase+DIRECT_OAM_READ,x      ; Copy the low word
+         ELSE
          ldal   PPU_OAM,x
+         FIN
          inc                          ; Increment the y-coordinate to match the PPU delay
          sta    OAM_COPY,y
 
@@ -1353,8 +1356,11 @@ scanOAMSprites
          ply
          plx
 
-;         ldal   ROMBase+$0202,x    ; Copy the high word
+         DO     DIRECT_OAM_READ
+         ldal   ROMBase+DIRECT_OAM_READ+2,x    ; Copy the high word
+         ELSE
          ldal   PPU_OAM+2,x
+         FIN
          sta    OAM_COPY+2,y
 
          iny
@@ -1391,8 +1397,11 @@ useOtherBitmap
          beq   :disabled
 
 :loop
-;         ldal   ROMBase+$0200,x      ; Copy the low word
+         DO     DIRECT_OAM_READ
+         ldal   ROMBase+DIRECT_OAM_READ,x      ; Copy the low word
+         ELSE
          ldal   PPU_OAM,x
+         FIN
          inc                          ; Increment the y-coordinate to match the PPU delay
          sta    OAM_COPY,y
 
@@ -1418,8 +1427,11 @@ useOtherBitmap
          ply
          plx
 
-;         ldal   ROMBase+$0202,x    ; Copy the high word
+         DO     DIRECT_OAM_READ
+         ldal   ROMBase+DIRECT_OAM_READ+2,x    ; Copy the high word
+         ELSE
          ldal   PPU_OAM+2,x
+         FIN
          sta    OAM_COPY+2,y
 
          iny
