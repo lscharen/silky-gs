@@ -521,6 +521,7 @@ nesPalette
 ;
 ; Returns RGB value in A
 NES_ColorToIIgs
+            and   #$003F
             asl
             tay
             lda   nesPalette,y

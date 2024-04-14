@@ -65,18 +65,20 @@ ROM_DRIVER_MODE   equ 0
 ;
 ; 0  = use OAM DMA
 ; >0 = read $100 bytes directly from NES RAM
-
 DIRECT_OAM_READ   equ 0
 
 ; Flag whether to ignore Sprite 0.  Somce games use this sprite only for the 
 ; special sprite 0 collision behavior, which is not supported in this runtime
-
-ALLOW_SPRITE_0   equ 0
+ALLOW_SPRITE_0    equ 0
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
+NO_INTERRUPTS     equ 0
 
-NO_INTERRUPTS    equ 0
+; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
+; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
+; set the background color.
+PPU_PALETTE_DISPATCH equ SMB_PALETTE_DISPATCH
 
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 2
@@ -274,6 +276,78 @@ InitPlayfield
             jsr   _SetPalette
 
             rts
+
+; When the NES ROM code tried to write to the PPU palette space, intercept here.
+;
+; Based on the palette data that SMB uses, we remap the NES palette entries
+; based on the AreaType, so most of the PPU writes are ignored.  However,
+; we do update some specific palette entries to support some color cycling effects
+;
+; BG0,0 maps to IIgs Palette index 0    (Background color)
+; BG3,1 maps to IIgs Palette index 1    (Color cycle for blocks)
+; SP0,1 maps to IIgs Palette index 14   (Player primary color; changes with fire flower)
+; SP0,3 maps to IIgs Palette index 15   (Player primary color; changes with fire flower)
+
+SMB_PALETTE_DISPATCH
+        dw   ppu_3F00,ppu_3F01,ppu_3F02,ppu_3F03
+        dw   ppu_3F04,ppu_3F05,ppu_3F06,ppu_3F07
+        dw   ppu_3F08,ppu_3F09,ppu_3F0A,ppu_3F0B
+        dw   ppu_3F0C,SMB_3F0D,ppu_3F0E,ppu_3F0F
+        dw   ppu_3F10,SMB_3F11,ppu_3F12,SMB_3F13
+        dw   ppu_3F14,SMB_3F15,SMB_3F16,SMB_3F17
+        dw   ppu_3F18,ppu_3F19,ppu_3F1A,ppu_3F1B
+        dw   ppu_3F1C,ppu_3F1D,ppu_3F1E,ppu_3F1F
+
+; Tile palette 3, color 1
+SMB_3F0D    ldal PPU_MEM+$3F0D
+            jsr  NES_ColorToIIgs
+            stal $E19E02
+            rts
+
+; Sprite Palette 0, color 1
+SMB_3F11    ldal PPU_MEM+$3F11
+            jsr  NES_ColorToIIgs
+            stal $E19E00+28
+            rts
+
+; Sprite Palette 0, color 3
+SMB_3F13    ldal PPU_MEM+$3F13
+            jsr  NES_ColorToIIgs
+            stal $E19E00+30
+            rts
+
+; Allow the second sprite palette to be set by the ROM in world *-4 because it switches to the bowser
+; palette when player reaches the end of the level.  Mapped to IIgs palette indices 8, 9, 10
+CASTLE_AREA_TYPE equ 3
+SMB_3F15
+            lda  LastAreaType
+            cmp  #CASTLE_AREA_TYPE
+            bne  :no_change
+
+            ldal PPU_MEM+$3F15
+            jsr  NES_ColorToIIgs
+            stal $E19E00+{8*2}
+:no_change  rts
+
+SMB_3F16
+            lda  LastAreaType
+            cmp  #CASTLE_AREA_TYPE
+            bne  :no_change
+
+            ldal PPU_MEM+$3F16
+            jsr  NES_ColorToIIgs
+            stal $E19E00+{9*2}
+:no_change  rts
+
+SMB_3F17
+            lda  LastAreaType
+            cmp  #CASTLE_AREA_TYPE
+            bne  :no_change
+
+            ldal PPU_MEM+$3F17
+            jsr  NES_ColorToIIgs
+            stal $E19E00+{10*2}
+:no_change  rts
 
 ; Check the AreaType and see if the palette needs to be changed. We do this after the screen is blitted
 ; so the palette does not get changed too early while old pixels are still on the screen.
@@ -636,7 +710,6 @@ CopyStatusToScreen
 
             put   ../../misc/App.Msg.s
             put   ../../misc/font.s
-;            put   ../../palette.s
             put   ../../ppu/ppu.s
 
             ds    \,$00                      ; pad to the next page boundary

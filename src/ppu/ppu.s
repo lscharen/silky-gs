@@ -1115,62 +1115,33 @@ PPUDATA_WRITE ENT
 
         mx   %00
 
-; Do some extra work to keep palette data in sync
+; Do some extra work to keep palette data in sync. Because the IIgs palette is not
+; large enough to accomodate all of the possible on-screen colors (16 colors vs 25 colors),
+; palette handling is always a per-game issue.
 ;
-; Based on the palette data that SMB uses, we remap the NES palette entries
-; based on the AreaType, so most of the PPU writes are ignored.  However,
-; we do update some specific palette entries to support some color cycling effects
-;
-; BG0,0 maps to IIgs Palette index 0    (Background color)
-; BG3,1 maps to IIgs Palette index 1    (Color cycle for blocks)
-; SP0,1 maps to IIgs Palette index 14   (Player primary color; changes with fire flower)
-; SP0,3 maps to IIgs Palette index 15   (Player primary color; changes with fire flower)
+; The only default behavior is writing the background color, which is always mapped to
+; palette index 0 for convenience.
+
         mx   %00
 :extra
         txa
         and  #$001F
         asl
         tax
-        jmp  (palTbl,x)
+        jsr  (PPU_PALETTE_DISPATCH,x)
+        sep  #$30
+        ply
+        plx
+        pla
+        plb
+        plp
+        rtl
 
-palTbl  dw   ppu_3F00,ppu_3F01,ppu_3F02,ppu_3F03
-        dw   ppu_3F04,ppu_3F05,ppu_3F06,ppu_3F07
-        dw   ppu_3F08,ppu_3F09,ppu_3F0A,ppu_3F0B
-        dw   ppu_3F0C,ppu_3F0D,ppu_3F0E,ppu_3F0F
-        dw   ppu_3F10,ppu_3F11,ppu_3F12,ppu_3F13
-        dw   ppu_3F14,ppu_3F15,ppu_3F16,ppu_3F17
-        dw   ppu_3F18,ppu_3F19,ppu_3F1A,ppu_3F1B
-        dw   ppu_3F1C,ppu_3F1D,ppu_3F1E,ppu_3F1F
-
+        mx   %00
 ; Background color
-ppu_3F00
-        ldal PPU_MEM+$3F00
-        ldx  #0
-        brl  extra_out
-
-; Mirror for background color
-ppu_3F10
-        ldal PPU_MEM+$3F10
-        ldx  #0
-        brl  extra_out
-
-
-; Tile palette 3, color 1
-ppu_3F0D
-        ldal PPU_MEM+$3F0D
-        ldx  #2
-        brl  extra_out
-
-; Sprite Palette 0, color 1
-ppu_3F11
-        ldal PPU_MEM+$3F11
-        ldx  #28
-        brl  extra_out
-
-ppu_3F13
-        ldal PPU_MEM+$3F13
-        ldx  #30
-        brl  extra_out
+ppu_3F00  ldal PPU_MEM+$3F00
+          stal $E19E00
+          rts
 
 ppu_3F01
 ppu_3F02
@@ -1187,41 +1158,22 @@ ppu_3F0A
 ppu_3F0B
 
 ppu_3F0C
-
+ppu_3F0D
 ppu_3F0E
-ppu_3F0F
+ppu_3F0F  rts
 
+ppu_3F10  ldal PPU_MEM+$3F10
+          jsr  NES_ColorToIIgs
+          stal $E19E00
+          rts
+ppu_3F11
 ppu_3F12
+ppu_3F13
 
 ppu_3F14
-
-; Allow the second sprite palette to be set by the ROM in world 4 because it switches to the bowser
-; palette when player reaches the end of the level.  Mapped to IIgs palette indices 8, 9, 10
-CASTLE_AREA_TYPE equ 3
 ppu_3F15
-        lda  LastAreaType
-        cmp  #CASTLE_AREA_TYPE
-        bne  no_pal
-
-        ldal PPU_MEM+$3F15
-        ldx  #8*2
-        brl  extra_out
 ppu_3F16
-        lda  LastAreaType
-        cmp  #CASTLE_AREA_TYPE
-        bne  no_pal
-
-        ldal PPU_MEM+$3F16
-        ldx  #9*2
-        brl  extra_out
 ppu_3F17
-        lda  LastAreaType
-        cmp  #CASTLE_AREA_TYPE
-        bne  no_pal
-
-        ldal PPU_MEM+$3F17
-        ldx  #10*2
-        brl  extra_out
 
 ppu_3F18
 ppu_3F19
@@ -1231,28 +1183,9 @@ ppu_3F1B
 ppu_3F1C
 ppu_3F1D
 ppu_3F1E
-ppu_3F1F
-        brl  no_pal
-; Exit code to set a IIgs palette entry from the PPU memory
-;
-; A = NES palette value
-; X = IIgs Palette index
-extra_out
-        and  #$00FF
-        asl
-        tay
-        lda  nesPalette,y
-        stal $E19E00,x
+ppu_3F1F rts
 
-no_pal
-        sep  #$30
-        ply
-        plx
-        pla
-        plb
-        plp
-        rtl
-
+        mx   %11
 * ; Trigger a copy from a page of memory to OAM.  Since this is a DMA operation, we can cheat a little and do a 16-bit copy
 PPUDMA_WRITE ENT
         DO DIRECT_OAM_READ

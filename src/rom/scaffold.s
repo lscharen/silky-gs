@@ -286,7 +286,7 @@ NES_RenderFrame
             jsr   PPUFlushQueues
 
 ; Now that the PEA field is in sync with the PPU Nametable data, we can setup the current frame's sprites.  No
-; sprites are actually drawn here, but the PPU OAM memory if scanned and copied into a more efficient internal
+; sprites are actually drawn here, but the PPU OAM memory is scanned and copied into a more efficient internal
 ; representation.
 
             jsr   drawOAMSprites

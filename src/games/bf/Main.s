@@ -76,7 +76,6 @@ PPU_SPR_TILE_ADDR equ #$0000
 ;
 ; 0 = Reset code drops into an infinite loop
 ; 1 = Reset code is the game code
-
 ROM_DRIVER_MODE   equ 1
 
 ; Flag whether the backend should use the OAMDMA to get the sprite information,
@@ -84,18 +83,20 @@ ROM_DRIVER_MODE   equ 1
 ;
 ; 0  = use OAM DMA
 ; >0 = read $100 bytes directly from NES RAM at this address (typically $200)
-
 DIRECT_OAM_READ   equ $200
 
 ; Flag whether to ignore Sprite 0.  Somce games use this sprite only for the 
 ; special sprite 0 collision behavior, which is not supported in this runtime
-
 ALLOW_SPRITE_0    equ 1   ; Sprite 0 is the lightning spark
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-
 NO_INTERRUPTS     equ 0
+
+; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
+; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
+; set the background color.
+PPU_PALETTE_DISPATCH equ BF_PALETTE_DISPATCH
 
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 3 
@@ -292,6 +293,18 @@ InitPlayfield
             jsr   _SetPalette
 
             rts
+
+
+; When the NES ROM code tried to write to the PPU palette space, intercept here.
+BF_PALETTE_DISPATCH
+        dw   ppu_3F00,ppu_3F01,ppu_3F02,ppu_3F03
+        dw   ppu_3F04,ppu_3F05,ppu_3F06,ppu_3F07
+        dw   ppu_3F08,ppu_3F09,ppu_3F0A,ppu_3F0B
+        dw   ppu_3F0C,ppu_3F0D,ppu_3F0E,ppu_3F0F
+        dw   ppu_3F10,ppu_3F11,ppu_3F12,ppu_3F13
+        dw   ppu_3F14,ppu_3F15,ppu_3F16,ppu_3F17
+        dw   ppu_3F18,ppu_3F19,ppu_3F1A,ppu_3F1B
+        dw   ppu_3F1C,ppu_3F1D,ppu_3F1E,ppu_3F1F
 
 ; Make the screen appear
 nesTopOffset    ds 2
