@@ -307,7 +307,7 @@ BF_3F10 ldal PPU_MEM+$3F10
 ; Tile palette 1, color 1
 BF_3F01 ldal PPU_MEM+$3F01
         jsr  NES_ColorToIIgs
-        stal $E19E02
+;        stal $E19E02
         stal $E19E22
         stal $E19E42
         rts
@@ -315,7 +315,7 @@ BF_3F01 ldal PPU_MEM+$3F01
 ; Tile palette 1, color 2
 BF_3F02 ldal PPU_MEM+$3F02
         jsr  NES_ColorToIIgs
-        stal $E19E04
+;        stal $E19E04
         stal $E19E24
         stal $E19E44
         rts
@@ -323,7 +323,7 @@ BF_3F02 ldal PPU_MEM+$3F02
 ; Tile palette 1, color 3
 BF_3F03 ldal PPU_MEM+$3F03
         jsr  NES_ColorToIIgs
-        stal $E19E06
+;        stal $E19E06
         stal $E19E26
         stal $E19E46
         rts
@@ -333,18 +333,21 @@ BF_3F03 ldal PPU_MEM+$3F03
 BF_3F05 ldal PPU_MEM+$3F05
         jsr  NES_ColorToIIgs
         stal $E19E08
+        stal $E19E02
         rts
 
 ; Tile palette 2, color 2
 BF_3F06 ldal PPU_MEM+$3F06
         jsr  NES_ColorToIIgs
         stal $E19E0A
+        stal $E19E04
         rts
 
 ; Tile palette 2, color 3
 BF_3F07 ldal PPU_MEM+$3F07
         jsr  NES_ColorToIIgs
         stal $E19E0C
+        stal $E19E06
         rts
 
 
@@ -553,7 +556,7 @@ SetDefaultPalette
 :scb1       stal  $E19D00,x
             inx
             inx
-            cpx   #8
+            cpx   #16
             bcc   :scb1
 
 
