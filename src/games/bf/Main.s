@@ -37,28 +37,9 @@ PRE_RENDER   mac
 ;
              <<<
 
-; For this ROM, we check the NES RAM after each rendered frame to see if the
-; mapped palette needs to be updated
 POST_RENDER  mac
-;            ldal  $0100c8               ; ROM zero page, $00C8 = Phase Type (00 = Regular, 01 = Bonus)
-;            and   #$00FF
-;            bne   bonus
-
-;            ldal  $01003c               ; $003B = Current Phase
-;            and   #$000C	            ;  | Select Palette based
-;            lsr
-;            lsr
-;            inc                         ; +1 because palette index 0 is the title screen
-;            bra   apply_pal
-;bonus
-;            lda   #0
-;apply_pal
-;            cmp   LastAreaType
-;            beq   no_area_change
-;            sta   LastAreaType
-;            jsr   SetPalette
-;no_area_change
-            <<<
+;
+             <<<
 
 ; Put in additional conditions to skip sprites when scanning the OAM table to decide what to
 ; render.  Set the carry flag to keep, clear the carry flag to skip
@@ -123,7 +104,8 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
 ;            jsr   ShowConfig
 
-; Set the palettes and swizzle tables
+; This is set up to let the game define all colors.  We only need to set up a single, static
+; swizzle table
 
             jsr   SetDefaultPalette
 
@@ -297,14 +279,188 @@ InitPlayfield
 
 ; When the NES ROM code tried to write to the PPU palette space, intercept here.
 BF_PALETTE_DISPATCH
-        dw   ppu_3F00,ppu_3F01,ppu_3F02,ppu_3F03
-        dw   ppu_3F04,ppu_3F05,ppu_3F06,ppu_3F07
-        dw   ppu_3F08,ppu_3F09,ppu_3F0A,ppu_3F0B
-        dw   ppu_3F0C,ppu_3F0D,ppu_3F0E,ppu_3F0F
-        dw   ppu_3F10,ppu_3F11,ppu_3F12,ppu_3F13
+        dw   BF_3F00,BF_3F01,BF_3F02,BF_3F03
+        dw   ppu_3F04,BF_3F05,BF_3F06,BF_3F07
+        dw   ppu_3F08,BF_3F09,BF_3F0A,BF_3F0B
+        dw   ppu_3F0C,BF_3F0D,BF_3F0E,BF_3F0F
+
+        dw   BF_3F10,BF_3F11,BF_3F12,BF_3F13
         dw   ppu_3F14,ppu_3F15,ppu_3F16,ppu_3F17
-        dw   ppu_3F18,ppu_3F19,ppu_3F1A,ppu_3F1B
-        dw   ppu_3F1C,ppu_3F1D,ppu_3F1E,ppu_3F1F
+        dw   ppu_3F18,BF_3F19,BF_3F1A,BF_3F1B
+        dw   ppu_3F1C,BF_3F1D,BF_3F1E,BF_3F1F
+
+; Background color
+BF_3F00 ldal PPU_MEM+$3F00
+        jsr  NES_ColorToIIgs
+        stal $E19E00
+        stal $E19E20
+        stal $E19E40
+        rts
+
+BF_3F10 ldal PPU_MEM+$3F10
+        jsr  NES_ColorToIIgs
+        stal $E19E00
+        stal $E19E20
+        stal $E19E40
+        rts
+
+; Tile palette 1, color 1
+BF_3F01 ldal PPU_MEM+$3F01
+        jsr  NES_ColorToIIgs
+        stal $E19E02
+        stal $E19E22
+        stal $E19E42
+        rts
+
+; Tile palette 1, color 2
+BF_3F02 ldal PPU_MEM+$3F02
+        jsr  NES_ColorToIIgs
+        stal $E19E04
+        stal $E19E24
+        stal $E19E44
+        rts
+
+; Tile palette 1, color 3
+BF_3F03 ldal PPU_MEM+$3F03
+        jsr  NES_ColorToIIgs
+        stal $E19E06
+        stal $E19E26
+        stal $E19E46
+        rts
+
+
+; Tile palette 2, color 1
+BF_3F05 ldal PPU_MEM+$3F05
+        jsr  NES_ColorToIIgs
+        stal $E19E08
+        rts
+
+; Tile palette 2, color 2
+BF_3F06 ldal PPU_MEM+$3F06
+        jsr  NES_ColorToIIgs
+        stal $E19E0A
+        rts
+
+; Tile palette 2, color 3
+BF_3F07 ldal PPU_MEM+$3F07
+        jsr  NES_ColorToIIgs
+        stal $E19E0C
+        rts
+
+
+; Tile palette 3, color 1
+BF_3F09 ldal PPU_MEM+$3F09
+        jsr  NES_ColorToIIgs
+        stal $E19E28
+        rts
+
+; Tile palette 3, color 2
+BF_3F0A ldal PPU_MEM+$3F0A
+        jsr  NES_ColorToIIgs
+        stal $E19E2A
+        rts
+
+; Tile palette 3, color 3
+BF_3F0B ldal PPU_MEM+$3F0B
+        jsr  NES_ColorToIIgs
+        stal $E19E2C
+        rts
+
+
+; Tile palette 4, color 1
+BF_3F0D ldal PPU_MEM+$3F0D
+        jsr  NES_ColorToIIgs
+        stal $E19E48
+        rts
+
+; Tile palette 4, color 2
+BF_3F0E ldal PPU_MEM+$3F0E
+        jsr  NES_ColorToIIgs
+        stal $E19E4A
+        rts
+
+; Tile palette 4, color 3
+BF_3F0F ldal PPU_MEM+$3F0F
+        jsr  NES_ColorToIIgs
+        stal $E19E4C
+        rts
+
+
+; Sprite palette 1, color 1
+BF_3F11 ldal PPU_MEM+$3F11
+        jsr  NES_ColorToIIgs
+        stal $E19E0E
+        stal $E19E2E
+        stal $E19E4E
+        rts
+
+; Sprite palette 1, color 2
+BF_3F12 ldal PPU_MEM+$3F12
+        jsr  NES_ColorToIIgs
+        stal $E19E10
+        stal $E19E30
+        stal $E19E50
+        rts
+
+; Sprite palette 1, color 3
+BF_3F13 ldal PPU_MEM+$3F13
+        jsr  NES_ColorToIIgs
+        stal $E19E12
+        stal $E19E32
+        stal $E19E52
+        rts
+
+; Sprite palette 2 is mapped to palette 1 colors
+
+; Sprite palette 3, color 1
+BF_3F19 ldal PPU_MEM+$3F19
+        jsr  NES_ColorToIIgs
+        stal $E19E14
+        stal $E19E34
+        stal $E19E54
+        rts
+
+; Sprite palette 3, color 2
+BF_3F1A ldal PPU_MEM+$3F1A
+        jsr  NES_ColorToIIgs
+        stal $E19E16
+        stal $E19E36
+        stal $E19E56
+        rts
+
+; Sprite palette 3, color 3
+BF_3F1B ldal PPU_MEM+$3F1B
+        jsr  NES_ColorToIIgs
+        stal $E19E18
+        stal $E19E38
+        stal $E19E58
+        rts
+
+
+; Sprite palette 4, color 1
+BF_3F1D ldal PPU_MEM+$3F1D
+        jsr  NES_ColorToIIgs
+        stal $E19E1A
+        stal $E19E3A
+        stal $E19E5A
+        rts
+
+; Sprite palette 4, color 2
+BF_3F1E ldal PPU_MEM+$3F1E
+        jsr  NES_ColorToIIgs
+        stal $E19E1C
+        stal $E19E3C
+        stal $E19E5C
+        rts
+
+; Sprite palette 4, color 3
+BF_3F1F ldal PPU_MEM+$3F1F
+        jsr  NES_ColorToIIgs
+        stal $E19E1E
+        stal $E19E3E
+        stal $E19E5E
+        rts
+
 
 ; Make the screen appear
 nesTopOffset    ds 2
@@ -381,42 +537,44 @@ RenderScreen
             stz   LastPatchOffset
             rts
 
+; For this game, we utilize multiple palettes to conserve palette colors and reserve colors for the sprites
 SetDefaultPalette
-            lda   #0
-SetPalette
-            and   #$0001              ; only two palettes defined right now...
-            asl
-            tay
-            ldx   AreaPalettes,y      ; First parameter to NESColorToIIgs
-            phx
 
-            asl
-            tay
-            lda   SwizzleTables+2,y
-            ldx   SwizzleTables,y
+; Set the tile/sprite mapping
+
+            lda   SwizzleTables+2
+            ldx   SwizzleTables
             jsr   NES_SetPaletteMap
 
-            plx
-            lda   #TmpPalette
-            jsr   NES_PaletteToIIgs
+; Set the SCB ranges
 
-; Special copy routine; do not touch color index 0 -- we let the NES PPU emulation handle setting that
-
-            ldx   #2
-:loop
-            lda   TmpPalette,x
-            stal  $E19E00,x
+            ldx   #0
+            lda   #$0000
+:scb1       stal  $E19D00,x
             inx
             inx
-            cpx   #2*16
-            bcc   :loop
-:out
+            cpx   #8
+            bcc   :scb1
 
-; Redraw the whole
+
+            lda   #$0202
+:scb2       stal  $E19D00,x
+            inx
+            inx
+            cpx   #192
+            bcc   :scb2
+
+            lda   #$0101
+:scb3       stal  $E19D00,x
+            inx
+            inx
+            cpx   #200
+            bcc   :scb3
+
             rts
 
-AreaPalettes  dw   TitleScreen,LevelHeader1
-SwizzleTables adrl TS_T0,L1_T0
+; AreaPalettes  dw   TitleScreen,LevelHeader1
+SwizzleTables adrl L1_T0
 
 ; Palettes of NES color indexes
 TitleScreen  dw    $0F, $30, $27, $2A, $15, $02, $21, $00, $10, $16, $12, $37, $21, $17, $11, $2B

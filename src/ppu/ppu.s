@@ -64,6 +64,15 @@ PPUStartUp
 
         jsr   _InitPPUTileMapping       ; Set up the lookup tables in the PPU shadow RAM
 
+        lda   #$FFFF                    ; Set initial palette values to out-of-range values
+        ldx   #0
+:loop
+        stal  PPU_MEM+$3F00,x
+        inx
+        inx
+        cpx   #$20
+        bcc   :loop
+
         clc
         rts
 
@@ -1789,7 +1798,7 @@ mul160  mac
         adc  ]1
         <<<
 
-; Define the opcodes directly so we can use then in a macro.  The brancket from long-indirect addressing, e.g. [],
+; Define the opcodes directly so we can use then in a macro.  The bracket from long-indirect addressing, e.g. [],
 ; causes the macro processor to get confused since variables can be written as "]x"
 LDA_IND_LONG_IDX equ $B7
 ORA_IND_LONG_IDX equ $17
