@@ -159,6 +159,10 @@ _InitPPUTileMapping
         stal PPU_MEM+TILE_BANK+$000,x  ; Store it in the PPU bank (Nametable 1)
         stal PPU_MEM+TILE_BANK+$800,x  ; Store it in the PPU bank (Nametable 3)
 
+        lda  :row
+        stal PPU_MEM+TILE_ROW,x
+        stal PPU_MEM+TILE_ROW+$800,x
+
         rep  #$21
         rts
 
@@ -188,16 +192,12 @@ SyncPPUMetatile
         sta   ActivePtr+1
 
         ldal  PPU_MEM+TILE_SHADOW+$00,x
-;        ldal  PPU_MEM,x
         sta   patch1+2
         ldal  PPU_MEM+TILE_SHADOW+$01,x
-;        ldal  PPU_MEM+1,x
         sta   patch2+2
         ldal  PPU_MEM+TILE_SHADOW+$20,x
-;        ldal  PPU_MEM+32,x
         sta   patch3+2
         ldal  PPU_MEM+TILE_SHADOW+$21,x
-;        ldal  PPU_MEM+33,x
         sta   patch4+2
 
         ldal  PPU_MEM+TILE_BANK,x     ; The tiles in the same row will have the same bank
@@ -215,6 +215,7 @@ SyncPPUMetatile
 
         ldal  PPU_MEM+TILE_ADDR_HI+$20,x
         pha
+
         ldal  PPU_MEM+TILE_ADDR_LO+$20,x
         pha                                ; Push the address onto the stack directly instead of going through a 16-bit register
 
@@ -391,6 +392,14 @@ _UpdateShadowTiles
 :nt_head   equ tmp3
 :at_head   equ tmp4
 
+; Clear the tile bitmap
+]n      equ   0
+        lup   15
+        stz   tileBitmap+]n
+]n      =     ]n+2
+        --^
+
+        lda  #$0000                  ; Clear the upper and lower bytes of the accumuator.  Important for things like TAX in mixed 8/16 bit modes.
         sep  #$20
         ldy  nt_queue_tail
         cpy  :nt_head                ; Are there any items on the queue?
@@ -402,6 +411,11 @@ _UpdateShadowTiles
         stal PPU_MEM+TILE_SHADOW,x   ; Update the shadow memory (must happen here so value is valid for metatile update)
         lda  #1
         stal PPU_MEM+TILE_VERSION,x  ; Set a flag to track the render status of all potential tiles
+
+        ldal PPU_MEM+TILE_ROW,x
+        tax                          ; The high byte of A must be zero.  Even though A is 8-bit, the full 16-bit value is copied to X
+        lda  #$FF
+        sta  tileBitmap,x
 
         iny                          ; Go to the next queue entry (wish this could be faster...)
         iny
@@ -454,12 +468,16 @@ _UpdateShadowTiles
 ; PPU bank are only updated as the queues are read.
 ;
 ; To avoid unecessary rendering, the queues are processed in reverse order so that only the most recent
-; PPU writes are acted upon.  A lookup table is marked as each byte is updates so any redundent PPU writes
+; PPU writes are acted upon.  A lookup table is marked as each byte is updated so any redundent PPU writes
 ; can be skipped.
 ;
 ; The Attribute queue is processed first because each attribute change will require between 4 and 16 tiles
 ; to be redrawn and, since the attributes are often changed when tiles are drawn those tiles will likely
 ; appear on the Nametable queue as well and can then be skipped.
+;
+; Finally, as each nametable address is processed, a bitmap is updated to record which lines have updated
+; background tiles.  This is used by the dirty renderer to determine which lines actually need to be drawn
+; on this frame.
 
 PPUFlushQueues
 :nt_head   equ tmp3
@@ -1030,9 +1048,6 @@ is_full
 ; So, we have to defer the drawing of tiles until after the ROM NMI routine is complete and
 ; we are ready to render a new frame.  To help with ordering, the attribute bytes are stored
 ; in a separate queue from the regular tile bytes.
-;ppu_write_log_index dw 0
-;ppu_write_log ds  3*1024
-
 PPUDATA_WRITE ENT
         php
         phb
@@ -1241,6 +1256,7 @@ OAM_COPY      ds 256
 spriteCount   dw 0
 shadowBitmap0 ds 32                ; Bitmap to use when frameCount & 1 == 0
 shadowBitmap1 ds 32                ; Bitmap to use when frameCount & 1 == 1
+tileBitmap    ds 32                ; Bitmap that marks which rows had background tile updates
 
          mx   %00
 scanOAMSprites
@@ -1475,6 +1491,51 @@ offsetMask
         db   $1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F  ; $E0 - $EF
         db   $0F,$0F,$0F,$0F,$0F,$0F,$0F,$0F,$07,$07,$07,$07,$03,$03,$01,$00  ; $F0 - $FF
 
+; Change all of the 1-bits from the MSB to the first one bit to zeros, i.e. 11011000 -> 00011000
+flipLeadingOnes
+        db   $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0A,$0B,$0C,$0D,$0E,$0F
+        db   $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$1A,$1B,$1C,$1D,$1E,$1F
+        db   $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$2A,$2B,$2C,$2D,$2E,$2F
+        db   $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$3A,$3B,$3C,$3D,$3E,$3F
+        db   $40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$4A,$4B,$4C,$4D,$4E,$4F
+        db   $50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$5A,$5B,$5C,$5D,$5E,$5F
+        db   $60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$6A,$6B,$6C,$6D,$6E,$6F
+        db   $70,$71,$72,$73,$74,$75,$76,$77,$78,$79,$7A,$7B,$7C,$7D,$7E,$7F
+
+        db   $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0A,$0B,$0C,$0D,$0E,$0F  ; $80 - $8F
+        db   $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$1A,$1B,$1C,$1D,$1E,$1F  ; $90 - $9F
+        db   $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$2A,$2B,$2C,$2D,$2E,$2F  ; $A0 - $AF
+        db   $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$3A,$3B,$3C,$3D,$3E,$3F  ; $B0 - $BF
+
+        db   $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0A,$0B,$0C,$0D,$0E,$0F  ; $C0 - $CF
+        db   $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$1A,$1B,$1C,$1D,$1E,$1F  ; $D0 - $DF
+
+        db   $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0A,$0B,$0C,$0D,$0E,$0F  ; $E0 - $EF
+        db   $00,$01,$02,$03,$04,$05,$06,$07,$00,$01,$02,$03,$00,$01,$00,$00  ; $F0 - $FF
+
+; Change all of the 0-bits from the MSB to the first zero bit to ones, i.e. 00100111 -> 11100111
+flipLeadingZeros
+        db   $FF,$FF,$FE,$FF,$FC,$FD,$FE,$FF,$F8,$F9,$FA,$FB,$FC,$FD,$FE,$FF  ; $00 - $0F
+        db   $F0,$F1,$F2,$F3,$F4,$F5,$F6,$F7,$F8,$F9,$FA,$FB,$FC,$FD,$FE,$FF  ; $10 - $1F
+
+        db   $E0,$E1,$E2,$E3,$E4,$E5,$E6,$E7,$E8,$E9,$EA,$EB,$EC,$ED,$EE,$EF  ; $20 - $2F
+        db   $F0,$F1,$F2,$F3,$F4,$F5,$F6,$F7,$F8,$F9,$FA,$FB,$FC,$FD,$FE,$FF  ; $30 - $3F
+
+        db   $C0,$C1,$C2,$C3,$C4,$C5,$C6,$C7,$C8,$C9,$CA,$CB,$CC,$CD,$CE,$CF  ; $40 - $4F
+        db   $D0,$D1,$D2,$D3,$D4,$D5,$D6,$D7,$D8,$D9,$DA,$DB,$DC,$DD,$DE,$DF  ; $50 - $5F
+        db   $E0,$E1,$E2,$E3,$E4,$E5,$E6,$E7,$E8,$E9,$EA,$EB,$EC,$ED,$EE,$EF  ; $60 - $6F
+        db   $F0,$F1,$F2,$F3,$F4,$F5,$F6,$F7,$F8,$F9,$FA,$FB,$FC,$FD,$FE,$FF  ; $70 - $7F
+
+        db   $80,$81,$82,$83,$84,$85,$86,$87,$88,$89,$8A,$8B,$8C,$8D,$8E,$8F  ; $80 - $8F
+        db   $90,$91,$92,$93,$94,$95,$96,$97,$98,$99,$9A,$9B,$9C,$9D,$9E,$9F  ; $90 - $9F
+        db   $A0,$A1,$A2,$A3,$A4,$A5,$A6,$A7,$A8,$A9,$AA,$AB,$AC,$AD,$AE,$AF  ; $A0 - $AF
+        db   $B0,$B1,$B2,$B3,$B4,$B5,$B6,$B7,$B8,$B9,$BA,$BB,$BC,$BD,$BE,$BF  ; $B0 - $BF
+        db   $C0,$C1,$C2,$C3,$C4,$C5,$C6,$C7,$C8,$C9,$CA,$CB,$CC,$CD,$CE,$CF  ; $C0 - $CF
+        db   $D0,$D1,$D2,$D3,$D4,$D5,$D6,$D7,$D8,$D9,$DA,$DB,$DC,$DD,$DE,$DF  ; $D0 - $DF
+        db   $E0,$E1,$E2,$E3,$E4,$E5,$E6,$E7,$E8,$E9,$EA,$EB,$EC,$ED,$EE,$EF  ; $E0 - $EF
+        db   $F0,$F1,$F2,$F3,$F4,$F5,$F6,$F7,$F8,$F9,$FA,$FB,$FC,$FD,$FE,$FF  ; $F0 - $FF
+
+
 
 ; Scan the bitmap list and call BltRange on the ranges
         mx   %00
@@ -1572,13 +1633,14 @@ shadowBitmapToList
 
         sep  #$30
 
-        ldy  #y_offset_rows               ; Start at the third row (y_offset = 16) walk the bitmap for 25 bytes (200 lines of height)
+        ldy  #y_offset_rows               ; Start at the top of the physical screen and walk the bitmap for 25 bytes (200 lines of height)
         lda  #0
         sta  shadowListCount              ; zero out the shadow list count
 
 ; This loop is called when we are not tracking a sprite range
 :zero_loop
         lda  (:bitmap),y
+:zero_chk
         beq  :zero_next
         tax
 
@@ -1604,7 +1666,8 @@ shadowBitmapToList
 
         tax
         and  offsetMask,x
-        sta  (:bitmap),y
+        sta  :bitfield
+;        sta  (:bitmap),y
 
         lda  {mul8-y_offset_rows},y
         clc
@@ -1619,7 +1682,9 @@ shadowBitmapToList
 
 ; Loop back to check if there is more sprite data on this byte
 
-        bra  :zero_loop
+        lda  :bitfield
+        bra  :zero_chk
+;        bra  :zero_loop
 
 
 :one_next
@@ -1646,10 +1711,133 @@ shadowBitmapToList
 
         rts
 
+; Variation on shadowBitmapToList that uses a temporary variable for the current byte and does not modify
+; the bitmap list itself
+;
+; X = bitmap address
+; Y = starting byte
+; A = ending byte (exclusive)
+;
+; Scan bytes 2 through 10 at address $1234
+; X = $1234
+; Y = 2
+; A = 11
+
+walk_top     equ tmp3
+walk_bottom  equ tmp4
+walk_curr    equ tmp5
+walk_prev    equ tmp6
+
+; Macro to walk a bitmap and execute a callback function for each range 
+;
+; WALK_BITMAP load;first;last;callback
+;
+; load:     code to get byte of the bitmap array; 32 bytes long (256 bits)
+; first:    byte index to start scanning
+; last:     byte index to stop scanning
+; callback: label of the callback function.  top/bottom indices are in tmp0/tmp1 of direct page
+LOAD_CURRENT mac
+        lda  (walk_curr),y
+        <<<
+
+; (prev | background) & ~current
+;
+; de Morgan: A & ~B = ~(~A | B)
+LOAD_OTHERS mac
+        lda  (walk_prev),y
+        ora  tileBitmap,y
+        eor  #$FF
+        ora  (walk_curr),y
+        eor  #$FF
+        <<<
+
+LOAD_INTERSECTION  mac
+        lda  shadowBitmap0,y
+        and  shadowBitmap1,y
+        <<<
+
+WALK_BITMAP mac
+        stz  walk_top
+        stz  walk_bottom
+
+        php                               ; Save the status flags
+        sep  #$30                         ; Do everything in 8-bit mode
+
+        ldy  #]2
+
+; This loop is called when we are not tracking a range of ones
+zero_loop
+        ]1                                ; Load a new byte from the bitmap (nested macro)
+zero_chk
+        bne  not_zero                     ; If it's not zero, then start processing
+        iny                               ; If it is zero, then move to the next byte
+        cpy  #]3
+        bcc  zero_loop
+
+        plp                               ; Ended while not tracking ones, so exit the function
+        rts
+
+not_zero
+        tax                               ; Keep a copy if the accumulator
+        bpl  starting_zero                ; If the MSB is one, then the top line is aligned
+
+        lda  {mul8-]2},y                  ; Just load the scanline.  The offset value will be zero
+        sta  walk_top
+
+        txa                               ; There are no leading zeros, so just keep the value as-is
+        bra  one_chk
+
+starting_zero
+
+        clc
+        lda  {mul8-]2},y                  ; This is the scanline we're on (offset by the starting byte)
+        adc  offset,x                     ; This is the first line defined by the bit pattern
+        sta  walk_top
+
+        lda  flipLeadingZeros,x           ; Fill the leading zeros with ones before moving to the next phase
+        bra  one_chk                      ; See if we have to end within this byte, e.g. 11110000
+
+; This loop is called when we are tracking a range of ones
+one_loop
+        ]1                                ; if the next byte is all sprite, just continue
+
+one_chk                                   ; Skip the load if coming from a 0->1 transition
+        cmp  #$FF
+        bne  not_ones
+        iny
+        cpy  #]3
+        bcc  one_loop
+
+        lda  #y_height                    ; Hit the end of the list while tracking ones, so call
+        sta  walk_bottom                  ; the action
+        jsr  ]4
+
+        plp
+        rts
+
+; The byte has to look like 1..10...  If the first byte was 0..01..10..., then the zero loop above 
+; will have already filled it to 1..10...
+
+not_ones
+        tax
+
+        clc
+        lda  {mul8-]2},y
+        adc  invOffset,x
+        sta  walk_bottom
+
+        jsr  ]4
+
+; Loop back to check if there are more transitions on this byte
+
+        lda  flipLeadingOnes,x
+        bra  zero_chk
+        <<<
+
 ; Setup all of the sprites from the NES OAM memory.  If possible, we read the OAM information directly
 ; from a game-specific area of NES RAM, rather than supporting the OAMDMA operation, to avoid extra
 ; copying.
-
+        mx  %11
 drawOAMSprites
 
 ; Step 1: Scan the OAM sprite information.  Since we're reading NES RAM, we disable interrupts so that
@@ -1660,6 +1848,109 @@ drawOAMSprites
 ; Step 2: Convert the bitmap to a list of (top, bottom) pairs in order to update the screen
 
         jmp   shadowBitmapToList
+
+; Dirty rendering.  Only draw differences
+
+; Set up specialized methods to walk the bitmaps (called in 8-bit mode)
+        mx   %11
+_drawBackground
+        phx
+        phy
+        php
+        rep  #$30
+        ldx  walk_top
+        ldy  walk_bottom
+        jsr  _BltRangeLite           ; BltRangeLite uses tmp0, tmp1, tmp2
+        plp
+        ply
+        plx
+        rts
+
+        mx   %11
+_exposeScreen
+        phx
+        phy
+        php
+        rep  #$30
+        ldx  walk_top
+        ldy  walk_bottom
+        jsr  _PEISlam               ; PEISlam uses tmp0
+        plp
+        ply
+        plx
+        rts
+
+        mx   %00
+clearPreviousSprites
+        WALK_BITMAP LOAD_INTERSECTION;y_offset_rows;y_height_rows;_drawBackground
+
+exposeCurrentSprites
+        WALK_BITMAP LOAD_CURRENT;y_offset_rows;y_height_rows;_exposeScreen
+
+drawOtherLines
+        WALK_BITMAP LOAD_OTHERS;y_offset_rows;y_height_rows;_drawBackground
+
+;        mx   %00
+;exposeSprites0
+;        WALK_BITMAP LOAD_BITMAP_0;y_offset_rows;y_height_rows;_exposeScreen
+
+;        mx   %00
+;exposeSprites1
+;        WALK_BITMAP LOAD_BITMAP_1;y_offset_rows;y_height_rows;_exposeScreen
+
+; Update the minimal amount of the screen just based on what had changed from the prior
+; frame.  We track three bitmaps of information that identify which lines different
+; components are on.
+;
+; shadowBitmap0 and shadowBitmap1 track the lines that hold sprites from the previous
+; and current frame. tileBitmap marks lines that had a tile updated since the last frame.
+        mx   %00
+drawDirtyScreen
+
+; Put pointers to the "current" and "previous".  This could br optimized by maintaining
+; these pointer in the app direct page and toggling them every time the frame counter is
+; incremented
+
+        lda   frameCount
+        bit   #$0001
+        bne   :odd
+        lda   #shadowBitmap0
+        sta   walk_curr
+        lda   #shadowBitmap1
+        sta   walk_prev
+        bra   :even
+:odd
+        lda   #shadowBitmap0
+        sta   walk_prev
+        lda   #shadowBitmap1
+        sta   walk_curr
+:even
+
+; Step 1: Draw the lines that had sprites on them and need to have sprites drawn
+;         this frame.  This is shadowBitmap0 AND shadowBitmap1.  This is drawn with
+;         shadowing off just to prep the screen.
+
+        jsr   _ShadowOff
+        jsr   clearPreviousSprites
+
+; Step 2: Draw the sprites
+
+        jsr   drawSprites
+        jsr   _ShadowOn
+
+; Step 3: This is different than the non-dirty case.  Because the background is presumed to
+;         not be moving, we are not as constrained to do a single top-to-bottom wipe to minimize
+;         tearing.  So, instead we do two separate passes to "erase" the lines that held preior
+;         sprites, but are not in the current frame, plus the background lines.
+;
+;         The bitmap is (prev | background) & ~current
+
+        jsr   drawOtherLines
+
+; Step 4: This is the PEI Slam of the current sprites.
+
+        jsr   exposeCurrentSprites
+        rts
 
 ; Render the prepared frame date
 drawScreen
@@ -1697,7 +1988,9 @@ oam_loop
 
         lda   OAM_COPY,x              ; Y-coordinate
         and   #$00FF
-        mul160 tmp0
+        asl
+        tay
+        lda   Mul160Tbl,y
         clc
         adc  #$2000-{y_offset*160}+x_offset
         sta  tmp0
@@ -1730,8 +2023,8 @@ oam_loop
         asl
         adc  SwizzlePtr               ; Carry is clear from the asl
         sta  ActivePtr
-        lda  SwizzlePtr+2
-        sta  ActivePtr+2
+;        lda  SwizzlePtr+2
+;        sta  ActivePtr+2
 
 ; Calculate the address of the tile data
 
@@ -1766,37 +2059,6 @@ draw_rtn
 drawProcs
         dw drawTileToScreen,drawTileToScreenP,drawTileToScreenH,drawTileToScreenPH
         dw drawTileToScreenV,drawTileToScreenPV,drawTileToScreenHV,drawTileToScreenPHV
-
-* ; Mapping table to go from the NES y-coordinate to the proper address on-screen.  The map will always put a sprite into
-* ; a legal range, but does not clip -- that must be done prior to looking up the on-screen address
-* nesToShrYTbl ds 512
-
-* ; Pass in A with the first physical line that corresponds to the top of the screen
-* initNesToShrTable
-* :tmp    equ   Tmp0
-*         ldx  #0
-*         ldy  #0
-* :loop
-
-*         iny
-*         inx
-*         inx
-*         cpx  #$200
-*         bcc  :loop
-*         rts
-
-mul160  mac
-        asl
-        asl
-        asl
-        asl
-        asl
-        sta  ]1
-        asl
-        asl
-        clc
-        adc  ]1
-        <<<
 
 ; Define the opcodes directly so we can use then in a macro.  The bracket from long-indirect addressing, e.g. [],
 ; causes the macro processor to get confused since variables can be written as "]x"

@@ -29,12 +29,27 @@ EVT_LOOP_BEGIN mac
 ;
              <<<
 
+; This hook happens immediately after all key presses have been handled by the scaffold and gives
+; user-code a change to implement custom key commands
 EVT_LOOP_END mac
-;
+             cmp  #'d'
+             bne  not_d
+             lda  disableDirtyRendering
+             eor  #1
+             sta  disableDirtyRendering
+not_d
              <<<
 
+; Pre-render check to see if there are any background tiles queued for updates.  If so, we will do
+; a regular rendering.  If not, use dirty rendering.
 PRE_RENDER   mac
-;
+
+             stz  use_dirty
+             lda  at_queue_tail
+             cmp  tmp4                    ; If there are any attribute changes, render the full screen
+             bne  do_full
+             inc  use_dirty
+do_full
              <<<
 
 POST_RENDER  mac
@@ -46,7 +61,8 @@ POST_RENDER  mac
 ;
 ; Input: The accumulator holds the first two OAM bytes (y-position and tile id)
 SCAN_OAM_XTRA_FILTER mac
-            sec
+            eor    #$FC00             ; Is the tile == $FC? This is a blank tile in this ROM
+            cmp    #$0100
             <<<
 
 ; Define which PPU address has the background and sprite tiles
@@ -66,7 +82,7 @@ ROM_DRIVER_MODE   equ 1
 ; >0 = read $100 bytes directly from NES RAM at this address (typically $200)
 DIRECT_OAM_READ   equ $200
 
-; Flag whether to ignore Sprite 0.  Somce games use this sprite only for the 
+; Flag whether to ignore Sprite 0.  Some games use this sprite only for the 
 ; special sprite 0 collision behavior, which is not supported in this runtime
 ALLOW_SPRITE_0    equ 1   ; Sprite 0 is the lightning spark
 
@@ -113,6 +129,8 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
             ldal  OneSecondCounter
             sta   OldOneSec
+            lda   frameCount
+            sta   oldFrameCount
 
 ; Set an internal flag to tell the VBL interrupt handler that it is
 ; ok to start invoking the game logic.  The ROM code has to be run
@@ -159,25 +177,6 @@ Greyscale   dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
 
-drawStats
-            ldx   #0
-            ldy   #$FFFF
-            sec
-            lda  at_queue_head          ; Calculate the number of elements in the queue
-            sbc  at_queue_tail
-            and  #AT_QUEUE_MASK
-            jsr  DrawWord
-
-            ldx   #8*160
-            ldy   #$FFFF
-            sec
-            lda  nt_queue_head          ; Calculate the number of elements in the queue
-            sbc  nt_queue_tail
-            and  #NT_QUEUE_MASK
-            jsr  DrawWord
-
-            rts
-
 TmpPalette  ds    32
 
 ; Program variables
@@ -185,6 +184,9 @@ singleStepMode    dw  0
 LastAreaType      dw  0
 show_vbl_cpu      dw  0
 user_break        dw  0
+use_dirty         dw  0        ; can use dirty rendering for this frame
+oldFrameCount     dw  0
+disableDirtyRendering dw 0
 
 ; Helper to initialize the playfield based on the selected VideoMode
 InitPlayfield
@@ -495,7 +497,6 @@ RenderScreen
 ; Now render the top 16 lines to show the status bar area
 
             clc
-;            lda   #16*2
             lda   #24*2
             sta   tmp1                    ; virt_line_x2
             lda   #16*2
@@ -506,7 +507,6 @@ RenderScreen
 
 ; Next render the remaining lines
 
-;            lda   #32*2
             lda   #40*2
             sta   tmp1                ; virt_line_x2
             lda   ScreenHeight
@@ -520,7 +520,30 @@ RenderScreen
 
 ; Copy the sprites and buffer to the graphics screen
 
+; If the screen has scrolled or background changed do not do a dirty update
+
+            lda   DirtyBits
+            bit   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_REFRESH
+            bne   :full_update
+
+; Otherwise defer to the flag
+
+            lda   disableDirtyRendering
+            bne   :full_update
+            lda   use_dirty
+            beq   :full_update
+            jsr   drawDirtyScreen
+            bra   :done
+
+:full_update
             jsr   drawScreen
+
+; Clear any dirty flags
+
+;            lda   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_REFRESH
+;            trb   DirtyBits
+             stz   DirtyBits
+:done
 
 ; Restore the buffer
 
@@ -536,6 +559,27 @@ RenderScreen
             lda   #40                     ; virt_line
             ldy   nesBottomOffset         ; offset to patch
             jsr   _RestoreBG0OpcodesAltLite
+
+; Optionally show the frames per second
+            ldal  OneSecondCounter
+            cmp   OldOneSec
+            beq   :skip_fps
+
+            sta   OldOneSec
+            ldx   frameCount
+            txa
+            sec
+            sbc   oldFrameCount
+            stx   oldFrameCount
+            ldx   #0
+            ldy   #$FFFF
+            jsr   DrawByte
+:skip_fps
+
+            lda   disableDirtyRendering
+            ldx   #8*160
+            ldy   #$FFFF
+            jsr   DrawByte
 
             stz   LastPatchOffset
             rts

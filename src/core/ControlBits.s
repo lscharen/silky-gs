@@ -5,10 +5,16 @@ EnableBackground
     beq   :turn_off
     lda   #CTRL_BKGND_ENABLE
     tsb   GTEControlBits
+    bne   :done
+    lda   #DIRTY_BIT_BG0_REFRESH     ; If the state of the background enable bit changed, trigger a refresh
+    tsb   DirtyBits
     bra   :done
 :turn_off
     lda   #CTRL_BKGND_ENABLE
     trb   GTEControlBits
+    beq   :done
+    lda   #DIRTY_BIT_BG0_REFRESH     ; If the state of the background enable bit changed, trigger a refresh
+    tsb   DirtyBits
 :done
     rts
 

@@ -180,8 +180,9 @@ PAD_KEY_DOWN           equ   $0400
 ; Rendering Control Bits
 CTRL_SPRITE_ENABLE     equ   $0001
 CTRL_BKGND_ENABLE      equ   $0002
-CTRL_GREYSCALE         equ   $4000           ; Use a fixed greyscale palette. This is not related to the NES greyscale bit
-CTRL_EVEN_RENDER       equ   $8000           ; Only render half the scanlines for speed
+CTRL_DIRTY_RENDER      equ   $2000                  ; Only render lines that changed from the previous frame
+CTRL_GREYSCALE         equ   $4000                  ; Use a fixed greyscale palette. This is not related to the NES greyscale bit
+CTRL_EVEN_RENDER       equ   $8000                  ; Only render half the scanlines for speed
 
 ; Tile constants
 TILE_DAMAGED_BIT       equ   $8000                  ; Mark a tile as damaged (internal only)
@@ -234,6 +235,7 @@ TILE_ADDR_LO equ $5000          ; pre-calculated address (low byte) of the locat
 TILE_ADDR_HI equ $6000          ; pre-calculated address (high byte) of the location of the PEA field tile
 TILE_VERSION equ $7000          ; version count of nametable byte (incremented on each PPUDATA_WRITE)
 TILE_TARGET  equ $8000          ; value of last rendered byte. If TILE_VERSION == TILE_TARGET, then no update
+TILE_ROW     equ $9000          ; pre-calculated row of the PPU address
 
 ; Return codes from the Event Loop harness
 USER_SAYS_QUIT equ 'q'

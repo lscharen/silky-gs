@@ -1,5 +1,12 @@
 ; All of the data tables and structures
 
+; A table of pre-multiplied values of 160
+Mul160Tbl
+]step       equ   0
+            lup   256
+            dw    160*]step
+]step       equ   ]step+1
+            --^
 
 ; The blitter table (BTable) is a double-length table that holds the full 4-byte address of each
 ; line of the blit fields.  We decompose arrays of pointers into separate high and low words so
