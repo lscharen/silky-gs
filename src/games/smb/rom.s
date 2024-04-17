@@ -706,19 +706,32 @@ ROMBase     ENT
 
 ; Define a helper for the ROM InitializeMemory routine to properly deal with the 
 ; direct page and stack being in a different bank
+;
+; Can't overwrite $01/0200 -- this has stack values...
             mx    %11
 GteInitMem
             php
             rep  #$30
-            ldx  #$015E
-GteLoop
+;            ldx  #$015E
+            ldx  #$FE
+:loop
             stz  00,x
             dex
             dex
-            bpl  GteLoop
+            bpl  :loop
+
+            ldx  #$15E
+:loop2
+            stz  00,x
+            dex
+            dex
+            cpx  #$100
+            bcc  :loop2
+
             plp
             rts
 
+            mx    %11
 ; Hooks to call back to the GTE harness for APU register access
 APU_IND_X_REG3_W
 ; x is 0, 4 or 8 -- dispatch to the correct underlying routine
@@ -857,7 +870,6 @@ APU_STATUS_WX
             plx
             rts
 ; Hooks to call back to the GTE harness for PPU memory-mapped accesses
-            mx    %11
 PPU_CTRL_W
             jsl  PPUCTRL_WRITE
             rts
@@ -891,7 +903,6 @@ SPR_DMA_W
 
 ; Enter via a JML. X = target address, Stack and Direct page set up properly. B = ROM bank. Called in 16-bit native mode
             mx    %00
-
 ExtRtn      EXT
 ExtIn       ENT
             stx  :patch+1
@@ -925,7 +936,7 @@ WBootCheck  lda TopScoreDisplay,x        ;check each score digit in the top scor
              cmp #$a5                     ;another location has a specific value
              bne ColdBoot   
              ldy #WarmBootOffset          ;if passed both, load warm boot pointer
-ColdBoot    jsr InitializeMemory         ;clear memory using pointer in Y
+ColdBoot     jsr InitializeMemory         ;clear memory using pointer in Y
              sta SND_DELTA_REG+1          ;reset delta counter load register
              sta OperMode                 ;reset primary mode of operation
              lda #$a5                     ;set warm boot flag
