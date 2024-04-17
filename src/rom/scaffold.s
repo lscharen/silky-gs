@@ -43,6 +43,11 @@ NES_StartUp
 
             stz   LastStatusUdt
 
+            jsr   _GetBorderColor
+            sta   BorderColor
+            lda   #0
+            jsr   _SetBorderColor
+
 ; Used for VOC rendering mode to togglee target of the PEA field render between
 ; bank $01 and $00
 
@@ -111,7 +116,9 @@ NES_ColdBoot
 NES_WarmBoot
             ldal  ROMBase+$FFFC
             tax
+            sei
             jsr   romxfer
+            cli
             rts
 
 ; NES_EvtLoop
@@ -218,6 +225,9 @@ NES_EvtLoop
 
 ; Clean up the runtime
 NES_ShutDown
+            lda   BorderColor              ; Restore the border color
+            jsr   _SetBorderColor
+
             DO    NO_INTERRUPTS
             ELSE
             jsr   APUShutDown
@@ -227,6 +237,7 @@ NES_ShutDown
 
 OneSecondCounter  dw  0
 DPSave            dw  0
+BorderColor       dw  0            ; save/restore border color
 
 ; Built-in user key actions
 
