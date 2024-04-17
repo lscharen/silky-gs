@@ -17,7 +17,7 @@
     "build": "npm run build:smb && npm run build:bf",
     "build:smb": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/games/smb/SMB.s",
     "build:bf": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/games/bf/BF.s",
-    "debug:smb": "cd src/games/smb && %npm_package_config_crossrunner% SuperMarioGS -source SuperMarioGS_S02__Output.txt SuperMarioGS_S03__Output.txt SuperMarioGS_S04__Output.txt SuperMarioGS_S05__Output.txt -map SMB.s -Debug -CompatibilityLayer",
+    "debug:smb": "cd src/games/smb && %npm_package_config_crossrunner% SuperMarioGS -source SuperMarioGS_S02__Output.txt SuperMarioGS_S03__Output.txt SuperMarioGS_S04__Output.txt SuperMarioGS_S05__Output.txt SuperMarioGS_S06__Output.txt -map SMB.s -Debug -CompatibilityLayer",
     "debug:bf": "cd src/games/bf && %npm_package_config_crossrunner% BalloonFgtGS -source BalloonFgtGS_S02__Output.txt BalloonFgtGS_S03__Output.txt BalloonFgtGS_S04__Output.txt BalloonFgtGS_S05__Output.txt BalloonFgtGS_S06__Output.txt -map BF.s -Debug -CompatibilityLayer",
     "build-image": "build-image.bat %npm_package_config_cadius% .\\emu\\Target.2mg /ClassicsGS/"
   },
