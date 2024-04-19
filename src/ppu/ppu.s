@@ -1763,6 +1763,7 @@ WALK_BITMAP mac
         php                               ; Save the status flags
         sep  #$30                         ; Do everything in 8-bit mode
 
+        clc                               ; Guarantee carry clear on entry
         ldy  #]2
 
 ; This loop is called when we are not tracking a range of ones
@@ -1778,7 +1779,8 @@ zero_chk
         rts
 
 not_zero
-        tax                               ; Keep a copy if the accumulator
+        tax                               ; Keep a copy of the accumulator
+not_zero0
         bpl  starting_zero                ; If the MSB is one, then the top line is aligned
 
         lda  {mul8-]2},y                  ; Just load the scanline.  The offset value will be zero
@@ -1789,7 +1791,7 @@ not_zero
 
 starting_zero
 
-        clc
+;        clc
         lda  {mul8-]2},y                  ; This is the scanline we're on (offset by the starting byte)
         adc  offset,x                     ; This is the first line defined by the bit pattern
         sta  walk_top
@@ -1820,8 +1822,23 @@ one_chk                                   ; Skip the load if coming from a 0->1 
 
 not_ones
         tax
+        bmi  starting_one
 
-        clc
+        lda  {mul8-]2},y
+        sta  walk_bottom
+
+        jsr  ]4                ; callback function must return with the carry clear
+
+        txa
+        bne  not_zero0         ; Don't do a useless branch to zero_chk, but inline a bit of that loop
+        iny
+        cpy  #]3
+        bcc  zero_loop
+        plp
+        rts
+
+starting_one
+;        clc                   ; only come here if the value is not equal to $FF, so it must be less, thus carry is always clear
         lda  {mul8-]2},y
         adc  invOffset,x
         sta  walk_bottom
@@ -1831,7 +1848,12 @@ not_ones
 ; Loop back to check if there are more transitions on this byte
 
         lda  flipLeadingOnes,x
-        bra  zero_chk
+        bne  not_zero          ; Don't do a useless branch to zero_chk, but inline a bit of that loop
+        iny
+        cpy  #]3
+        bcc  zero_loop
+        plp
+        rts
         <<<
 
 ; Setup all of the sprites from the NES OAM memory.  If possible, we read the OAM information directly
@@ -1851,7 +1873,8 @@ not_ones
 
 ; Dirty rendering.  Only draw differences
 
-; Set up specialized methods to walk the bitmaps (called in 8-bit mode)
+; Set up specialized methods to walk the bitmaps (called in 8-bit mode), guaranteed to have
+; the carry clear when called, must return with the carry clear as well.
         mx   %11
 _drawBackground
         phx
@@ -1873,6 +1896,7 @@ _exposeScreen
         php
         rep  #$30
         ldx  walk_top
+        tay
         ldy  walk_bottom
         jsr  _PEISlam               ; PEISlam uses tmp0
         plp

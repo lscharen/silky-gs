@@ -98,6 +98,9 @@ PPU_PALETTE_DISPATCH equ BF_PALETTE_DISPATCH
 ; Turn on code that visualizes the CPU time used by the ROM code
 SHOW_ROM_EXECUTION_TIME equ 0
 
+; Turn on some off-screen information
+SHOW_DEBUG_VARS equ 0
+
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 3 
 y_height_rows equ 25
@@ -608,6 +611,7 @@ RenderScreen
 
 
 ; Optionally show the frames per second
+            DO    SHOW_DEBUG_VARS
             ldal  OneSecondCounter
             cmp   OldOneSec
             beq   :skip_fps
@@ -627,6 +631,7 @@ RenderScreen
             ldx   #8*160
             ldy   #$FFFF
             jsr   DrawByte
+            FIN
 
             stz   LastPatchOffset
             rts
