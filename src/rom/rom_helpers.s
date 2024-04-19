@@ -447,24 +447,24 @@ TileBuff    ds    128
 
 ; NES Palette (52 entries)
 nesPalette
-    dw  $0777
-    dw  $004A
-    dw  $001B
-    dw  $0409
-    dw  $0A06
-    dw  $0C02
-    dw  $0C10
-    dw  $0910
-    dw  $0630
-    dw  $0140
-    dw  $0050
+    dw  $0666  ; 0
+    dw  $0038  ; 1
+    dw  $011A  ; 2
+    dw  $040A  ; 3
+    dw  $0608  ; 4
+    dw  $0710  ; 5
+    dw  $0C10  ; 6
+    dw  $0520  ; 7
+    dw  $0330  ; 8
+    dw  $0140  ; 9
+    dw  $0050  ; A
     dw  $0043
     dw  $0046
-    dw  $0000
-    dw  $0111
-    dw  $0111
+    dw  $0000  ; D
+    dw  $0000  ; E
+    dw  $0000  ; F
 
-    dw  $0CCC
+    dw  $0CCC  ; 10
     dw  $007F
     dw  $025F
     dw  $083F
@@ -477,11 +477,11 @@ nesPalette
     dw  $0190
     dw  $0095
     dw  $00AD
-    dw  $0222
-    dw  $0111
-    dw  $0111
+    dw  $0000  ; $1D
+    dw  $0000  ; $1E
+    dw  $0000  ; $1F
 
-    dw  $0FFF
+    dw  $0FFF  ; $20
     dw  $01DF
     dw  $07AF
     dw  $0D8F
@@ -494,11 +494,11 @@ nesPalette
     dw  $03F3
     dw  $01FA
     dw  $00FF
-    dw  $0666
+    dw  $0555  ; $2D
     dw  $0111
     dw  $0111
 
-    dw  $0FFF
+    dw  $0FFF  ; $30
     dw  $0AFF
     dw  $0BEF
     dw  $0DAF
@@ -511,9 +511,9 @@ nesPalette
     dw  $0AEB
     dw  $0AFD
     dw  $09FF
-    dw  $0EEE
-    dw  $0111
-    dw  $0111
+    dw  $0BBB   ; $3D
+    dw  $0000   ; $3E
+    dw  $0000   ; $3F
 
 ; Convert a single NES palette entry to IIgs RGB
 ; A = NES color index
@@ -559,7 +559,12 @@ NES_PaletteToIIgs
 ; A = high word, X = low word
 NES_SetPaletteMap
             sta   SwizzlePtr+2
+            sta   SwizzlePtr2+2
             sta   ActivePtr+2
             stx   SwizzlePtr
             stx   ActivePtr
+            txa
+            clc
+            adc   #$0800            ; Pre-advance to the sprite table
+            sta   SwizzlePtr2
             rts

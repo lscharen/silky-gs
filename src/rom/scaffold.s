@@ -134,6 +134,15 @@ NES_EvtLoop
             DO    NO_INTERRUPTS
             jsr   NES_ReadInput
             jsr   NES_TriggerNMI
+            ELSE
+
+; Wait for a frame to become available.  This almost never waits, unless
+; dirty rendering mode is on and there are no updated to the screen,
+; or the user is running under emulation
+
+:spin       lda  frameReady
+            bne  :spin
+            inc  frameReady
             FIN
 
 ; When this code has control the ROM is not executing, so render the
@@ -300,7 +309,7 @@ NES_RenderFrame
 ; sprites are actually drawn here, but the PPU OAM memory is scanned and copied into a more efficient internal
 ; representation.
 
-            jsr   drawOAMSprites
+;            jsr   drawOAMSprites
 
 ; Finally, render the PEA field to the Super Hires screen.  The performance of the runtime is limited by this
 ; step and it is important to keep the high-level rendering code generalized so that optimizations, like falling
@@ -320,3 +329,6 @@ NES_RenderFrame
 
 ; Tracks the number of times NES_RenderFrame has been called
 frameCount   dw  0
+
+; Cleared when the NMI handler has run.  Used to limit updates to 60fps
+frameReady   dw  0

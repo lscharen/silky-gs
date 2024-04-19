@@ -147,21 +147,23 @@ nmiTask
             ldal  singleStepMode
             bne   :no_nmi
 
-            ldal  show_vbl_cpu
-            beq   :no_show_1
-;            jsr   incborder
-:no_show_1
-            jsr   NES_TriggerNMI
+            DO SHOW_ROM_EXECUTION_TIME
+            lda   #1
+            jsr   _SetBorderColor
+            FIN
 
-            ldal  show_vbl_cpu
-            beq   :no_nmi
-;            jsr   decborder
+            jsr   NES_TriggerNMI
+            stz   frameReady
+
+            DO SHOW_ROM_EXECUTION_TIME
+            lda   #0
+            jsr   _SetBorderColor
+            FIN
 
 :no_nmi
             pld
             plb
             plp
-:skip
             rtl
 
 
@@ -187,9 +189,19 @@ NES_TriggerNMI
             bit   #$80
             beq   :skip
 
+            DO    SHOW_ROM_EXECUTION_TIME
+            lda   #2
+            jsr   _SetBorderColor
+            FIN
+
             ldal  ROMBase+$FFFA         ; NMI Vector
             tax
             jsr   romxfer               ; Execute NMI handler
+
+            DO    SHOW_ROM_EXECUTION_TIME
+            lda   #1
+            jsr   _SetBorderColor
+            FIN
 
             DO    ROM_DRIVER_MODE
             jsr   resume                ; Yield control back to the ROM until it is waiting for the next VBL

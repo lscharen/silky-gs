@@ -80,6 +80,9 @@ NO_INTERRUPTS     equ 0
 ; set the background color.
 PPU_PALETTE_DISPATCH equ SMB_PALETTE_DISPATCH
 
+; Turn on code that visualizes the CPU time used by the ROM code
+SHOW_ROM_EXECUTION_TIME equ 0
+
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 2
 y_height_rows equ 25
@@ -122,9 +125,11 @@ x_offset    equ   16                      ; number of bytes from the left edge
 ;WorldNumber           = $075f
 ;LevelNumber           = $075c
 ;AreaNumber            = $0760
+ContinueWorld         = $07fd
 ;OffScr_WorldNumber    = $0766
 ;OffScr_AreaNumber     = $0767
 ;OffScr_LevelNumber    = $0763
+ContinueArea          = $7E00   ; patches operand
 
 ; We _never_ scroll vertically, so just set it once.  This is to make sure these kinds of optimizations
 ; can be set up in the generic structure
@@ -136,6 +141,14 @@ x_offset    equ   16                      ; number of bytes from the left edge
 
 ; Start up the NES
 :start
+; Hack for testing
+            sep   #$20
+            lda   #3
+            stal  ROMBase+ContinueWorld
+            lda   #1
+            stal  ROMBase+ContinueArea
+            rep   #$20
+
             jsr   NES_EvtLoop
 
             cmp   #USER_SAYS_QUIT
@@ -353,10 +366,9 @@ SMB_3F17
 ; so the palette does not get changed too early while old pixels are still on the screen.
 
 CheckForPaletteChange
-
             ldal  ROMBase+$074E
-            and   #$00FF
-            cmp   LastAreaType
+            and   #$0003                  ; There are four area types
+            cmp   LastAreaType            ;   order is WaterPaletteData, <GroundPaletteData, <UndergroundPaletteData, <CastlePaletteData
             beq   :no_area_change
             sta   LastAreaType
             jsr   SetAreaPalette

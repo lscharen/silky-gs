@@ -56,9 +56,11 @@ OldStartY              equ   42
 
 ; Application variables
 SwizzlePtr             equ   44          ; Pointer to a table of 8 swizzle tables, one per palette
+SwizzlePtr2            equ   52          ; Work pointer to point at the fouth palette of the active swizzle table
 ActivePtr              equ   48          ; Work pointer to point at the active swizzle table
-shadowBitmap           equ   52          ; Provide enough space for the full ppu range (240 lines) + 16 since the y coordinate can be off-screen
-_next                  equ   shadowBitmap+32
+
+;shadowBitmap           equ   52          ; Provide enough space for the full ppu range (240 lines) + 16 since the y coordinate can be off-screen
+;_next                  equ   shadowBitmap+32
 
 RenderCount            equ   102         ; 8-bit value tracking the number of times the PPU queues have been rendered to the PEA field
 LastRead               equ   104

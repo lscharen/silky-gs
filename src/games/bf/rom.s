@@ -820,8 +820,8 @@ lc094_nmi
     tya			;  |
     pha			;  /
 ; PPU harness will read directly from $0200 to get the OAM information
-;    bra  :skip
-    lda #$00	;  \
+    bra  :skip
+;    lda #$00	;  \
     jsr STA_2003	;  | Upload OAM Buffer
     lda #$02	;  | $0200 - $02FF to OAM (via DMA)
     jsr STA_4014	;  /
@@ -3710,7 +3710,8 @@ ld60c
 
 ld60d_updatestarbganim
     lda $4c		;  \ If [$4C] == 0
-    beq ld63a	;  / Then Do Nothing
+;    beq ld63a	;  / Then Do Nothing
+    bra ld63a   ; IIgs -- patch to disable background animation
     dec $4c
     lda $4f		;  \
     clc			;  |
@@ -6716,7 +6717,7 @@ lf465_clearframeflag
 lf469_waitnextframe
 ; IIgs -- take back control here while the ROM busy-waits for the next VBL
 ;    lda $02
-;    beq lf469_waitnextframe     ; $02 is incremente din the NMI interupt handler
+;    beq lf469_waitnextframe     ; $02 is incremented in the NMI interupt handler
     jsl yield
     dec $02
 lf46f

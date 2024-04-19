@@ -95,6 +95,9 @@ NO_INTERRUPTS     equ 0
 ; set the background color.
 PPU_PALETTE_DISPATCH equ BF_PALETTE_DISPATCH
 
+; Turn on code that visualizes the CPU time used by the ROM code
+SHOW_ROM_EXECUTION_TIME equ 0
+
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 3 
 y_height_rows equ 25
@@ -471,29 +474,8 @@ BF_3F1F ldal PPU_MEM+$3F1F
 nesTopOffset    ds 2
 nesBottomOffset ds 2
 
-RenderScreen
-
-; Do the basic setup
-
-            sep   #$20
-            lda   ppuctrl                 ; Bit 0 is the high bit of the X scroll position
-            lsr                           ; put in the carry bit
-            lda   ppuscroll+1             ; load the scroll value
-            ror                           ; put the high bit and divide by 2 for the engine
-            rep   #$20
-            and   #$00FF                  ; make sure nothing is in the high byte
-            jsr   _SetBG0XPos
-
-            lda   ppumask
-            and   ppumask_override
-            and   #NES_PPUMASK_BG
-            jsr   EnableBackground
-
-            lda   ppumask
-            and   ppumask_override
-            and   #NES_PPUMASK_SPR
-            jsr   EnableSprites
-
+; Patch the PEA field based on the current PPU parameters
+_SetupPEAField
 ; Now render the top 16 lines to show the status bar area
 
             clc
@@ -518,34 +500,13 @@ RenderScreen
             jsr   _ApplyBG0XPosAltLite
             sta   nesBottomOffset
 
-; Copy the sprites and buffer to the graphics screen
+            lda   #1
+            sta   peaFieldIsPatched
+            rts
 
-; If the screen has scrolled or background changed do not do a dirty update
-
-            lda   DirtyBits
-            bit   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_REFRESH
-            bne   :full_update
-
-; Otherwise defer to the flag
-
-            lda   disableDirtyRendering
-            bne   :full_update
-            lda   use_dirty
-            beq   :full_update
-            jsr   drawDirtyScreen
-            bra   :done
-
-:full_update
-            jsr   drawScreen
-
-; Clear any dirty flags
-
-;            lda   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_REFRESH
-;            trb   DirtyBits
-             stz   DirtyBits
-:done
-
-; Restore the buffer
+; Restore the patched PEA field to put it back into a clean state
+_ResetPEAField
+            stz   peaFieldIsPatched
 
             lda   #24                     ; virt_line
             ldx   #16                     ; lines_left
@@ -558,7 +519,93 @@ RenderScreen
             tax                           ; lines_left
             lda   #40                     ; virt_line
             ldy   nesBottomOffset         ; offset to patch
-            jsr   _RestoreBG0OpcodesAltLite
+            jmp   _RestoreBG0OpcodesAltLite
+
+; Track if the PEA field is patched or not
+peaFieldIsPatched dw 0
+
+RenderScreen
+
+; Do the basic setup
+
+            sep   #$20
+            lda   ppuctrl                 ; Bit 0 is the high bit of the X scroll position
+            lsr                           ; put in the carry bit
+            lda   ppuscroll+1             ; load the scroll value
+            ror                           ; put the high bit and divide by 2 for the engine
+            rep   #$20
+            and   #$00FF                  ; make sure nothing is in the high byte
+            jsr   _SetBG0XPos
+
+            lda   ppumask
+            and   ppumask_override
+            and   #NES_PPUMASK_BG
+            jsr   EnableBackground
+
+            lda   ppumask
+            and   ppumask_override
+            and   #NES_PPUMASK_SPR
+            jsr   EnableSprites
+
+
+; Determine if this will be a dirty update or not
+
+            lda   DirtyBits
+            bit   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_REFRESH
+            bne   :full_update
+            lda   disableDirtyRendering
+            bne   :full_update
+            lda   use_dirty
+            bne   :dirty_update
+:full_update
+            lda   peaFieldIsPatched
+            beq   :no_restore
+            jsr   _ResetPEAField          ; A full update needs to restore the PEA field before changing the XPos
+:no_restore
+            jsr   _SetupPEAField
+            jsr   drawScreen
+            bra   :complete
+:dirty_update
+            lda   peaFieldIsPatched
+            bne   :no_patch
+            jsr   _SetupPEAField
+:no_patch
+            jsr   drawDirtyScreen
+:complete
+
+; Patch the PEA field give the current frame's parameters
+
+;            jsr   _SetupPEAField
+
+; See if we are doing a dirty update or a full render
+
+;            lda   DirtyBits
+;            bit   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_REFRESH
+;            bne   :full_update
+;            lda   disableDirtyRendering
+;            bne   :full_update
+;            lda   use_dirty
+;            beq   :full_update
+
+;            jsr   drawDirtyScreen
+;            bra   :complete
+
+;:full_update
+;            jsr   drawScreen
+
+;:complete
+
+; Clear any dirty flags
+
+;            lda   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_REFRESH
+;            trb   DirtyBits
+             stz   DirtyBits
+;:done
+
+; Restore the PEA field
+
+;            jsr   _ResetPEAField
+
 
 ; Optionally show the frames per second
             ldal  OneSecondCounter

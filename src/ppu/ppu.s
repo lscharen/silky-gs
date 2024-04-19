@@ -1837,8 +1837,8 @@ not_ones
 ; Setup all of the sprites from the NES OAM memory.  If possible, we read the OAM information directly
 ; from a game-specific area of NES RAM, rather than supporting the OAMDMA operation, to avoid extra
 ; copying.
-        mx  %11
-drawOAMSprites
+;        mx  %11
+;drawOAMSprites
 
 ; Step 1: Scan the OAM sprite information.  Since we're reading NES RAM, we disable interrupts so that
 ;         a VBL cannot fire while we sync the data.
@@ -1847,7 +1847,7 @@ drawOAMSprites
 
 ; Step 2: Convert the bitmap to a list of (top, bottom) pairs in order to update the screen
 
-        jmp   shadowBitmapToList
+;        jmp   shadowBitmapToList
 
 ; Dirty rendering.  Only draw differences
 
@@ -1889,14 +1889,6 @@ exposeCurrentSprites
 
 drawOtherLines
         WALK_BITMAP LOAD_OTHERS;y_offset_rows;y_height_rows;_drawBackground
-
-;        mx   %00
-;exposeSprites0
-;        WALK_BITMAP LOAD_BITMAP_0;y_offset_rows;y_height_rows;_exposeScreen
-
-;        mx   %00
-;exposeSprites1
-;        WALK_BITMAP LOAD_BITMAP_1;y_offset_rows;y_height_rows;_exposeScreen
 
 ; Update the minimal amount of the screen just based on what had changed from the prior
 ; frame.  We track three bitmaps of information that identify which lines different
@@ -1955,6 +1947,10 @@ drawDirtyScreen
 ; Render the prepared frame date
 drawScreen
 
+; Step 0: Convert the bitmap into a list since it can be reused in Steps 1 and 3
+
+        jsr   shadowBitmapToList
+
 ; Step 1: Draw the PEA lines that have sprites on them
 
         jsr   _ShadowOff
@@ -1971,72 +1967,91 @@ drawScreen
 
 
 drawSprites
-:tmp    equ   tmp0
+:spriteCount equ tmp4    ; tmp0 - tmp3 are used in the blitters
+:mul160      equ tmp8    ; Setting this to tmp5 causes problems -- need to investigate
 
 ; Run through the copy of the OAM memory and render each sprite to the graphics screen.  Typically,
-; shadowing is disabled during this routing.
+; shadowing is disabled during this routine.
+
+; Put some variables on the direct page so we don't have to change the bank in each iteration
+
+        lda   spriteCount
+        sta   :spriteCount
+        lda   #Mul160Tbl
+        sta   :mul160
+        lda   #^Mul160Tbl
+        sta   :mul160+2
 
         ldx   #0
-        cpx   spriteCount
-        bne   oam_loop
+        cpx   :spriteCount
+        bne   *+3
         rts
+
+; Set up the data bank to point to the tile data
+
+        phb
+        pea   #^tiledata
+        plb
 
 oam_loop
         phx                           ; Save x
 
 ; First, calculate the physical location on the SHR screen at which to draw the sprite
 
-        lda   OAM_COPY,x              ; Y-coordinate
+;        lda   OAM_COPY,x              ; Y-coordinate
+        ldal  OAM_COPY,x
         and   #$00FF
         asl
         tay
-        lda   Mul160Tbl,y
-        clc
+;        lda   Mul160Tbl,y
+        lda  [:mul160],y
+
+;        clc
         adc  #$2000-{y_offset*160}+x_offset
         sta  tmp0
 
-; Convert the x-coordinate.
+; Do some stuff faster in 8-bit mode
 
         sep  #$20
-        lda  _ppuscroll+1
-        and  #$01
-        clc
-        adc  OAM_COPY+3,x             ; X-coordinate (In NES pixels, need to convert to IIgs bytes)
-        and  #$FE                     ; Mask before the shift so that we know a 0 goes into the carry
-        ror
-        rep  #$20
-        and  #$00FF
-
-;        lda  OAM_COPY+3,x
-;        and  #$00FE
-;        lsr
-
-        sta  tmp1
-        adc  tmp0                     ; Add to the base address calculated fom the Y-coordinate
-        tay                           ; This is the SHR address at which to draw the sprite
 
 ; Set the palette pointer for this sprite
 
-        lda  OAM_COPY+1,x             ; Put attribute byte in the high byte
-        and  #$0300
-        ora  #$0400                   ; Select the second set of palettes
+;        lda  OAM_COPY+2,x             ; Put attribute byte in the high byte
+        ldal OAM_COPY+2,x             ; Put attribute byte in the high byte
+        and  #$03
         asl
-        adc  SwizzlePtr               ; Carry is clear from the asl
-        sta  ActivePtr
-;        lda  SwizzlePtr+2
-;        sta  ActivePtr+2
+        adc  SwizzlePtr2+1             ; Carry is clear from the asl
+        sta  ActivePtr+1               ; Select the second set of palettes
+
+; Convert the x-coordinate.
+
+;        lda  _ppuscroll+1
+        ldal _ppuscroll+1
+        and  #$01
+;        clc
+;        adc  OAM_COPY+3,x             ; X-coordinate (In NES pixels, need to convert to IIgs bytes)
+        adcl OAM_COPY+3,x             ; X-coordinate (In NES pixels, need to convert to IIgs bytes)
+        and  #$FE                     ; Mask before the shift so that we know a 0 goes into the carry
+        ror                           ; Rotate to bring the carry into the high bit in case of overflow
+        rep  #$20
+        and  #$00FF
+        adc  tmp0                     ; Add to the base address calculated fom the Y-coordinate
+;        tay                           ; This is the SHR address at which to draw the sprite
+        sta  tmp1
 
 ; Calculate the address of the tile data
 
-        lda  OAM_COPY,x
+;        lda  OAM_COPY,x
+        ldal OAM_COPY,x
         and  #$FF00
-        lsr
+        lsr                           ; Each tile is 128 bytes of data
         sta  tmp0                     ; This is loaded in the draw routines
 
 ; Now, examine the other control bits.  We dispatch differently based on the herizontal flip, vertical
 ; flip and priority bits. when calling the rendering function, Y = screen address, X = tile data address
 
-        lda  OAM_COPY+2,x
+;        lda  OAM_COPY+2,x
+        ldal OAM_COPY+2,x
         and  #$00E0
         lsr
         lsr
@@ -2051,8 +2066,11 @@ draw_rtn
         inx
         inx
         inx
-        cpx   spriteCount
+        cpx   :spriteCount
         bcc   oam_loop
+
+        plb
+        plb
 
         rts
 
@@ -2068,17 +2086,17 @@ ORA_IND_LONG_IDX equ $17
 drawTileToScreenH
 
           lda   tmp0
-          clc
+;          clc              ; There are a series of zero shifts before calling into this routine
           adc   #64
           sta   tmp0
 
 drawTileToScreen
 
-          sty   tmp1        ; screen address
+;          sty   tmp1        ; screen address
 
-          phb
-          pea   #^tiledata
-          plb
+;          phb               ; 3
+;          pea   #^tiledata  ; 5
+;          plb               ; 4
 
 ]line     equ   0
           lup   8
@@ -2102,24 +2120,24 @@ drawTileToScreen
 ]line     equ   ]line+1
           --^
 
-          plb
-          plb
+;          plb               ; 4
+;          plb               ; 4 = 20 cycles per sprite
           jmp   draw_rtn
 
 drawTileToScreenHV
 
           lda   tmp0
-          clc
+;          clc
           adc   #64
           sta   tmp0
 
 drawTileToScreenV
 
-          sty   tmp1        ; screen address
+;          sty   tmp1        ; screen address
 
-          phb
-          pea   #^tiledata
-          plb
+;          phb
+;          pea   #^tiledata
+;          plb
 
 ]line     equ   0
           lup   8
@@ -2143,26 +2161,26 @@ drawTileToScreenV
 ]line     equ   ]line+1
           --^
 
-          plb
-          plb
+;          plb
+;          plb
           jmp   draw_rtn
 
 drawTileToScreenPHV
 drawTileToScreenPH
 
           lda   tmp0
-          clc
+;          clc
           adc   #64
           sta   tmp0
 
 drawTileToScreenPV
 drawTileToScreenP
 
-          sty   tmp1        ; screen address
+;          sty   tmp1        ; screen address
 
-          phb
-          pea   #^tiledata
-          plb
+;          phb
+;          pea   #^tiledata
+;          plb
 
 ]line     equ   0
           lup   8
@@ -2247,8 +2265,8 @@ drawTileToScreenP
 ]line     equ   ]line+1
           --^
 
-          plb
-          plb
+;          plb
+;          plb
           jmp   draw_rtn
 
 incborder
