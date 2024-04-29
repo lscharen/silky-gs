@@ -305,12 +305,6 @@ NES_RenderFrame
 
             jsr   PPUFlushQueues
 
-; Now that the PEA field is in sync with the PPU Nametable data, we can setup the current frame's sprites.  No
-; sprites are actually drawn here, but the PPU OAM memory is scanned and copied into a more efficient internal
-; representation.
-
-;            jsr   drawOAMSprites
-
 ; Finally, render the PEA field to the Super Hires screen.  The performance of the runtime is limited by this
 ; step and it is important to keep the high-level rendering code generalized so that optimizations, like falling
 ; back to a dirty-rectangle mode when the NES PPUSCROLL does not change, will be important to support good performance

@@ -33,6 +33,37 @@ ROM_LoadBackgroundTiles
             cpx  #16*512         ; Have we done the last background tile?
             bcc  :tloop
 
+            DO   BG_TILES_AS_SPRITES
+            ldx  PPU_BG_TILE_ADDR
+            ldy  #$8000
+:tloop2
+            phx
+            phy
+
+            lda  #TileBuff
+            jsr  ROMTileToBitmap ; Convert the tile, no mask and create horizontally flipped versions
+
+            ldy  #0              ; Copy the converted tile data into the tiledata bank
+            plx
+:cploop
+            lda  TileBuff,y
+            stal tiledata,x
+            iny
+            iny
+            inx
+            inx
+            cpy  #128
+            bcc  :cploop
+
+            txy
+            pla
+            clc
+            adc  #16             ; NES tiles are 16 bytes
+            tax
+
+            cpx  #16*512         ; Have we done the last background tile?
+            bcc  :tloop2
+            FIN
             rts
 
 ; ROM_LoadSpriteTiles
@@ -95,6 +126,17 @@ ROM_LoadSpriteTiles
 ; pixel data for the word.  There are 2 swizzle tables, one for tiles and one for sprites
 ; that take care of mapping the 25 possible on-screen colors to a 16-color palette.
 ConvertROMTile3
+            phy                       ; Save y -- this is the compiled address location to use
+            jsr   ROMTileToBitmap
+            ply
+
+; Now we have the NES pixel data in a more linear format that matches the IIgs screen
+
+            lda   #TileBuff
+            ldx   #^TileBuff
+            jmp   CompileTile
+
+ROMTileToBitmap
 :DPtr       equ   tmp1
 :save       equ   tmp2
 
@@ -102,7 +144,6 @@ ConvertROMTile3
 ; to provide alternative vertically and horizontally flipped variants.  Instead,
 ; we leverage this to create optimized, compiled representations of the background tiles
 
-            phy                        ; Save y -- this is the compiled address location to use
             jsr   ROMTileToLookup      ; A = address to write, X = address in CHR ROM
 
 ; The :DPtr is set to point at the data buffer, so now convert the lookup values to data nibbles
@@ -119,7 +160,7 @@ ConvertROMTile3
             lda   (:DPtr),y
             tax
             lda   DLUT2,x             ; Look up the two, 2-bit pixel values for next quad of bits
-            ora   tmp3                ; Move it int othe top nibble since it will decode to the top-byte on the SHR screen
+            ora   tmp3                ; Move it into the top nibble since it will decode to the top-byte on the SHR screen
 
             dey
             asl
@@ -132,14 +173,9 @@ ConvertROMTile3
             iny
             cpy   #32
             bcc   :loop
+
             rep    #$30
-
-; Now we have the NES pixel data in a more linear format that matches the IIgs screen
-
-            ply
-            lda   #TileBuff
-            ldx   #^TileBuff
-            jmp   CompileTile
+            rts
 
 ConvertROMTile2
 :DPtr       equ   tmp1
@@ -549,7 +585,19 @@ NES_PaletteToIIgs
             bcc   :loop
             rts
 
+; Help to take a palette of 16 NES colors and convert them to IIgs
+; colors and set a specific palette on the IIgs SHR screen
+;
+; A = palette number
+; X = NES color palette address
+NES_SetPalette
+            pha
+            lda   #TmpPalette
+            jsr   NES_PaletteToIIgs
 
+            pla
+            ldx   #TmpPalette
+            jmp   _SetPalette
 ; Initialize the swizzle pointer to the set of palette maps.  The pointer must
 ;
 ; 1. Be page-aligned

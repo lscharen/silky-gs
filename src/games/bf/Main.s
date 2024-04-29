@@ -69,6 +69,10 @@ SCAN_OAM_XTRA_FILTER mac
 PPU_BG_TILE_ADDR  equ #$1000
 PPU_SPR_TILE_ADDR equ #$0000
 
+; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
+; in addition to the compiled representation
+BG_TILES_AS_SPRITES equ 1
+
 ; Define what kind of execution harness to use
 ;
 ; 0 = Reset code drops into an infinite loop
@@ -88,7 +92,7 @@ ALLOW_SPRITE_0    equ 1   ; Sprite 0 is the lightning spark
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 0
+NO_INTERRUPTS     equ 1
 
 ; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
@@ -122,12 +126,21 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
             stz   LastAreaType            ; Check if the palettes need to be updates
 
-; Show the configuration screen
-
-;            jsr   ShowConfig
-
 ; This is set up to let the game define all colors.  We only need to set up a single, static
 ; swizzle table
+
+            lda   SwizzleTables+2
+            ldx   SwizzleTables
+            jsr   NES_SetPaletteMap
+
+; Show the configuration screen
+
+            ldx   #CONFIG_BLK
+            jsr   ShowConfig
+            bcc   *+5
+            jmp   quit
+
+; Initialize the graphics for the main game mode
 
             jsr   SetDefaultPalette
 
@@ -160,16 +173,16 @@ x_offset      equ 16                      ; number of bytes from the left edge
             jsr   NES_EvtLoop
 
             cmp   #USER_SAYS_QUIT
-            beq   :quit
+            beq   quit
 
             cmp   #USER_SAYS_RESET
-            bne   :quit
+            bne   quit
 
             jsr   NES_WarmBoot
             bra   :start
 
 ; The user has existed the runtime
-:quit
+quit
             jsr   NES_ShutDown
 
 ; Exit the application
@@ -275,12 +288,8 @@ InitPlayfield
 ; Set a default palette for the title screen
 
             ldx   #TitleScreen
-            lda   #TmpPalette
-            jsr   NES_PaletteToIIgs
-
             lda   #0
-            ldx   #TmpPalette
-            jsr   _SetPalette
+            jsr   NES_SetPalette
 
             rts
 
@@ -672,10 +681,11 @@ SetDefaultPalette
 
             rts
 
-; AreaPalettes  dw   TitleScreen,LevelHeader1
+
 SwizzleTables adrl L1_T0
 
 ; Palettes of NES color indexes
+ConfScrnPal  dw    $0F, $30, $27, $2A, $15, $02, $21, $00, $10, $16, $12, $37, $21, $17, $11, $2B
 TitleScreen  dw    $0F, $30, $27, $2A, $15, $02, $21, $00, $10, $16, $12, $37, $21, $17, $11, $2B
 LevelHeader1 dw    $0F, $2A, $09, $07, $30, $27, $16, $11, $21, $00, $10, $12, $37, $17, $35, $2B
 
@@ -687,22 +697,252 @@ ClearScreen
             bpl  :loop
             rts
 
+; Configuration screen and variables
+;
+; The configuration screen has two sections -- the menu and the controls.  Each
+; menu defines a set of controls and each control references a memory location
+; that stores a configuration value.
+;
+; The focus can either be on the menu column or the control column and code tracks
+; the active menu and the active control.  Navigation is primarily controlled
+; by prev/next pointers on the menu and control itmes that direct which control to
+; select in response to the user's inputs.
+
+config_audio_quality   ds  2  ; good / better / best audio quality (60Hz, 120Hz, 240Hz audio interrupts)
+config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
+config_video_fastmode  ds  2  ; use the "skip line" rendering mode
+config_video_notwinkle ds  2  ; disable the background star animation
+config_input_type      dw  0  ; keyboard / joystick / snes max
+config_input_key_left  dw  LEFT_ARROW
+config_input_key_right dw  RIGHT_ARROW
+config_input_key_up    dw  UP_ARROW
+config_input_key_down  dw  DOWN_ARROW
+
+CONFIG_PALETTE  equ 0
+TILE_TOP_LEFT   equ $1E0
+TILE_TOP_RIGHT  equ $1E2
+TILE_HORIZONTAL equ $1E1
+TILE_VERTICAL   equ $1E1
+TILE_ZERO       equ $100
+TILE_A          equ $10A
+TILE_SPACE      equ $124
+TILE_CURSOR     equ $0A0  ; $10A
+
+; Control types
+RADIO           equ 1     ; radio (mutually exclusive options)
+CHKBOX          equ 2     ; checkbox (boolean)
+KEYMAP          equ 3     ; keymap (reads input character; tab to enter/exit)
+
+CHKBOX_YES          str 'YES'
+CHKBOX_NO           str ' NO'
+CHKBOX_ON           str ' ON'
+CHKBOX_OFF          str 'OFF'
+
+AUDIO_TITLE_STR     str 'AUDIO'
+AUDIO_QUALITY_STR   str 'QUALITY'
+AUDIO_QUALITY_OPT_1 str ' 60 HZ'
+AUDIO_QUALITY_OPT_2 str '120 HZ'
+AUDIO_QUALITY_OPT_3 str '240 HZ'
+
+VIDEO_TITLE_STR      str 'VIDEO'
+VIDEO_FASTMODE_STR   str 'FAST BLIT'
+VIDEO_STATUS_BAR_STR str 'STATUS BAR'
+
+INPUT_TITLE_STR     str 'INPUT'
+INPUT_TYPE_STR      str 'TYPE'
+INPUT_TYPE_OPT_1    str 'KEYBOARD'
+INPUT_TYPE_OPT_2    str 'JOYSTICK'
+INPUT_TYPE_OPT_3    str 'SNES MAX'
+INPUT_LEFT_MAP_STR  str 'LEFT'
+INPUT_RIGHT_MAP_STR str 'RIGHT'
+INPUT_UP_MAP_STR    str 'UP'
+INPUT_DOWN_MAP_STR  str 'DOWN'
+
+GAME_TITLE_STR      str 'GAME'
+GAME_NO_ANIM_STR    str 'STAR ANIMATION'
+
+; Control offsets from their base address
+MENU_TITLE      equ  0 
+MENU_PREV       equ  2
+MENU_NEXT       equ  4
+MENU_CTRL_COUNT equ  6
+MENU_CTRL_LIST  equ  8
+
+CTRL_TYPE       equ  0
+CTRL_PREV       equ  2
+CTRL_NEXT       equ  4
+CTRL_POS        equ  6
+CTRL_POS_X      equ  6
+CTRL_POS_Y      equ  8
+CTRL_TITLE      equ  10
+CTRL_VALUE_ADDR equ  12
+CTRL_DATA       equ  14
+
+; Control-specific offsets
+CTRL_RADIO_OPTION_COUNT  equ CTRL_DATA
+CTRL_RADIO_OPTION_VALUE  equ CTRL_DATA+2
+CTRL_RADIO_OPTION_LABEL  equ CTRL_DATA+4
+CTRL_RADIO_OPTION_SIZEOF equ 4
+
+; Units to move text around
+COL_STEP    equ 4
+ROW_STEP    equ {8*160}
+
+; Menu panel area
+MENU_PANEL_ORIGIN equ $2000+x_offset+4+{160*16}
+
+; Config / Control palen area
+CONFIG_PANEL_ORIGIN equ $2000+x_offset+48+{160*8}
+CONFIG_PANEL_WIDTH equ {160-44-x_offset}
+CONFIG_PANEL_HEIGHT equ 144
+
+; Palette select for normal / selected / yes / no test
+TEXT_NORMAL equ 0
+TEXT_SELECTED equ 2
+TEXT_YES equ 2
+TEXT_NO equ 0
+
+; The configuration screen leverages the NES runtime itself
+CONFIG_BLK   db   CONFIG_PALETTE        ; Which background palette to use
+             db   TILE_TOP_LEFT         ; Define the tiles to use for the UI
+             db   TILE_TOP_RIGHT
+             db   TILE_HORIZONTAL
+             db   TILE_VERTICAL
+             db   TILE_ZERO             ; First tile for the 0 - 9 characters
+             db   TILE_A                ; First tile for the alphabet A - Z characters
+             db   TILE_SPACE
+CONFIG_MENU  dw   4                     ; Four screens "Audio", "Video", "Input", "Game"
+             dw   AUDIO_CONFIG
+             dw   VIDEO_CONFIG
+             dw   INPUT_CONFIG
+             dw   GAME_CONFIG
+
+AUDIO_CONFIG dw   AUDIO_TITLE_STR
+             dw   0                     ; previous menu item
+             dw   VIDEO_CONFIG          ; next menu item
+
+             dw   1                     ; One configuration element
+             dw   AUDIO_ITEM_1
+
+AUDIO_ITEM_1 dw   RADIO                 ; A radio button (mutually exclusive) option
+             dw   0                     ; previous control
+             dw   0                     ; next control
+             dw   3,1                   ; X,Y location of control in the config area
+             dw   AUDIO_QUALITY_STR     ; Title
+             dw   config_audio_quality  ; Memory address to write the configuration value
+             dw   3                     ; Three options
+             dw   0                     ; config value
+             dw   AUDIO_QUALITY_OPT_1   ; config label
+             dw   2
+             dw   AUDIO_QUALITY_OPT_2
+             dw   4
+             dw   AUDIO_QUALITY_OPT_3
+
+VIDEO_CONFIG dw   VIDEO_TITLE_STR
+             dw   AUDIO_CONFIG          ; previous menu item
+             dw   INPUT_CONFIG          ; next menu item
+
+             dw   2                     ; Two configuration elements
+             dw   VIDEO_ITEM_1
+             dw   VIDEO_ITEM_2
+
+VIDEO_ITEM_1 dw   CHKBOX                ; Checkbox just forces a 0/1 for False/True
+             dw   0                     ; previous control
+             dw   VIDEO_ITEM_2          ; next control
+             dw   3,1
+             dw   VIDEO_STATUS_BAR_STR
+             dw   config_video_statusbar
+
+VIDEO_ITEM_2 dw   CHKBOX
+             dw   VIDEO_ITEM_1          ; previous control
+             dw   0                     ; next control
+             dw   3,3
+             dw   VIDEO_FASTMODE_STR
+             dw   config_video_fastmode
+
+INPUT_CONFIG dw   INPUT_TITLE_STR
+             dw   VIDEO_CONFIG          ; previous menu item
+             dw   GAME_CONFIG           ; next menu item
+
+             dw   5
+             dw   INPUT_ITEM_1
+             dw   INPUT_ITEM_2
+             dw   INPUT_ITEM_3
+             dw   INPUT_ITEM_4
+             dw   INPUT_ITEM_5
+
+INPUT_ITEM_1 dw   RADIO
+             dw   0
+             dw   INPUT_ITEM_2
+             dw   3,1
+             dw   INPUT_TYPE_STR
+             dw   config_input_type
+             dw   3
+             dw   0
+             dw   INPUT_TYPE_OPT_1
+             dw   2
+             dw   INPUT_TYPE_OPT_2
+             dw   4
+             dw   INPUT_TYPE_OPT_3
+
+INPUT_ITEM_2 dw   KEYMAP
+             dw   INPUT_ITEM_1
+             dw   INPUT_ITEM_3
+             dw   3,7
+             dw   INPUT_LEFT_MAP_STR
+             dw   config_input_key_left
+
+INPUT_ITEM_3 dw   KEYMAP
+             dw   INPUT_ITEM_2
+             dw   INPUT_ITEM_4
+             dw   3,8
+             dw   INPUT_RIGHT_MAP_STR
+             dw   config_input_key_right
+
+INPUT_ITEM_4 dw   KEYMAP
+             dw   INPUT_ITEM_3
+             dw   INPUT_ITEM_5
+             dw   3,9
+             dw   INPUT_UP_MAP_STR
+             dw   config_input_key_up
+
+INPUT_ITEM_5 dw   KEYMAP
+             dw   INPUT_ITEM_4
+             dw   0
+             dw   3,10
+             dw   INPUT_DOWN_MAP_STR
+             dw   config_input_key_down
+
+
+GAME_CONFIG  dw   GAME_TITLE_STR
+             dw   INPUT_CONFIG          ; previous menu item
+             dw   0                     ; next menu item
+
+             dw   1
+             dw   GAME_ITEM_1
+
+GAME_ITEM_1  dw   CHKBOX
+             dw   0
+             dw   0
+             dw   3,1
+             dw   GAME_NO_ANIM_STR
+             dw   config_video_notwinkle
+
 ; Draw PPU tiles to the screen for a UI
 ;
 ; 0 - 9 starts at tile 256
 ; A - Z starts at tile 266
 ; mushroom is $1CE = 462
-TILE_ZERO   equ 256
-TILE_A      equ 266
-TILE_SHROOM equ 462
-TILE_BLANK  equ 295
-COL_STEP    equ 4
-ROW_STEP    equ {8*160}
+;TILE_ZERO   equ 256
+;TILE_A      equ 266
+;TILE_SHROOM equ 462
+;TILE_BLANK  equ 295
 _PutTile    mac
-;            pea {]1}+TILE_USER_BIT
-;            pea $2000+{]2*COL_STEP}+{]3*ROW_STEP}
-;            pea ]4
-;            _GTEDrawTileToScreen     ; call NESTileBlitter direction
+            lda  ]1
+            sta  tmp0
+            lda  #$2000+{]2*COL_STEP}+{]3*ROW_STEP}
+            sta  tmp1
+            jsr  drawTileToScreen
             <<<
 _PutStr     mac
             ldx #]1
@@ -710,110 +950,842 @@ _PutStr     mac
             jsr ConfigDrawString
             <<<
 
-ShowConfig
-;            lda #1
-;            jsr SetAreaType
+; Render the configuration sidebar
+_DrawConfigMenu
+:count      equ  tmp14
+:addr       equ  tmp15
 
-            lda #$0000
-            stal $E19E00
+            lda  CONFIG_MENU
+            asl
+            sta  :count
 
-            lda #0
-            jsr ClearScreen
+            ldx  #0
 
-            ldx #0                  ; Config setting index
+            lda  #MENU_PANEL_ORIGIN
+            sta  :addr
+:dcm_loop
+            phx
+
+            lda: CONFIG_MENU+2,x               ; Get the address of the config block for this menu item
+            tax
+
+            lda  :addr
+            clc
+            adc  #4*COL_STEP
+            tay
+
+            lda: MENU_TITLE,x                  ; Load the title pointer
+            tax
+            lda  #0
+            jsr  ConfigDrawString
+
+            lda  :addr
+            sec
+            sbc  #2*ROW_STEP
+            tay
+            jsr  ConfigDrawTopBorder
+
+            lda  :addr
+            sec
+            sbc  #1*ROW_STEP
+            tay
+            jsr  ConfigDrawSideBorder
+
+            lda  :addr
+            clc
+            adc  #4*ROW_STEP
+            sta  :addr
+
+            plx
+            inx
+            inx
+            cpx  :count
+            bcc  :dcm_loop
+            rts
+
+_ClearPanel
+:line       equ  tmp15
+
+            phx
+            phy
+
+            lda  #CONFIG_PANEL_HEIGHT
+            sta  :line
+
+            ldx  #CONFIG_PANEL_ORIGIN
+:oloop
+            ldy  #CONFIG_PANEL_WIDTH
+            lda  #0
+:iloop
+            stal $E10000,x
+            inx
+            inx
+            dey
+            dey
+            bne  :iloop
+
+            txa
+            clc
+            adc  #160-CONFIG_PANEL_WIDTH
+            tax
+
+            dec  :line
+            bne  :oloop
+
+            ply
+            plx
+            rts
+
+_OffsetToAddr
+            lda: CTRL_POS_Y,x      ; Load the y-block
+            and  #$00FF
+            xba           ; addr = (y * 8) * 160 = y * 8 * (32 + 128)
+            pha           ;      = y * 256 + y * 1024
+            asl
+            asl
+            clc
+            adc  1,s
+            sta  1,s
+
+            lda: CTRL_POS_X,x      ; Load the x-block
+            asl
+            asl
+            clc
+            adc  1,s
+            clc
+            adc  #CONFIG_PANEL_ORIGIN
+            sta  1,s
+            ply
+            rts
+
+; Y = screen addr
+; X = control addr
+;
+; +----------------
+; + XX <title>  
+;
+; Where XX is the character hex code
+_DrawKeymap
+:addr       equ  tmp15
+
+; First two words are the offset coordinates of the control
+
+            jsr  _OffsetToAddr
+            sta  :addr
+
+; Move label to right for yes/no label
+
+            clc
+            adc  #COL_STEP*3
+            tay
+
+; Move to the label string
+
+            phx
+            lda: CTRL_TITLE,x
+            tax
+            lda  #TEXT_NORMAL
+            jsr  ConfigDrawString
+            plx
+
+            ldy: CTRL_VALUE_ADDR,x      ; load the variable address
+            ldx: 0,y                    ; load the variable value
+
+            ldy  :addr
+            lda  #TEXT_NORMAL
+            jmp  ConfigDrawByte
+             rts
+
+; Y = screen addr
+; X = control addr
+;
+; +------------
+; | YES <title>
+; |  NO <title>
+_DrawCheckbox
+:addr       equ  tmp15
+:count      equ  tmp14
+
+; First two words are the offset coordinates of the control
+
+            jsr  _OffsetToAddr
+            sta  :addr
+
+; Move label to right for yes/no label
+
+            clc
+            adc  #COL_STEP*5
+            tay
+
+; Move to the label string
+
+            phx
+            lda: CTRL_TITLE,x
+            tax
+            lda  #0
+            jsr  ConfigDrawString
+            plx
+
+            ldy: CTRL_VALUE_ADDR,x      ; load the variable address
+            lda: 0,y                    ; load the variable value
+            beq  :draw_no
+            ldx  #CHKBOX_YES
+            ldy  :addr
+            lda  #TEXT_YES
+            jsr  ConfigDrawString
+            bra  :draw_done
+
+:draw_no
+            ldx  #CHKBOX_NO
+            ldy  :addr
+            lda  #TEXT_NO
+            jsr  ConfigDrawString
+
+:draw_done
+            rts
+
+; X = control addr
+;
+; Wait for the user to press a key
+_ToggleKeymap
+:addr       equ  tmp15
+
+            lda: CTRL_VALUE_ADDR,x
+            sta  :addr   ; address of the value
+
+:waitloop   jsr  _ReadControl
+            bit  #PAD_KEY_DOWN
+            beq  :waitloop
+
+            and  #$007F
+            sta  (:addr)
+
+            rts
+
+; X = control addr
+;
+; Move the checkbox to the next value
+_ToggleCheckbox
+:addr       equ  tmp15
+
+            lda: CTRL_VALUE_ADDR,x
+            sta  :addr   ; address of the value
+
+            lda  (:addr)
+            eor  #$0001
+            sta  (:addr)
+
+            rts
+
+; X = control addr
+;
+; Move the radio to the next value
+_ToggleRadio
+:value      equ  tmp15
+:count      equ  tmp14
+:addr       equ  tmp13
+
+            stx  :addr
+
+            lda: CTRL_VALUE_ADDR,x
+            sta  :value                       ; address of the value
+
+            lda: CTRL_RADIO_OPTION_COUNT,x
+            beq  :done
+
+            sta  :count
+            ldy  #0
+
+:loop
+
+; Find the index of the current value
+
+            lda: CTRL_RADIO_OPTION_VALUE,x
+            cmp  (:value)
+            beq  :found
+
+            txa
+            clc
+            adc  #CTRL_RADIO_OPTION_SIZEOF
+            tax
+
+            iny
+            cpy  :count
+            bcc  :loop
+            rts
+
+:found
+            tya
+            inc
+            cmp  :count
+            bcc  *+5
+            lda  #0
+
+            asl
+            asl                    ; multiply by 4 to get the option item
+            clc
+            adc  :addr
+            tax
+            lda: CTRL_RADIO_OPTION_VALUE,x
+            sta  (:value)          ; Update the value
+
+:done
+            rts
+
+; Y = screen addr
+; X = control addr
+;
+; +------------
+; |<title>
+; |  [] option 1
+; |  [] option 2
+; |  ...
+; |  [] option N
+_DrawRadio
+:addr       equ  tmp15
+:count      equ  tmp14
+:value      equ  tmp13
+:palette    equ  tmp12
+
+; First two words are the offset coordinates of the control
+
+            jsr  _OffsetToAddr
+            sty  :addr
+
+; Move to the label string
+
+            phx
+            lda: CTRL_TITLE,x
+            tax
+            lda  #0
+            jsr  ConfigDrawString
+            plx
+
+            lda  :addr
+            clc
+            adc  #{2*ROW_STEP}+4              ; Indent for the options
+            sta  :addr
+
+            lda: CTRL_VALUE_ADDR,x            ; Get a copy of the config value address
+            sta  :value
+
+            ldy: CTRL_RADIO_OPTION_COUNT,x    ; Load the number of options
+            beq  :done
+
 :loop
             phx
-            cpx #0
-            beq :video
-            cpx #1
-            beq :audio
-            bra :skip_selector
-:video
-            _PutTile TILE_SHROOM;2;2;1
-            _PutTile TILE_BLANK;2;7;1
-            bra :skip_selector
-:audio
-            _PutTile TILE_SHROOM;2;7;1
-            _PutTile TILE_BLANK;2;2;1
-            bra :skip_selector
+            phy
 
-:skip_selector
-            lda #2
-            _PutStr  VideoTitle;4;2
+            stz  :palette
+            lda: CTRL_RADIO_OPTION_VALUE,x    ; See if this options matches the current value
+            cmp  (:value)
+            bne  :no_match
+            lda  #2
+            sta  :palette
+:no_match
 
-            ldx VideoMode
-            lda GoodPalette,x
-            _PutStr  GoodStr;6;4
-            ldx VideoMode
-            lda BetterPalette,x
-            _PutStr  BetterStr;12;4
-            ldx VideoMode
-            lda BestPalette,x
-            _PutStr  BestStr;20;4
+            lda  :addr
+            tay
+            clc
+            adc  #ROW_STEP
+            sta  :addr
+            lda: CTRL_RADIO_OPTION_LABEL,x    ; Load the string address
+            tax
 
-            lda #2
-            _PutStr  AudioTitle;4;7
+            lda  :palette
+            jsr  ConfigDrawString
+            ply
 
-            ldx AudioMode
-            lda GoodPalette,x
-            _PutStr  GoodStr;6;9
-            ldx AudioMode
-            lda BetterPalette,x
-            _PutStr  BetterStr;12;9
-            ldx AudioMode
-            lda BestPalette,x
-            _PutStr  BestStr;20;9
+            pla
+            clc
+            adc  #CTRL_RADIO_OPTION_SIZEOF    ; number of bytes per radio option entry
+            tax
+
+            dey
+            bne  :loop
+
+:done
+            rts
+
+
+; Iterate through the control list of the active control
+; and draw them in the configuration panel
+_DrawControl
+            lda: CTRL_TYPE,x             ; Load the control type
+            cmp  #RADIO
+            bne  :not_radio
+            jmp  _DrawRadio      ; _DrawXXX updates the x-register
+
+:not_radio  cmp  #CHKBOX
+            bne  :not_chkbox
+            jmp  _DrawCheckbox
+
+:not_chkbox cmp  #KEYMAP
+            bne  :not_keymap
+            jmp  _DrawKeymap
+
+:not_keymap
+            rts
+
+; Switchthe value of the active control
+_ToggleActiveControl
+            lda  config_focus
+            bit  #$FF00
+            bne  *+3
+            rts
+
+            ldx  config_active_ctrl
+            bne  *+3                   ; Check that it is set
+            rts
+
+            lda: CTRL_TYPE,x             ; Load the control type
+            cmp  #RADIO
+            bne  :not_radio
+            jmp  _ToggleRadio
+
+:not_radio  cmp  #CHKBOX
+            bne  :not_chkbox
+            jmp  _ToggleCheckbox
+
+:not_chkbox cmp  #KEYMAP
+            bne  :not_keymap
+            jmp  _ToggleKeymap
+
+:not_keymap
+            rts
+
+; Loads the active menu address from config_active_menu
+_DrawActiveMenuControls
+            ldx  config_active_menu
+            bne  *+3                   ; Check that it is set
+            rts
+
+; X = menu item address
+_DrawMenuControls
+            jsr  _ClearPanel
+
+            lda: MENU_CTRL_COUNT,x     ; Get the number of controls
+            beq  :empty
+
+            dec
+            tay                        ; Start counting from the end
+
+:loop       phy
+            phx
+            lda: MENU_CTRL_LIST,x
+            tax
+            jsr  _DrawControl
+            pla
+            clc
+            adc  #2                    ; Each entry is a 2-byte address
+            tax
+            ply
+            dey
+            bpl  :loop
+:empty      rts
+
+; X = address
+; Return A = index of the menu item in the list
+_GetMenuItemIndex
+            phy
+            phx
+            ldy  #0
+:loop
+            lda  CONFIG_MENU+2,y
+            cmp  1,s
+            beq  :found
+            iny
+            iny
+            cpy  #8           ; number of items
+            bcc  :loop
+            ldy  #0           ; pick index zero by default
+
+:found      tya
+            lsr
+
+            plx
+            ply
+            rts
+
+; If the focus is on the config panel, draw the curson next to the
+; active control
+_UpdateControlCursor
+            ldx  config_active_menu
+            bne  *+3                   ; Check that it is set
+            rts
+
+            lda: MENU_CTRL_COUNT,x
+            beq  :no_controls
+            tay
+
+:loop
+            phx
+            phy
+            lda: MENU_CTRL_LIST,x
+            jsr  _DrawControlCursor
+            ply
+            pla
+            clc
+            adc #2
+            tax
+            dey
+            bne  :loop
+
+:no_controls
+            rts
+
+_DrawControlCursor
+:tile       equ  tmp15
+
+            pha
+            ldx  #TILE_SPACE
+            lda  config_focus
+            bit  #$FF00
+            beq  :no_focus
+            lda  1,s
+            cmp  config_active_ctrl
+            bne  :no_focus
+            ldx  #TILE_CURSOR
+:no_focus
+            stx  :tile
+            plx
+
+            jsr  _OffsetToAddr            ; Address of control label
+            tya
+            sec
+            sbc  #2*COL_STEP
+            tay                           ; Move to the left
+
+            lda   :tile
+            ldx   #0
+            jsr   blitTile
+
+            rts
+
+_UpdateMenuCursor
+            lda  CONFIG_MENU+2
+            jsr  _DrawMenuCursor
+            lda  CONFIG_MENU+4
+            jsr  _DrawMenuCursor
+            lda  CONFIG_MENU+6
+            jsr  _DrawMenuCursor
+            lda  CONFIG_MENU+8
+;            jmp  _DrawMenuCursor
+            
+_DrawMenuCursor
+:tile       equ  tmp15
+
+            pha
+            ldx  #TILE_SPACE
+            lda  config_focus
+            bit  #$00FF
+            beq  :no_focus
+            lda  1,s
+            cmp  config_active_menu
+            bne  :no_focus
+            ldx  #TILE_CURSOR
+:no_focus
+            stx  :tile
+            plx
+            jsr  _GetMenuItemIndex
+
+            asl
+            asl
+            asl                           ; x8
+
+            asl
+            asl                           ; x4 spaces between 
+
+            asl                           ; x2 for indexing
+            tax
+            lda   Mul160Tbl,x
+            clc
+            adc   #MENU_PANEL_ORIGIN
+            clc
+            adc   #8
+            tay
+
+            lda   :tile
+            ldx   #0
+            jsr   blitTile
+
+            rts
+
+config_active_menu ds 2    ; currently selected menu item
+config_active_ctrl ds 2    ; currently selected control
+config_focus       ds 2
+
+ShowConfig
+
+; Set the palette for the config screen
+
+            lda  #0
+            jsr  _SetSCBs
+
+            lda  #0
+            jsr  ClearScreen
+
+            lda  #0
+            ldx  #ConfScrnPal
+            jsr  NES_SetPalette
+
+; Set the top menu item active by default
+
+            lda CONFIG_MENU+2
+            sta config_active_menu       ; Intialize the active components
+            lda AUDIO_CONFIG+MENU_CTRL_LIST
+            sta config_active_ctrl
+
+            lda #1
+            sta config_focus             ; focus must always be non-zero
+
+            jsr _DrawConfigMenu
+
+:loop
+            jsr _UpdateMenuCursor
+            jsr _DrawActiveMenuControls
+            jsr _UpdateControlCursor
 
 :waitloop
             jsr  _ReadControl
             bit  #PAD_KEY_DOWN
             beq  :waitloop
 
-            plx
             and  #$007F
             cmp  #UP_ARROW
             beq  :decrement
             cmp  #DOWN_ARROW
             beq  :increment
+            cmp  #RIGHT_ARROW
+            beq  :move_right
+            cmp  #LEFT_ARROW
+            beq  :move_left
             cmp  #' '
             beq  :toggle
+            cmp  #'q'
+            beq  :abort
             cmp  #13
             bne  :waitloop
+            clc
+            rts
+:abort
+            sec
             rts
 :toggle
-            cpx  #0
-            beq  :toggle_video
-            lda  AudioMode
-            inc
-            inc
-            cmp  #6
-            bcc  *+5
-            lda  #0
-            sta  AudioMode
-            brl  :loop
-:toggle_video
-            lda  VideoMode
-            inc
-            inc
-            cmp  #6
-            bcc  *+5
-            lda  #0
-            sta  VideoMode
+            jsr  _ToggleActiveControl
             brl  :loop
 
+; When the uses the arrow keys, we set the focus based on
+; the user's current location.  Menu focus in the low byte
+; and control focus is the high byte
+:move_right
+            lda   #$0100
+            sta   config_focus
+            brl   :loop
+
+:move_left
+            lda   #$0001
+            sta   config_focus
+            brl   :loop
+
 :increment
-            ldx   #1
+            lda   config_focus
+            bit   #$00FF           ; Is focus on the menu?
+            beq   :inc_chk_ctrl_focus
+
+            jsr   :menu_down
             brl   :loop
-:decrement  ldx   #0
+
+:inc_chk_ctrl_focus
+            bit   #$FF00
+            beq   :focus_done
+
+            jsr   :ctrl_down
             brl   :loop
+
+:decrement
+            lda   config_focus
+            bit   #$00FF
+            beq   :dec_chk_ctrl_focus
+
+            jsr   :menu_up
+            brl   :loop
+
+:dec_chk_ctrl_focus
+            bit   #$FF00
+            beq   :focus_done
+
+            jsr   :ctrl_up
+            brl   :loop
+
+:focus_done
+            brl   :loop
+
+:menu_up
+            ldx   config_active_menu
+            lda:  MENU_PREV,x
+            beq   :no_action
+            sta   config_active_menu
+            tax
+            jmp   :set_first_control_active
+
+:ctrl_up
+            ldx   config_active_ctrl
+            beq   :no_action
+            lda:  CTRL_PREV,x
+            beq   :no_action
+            sta   config_active_ctrl
+            rts
+
+:menu_down
+            ldx   config_active_menu
+            lda:  MENU_NEXT,x
+            beq   :no_action
+            sta   config_active_menu
+            tax
+            jmp   :set_first_control_active
+
+:ctrl_down
+            ldx   config_active_ctrl
+            beq   :no_action
+            lda:  CTRL_NEXT,x
+            beq   :no_action
+            sta   config_active_ctrl
+            rts
+
+:no_action
+            rts
+
+:set_first_control_active
+            lda:  MENU_CTRL_COUNT,x
+            beq   :no_items
+            lda:  MENU_CTRL_LIST,x
+            sta   config_active_ctrl
+:no_items
+            rts
 
 GoodPalette   dw    0,2,2
 BetterPalette dw    2,0,2
 BestPalette   dw    2,2,0
 
+; Y = address
+ConfigDrawSideBorder
+            ldx  #3
+:loop
+            phx
+
+            phy
+            lda  #TILE_VERTICAL
+            ldx  #0
+            jsr  blitTile
+            pla
+            clc
+            adc  #40
+            tay
+            phy
+            lda  #TILE_VERTICAL
+            ldx  #0
+            jsr  blitTile
+            pla
+            clc
+            adc  #{8*160}-40
+            tay
+
+            plx
+            dex
+            bne  :loop
+            rts
+
+; Y = address
+ConfigDrawTopBorder
+            phy
+            lda  #TILE_TOP_LEFT
+            ldx  #0
+            jsr  blitTile
+            ply
+
+            ldx  #9
+:hloop
+            tya
+            clc
+            adc #4
+            tay
+
+            phy
+            phx
+            lda  #TILE_HORIZONTAL
+            ldx  #0
+            jsr  blitTile
+            plx
+            ply
+            dex
+            bne  :hloop
+
+            tya
+            clc
+            adc  #4
+            tay
+            lda  #TILE_TOP_RIGHT
+            ldx  #0
+            jsr  blitTile
+            rts
+
+; X = hex value (only lower byte) 
+; Y = address
+; A = palette select (0, 2, 4, or 6)
+ConfigDrawByte
+            stx   tmp0
+            sty   tmp1
+            sta   tmp2
+
+
+            lda   tmp0
+            and   #$00F0
+            lsr
+            lsr
+            lsr
+            lsr
+            cmp   #$000A
+            bcc   :drawDigitHigh
+            sbc   #$000A
+            clc
+            adc   #TILE_A
+            bra   :drawHigh
+:drawDigitHigh
+            clc
+            adc   #TILE_ZERO
+
+:drawHigh
+            ldy  tmp1
+            ldx  tmp2
+            jsr  blitTile
+
+            lda   tmp1
+            clc
+            adc   #4
+            sta   tmp1
+
+
+            lda   tmp0
+            and   #$000F
+            cmp   #$000A
+            bcc   :drawDigitLow
+            sbc   #$000A
+            clc
+            adc   #TILE_A
+            bra   :drawLow
+:drawDigitLow
+            clc
+            adc   #TILE_ZERO
+
+:drawLow
+            ldy  tmp1
+            ldx  tmp2
+            jmp  blitTile
+
 ; X = string pointer
 ; Y = address
-
+; A = palette select (0, 2, 4, or 6)
 ConfigDrawString
             stx   tmp0
             sty   tmp1
@@ -841,11 +1813,9 @@ ConfigDrawString
             clc
             adc   #TILE_ZERO
 :draw
-;            ora   #TILE_USER_BIT
-;            pha
-;            pei   tmp1
-;            pei   tmp2                 ; palette select
-;            _GTEDrawTileToScreen       ; call NESTileBlitter
+            ldy  tmp1
+            ldx  tmp2
+            jsr  blitTile
 
 :skip
             lda   tmp1
@@ -860,15 +1830,6 @@ ConfigDrawString
             dex
             bne   :loop
             rts
-
-VideoTitle  str  'VIDEO QUALITY'
-AudioTitle  str  'AUDIO QUALITY'
-GoodStr     str  'GOOD'
-BetterStr   str  'BETTER'
-BestStr     str  'BEST'
-VOCTitle    str  'ENABLE VOC ACCELERATION'
-YesStr      str  'YES'
-NoStr       str  'NO'
 
             put   ../../misc/App.Msg.s
             put   ../../misc/font.s

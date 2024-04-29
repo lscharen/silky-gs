@@ -237,7 +237,7 @@ patch1  jsl   $000000
 
 patch2  jsl   $000000
 
-        plx                             ; Load up for the next row
+        plx                           ; Load up for the next row
         plb
 
 patch3  jsl   $000000
@@ -249,7 +249,7 @@ patch3  jsl   $000000
 
 patch4  jsl   $000000
 
-        plb                            ; Restore the original bank
+        plb                           ; Restore the original bank
         sep   #$20
 bad_row2
         rts
@@ -1242,6 +1242,52 @@ PPUDMA_WRITE ENT
         rtl
         FIN
 
+; Alternate scanOAMSprites that unrolls the loop, uses exclusion tables and 8-bit operations
+; to improve scanning speed
+
+        mx   %00
+scanOAMSprites2
+
+        ldx    #0
+        ldy    #0                   ; clear all 16-bits
+        sep    #$30                 ; 8-bit registers
+
+; Since it's rare that all 64 sprites are active, the code is
+; slightly biased for fast skipping.  Most NES games place sprites
+; that are not in use below the screen, so we try to do an early
+; out by testing the vertical range first.  Also, the IIgs screen
+; is shorted than the NES screen, so even more sprites are rejected
+; quickly.
+
+        ldx    PPU_OAM+1            ; check for tile exclusions = 10 cycles
+        lda    y_exclude,x
+        bne    next
+
+        ldy    PPU_OAM              ; check for y exclusions = 10 cycles
+        lda    tile_exclude,y
+        bne    next
+
+        rep    #$20                 ; = 18 cycles
+        lda    PPU_OAM+2            ; push the OAM info in reverse order
+        pha
+        phx
+        phy
+
+        ldx    y2idx,y              ; load the byte index (0 - 30) for this coordinate = 32
+        tya                         ; Use as a lookup
+        asl
+        tay                         ; this polluted the high byte of Y, but has no effect
+        lda    y2bits,y             ; repeats every 8 words, so don't need a 16-bit index reg
+        ora    shadowBitmap0,x      ; set the eight bits in the bitfield value across two bytes
+        sta    shadowBitmap0,x
+
+        sep    #$20                 ; about 70 cycles per sprite
+next
+        rts
+y_exclude
+tile_exclude
+
+
 ; Scan the OAM copy and start to build up the data structures for rendering the screen.
 ;
 ; The first step is building a bitmap of lines with sprites, which are used to segment
@@ -1296,9 +1342,11 @@ scanOAMSprites
          bcc    :skip
 
          and    #$00FF              ; Isolate the Y-coordinate
-         cmp    #{max_nes_y-8}+1    ; Skip anything that is beyond this line
+;         cmp    #{max_nes_y-8}+1    ; Skip anything that is beyond this line
+         cmp    #max_nes_y
          bcs    :skip
-         cmp    #y_offset
+;         cmp    #y_offset
+         cmp    #y_offset-7
          bcc    :skip
 
          phx
@@ -1564,7 +1612,9 @@ drawShadowList
 :exit
         rts
 
-* ; Altername between BltRange and PEISlam to expose the screen
+; Altername between BltRange and PEISlam to expose the screen
+;
+; Bug in BF after running for a long period of time -- hits BRK $66
 exposeShadowList
 :last   equ  tmp3
 :top    equ  tmp4
@@ -1990,9 +2040,16 @@ drawScreen
         jmp   exposeShadowList
 
 
+sprTmp0      equ pputmp
+sprTmp1      equ pputmp+2
+sprTmp2      equ pputmp+4
+sprTmp3      equ pputmp+6
+
 drawSprites
-:spriteCount equ tmp4    ; tmp0 - tmp3 are used in the blitters
-:mul160      equ tmp8    ; Setting this to tmp5 causes problems -- need to investigate
+;:spriteCount equ tmp4    ; tmp0 - tmp3 are used in the blitters
+;:mul160      equ tmp8    ; Setting this to tmp5 causes problems -- need to investigate
+:spriteCount equ pputmp+8
+:mul160      equ pputmp+10
 
 ; Run through the copy of the OAM memory and render each sprite to the graphics screen.  Typically,
 ; shadowing is disabled during this routine.
@@ -2032,7 +2089,7 @@ oam_loop
 
 ;        clc
         adc  #$2000-{y_offset*160}+x_offset
-        sta  tmp0
+        sta  sprTmp0
 
 ; Do some stuff faster in 8-bit mode
 
@@ -2059,9 +2116,9 @@ oam_loop
         ror                           ; Rotate to bring the carry into the high bit in case of overflow
         rep  #$20
         and  #$00FF
-        adc  tmp0                     ; Add to the base address calculated fom the Y-coordinate
+        adc  sprTmp0                   ; Add to the base address calculated fom the Y-coordinate
 ;        tay                           ; This is the SHR address at which to draw the sprite
-        sta  tmp1
+        sta  sprTmp1
 
 ; Calculate the address of the tile data
 
@@ -2069,7 +2126,7 @@ oam_loop
         ldal OAM_COPY,x
         and  #$FF00
         lsr                           ; Each tile is 128 bytes of data
-        sta  tmp0                     ; This is loaded in the draw routines
+        sta  sprTmp0                  ; This is loaded in the draw routines
 
 ; Now, examine the other control bits.  We dispatch differently based on the herizontal flip, vertical
 ; flip and priority bits. when calling the rendering function, Y = screen address, X = tile data address
@@ -2102,6 +2159,55 @@ drawProcs
         dw drawTileToScreen,drawTileToScreenP,drawTileToScreenH,drawTileToScreenPH
         dw drawTileToScreenV,drawTileToScreenPV,drawTileToScreenHV,drawTileToScreenPHV
 
+; Draw a tile directly to the screen
+;
+; A = tile ID
+; Y = screen address
+; X = palette select 0,2,4,6
+blitTile
+        phb
+        pea   #^tiledata
+        plb
+
+        cmp   #$0100
+        xba
+        ror
+        sta   sprTmp0
+        sty   sprTmp1
+
+        txa
+        sep  #$20
+        clc
+        adc  SwizzlePtr+1             ; Carry is clear from the asl
+        sta  ActivePtr+1
+        rep  #$20
+
+]line     equ   0
+          lup   8
+
+          ldx   sprTmp0
+          ldy:  {]line*4},x                            ; Load the tile data lookup value
+          lda:  {]line*4}+32,x                         ; Load the mask value
+          ldx   sprTmp1
+          andl  $010000+{]line*SHR_LINE_WIDTH},x       ; Mask against the screen
+          db    ORA_IND_LONG_IDX,ActivePtr             ; Merge in the remapped tile data
+          stal  $010000+{]line*SHR_LINE_WIDTH},x
+
+          ldx   sprTmp0
+          ldy:  {]line*4}+2,x
+          lda:  {]line*4}+32+2,x
+          ldx   sprTmp1
+          andl  $010000+{]line*SHR_LINE_WIDTH}+2,x
+          db    ORA_IND_LONG_IDX,ActivePtr
+          stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+
+]line     equ   ]line+1
+          --^
+
+        plb
+        plb
+        rts
+
 ; Define the opcodes directly so we can use then in a macro.  The bracket from long-indirect addressing, e.g. [],
 ; causes the macro processor to get confused since variables can be written as "]x"
 LDA_IND_LONG_IDX equ $B7
@@ -2109,10 +2215,10 @@ ORA_IND_LONG_IDX equ $17
 
 drawTileToScreenH
 
-          lda   tmp0
+          lda   sprTmp0
 ;          clc              ; There are a series of zero shifts before calling into this routine
           adc   #64
-          sta   tmp0
+          sta   sprTmp0
 
 drawTileToScreen
 
@@ -2125,18 +2231,18 @@ drawTileToScreen
 ]line     equ   0
           lup   8
 
-          ldx   tmp0
+          ldx   sprTmp0
           ldy:  {]line*4},x                            ; Load the tile data lookup value
           lda:  {]line*4}+32,x                         ; Load the mask value
-          ldx   tmp1
+          ldx   sprTmp1
           andl  $010000+{]line*SHR_LINE_WIDTH},x       ; Mask against the screen
           db    ORA_IND_LONG_IDX,ActivePtr             ; Merge in the remapped tile data
           stal  $010000+{]line*SHR_LINE_WIDTH},x
 
-          ldx   tmp0
+          ldx   sprTmp0
           ldy:  {]line*4}+2,x
           lda:  {]line*4}+32+2,x
-          ldx   tmp1
+          ldx   sprTmp1
           andl  $010000+{]line*SHR_LINE_WIDTH}+2,x
           db    ORA_IND_LONG_IDX,ActivePtr
           stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
@@ -2150,10 +2256,10 @@ drawTileToScreen
 
 drawTileToScreenHV
 
-          lda   tmp0
+          lda   sprTmp0
 ;          clc
           adc   #64
-          sta   tmp0
+          sta   sprTmp0
 
 drawTileToScreenV
 
@@ -2166,18 +2272,18 @@ drawTileToScreenV
 ]line     equ   0
           lup   8
 
-          ldx   tmp0
+          ldx   sprTmp0
           ldy:  {{7-]line}*4},x
           lda:  {{7-]line}*4}+32,x
-          ldx   tmp1
+          ldx   sprTmp1
           andl  $010000+{]line*SHR_LINE_WIDTH},x
           db    ORA_IND_LONG_IDX,ActivePtr
           stal  $010000+{]line*SHR_LINE_WIDTH},x
 
-          ldx   tmp0
+          ldx   sprTmp0
           ldy:  {{7-]line}*4}+2,x
           lda:  {{7-]line}*4}+32+2,x
-          ldx   tmp1
+          ldx   sprTmp1
           andl  $010000+{]line*SHR_LINE_WIDTH}+2,x
           db    ORA_IND_LONG_IDX,ActivePtr
           stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
@@ -2192,10 +2298,10 @@ drawTileToScreenV
 drawTileToScreenPHV
 drawTileToScreenPH
 
-          lda   tmp0
+          lda   sprTmp0
 ;          clc
           adc   #64
-          sta   tmp0
+          sta   sprTmp0
 
 drawTileToScreenPV
 drawTileToScreenP
@@ -2209,17 +2315,17 @@ drawTileToScreenP
 ]line     equ   0
           lup   8
 
-          ldx   tmp0
+          ldx   sprTmp0
           lda:  {]line*4}+32,x                         ; load the mask and invert it
           eor   #$FFFF
-          sta   tmp2
+          sta   sprTmp2
 
           ldy:  {]line*4}+0,x                          ; load the lookup value
           db    LDA_IND_LONG_IDX,ActivePtr             ; get the correct pixel data
 
-          ldx   tmp1                                   ; Get the screen address
+          ldx   sprTmp1                                   ; Get the screen address
           eorl  $010000+{]line*SHR_LINE_WIDTH}+0,x     ; save a blended value of the sprite and screen data
-          sta   tmp3
+          sta   sprTmp3
 
 ; Alternative to use a full branching network to shave a few cycles off
 ;          bit   #$F000
@@ -2248,24 +2354,24 @@ drawTileToScreenP
           beq   *+5
           ora   #$000F
           eor   #$FFFF
-          and   tmp2                                   ; AND against the inverted sprite mask
-          and   tmp3                                   ; Apply mask to the blended pixel data
+          and   sprTmp2                                ; AND against the inverted sprite mask
+          and   sprTmp3                                ; Apply mask to the blended pixel data
 
           eorl  $010000+{]line*SHR_LINE_WIDTH}+0,x     ; flip tile pixels back to original value and let sprite pixels show
           stal  $010000+{]line*SHR_LINE_WIDTH}+0,x
 
 
-          ldx   tmp0
+          ldx   sprTmp0
           lda:  {]line*4}+32+2,x                         ; load the mask and invert it
           eor   #$FFFF
-          sta   tmp2
+          sta   sprTmp2
 
           ldy:  {]line*4}+2,x                          ; load the lookup value
           db    LDA_IND_LONG_IDX,ActivePtr             ; get the correct pixel data
 
-          ldx   tmp1                                   ; Get the screen address
+          ldx   sprTmp1                                ; Get the screen address
           eorl  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; save a blended value of the sprite and screen data
-          sta   tmp3
+          sta   sprTmp3
 
           ldal  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; create mask where F = !0 and 0 = 0.
           bit   #$F000
@@ -2281,8 +2387,8 @@ drawTileToScreenP
           beq   *+5
           ora   #$000F
           eor   #$FFFF
-          and   tmp2                                   ; AND against the inverted sprite mask
-          and   tmp3                                   ; Apply mask to the blended pixel data
+          and   sprTmp2                                ; AND against the inverted sprite mask
+          and   sprTmp3                                ; Apply mask to the blended pixel data
           eorl  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; flip tile pixels back to original value and let sprite pixels show
           stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
 
