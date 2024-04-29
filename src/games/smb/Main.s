@@ -54,6 +54,11 @@ SCAN_OAM_XTRA_FILTER mac
 PPU_BG_TILE_ADDR  equ #$1000
 PPU_SPR_TILE_ADDR equ #$0000
 
+; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
+; in addition to the compiled representation (usually yes, since this is used for the config
+; screen)
+BG_TILES_AS_SPRITES equ 1
+
 ; Define what kind of execution harness to use
 ;
 ; 0 = Reset code drops into an infinite loop
@@ -83,6 +88,9 @@ PPU_PALETTE_DISPATCH equ SMB_PALETTE_DISPATCH
 ; Turn on code that visualizes the CPU time used by the ROM code
 SHOW_ROM_EXECUTION_TIME equ 0
 
+; Turn on some off-screen information
+SHOW_DEBUG_VARS equ 0
+
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 2
 y_height_rows equ 25
@@ -100,13 +108,16 @@ x_offset    equ   16                      ; number of bytes from the left edge
 
             stz   LastAreaType            ; Check if the palettes need to be updates
 
-; Show the configuration screen
-
-;            jsr   ShowConfig
-
 ; Set the palettes and swizzle tables
 
             jsr   SetDefaultPalette
+
+; Show the configuration screen
+
+            ldx   #CONFIG_BLK
+            jsr   ShowConfig
+            bcc   *+5
+            jmp   quit
 
 ; Start the FPS counter
             ldal  OneSecondCounter
@@ -152,17 +163,17 @@ ContinueArea          = $7E00   ; patches operand
             jsr   NES_EvtLoop
 
             cmp   #USER_SAYS_QUIT
-            beq   :quit
+            beq   quit
 
             cmp   #USER_SAYS_RESET
-            bne   :quit
+            bne   quit
 
             jsr   NES_WarmBoot
             bra   :start
 
 
 ; The user has existed the runtime
-:quit
+quit
             jsr   NES_ShutDown
 
 ; Exit the application
@@ -176,6 +187,7 @@ Greyscale   dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
 
+            DO    SHOW_DEBUG_VARS
 drawStats
             ldx   #0
             ldy   #$FFFF
@@ -191,9 +203,8 @@ drawStats
             lda  nt_queue_head          ; Calculate the number of elements in the queue
             sbc  nt_queue_tail
             and  #NT_QUEUE_MASK
-            jsr  DrawWord
-
-            rts
+            jmp  DrawWord
+            FIN
 
 TmpPalette  ds    32
 
@@ -492,188 +503,6 @@ ClearScreen
             bpl  :loop
             rts
 
-; Draw PPU tiles to the screen for a UI
-;
-; 0 - 9 starts at tile 256
-; A - Z starts at tile 266
-; mushroom is $1CE = 462
-TILE_ZERO   equ 256
-TILE_A      equ 266
-TILE_SHROOM equ 462
-TILE_BLANK  equ 295
-COL_STEP    equ 4
-ROW_STEP    equ {8*160}
-_PutTile    mac
-;            pea {]1}+TILE_USER_BIT
-;            pea $2000+{]2*COL_STEP}+{]3*ROW_STEP}
-;            pea ]4
-;            _GTEDrawTileToScreen     ; call NESTileBlitter direction
-            <<<
-_PutStr     mac
-            ldx #]1
-            ldy #$2000+{]2*COL_STEP}+{]3*ROW_STEP}
-            jsr ConfigDrawString
-            <<<
-
-ShowConfig
-            jsr SetDefaultPalette
-
-            lda #$0000
-            stal $E19E00
-
-            lda #0
-            jsr ClearScreen
-
-            ldx #0                  ; Config setting index
-:loop
-            phx
-            cpx #0
-            beq :video
-            cpx #1
-            beq :audio
-            bra :skip_selector
-:video
-            _PutTile TILE_SHROOM;2;2;1
-            _PutTile TILE_BLANK;2;7;1
-            bra :skip_selector
-:audio
-            _PutTile TILE_SHROOM;2;7;1
-            _PutTile TILE_BLANK;2;2;1
-            bra :skip_selector
-
-:skip_selector
-            lda #2
-            _PutStr  VideoTitle;4;2
-
-            ldx VideoMode
-            lda GoodPalette,x
-            _PutStr  GoodStr;6;4
-            ldx VideoMode
-            lda BetterPalette,x
-            _PutStr  BetterStr;12;4
-            ldx VideoMode
-            lda BestPalette,x
-            _PutStr  BestStr;20;4
-
-            lda #2
-            _PutStr  AudioTitle;4;7
-
-            ldx AudioMode
-            lda GoodPalette,x
-            _PutStr  GoodStr;6;9
-            ldx AudioMode
-            lda BetterPalette,x
-            _PutStr  BetterStr;12;9
-            ldx AudioMode
-            lda BestPalette,x
-            _PutStr  BestStr;20;9
-
-:waitloop
-            jsr  _ReadControl
-            bit  #PAD_KEY_DOWN
-            beq  :waitloop
-
-            plx
-            and  #$007F
-            cmp  #UP_ARROW
-            beq  :decrement
-            cmp  #DOWN_ARROW
-            beq  :increment
-            cmp  #' '
-            beq  :toggle
-            cmp  #13
-            bne  :waitloop
-            rts
-:toggle
-            cpx  #0
-            beq  :toggle_video
-            lda  AudioMode
-            inc
-            inc
-            cmp  #6
-            bcc  *+5
-            lda  #0
-            sta  AudioMode
-            brl  :loop
-:toggle_video
-            lda  VideoMode
-            inc
-            inc
-            cmp  #6
-            bcc  *+5
-            lda  #0
-            sta  VideoMode
-            brl  :loop
-
-:increment
-            ldx   #1
-            brl   :loop
-:decrement  ldx   #0
-            brl   :loop
-
-GoodPalette   dw    0,2,2
-BetterPalette dw    2,0,2
-BestPalette   dw    2,2,0
-
-; X = string pointer
-; Y = address
-
-ConfigDrawString
-            stx   tmp0
-            sty   tmp1
-            sta   tmp2
-            lda   (tmp0)
-            and   #$00FF
-            tax
-            ldy   #1
-:loop
-            phx
-            phy
-
-            lda   (tmp0),y
-            and   #$007F
-            cmp   #'A'
-            bcc   :not_letter
-            sbc   #'A'
-            clc
-            adc   #TILE_A
-            bra   :draw
-:not_letter
-            cmp   #'0'
-            bcc   :skip
-            sbc   #'0'
-            clc
-            adc   #TILE_ZERO
-:draw
-;            ora   #TILE_USER_BIT
-;            pha
-;            pei   tmp1
-;            pei   tmp2                 ; palette select
-;            _GTEDrawTileToScreen       ; call NESTileBlitter
-
-:skip
-            lda   tmp1
-            clc
-            adc   #4
-            sta   tmp1
-
-            ply
-            plx
-
-            iny
-            dex
-            bne   :loop
-            rts
-
-VideoTitle  str  'VIDEO QUALITY'
-AudioTitle  str  'AUDIO QUALITY'
-GoodStr     str  'GOOD'
-BetterStr   str  'BETTER'
-BestStr     str  'BEST'
-VOCTitle    str  'ENABLE VOC ACCELERATION'
-YesStr      str  'YES'
-NoStr       str  'NO'
-
 ; Copy just the tiles that change directly to the graphics screen
 
 MemOffsets    dw    67, 68, 69, 70, 71,                        82, 83, 84, 85, 86,  89, 90, 91, 92
@@ -720,8 +549,184 @@ CopyStatusToScreen
             bcc   :loop
             rts
 
+
+; Configuration screen and variables
+;
+; The configuration screen has two sections -- the menu and the controls.  Each
+; menu defines a set of controls and each control references a memory location
+; that stores a configuration value.
+;
+; The focus can either be on the menu column or the control column and code tracks
+; the active menu and the active control.  Navigation is primarily controlled
+; by prev/next pointers on the menu and control itmes that direct which control to
+; select in response to the user's inputs.
+
+config_audio_quality   ds  2  ; good / better / best audio quality (60Hz, 120Hz, 240Hz audio interrupts)
+config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
+config_video_fastmode  ds  2  ; use the "skip line" rendering mode
+config_video_small     ds  2  ; use a smaller playfield screen size
+config_input_type      dw  0  ; keyboard / joystick / snes max
+config_input_key_left  dw  LEFT_ARROW
+config_input_key_right dw  RIGHT_ARROW
+config_input_key_up    dw  UP_ARROW
+config_input_key_down  dw  DOWN_ARROW
+
+CONFIG_PALETTE      equ 1
+TILE_TOP_LEFT       equ $144
+TILE_TOP_RIGHT      equ $149
+TILE_HORIZONTAL     equ $148
+TILE_VERTICAL_LEFT  equ $146
+TILE_VERTICAL_RIGHT equ $14A
+TILE_ZERO           equ $100
+TILE_A              equ $10A
+TILE_SPACE          equ $124
+TILE_CURSOR         equ $1CE
+
+AUDIO_TITLE_STR     str 'AUDIO'
+AUDIO_QUALITY_STR   str 'QUALITY'
+AUDIO_QUALITY_OPT_1 str ' 60 HZ'
+AUDIO_QUALITY_OPT_2 str '120 HZ'
+AUDIO_QUALITY_OPT_3 str '240 HZ'
+
+VIDEO_TITLE_STR      str 'VIDEO'
+VIDEO_FASTMODE_STR   str 'FAST BLIT'
+VIDEO_STATUS_BAR_STR str 'STATUS BAR'
+VIDEO_SMALL_STR      str 'SMALL SCREEN'
+
+INPUT_TITLE_STR     str 'INPUT'
+INPUT_TYPE_STR      str 'TYPE'
+INPUT_TYPE_OPT_1    str 'KEYBOARD'
+INPUT_TYPE_OPT_2    str 'JOYSTICK'
+INPUT_TYPE_OPT_3    str 'SNES MAX'
+INPUT_LEFT_MAP_STR  str 'LEFT'
+INPUT_RIGHT_MAP_STR str 'RIGHT'
+INPUT_UP_MAP_STR    str 'UP'
+INPUT_DOWN_MAP_STR  str 'DOWN'
+
+; The configuration screen leverages the NES runtime itself
+CONFIG_BLK   db   CONFIG_PALETTE        ; Which background palette to use
+             db   TILE_TOP_LEFT         ; Define the tiles to use for the UI
+             db   TILE_TOP_RIGHT
+             db   TILE_HORIZONTAL
+             db   TILE_VERTICAL_LEFT
+             db   TILE_VERTICAL_RIGHT
+             db   TILE_ZERO             ; First tile for the 0 - 9 characters
+             db   TILE_A                ; First tile for the alphabet A - Z characters
+             db   TILE_SPACE
+CONFIG_MENU  dw   3                     ; Four screens "Audio", "Video", "Input"
+             dw   AUDIO_CONFIG
+             dw   VIDEO_CONFIG
+             dw   INPUT_CONFIG
+
+AUDIO_CONFIG dw   AUDIO_TITLE_STR
+             dw   0                     ; previous menu item
+             dw   VIDEO_CONFIG          ; next menu item
+
+             dw   1                     ; One configuration element
+             dw   AUDIO_ITEM_1
+
+AUDIO_ITEM_1 dw   RADIO                 ; A radio button (mutually exclusive) option
+             dw   0                     ; previous control
+             dw   0                     ; next control
+             dw   3,1                   ; X,Y location of control in the config area
+             dw   AUDIO_QUALITY_STR     ; Title
+             dw   config_audio_quality  ; Memory address to write the configuration value
+             dw   3                     ; Three options
+             dw   0                     ; config value
+             dw   AUDIO_QUALITY_OPT_1   ; config label
+             dw   2
+             dw   AUDIO_QUALITY_OPT_2
+             dw   4
+             dw   AUDIO_QUALITY_OPT_3
+
+VIDEO_CONFIG dw   VIDEO_TITLE_STR
+             dw   AUDIO_CONFIG          ; previous menu item
+             dw   INPUT_CONFIG          ; next menu item
+
+             dw   3                     ; Two configuration elements
+             dw   VIDEO_ITEM_1
+             dw   VIDEO_ITEM_2
+             dw   VIDEO_ITEM_3
+
+VIDEO_ITEM_1 dw   CHKBOX                ; Checkbox just forces a 0/1 for False/True
+             dw   0                     ; previous control
+             dw   VIDEO_ITEM_2          ; next control
+             dw   3,1
+             dw   VIDEO_STATUS_BAR_STR
+             dw   config_video_statusbar
+
+VIDEO_ITEM_2 dw   CHKBOX
+             dw   VIDEO_ITEM_1          ; previous control
+             dw   VIDEO_ITEM_3          ; next control
+             dw   3,3
+             dw   VIDEO_FASTMODE_STR
+             dw   config_video_fastmode
+
+VIDEO_ITEM_3 dw   CHKBOX
+             dw   VIDEO_ITEM_2          ; previous control
+             dw   0                     ; next control
+             dw   3,5
+             dw   VIDEO_SMALL_STR
+             dw   config_video_small
+
+INPUT_CONFIG dw   INPUT_TITLE_STR
+             dw   VIDEO_CONFIG          ; previous menu item
+             dw   0                     ; next menu item
+
+             dw   5
+             dw   INPUT_ITEM_1
+             dw   INPUT_ITEM_2
+             dw   INPUT_ITEM_3
+             dw   INPUT_ITEM_4
+             dw   INPUT_ITEM_5
+
+INPUT_ITEM_1 dw   RADIO
+             dw   0
+             dw   INPUT_ITEM_2
+             dw   3,1
+             dw   INPUT_TYPE_STR
+             dw   config_input_type
+             dw   3
+             dw   0
+             dw   INPUT_TYPE_OPT_1
+             dw   2
+             dw   INPUT_TYPE_OPT_2
+             dw   4
+             dw   INPUT_TYPE_OPT_3
+
+INPUT_ITEM_2 dw   KEYMAP
+             dw   INPUT_ITEM_1
+             dw   INPUT_ITEM_3
+             dw   3,7
+             dw   INPUT_LEFT_MAP_STR
+             dw   config_input_key_left
+
+INPUT_ITEM_3 dw   KEYMAP
+             dw   INPUT_ITEM_2
+             dw   INPUT_ITEM_4
+             dw   3,8
+             dw   INPUT_RIGHT_MAP_STR
+             dw   config_input_key_right
+
+INPUT_ITEM_4 dw   KEYMAP
+             dw   INPUT_ITEM_3
+             dw   INPUT_ITEM_5
+             dw   3,9
+             dw   INPUT_UP_MAP_STR
+             dw   config_input_key_up
+
+INPUT_ITEM_5 dw   KEYMAP
+             dw   INPUT_ITEM_4
+             dw   0
+             dw   3,10
+             dw   INPUT_DOWN_MAP_STR
+             dw   config_input_key_down
+
+            DO    SHOW_DEBUG_VARS
             put   ../../misc/App.Msg.s
             put   ../../misc/font.s
+            FIN
+
             put   ../../ppu/ppu.s
 
             ds    \,$00                      ; pad to the next page boundary
@@ -749,6 +754,9 @@ PPU_ATTR_MASK
             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
 
+; Palette for the configuration screen
+ConfScrnPal  dw     $0F, $00, $29, $1A, $0F, $36, $17, $30, $21, $27, $1A, $16, $00, $00, $16, $18
+
 ; If AreaStyle is 1 then load an alternate palette 'b'
 ;
 ; Palettes of NES color indexes
@@ -772,6 +780,7 @@ WaterPalette dw     $22, $00, $15, $12, $25, $3A, $1A, $0F, $30, $12, $27, $10, 
             put   ../../rom/rom_helpers.s
             put   ../../rom/rom_input.s
             put   ../../rom/rom_exec.s
+            put   ../../rom/rom_config.s
 
             put   ../../core/CoreData.s
             put   ../../core/CoreImpl.s
