@@ -131,7 +131,7 @@ ShowConfig
             jsr _UpdateControlCursor
 
 :waitloop
-            jsr  _ReadControl
+            jsr  _ReadKeypress
             bit  #PAD_KEY_DOWN
             beq  :waitloop
 
@@ -239,6 +239,8 @@ ShowConfig
             beq   :chk_radio
             sta   config_active_ctrl
             rts
+
+; A bit of complexity for handling more sophisticated controls
 :chk_radio  lda:  CTRL_TYPE,x
             cmp   #RADIO
             bne   :not_radio
@@ -581,7 +583,7 @@ _ToggleKeymap
             lda: CTRL_VALUE_ADDR,x
             sta  :addr   ; address of the value
 
-:waitloop   jsr  _ReadControl
+:waitloop   jsr  _ReadKeypress                       ; Read keyboard directly, and only for raw keystrokes
             bit  #PAD_KEY_DOWN
             beq  :waitloop
 

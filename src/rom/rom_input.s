@@ -3,6 +3,7 @@
             mx  %00
 
 ; Expose joypad bits to the ROM for two controllers: A-B-Select-Start-Up-Down-Left-Right
+;   
 native_joy  ENT
             db   0,0
 
@@ -13,6 +14,14 @@ native_joy  ENT
 NES_ReadInput
             jsr   _ReadControl
             sta   LastRead
+            pha
+            sep   #$20
+            xba
+            sta   native_joy
+            sta   native_joy+1
+            rep   #$20
+            pla
+            rts
 
 ; Map the field to the NES controller format: A-B-Select-Start-Up-Down-Left-Right
 

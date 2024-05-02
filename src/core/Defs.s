@@ -70,8 +70,10 @@ LastRead               equ   104
 ;TileStoreBankAndBank01 equ   106
 ;TileStoreBankAndTileDataBank equ 108
 ;TileStoreBankDoubled   equ   110
-UserId                 equ   112         ; Memory manager user Id to use
+UserId                 equ   112          ; Memory manager user Id to use
 LastKey                equ   116
+InputPlayer1           equ   118          ; Filled in by _ReadContollers
+InputPlayer2           equ   120
 ;LastTick               equ   118
 ;ForceSpriteFlag        equ   120
 ;RenderFlags            equ   124         ; Flags passed to the Render() function
@@ -137,9 +139,16 @@ DIRTY_BIT_BG0_REFRESH  equ   $0010
 DIRTY_BIT_SPRITE_ARRAY equ   $0040
 
 ; ReadControl return value bits
-PAD_BUTTON_B           equ   $0100
-PAD_BUTTON_A           equ   $0200
-PAD_KEY_DOWN           equ   $0400
+PAD_KEY_DOWN           equ   $0080
+PAD_KEY_MASK           equ   $007F
+PAD_RIGHT              equ   $0100
+PAD_LEFT               equ   $0200
+PAD_DOWN               equ   $0400
+PAD_UP                 equ   $0800
+PAD_START              equ   $1000
+PAD_SELECT             equ   $2000
+PAD_BUTTON_A           equ   $4000
+PAD_BUTTON_B           equ   $8000
 
 ; Rendering Control Bits
 CTRL_SPRITE_ENABLE     equ   $0001
