@@ -625,7 +625,7 @@ NOISE_CONST_VOL_FLAG equ $10
 TRIANGLE_HALT_FLAG   equ $80
 
                         mx %11
-quarter_speed_driver    = *
+APU_quarter_speed_driver    = *
 
                         phb
                         phd

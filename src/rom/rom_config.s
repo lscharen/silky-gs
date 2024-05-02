@@ -2,12 +2,13 @@
 RADIO           equ 1     ; radio (mutually exclusive options)
 CHKBOX          equ 2     ; checkbox (boolean)
 KEYMAP          equ 3     ; keymap (reads input character; tab to enter/exit)
+CTRL_LIST       equ 4     ; list of other controls (no UI)
+NUMBER_SELECT   equ 5     ; select from a range of single-digit numbers
 
 CHKBOX_YES          str 'YES'
 CHKBOX_NO           str ' NO'
 CHKBOX_ON           str ' ON'
 CHKBOX_OFF          str 'OFF'
-
 
 ; Control offsets from their base address
 MENU_TITLE      equ  0 
@@ -30,18 +31,31 @@ CTRL_DATA       equ  14
 CTRL_RADIO_OPTION_COUNT  equ CTRL_DATA
 CTRL_RADIO_OPTION_VALUE  equ CTRL_DATA+2
 CTRL_RADIO_OPTION_LABEL  equ CTRL_DATA+4
-CTRL_RADIO_OPTION_SIZEOF equ 4
+CTRL_RADIO_OPTION_NEXT   equ CTRL_DATA+6
+CTRL_RADIO_OPTION_SIZEOF equ 6
+
+CTRL_LIST_COUNT  equ CTRL_PREV
+
+CTRL_NUMBER_MIN  equ CTRL_DATA
+CTRL_NUMBER_MAX  equ CTRL_DATA+2
 
 ; Units to move text around
 COL_STEP    equ 4
 ROW_STEP    equ {8*160}
 
-; Menu panel area
-MENU_PANEL_ORIGIN equ $2000+x_offset+4+{160*16}
+; NES Playfield origin
+PLAYFIELD_ORIGIN equ {$2000+x_offset}
+PLAYFIELD_WIDTH  equ {32*COL_STEP}
+PLAYFIELD_HEIGHT equ 200
 
-; Config / Control palen area
-CONFIG_PANEL_ORIGIN equ $2000+x_offset+48+{160*8}
-CONFIG_PANEL_WIDTH equ {160-44-x_offset}
+; Menu panel area
+MENU_PANEL_ORIGIN equ PLAYFIELD_ORIGIN
+MENU_PANEL_WIDTH  equ {11*COL_STEP}
+
+; Config / Control panel area
+CONFIG_PANEL_ORIGIN equ MENU_PANEL_ORIGIN+MENU_PANEL_WIDTH
+CONFIG_PANEL_WIDTH equ {PLAYFIELD_WIDTH-MENU_PANEL_WIDTH}
+CONFIG_PANEL_INTERIOR_WIDTH equ {CONFIG_PANEL_WIDTH-{2*COL_STEP}}
 CONFIG_PANEL_HEIGHT equ 144
 
 ; Palette select for normal / selected / yes / no test
@@ -50,8 +64,41 @@ TEXT_SELECTED equ 2
 TEXT_YES equ 2
 TEXT_NO equ 0
 
+_ConfigSaveBuffer ds 256+32
+
+SAFE_JSR    mac
+            phx
+            phy
+            jsr ]1
+            ply
+            plx
+            <<<
+
+; Preserve the SCBs and the first palette.
+_ConfigEntry
+            ldx  #{256+32}-2
+:loop
+            ldal $E19D00,x
+            sta  _ConfigSaveBuffer,x
+            dex
+            dex
+            bpl  :loop 
+            rts
+
+_ConfigExit
+            ldx  #{256+32}-2
+:loop
+            lda  _ConfigSaveBuffer,x
+            stal $E19D00,x
+            dex
+            dex
+            bpl  :loop 
+            rts
+
 ; Creates a UI for the runtime configuration
 ShowConfig
+
+            jsr  _ConfigEntry
 
 ; Set the palette for the config screen
 
@@ -59,7 +106,7 @@ ShowConfig
             jsr  _SetSCBs
 
             lda  #0
-            jsr  ClearScreen
+            jsr  _ClearToColor
 
             lda  #0
             ldx  #ConfScrnPal
@@ -76,6 +123,7 @@ ShowConfig
             sta config_focus             ; focus must always be non-zero
 
             jsr _DrawConfigMenu
+            jsr _DrawControlBorder
 
 :loop
             jsr _UpdateMenuCursor
@@ -102,9 +150,12 @@ ShowConfig
             beq  :abort
             cmp  #13
             bne  :waitloop
+
+            jsr  _ConfigExit
             clc
             rts
 :abort
+            jsr  _ConfigExit
             sec
             rts
 :toggle
@@ -185,12 +236,26 @@ ShowConfig
             ldx   config_active_ctrl
             beq   :no_action
             lda:  CTRL_NEXT,x
-            beq   :no_action
+            beq   :chk_radio
             sta   config_active_ctrl
             rts
-
-:no_action
-            rts
+:chk_radio  lda:  CTRL_TYPE,x
+            cmp   #RADIO
+            bne   :not_radio
+            jsr   _SelectedRadioItem
+            beq   :not_radio
+            tax
+            lda:  CTRL_RADIO_OPTION_NEXT,x
+            beq   :not_radio
+            tax
+            lda:  CTRL_TYPE,x
+            cmp   #CTRL_LIST
+            bne   :not_list
+            lda:  CTRL_LIST_COUNT+2,x
+            tax
+:not_list   stx   config_active_ctrl
+:not_radio
+:no_action  rts
 
 :set_first_control_active
             lda:  MENU_CTRL_COUNT,x
@@ -204,6 +269,25 @@ config_active_menu ds 2    ; currently selected menu item
 config_active_ctrl ds 2    ; currently selected control
 config_focus       ds 2
 
+; Render the border for the control panel
+_DrawControlBorder
+:count      equ  tmp14
+:addr       equ  tmp15
+
+            ldy  #CONFIG_PANEL_ORIGIN
+            ldx  #19
+            jsr  ConfigDrawTopBorder
+
+            ldy  #CONFIG_PANEL_ORIGIN+ROW_STEP
+            ldx  #20
+            lda  #COL_STEP*20
+            jsr  ConfigDrawSideBorder
+
+            ldy  #CONFIG_PANEL_ORIGIN+{21*ROW_STEP}
+            ldx  #19
+            jsr  ConfigDrawBottomBorder
+
+            rts
 
 ; Render the configuration sidebar
 _DrawConfigMenu
@@ -221,12 +305,33 @@ _DrawConfigMenu
 :dcm_loop
             phx
 
+            ldy  :addr
+            ldx  #9
+            jsr  ConfigDrawTopBorder
+
+            lda  :addr
+            clc
+            adc  #ROW_STEP
+            tay
+            ldx  #3
+            lda  #COL_STEP*10
+            jsr  ConfigDrawSideBorder
+
+            lda  :addr
+            clc
+            adc  #4*ROW_STEP
+            tay
+            ldx  #9
+            jsr  ConfigDrawBottomBorder
+
+            lda  1,s
+            tax
             lda: CONFIG_MENU+2,x               ; Get the address of the config block for this menu item
             tax
 
             lda  :addr
             clc
-            adc  #4*COL_STEP
+            adc  #{2*ROW_STEP}+{4*COL_STEP}
             tay
 
             lda: MENU_TITLE,x                  ; Load the title pointer
@@ -235,20 +340,8 @@ _DrawConfigMenu
             jsr  ConfigDrawString
 
             lda  :addr
-            sec
-            sbc  #2*ROW_STEP
-            tay
-            jsr  ConfigDrawTopBorder
-
-            lda  :addr
-            sec
-            sbc  #1*ROW_STEP
-            tay
-            jsr  ConfigDrawSideBorder
-
-            lda  :addr
             clc
-            adc  #4*ROW_STEP
+            adc  #5*ROW_STEP
             sta  :addr
 
             plx
@@ -258,18 +351,21 @@ _DrawConfigMenu
             bcc  :dcm_loop
             rts
 
+; Clear the interior of the control panel area
+;
+; +----------+
+; |xxxxxxxxxx|
+; |xxxxxxxxxx|
+; |..........|
 _ClearPanel
 :line       equ  tmp15
-
-            phx
-            phy
 
             lda  #CONFIG_PANEL_HEIGHT
             sta  :line
 
-            ldx  #CONFIG_PANEL_ORIGIN
+            ldx  #CONFIG_PANEL_ORIGIN+ROW_STEP+COL_STEP
 :oloop
-            ldy  #CONFIG_PANEL_WIDTH
+            ldy  #CONFIG_PANEL_INTERIOR_WIDTH
             lda  #0
 :iloop
             stal $E10000,x
@@ -281,14 +377,11 @@ _ClearPanel
 
             txa
             clc
-            adc  #160-CONFIG_PANEL_WIDTH
+            adc  #160-CONFIG_PANEL_INTERIOR_WIDTH
             tax
 
             dec  :line
             bne  :oloop
-
-            ply
-            plx
             rts
 
 _OffsetToAddr
@@ -311,6 +404,30 @@ _OffsetToAddr
             adc  #CONFIG_PANEL_ORIGIN
             sta  1,s
             ply
+            rts
+
+; Y = screen addr
+; X = control addr
+;
+; Draw the list of other controls
+_DrawControlList
+            ldy: CTRL_LIST_COUNT,x
+            beq  :done
+
+            dey                        ; Start counting from the end
+:loop       phy
+            phx
+            lda: CTRL_LIST_COUNT+2,x
+            tax
+            jsr  _DrawControl
+            pla
+            clc
+            adc  #2                    ; Each entry is a 2-byte address
+            tax
+            ply
+            dey
+            bpl  :loop
+:done
             rts
 
 ; Y = screen addr
@@ -350,6 +467,46 @@ _DrawKeymap
             lda  #TEXT_NORMAL
             jmp  ConfigDrawByte
              rts
+
+; Y = screen addr
+; X = control addr
+;
+; +------------
+; |  d <title>
+_DrawNumber
+:addr       equ  tmp15
+:count      equ  tmp14
+
+; First two words are the offset coordinates of the control
+
+            jsr  _OffsetToAddr
+            sta  :addr
+
+; Move label to right for yes/no label
+
+            clc
+            adc  #COL_STEP*5
+            tay
+
+; Move to the label string
+
+            phx
+            lda: CTRL_TITLE,x
+            tax
+            lda  #0
+            jsr  ConfigDrawString
+            plx
+
+            ldy: CTRL_VALUE_ADDR,x      ; load the variable address
+            lda: 0,y                    ; load the variable value
+
+            clc
+            adc  #TILE_ZERO
+            ldx  #TEXT_NORMAL
+            ldy  :addr
+            jsr  blitTile
+
+            rts
 
 ; Y = screen addr
 ; X = control addr
@@ -400,6 +557,22 @@ _DrawCheckbox
             rts
 
 ; X = control addr
+_ToggleNumber
+:addr       equ  tmp15
+            lda: CTRL_VALUE_ADDR,x
+            sta  :addr   ; address of the value
+
+            lda  (:addr)
+            cmp: CTRL_NUMBER_MAX,x
+            bcc  :ok
+            lda: CTRL_NUMBER_MIN,x
+            bra  :ok2
+:ok         inc
+:ok2        sta  (:addr)
+
+            rts
+
+; X = control addr
 ;
 ; Wait for the user to press a key
 _ToggleKeymap
@@ -434,30 +607,24 @@ _ToggleCheckbox
 
 ; X = control addr
 ;
-; Move the radio to the next value
-_ToggleRadio
+; Return A = address of selected option. 0 is no match
+;        Y = index of selected item
+_SelectedRadioItem
 :value      equ  tmp15
 :count      equ  tmp14
-:addr       equ  tmp13
-
-            stx  :addr
 
             lda: CTRL_VALUE_ADDR,x
-            sta  :value                       ; address of the value
+            sta  :value
 
             lda: CTRL_RADIO_OPTION_COUNT,x
-            beq  :done
-
+            beq  :empty_list
             sta  :count
             ldy  #0
 
 :loop
-
-; Find the index of the current value
-
-            lda: CTRL_RADIO_OPTION_VALUE,x
-            cmp  (:value)
-            beq  :found
+            lda:  CTRL_RADIO_OPTION_VALUE,x
+            cmp   (:value)
+            beq   :found
 
             txa
             clc
@@ -467,6 +634,27 @@ _ToggleRadio
             iny
             cpy  :count
             bcc  :loop
+
+:empty_list
+            lda   #0
+            rts
+
+:found
+            txa
+            rts
+
+; X = control addr
+;
+; Move the radio to the next value
+_ToggleRadio
+:value      equ  tmp15     ; shared with _SelectedRadioItem
+:count      equ  tmp14     ; shared with _SelectedRadioItem
+:addr       equ  tmp13
+
+            stx  :addr
+
+            jsr  _SelectedRadioItem
+            bne  :found
             rts
 
 :found
@@ -477,8 +665,10 @@ _ToggleRadio
             lda  #0
 
             asl
-            asl                    ; multiply by 4 to get the option item
+            sta  :count
+            asl                    ; multiply by 6 to get the option item
             clc
+            adc  :count
             adc  :addr
             tax
             lda: CTRL_RADIO_OPTION_VALUE,x
@@ -501,11 +691,16 @@ _DrawRadio
 :count      equ  tmp14
 :value      equ  tmp13
 :palette    equ  tmp12
+:next       equ  tmp11           ; next control to draw (must use tail-call, draw routines not recursive)
 
 ; First two words are the offset coordinates of the control
 
             jsr  _OffsetToAddr
             sty  :addr
+
+; Clear the next control (conditional control shows when options are selected)
+
+            stz  :next
 
 ; Move to the label string
 
@@ -535,6 +730,8 @@ _DrawRadio
             lda: CTRL_RADIO_OPTION_VALUE,x    ; See if this options matches the current value
             cmp  (:value)
             bne  :no_match
+            lda: CTRL_RADIO_OPTION_NEXT,x     ; Mark the next control to show based on this selection
+            sta  :next
             lda  #2
             sta  :palette
 :no_match
@@ -560,6 +757,10 @@ _DrawRadio
             bne  :loop
 
 :done
+            ldx  :next                        ; Is there another control to draw?
+            beq  *+5
+            jmp  _DrawControl                 ; Tail call
+
             rts
 
 
@@ -579,7 +780,15 @@ _DrawControl
             bne  :not_keymap
             jmp  _DrawKeymap
 
-:not_keymap
+:not_keymap cmp  #CTRL_LIST
+            bne  :not_list
+            jmp  _DrawControlList
+
+:not_list   cmp  #NUMBER_SELECT
+            bne  :not_number
+            jmp  _DrawNumber
+
+:not_number
             rts
 
 ; Switchthe value of the active control
@@ -606,7 +815,11 @@ _ToggleActiveControl
             bne  :not_keymap
             jmp  _ToggleKeymap
 
-:not_keymap
+:not_keymap cmp  #NUMBER_SELECT
+            bne  :not_number
+            jmp  _ToggleNumber
+
+:not_number
             rts
 
 ; Loads the active menu address from config_active_menu
@@ -617,7 +830,7 @@ _DrawActiveMenuControls
 
 ; X = menu item address
 _DrawMenuControls
-            jsr  _ClearPanel
+            SAFE_JSR  _ClearPanel
 
             lda: MENU_CTRL_COUNT,x     ; Get the number of controls
             beq  :empty
@@ -662,7 +875,7 @@ _GetMenuItemIndex
             ply
             rts
 
-; If the focus is on the config panel, draw the curson next to the
+; If the focus is on the config panel, draw the cursor next to the
 ; active control
 _UpdateControlCursor
             ldx  config_active_menu
@@ -674,23 +887,20 @@ _UpdateControlCursor
             tay
 
 :loop
-            phx
-            phy
             lda: MENU_CTRL_LIST,x
-            jsr  _DrawControlCursor
-            ply
-            pla
-            clc
-            adc #2
-            tax
+            SAFE_JSR  _DrawControlCursor
+            inx
+            inx
             dey
             bne  :loop
 
 :no_controls
             rts
 
+; A = control address
 _DrawControlCursor
 :tile       equ  tmp15
+:value      equ  tmp14
 
             pha
             ldx  #TILE_SPACE
@@ -703,7 +913,8 @@ _DrawControlCursor
             ldx  #TILE_CURSOR
 :no_focus
             stx  :tile
-            plx
+            lda  1,s
+            tax
 
             jsr  _OffsetToAddr            ; Address of control label
             tya
@@ -715,7 +926,38 @@ _DrawControlCursor
             ldx   #CONFIG_PALETTE*2
             jsr   blitTile
 
+            plx                           ; restore the control address
+
+; If this is a list control, call for each of its controle
+
+            lda:  CTRL_TYPE,x
+            cmp   #CTRL_LIST
+            bne   :not_list
+
+            ldy:  CTRL_LIST_COUNT,x
+            beq   :empty_list
+:loop_list
+            lda:  CTRL_LIST_COUNT+2,x
+            SAFE_JSR _DrawControlCursor
+            inx
+            inx
+            dey
+            bne   :loop_list
+:empty_list
+:not_radio
+:not_found
             rts
+
+; If it's a radio, check it's selected value and see if it points to conditional control
+:not_list   cmp  #RADIO
+            bne  :not_radio
+
+            jsr  _SelectedRadioItem
+            beq  :not_found
+
+            lda: CTRL_RADIO_OPTION_NEXT,x
+            beq  :not_radio
+            jmp  _DrawControlCursor
 
 _UpdateMenuCursor
             lda  CONFIG_MENU+2
@@ -728,6 +970,7 @@ _UpdateMenuCursor
             
 _DrawMenuCursor
 :tile       equ  tmp15
+:scratch    equ  tmp14
 
             pha
             ldx  #TILE_SPACE
@@ -747,8 +990,11 @@ _DrawMenuCursor
             asl
             asl                           ; x8
 
+            sta   :scratch
             asl
-            asl                           ; x4 spaces between 
+            asl                           ; x5 spaces between 
+            clc
+            adc   :scratch
 
             asl                           ; x2 for indexing
             tax
@@ -756,7 +1002,7 @@ _DrawMenuCursor
             clc
             adc   #MENU_PANEL_ORIGIN
             clc
-            adc   #8
+            adc   #{2*ROW_STEP}+{2*COL_STEP}
             tay
 
             lda   :tile
@@ -766,8 +1012,10 @@ _DrawMenuCursor
             rts
 
 ; Y = address
+; X = number of rows
+; A = width
 ConfigDrawSideBorder
-            ldx  #3
+            sta  tmp10
 :loop
             phx
 
@@ -777,7 +1025,7 @@ ConfigDrawSideBorder
             jsr  blitTile
             pla
             clc
-            adc  #40
+            adc  tmp10
             tay
             phy
             lda  #TILE_VERTICAL_RIGHT
@@ -785,7 +1033,9 @@ ConfigDrawSideBorder
             jsr  blitTile
             pla
             clc
-            adc  #{8*160}-40
+            adc  #{8*160}
+            sec
+            sbc  tmp10
             tay
 
             plx
@@ -794,14 +1044,16 @@ ConfigDrawSideBorder
             rts
 
 ; Y = address
+; X = number of center items
 ConfigDrawTopBorder
+            phx
             phy
             lda  #TILE_TOP_LEFT
             ldx  #CONFIG_PALETTE*2
             jsr  blitTile
             ply
+            plx
 
-            ldx  #9
 :hloop
             tya
             clc
@@ -823,6 +1075,42 @@ ConfigDrawTopBorder
             adc  #4
             tay
             lda  #TILE_TOP_RIGHT
+            ldx  #CONFIG_PALETTE*2
+            jsr  blitTile
+            rts
+
+; Y = address
+; X = number of center items
+ConfigDrawBottomBorder
+            phx
+            phy
+            lda  #TILE_BOTTOM_LEFT
+            ldx  #CONFIG_PALETTE*2
+            jsr  blitTile
+            ply
+            plx
+
+:hloop
+            tya
+            clc
+            adc #4
+            tay
+
+            phy
+            phx
+            lda  #TILE_HORIZONTAL
+            ldx  #CONFIG_PALETTE*2
+            jsr  blitTile
+            plx
+            ply
+            dex
+            bne  :hloop
+
+            tya
+            clc
+            adc  #4
+            tay
+            lda  #TILE_BOTTOM_RIGHT
             ldx  #CONFIG_PALETTE*2
             jsr  blitTile
             rts

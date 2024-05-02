@@ -77,7 +77,7 @@ NES_StartUp
 ; Clear the IIgs screen and initialize the rendering infrastrucure
 
             lda   #0
-            jsr   ClearScreen
+            jsr   _ClearToColor
             jsr   InitPlayfield
 
 ; Convert the CHR ROM from the cart into blittable tiles
@@ -119,6 +119,23 @@ NES_WarmBoot
             sei
             jsr   romxfer
             cli
+            rts
+
+; A pair of utility functions to stop/start the actual execution of the game runtime.  This is
+; used to cleanly suspend the VBL interrupt driver and allow "something else" to happen.  Typically
+; this can be used to invoke the configuration screen and reset the runtime in the middle of running
+; a ROM.
+;
+; NES_StopExecution
+; NES_StartExecution
+NES_StopExecution
+            lda  #1
+            sta  skipInterruptHandling
+            rts
+
+NES_StartExecution
+            lda  #0
+            sta  skipInterruptHandling
             rts
 
 ; NES_EvtLoop
@@ -182,6 +199,19 @@ NES_EvtLoop
             sta   ppumask_override
             brl   NES_EvtLoop
 :not_s
+
+; '?' to bring up the configuration screen and reapply the settings
+
+            cmp   #'?'
+            bne   :not_config
+            jsr   NES_StopExecution
+            jsr   ShowConfig
+            jsr   ApplyConfig
+            lda   #DIRTY_BIT_BG0_REFRESH                  ; Force a full page refresh on config exit
+            tsb   DirtyBits
+            jsr   NES_StartExecution
+            brl   NES_EvtLoop
+:not_config
 
 ; '0': force all of the APU channels to be turned off
             cmp   #'0'
@@ -326,3 +356,6 @@ frameCount   dw  0
 
 ; Cleared when the NMI handler has run.  Used to limit updates to 60fps
 frameReady   dw  0
+
+; Set to abort from the VBL interrupt handler.  Effectively stops the execution of the ROM game code
+skipInterruptHandling dw 0

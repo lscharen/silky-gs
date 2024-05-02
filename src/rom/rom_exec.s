@@ -138,6 +138,9 @@ nmiTask
             lda   DPSave
             tcd
 
+            lda   skipInterruptHandling
+            bne   :no_nmi
+
             ldal  ppustatus             ; Set the bit that the VBL has started
             ora   #$80
             stal  ppustatus
@@ -178,12 +181,12 @@ NES_TriggerNMI
 ; If the audio engine is not running off of its own ESQ interrups at 240Hz or 120Hz, then it must be manually drive
 ; at 60Hz from the VBL/NMI handler
 
-;            lda   AudioMode
-;            bne   :good_audio
-;            sep   #$30
-;            jsl   quarter_speed_driver
-;            rep   #$30
-;:good_audio
+            lda   config_audio_quality
+            bne   :audio_uses_interrupts
+            sep   #$30
+            jsl   APU_quarter_speed_driver
+            rep   #$30
+:audio_uses_interrupts
 
             ldal  ppuctrl               ; If the ROM has not enabled VBL NMI, also skip
             bit   #$80

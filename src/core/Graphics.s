@@ -103,11 +103,11 @@ _SetBorderColor  sep   #$20                 ; ACC = $X_Y, REG = $W_Z
 
 ; Clear to SHR screen to a specific color
 _ClearToColor
-                 ldx   #$7D00               ;start at top of pixel data! ($2000-9D00)
-:clearloop       dex
+                 ldx  #$7CFE
+:loop            stal $012000,x
                  dex
-                 stal  SHR_SCREEN,x         ;screen location
-                 bne   :clearloop           ;loop until we've worked our way down to 0
+                 dex
+                 bpl  :loop
                  rts
 
 ; Set a palette values
