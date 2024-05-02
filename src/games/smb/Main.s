@@ -495,12 +495,10 @@ SetAreaPalette
 AreaPalettes  dw   WaterPalette,Area1Palette,Area2Palette,Area3Palette,Area2Palette
 SwizzleTables adrl AT0_T0,AT1_T0,AT2_T0,AT3_T0,AT2_T0
 
-ClearScreen
-            ldx  #$7CFE
-:loop       stal $012000,x
-            dex
-            dex
-            bpl  :loop
+; ApplyConfig
+;
+; Read the variabled set up the configuration screen and apply them to the runtime engine.
+ApplyConfig
             rts
 
 ; Copy just the tiles that change directly to the graphics screen
@@ -591,7 +589,7 @@ AUDIO_QUALITY_OPT_3 str '240 HZ'
 VIDEO_TITLE_STR      str 'VIDEO'
 VIDEO_FASTMODE_STR   str 'FAST BLIT'
 VIDEO_STATUS_BAR_STR str 'STATUS BAR'
-VIDEO_SMALL_STR      str 'SMALL SCREEN'
+VIDEO_SMALL_STR      str 'SMALL SCRN'
 
 INPUT_TITLE_STR     str 'INPUT'
 INPUT_TYPE_STR      str 'TYPE'
@@ -628,16 +626,22 @@ AUDIO_CONFIG dw   AUDIO_TITLE_STR
 AUDIO_ITEM_1 dw   RADIO                 ; A radio button (mutually exclusive) option
              dw   0                     ; previous control
              dw   0                     ; next control
-             dw   3,1                   ; X,Y location of control in the config area
+             dw   3,2                   ; X,Y location of control in the config area
              dw   AUDIO_QUALITY_STR     ; Title
-             dw   config_audio_quality  ; Memory address to write the configuration value
+             dw   config_audio_quality  ; Memory address to write the configuration value (set to zero if not saved)
              dw   3                     ; Three options
+
              dw   0                     ; config value
              dw   AUDIO_QUALITY_OPT_1   ; config label
+             dw   0                     ; conditional control (if null, nothing)
+
              dw   2
              dw   AUDIO_QUALITY_OPT_2
+             dw   0                     ; conditional control (if null, nothing)
+
              dw   4
              dw   AUDIO_QUALITY_OPT_3
+             dw   0                     ; conditional control (if null, nothing)
 
 VIDEO_CONFIG dw   VIDEO_TITLE_STR
              dw   AUDIO_CONFIG          ; previous menu item
@@ -651,21 +655,21 @@ VIDEO_CONFIG dw   VIDEO_TITLE_STR
 VIDEO_ITEM_1 dw   CHKBOX                ; Checkbox just forces a 0/1 for False/True
              dw   0                     ; previous control
              dw   VIDEO_ITEM_2          ; next control
-             dw   3,1
+             dw   3,2
              dw   VIDEO_STATUS_BAR_STR
              dw   config_video_statusbar
 
 VIDEO_ITEM_2 dw   CHKBOX
              dw   VIDEO_ITEM_1          ; previous control
              dw   VIDEO_ITEM_3          ; next control
-             dw   3,3
+             dw   3,4
              dw   VIDEO_FASTMODE_STR
              dw   config_video_fastmode
 
 VIDEO_ITEM_3 dw   CHKBOX
              dw   VIDEO_ITEM_2          ; previous control
              dw   0                     ; next control
-             dw   3,5
+             dw   3,6
              dw   VIDEO_SMALL_STR
              dw   config_video_small
 
@@ -683,42 +687,45 @@ INPUT_CONFIG dw   INPUT_TITLE_STR
 INPUT_ITEM_1 dw   RADIO
              dw   0
              dw   INPUT_ITEM_2
-             dw   3,1
+             dw   3,2
              dw   INPUT_TYPE_STR
              dw   config_input_type
              dw   3
+
              dw   0
              dw   INPUT_TYPE_OPT_1
+
              dw   2
              dw   INPUT_TYPE_OPT_2
+
              dw   4
              dw   INPUT_TYPE_OPT_3
 
 INPUT_ITEM_2 dw   KEYMAP
              dw   INPUT_ITEM_1
              dw   INPUT_ITEM_3
-             dw   3,7
+             dw   3,8
              dw   INPUT_LEFT_MAP_STR
              dw   config_input_key_left
 
 INPUT_ITEM_3 dw   KEYMAP
              dw   INPUT_ITEM_2
              dw   INPUT_ITEM_4
-             dw   3,8
+             dw   3,9
              dw   INPUT_RIGHT_MAP_STR
              dw   config_input_key_right
 
 INPUT_ITEM_4 dw   KEYMAP
              dw   INPUT_ITEM_3
              dw   INPUT_ITEM_5
-             dw   3,9
+             dw   3,10
              dw   INPUT_UP_MAP_STR
              dw   config_input_key_up
 
 INPUT_ITEM_5 dw   KEYMAP
              dw   INPUT_ITEM_4
              dw   0
-             dw   3,10
+             dw   3,11
              dw   INPUT_DOWN_MAP_STR
              dw   config_input_key_down
 

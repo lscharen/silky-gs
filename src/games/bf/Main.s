@@ -560,7 +560,6 @@ RenderScreen
             and   #NES_PPUMASK_SPR
             jsr   EnableSprites
 
-
 ; Determine if this will be a dirty update or not
 
             lda   DirtyBits
@@ -586,40 +585,6 @@ RenderScreen
             jsr   drawDirtyScreen
 :complete
 
-; Patch the PEA field give the current frame's parameters
-
-;            jsr   _SetupPEAField
-
-; See if we are doing a dirty update or a full render
-
-;            lda   DirtyBits
-;            bit   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_REFRESH
-;            bne   :full_update
-;            lda   disableDirtyRendering
-;            bne   :full_update
-;            lda   use_dirty
-;            beq   :full_update
-
-;            jsr   drawDirtyScreen
-;            bra   :complete
-
-;:full_update
-;            jsr   drawScreen
-
-;:complete
-
-; Clear any dirty flags
-
-;            lda   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_REFRESH
-;            trb   DirtyBits
-             stz   DirtyBits
-;:done
-
-; Restore the PEA field
-
-;            jsr   _ResetPEAField
-
-
 ; Optionally show the frames per second
             DO    SHOW_DEBUG_VARS
             ldal  OneSecondCounter
@@ -643,6 +608,7 @@ RenderScreen
             jsr   DrawByte
             FIN
 
+            stz   DirtyBits
             stz   LastPatchOffset
             rts
 
@@ -690,12 +656,11 @@ ConfScrnPal  dw    $0F, $30, $27, $2A, $15, $02, $21, $00, $10, $16, $12, $37, $
 TitleScreen  dw    $0F, $30, $27, $2A, $15, $02, $21, $00, $10, $16, $12, $37, $21, $17, $11, $2B
 LevelHeader1 dw    $0F, $2A, $09, $07, $30, $27, $16, $11, $21, $00, $10, $12, $37, $17, $35, $2B
 
-ClearScreen
-            ldx  #$7CFE
-:loop       stal $012000,x
-            dex
-            dex
-            bpl  :loop
+; ApplyConfig
+;
+; Read the variabled set up the configuration screen and apply them to the runtime engine.
+ApplyConfig
+
             rts
 
 ; Configuration screen and variables
@@ -718,13 +683,16 @@ config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
+config_input_snesmax_port dw 4
 
 CONFIG_PALETTE       equ 0
 TILE_TOP_LEFT        equ $1E0
 TILE_TOP_RIGHT       equ $1E2
-TILE_HORIZONTAL      equ $1E1
-TILE_VERTICAL_LEFT   equ $1E1
-TILE_VERTICAL_RIGHT  equ $1E1
+TILE_BOTTOM_LEFT     equ $1FE
+TILE_BOTTOM_RIGHT    equ $1FE
+TILE_HORIZONTAL      equ $1FE
+TILE_VERTICAL_LEFT   equ $1FE
+TILE_VERTICAL_RIGHT  equ $1FE
 TILE_ZERO            equ $100
 TILE_A               equ $10A
 TILE_SPACE           equ $124
@@ -749,9 +717,10 @@ INPUT_LEFT_MAP_STR  str 'LEFT'
 INPUT_RIGHT_MAP_STR str 'RIGHT'
 INPUT_UP_MAP_STR    str 'UP'
 INPUT_DOWN_MAP_STR  str 'DOWN'
+INPUT_SNESMAX_PORT_STR str 'SLOT'
 
 GAME_TITLE_STR      str 'GAME'
-GAME_NO_ANIM_STR    str 'STAR ANIMATION'
+GAME_NO_ANIM_STR    str 'STAR ANIM'
 
 ; The configuration screen leverages the NES runtime itself
 CONFIG_BLK   db   CONFIG_PALETTE        ; Which background palette to use
@@ -779,16 +748,22 @@ AUDIO_CONFIG dw   AUDIO_TITLE_STR
 AUDIO_ITEM_1 dw   RADIO                 ; A radio button (mutually exclusive) option
              dw   0                     ; previous control
              dw   0                     ; next control
-             dw   3,1                   ; X,Y location of control in the config area
+             dw   3,2                   ; X,Y location of control in the config area
              dw   AUDIO_QUALITY_STR     ; Title
              dw   config_audio_quality  ; Memory address to write the configuration value
              dw   3                     ; Three options
+             
              dw   0                     ; config value
              dw   AUDIO_QUALITY_OPT_1   ; config label
+             dw   0
+
              dw   2
              dw   AUDIO_QUALITY_OPT_2
+             dw   0
+             
              dw   4
              dw   AUDIO_QUALITY_OPT_3
+             dw   0
 
 VIDEO_CONFIG dw   VIDEO_TITLE_STR
              dw   AUDIO_CONFIG          ; previous menu item
@@ -801,14 +776,14 @@ VIDEO_CONFIG dw   VIDEO_TITLE_STR
 VIDEO_ITEM_1 dw   CHKBOX                ; Checkbox just forces a 0/1 for False/True
              dw   0                     ; previous control
              dw   VIDEO_ITEM_2          ; next control
-             dw   3,1
+             dw   3,2
              dw   VIDEO_STATUS_BAR_STR
              dw   config_video_statusbar
 
 VIDEO_ITEM_2 dw   CHKBOX
              dw   VIDEO_ITEM_1          ; previous control
              dw   0                     ; next control
-             dw   3,3
+             dw   3,4
              dw   VIDEO_FASTMODE_STR
              dw   config_video_fastmode
 
@@ -816,52 +791,76 @@ INPUT_CONFIG dw   INPUT_TITLE_STR
              dw   VIDEO_CONFIG          ; previous menu item
              dw   GAME_CONFIG           ; next menu item
 
-             dw   5
+             dw   1
              dw   INPUT_ITEM_1
-             dw   INPUT_ITEM_2
-             dw   INPUT_ITEM_3
-             dw   INPUT_ITEM_4
-             dw   INPUT_ITEM_5
+;             dw   INPUT_ITEM_2
+;             dw   INPUT_ITEM_3
+;             dw   INPUT_ITEM_4
+;             dw   INPUT_ITEM_5
 
 INPUT_ITEM_1 dw   RADIO
              dw   0
-             dw   INPUT_ITEM_2
-             dw   3,1
+             dw   0                    ; No NEXT defined, use the selected item
+             dw   3,2
              dw   INPUT_TYPE_STR
              dw   config_input_type
-             dw   3
+             dw   2
+;             dw   3
+
              dw   0
              dw   INPUT_TYPE_OPT_1
-             dw   2
-             dw   INPUT_TYPE_OPT_2
+             dw   KEYBOARD_LIST
+
+;             dw   2
+;             dw   INPUT_TYPE_OPT_2
+;             dw   0
+
              dw   4
              dw   INPUT_TYPE_OPT_3
+             dw   SNESMAX_LIST
+
+SNESMAX_LIST  dw  NUMBER_SELECT
+              dw  INPUT_ITEM_1
+              dw  0
+              dw  3,8
+              dw  INPUT_SNESMAX_PORT_STR
+              dw  config_input_snesmax_port
+
+              dw  1            ; minimum value
+              dw  7            ; maximum value
+
+KEYBOARD_LIST dw  CTRL_LIST
+              dw  4
+              dw  INPUT_ITEM_2
+              dw  INPUT_ITEM_3
+              dw  INPUT_ITEM_4
+              dw  INPUT_ITEM_5
 
 INPUT_ITEM_2 dw   KEYMAP
              dw   INPUT_ITEM_1
              dw   INPUT_ITEM_3
-             dw   3,7
+             dw   3,8
              dw   INPUT_LEFT_MAP_STR
              dw   config_input_key_left
 
 INPUT_ITEM_3 dw   KEYMAP
              dw   INPUT_ITEM_2
              dw   INPUT_ITEM_4
-             dw   3,8
+             dw   3,9
              dw   INPUT_RIGHT_MAP_STR
              dw   config_input_key_right
 
 INPUT_ITEM_4 dw   KEYMAP
              dw   INPUT_ITEM_3
              dw   INPUT_ITEM_5
-             dw   3,9
+             dw   3,10
              dw   INPUT_UP_MAP_STR
              dw   config_input_key_up
 
 INPUT_ITEM_5 dw   KEYMAP
              dw   INPUT_ITEM_4
              dw   0
-             dw   3,10
+             dw   3,11
              dw   INPUT_DOWN_MAP_STR
              dw   config_input_key_down
 
@@ -876,7 +875,7 @@ GAME_CONFIG  dw   GAME_TITLE_STR
 GAME_ITEM_1  dw   CHKBOX
              dw   0
              dw   0
-             dw   3,1
+             dw   3,2
              dw   GAME_NO_ANIM_STR
              dw   config_video_notwinkle
 
