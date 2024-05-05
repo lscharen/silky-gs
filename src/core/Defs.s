@@ -40,7 +40,7 @@ StartY                 equ   18          ; Which code buffer line is the top of 
 CompileBank0           equ   20          ; Always zero to allow [CompileBank0],y addressing
 CompileBank            equ   22          ; Data bank that holds compiled sprite code
 
-LastPatchOffset        equ   24          ; Offset into code field that was patched with BRA instructions
+; LastPatchOffset        equ   24          ; Offset into code field that was patched with BRA instructions
 StartXMod256           equ   26
 StartYMod240           equ   28
 
@@ -80,8 +80,8 @@ InputPlayer2           equ   120
 
 ShowFPS                equ   126
 YOrigin                equ   128
-VideoMode              equ   130
-AudioMode              equ   132
+; VideoMode              equ   130
+; AudioMode              equ   132
 ; BGToggle               equ   134
 LastEnable             equ   136
 LastStatusUdt          equ   138
@@ -187,6 +187,11 @@ TILE_ROW     equ $9000          ; pre-calculated row of the PPU address
 ; Return codes from the Event Loop harness
 USER_SAYS_QUIT equ 'q'
 USER_SAYS_RESET equ 'r'
+
+; APU emulation constants
+APU_60HZ equ 0
+APU_120HZ equ 1
+APU_240HZ equ 2
 
 ; NES Register definitions
 NES_PPUMASK_BG  equ $08

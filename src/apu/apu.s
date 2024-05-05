@@ -44,6 +44,28 @@ APUStartUp
                         plp
                         rts
 
+; Reload the configuration for on-the-fly changes
+APUReload
+                        php
+                        sei
+                        phd
+
+                        pha                    ; Save the new configuration mode
+                        pea $c000
+                        pld
+
+                        jsr stop_playing
+                        jsr stop_interrupts
+
+                        pla
+                        stal apu_mode
+                        jsr setup_doc_registers
+                        jsr setup_interrupt
+
+                        pld
+                        plp
+                        rts
+
 APUShutDown             = *
                         php
                         sei
@@ -53,21 +75,25 @@ APUShutDown             = *
                         tcd
 
                         jsr   stop_playing
+                        jsr   stop_interrupts
 
+                        pld
+                        plp
+                        clc
+                        rts
+
+stop_interrupts
                         ldal  apu_mode
-                        cmp   #2
+                        cmp   #APU_60HZ
                         beq   :no_doc_interrupts
 
                         lda   backup_interrupt_ptr      ; restore old interrupt ptr
                         stal  sound_interrupt_ptr
                         lda   backup_interrupt_ptr+2
                         stal  sound_interrupt_ptr+2
-
 :no_doc_interrupts
-                        pld
-                        plp
-                        clc
                         rts
+
 
 stop_playing            = *
 
@@ -330,7 +356,7 @@ copy_register_config
 
 setup_interrupt         = *
                         ldal  apu_mode
-                        cmp   #2                                   ; mode 2 = external driver at 60Hz
+                        cmp   #APU_60HZ                             ; external driver at 60Hz
                         beq   :no_doc_interrupts
 
                         ldal  sound_interrupt_ptr
@@ -705,6 +731,7 @@ interrupt_handler       = *
 
 ; Figure out which speed we are dispatching
                         lda   apu_mode
+                        cmp   #APU_240HZ
                         beq   :do_240hz_mode
                         jmp   (:apu_120hz_table,x)
 :do_240hz_mode          jmp   (:apu_240hz_table,x)

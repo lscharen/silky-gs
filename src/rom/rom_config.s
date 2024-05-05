@@ -1064,7 +1064,7 @@ ConfigDrawTopBorder
 
             phy
             phx
-            lda  #TILE_HORIZONTAL
+            lda  #TILE_HORIZONTAL_TOP
             ldx  #CONFIG_PALETTE*2
             jsr  blitTile
             plx
@@ -1100,7 +1100,7 @@ ConfigDrawBottomBorder
 
             phy
             phx
-            lda  #TILE_HORIZONTAL
+            lda  #TILE_HORIZONTAL_BOTTOM
             ldx  #CONFIG_PALETTE*2
             jsr  blitTile
             plx

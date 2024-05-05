@@ -90,15 +90,10 @@ _CoreStartUp
 ; it would see that the x and p positions did not change from zero and some critical dispatch information
 ; would not get filled in.
 
-                  jsr       _ApplyBG0YPosLite
-                  jsr       _ApplyBG0XPosLite
+;                  jsr       _ApplyBG0YPosLite
+;                  jsr       _ApplyBG0XPosLite
+;                  jsr       _RestoreBG0OpcodesLite
                   clc
-
-
-;                  jsr       InitSprites         ; Initialize the sprite subsystem
-;                  jsr       InitTiles           ; Initialize the tile subsystem
-
-;                  jsr       InitTimers          ; Initialize the timer subsystem
                   rts
 :core_err
                   brk $ee
@@ -171,22 +166,6 @@ OneSecHandler     mx        %11
                   clc
                   rtl
 
-;                  phb
-;                  pha
-
-;                  rep       #$20
-;                  ldal      OneSecondCounter
-;                  inc
-;                  stal      OneSecondCounter
-;                  sep       #$20
-
-;                  ldal      $E0C032
-;                  and       #%10111111          ;clear IRQ source
-;                  stal      $E0C032
-
-;                  pla
-;                  clc
-;                  rtl
                   mx        %00
 
 ; This is OK, it's referenced by a long address
@@ -227,7 +206,7 @@ EngineReset
 
                   stz       DirtyBits
                   stz       LastRender             ; Initialize as if a full render was performed
-                  stz       LastPatchOffset
+;                  stz       LastPatchOffset
                   stz       RenderCount
 
                   lda       #CTRL_EVEN_RENDER
@@ -235,10 +214,6 @@ EngineReset
                   stz       GTEControlBits
 
                   stz       CompileBankTop
-
-;                  stz       SpriteBanks
-;                  stz       SpriteMap
-;                  stz       ActiveSpriteCount
 
                   stz       OneSecondCounter
 
@@ -255,14 +230,38 @@ EngineReset
                   sta       STATE_REG_R1W1
                   rep       #$20
 
+; Insert jumps to the interrupt enable code every 16 lines
+
+                  jsr       _InitPEAFieldInt
+
+; If the even mode is turned on, adjust all of the even lines in the PEA field to skip their next line
+
+                  jsr       _InitRenderMode
+
+; Done initializing the engine
+
+                  clc
+                  rts
+
+_InitRenderMode
+                  lda       GTEControlBits
+                  bit       #CTRL_EVEN_RENDER
+                  beq       :no_even
+                  jmp       _InitPEAFieldEven
+:no_even          jmp       _InitPEAFieldAll
+
+
 ; Insert jumps to the interrupt enable code every 16 lines. There are 120 lines in each bank, so
 ; only 7 loops needed.  Interrups are set at the mid-point lines -- 4, 20, 36, 52, 68, 84, 100, 116
-
+;
+; Notice that this routine sets the low byte of the EXIT_EVEN address, while _InitPEAFieldAll and
+; _InitPEAFieldEven set the high byte of EXIT_EVEN.
+_InitPEAFieldInt
                   lda       #7
                   sta       tmp15
 
                   ldx       #_EXIT_EVEN+{_LINE_SIZE*4}+1      ; Patch the JMP operand here
-:lloop
+:loop
                   sep       #$20
                   lda       #_ENTRY_INT
                   stal      lite_base,x
@@ -275,20 +274,60 @@ EngineReset
                   tax
 
                   dec       tmp15
-                  bne       :lloop
+                  bne       :loop
+                  rts
 
-; If the even mode is turned on, adjust all of the even lines in the PEA field to skip their next line
 
-                  lda       GTEControlBits
-                  bit       #CTRL_EVEN_RENDER
-                  beq       :no_even
+; Initialize the PEA fields for "normal" mode that draws all of the lines
+_InitPEAFieldAll
+                  lda       #119                   ; There are 120 lines in each bank
+                  sta       tmp15
 
+                  ldx       #_EXIT_EVEN+2
+                  ldy       #3                    ; The first even line jumps to $3F1
+:loop
+                  sep       #$20
+                  tya
+;                  cmpl      lite_base,x
+;                  beq  :ok1
+;                  ldal      lite_base,x
+;                  brk  $04
+
+:ok1
+                  stal      lite_base,x
+
+;                  cmpl      lite_base_2,x
+;                  beq  :ok2
+;                  ldal      lite_base_2,x
+;                  brk  $05
+
+:ok2
+                  stal      lite_base_2,x
+                  rep       #$20
+
+                  tya
+                  clc
+                  adc       #2                   ; Move this many pages up
+                  tay
+
+                  txa
+                  clc
+                  adc       #_LINE_SIZE          ; Step to the next line
+                  tax
+
+                  dec       tmp15
+                  bne       :loop
+
+                  rts
+
+; Initialize the PEA fields for "even" mode where all of the odd lines are skipped
+_InitPEAFieldEven
                   lda       #60                   ; There are 120 lines in each bank, we update half of them
                   sta       tmp15
 
                   ldx       #_EXIT_EVEN+2
                   ldy       #5                    ; The first even line jumps to $3F1, needs to go to $5xx
-:eloop
+:loop
                   sep       #$20
                   tya
                   stal      lite_base,x
@@ -306,13 +345,8 @@ EngineReset
                   tax
 
                   dec       tmp15
-                  bne       :eloop
-:no_even
-
-; Done initializing the engine
-                  clc
+                  bne       :loop
                   rts
-
 
 WaitForKey        sep       #$20
                   stal      KBD_STROBE_REG      ; clear the strobe
@@ -344,7 +378,8 @@ _ReadControl
 ; Now read the specific input device for each player
 
                   ldx       config_input_p1_type ; Load the input type for player 1
-                  jsr       (:input_proc,x)
+;                  jsr       (:input_proc,x)
+                  jsr       _ReadKeyboard1
                   tsb       InputPlayer1
                   rts
 
@@ -419,42 +454,42 @@ _ReadKeyboard     pha                           ; low byte = key code, high byte
                   and       #$7f
                   cmp       config_input_key_down
                   bne       :not_down
-                  lda       #PAD_DOWN
+                  lda       #>PAD_DOWN
                   ora       2,s
                   bra       :done
 
 :not_down
                   cmp       config_input_key_up
                   bne       :not_up
-                  lda       #PAD_UP
+                  lda       #>PAD_UP
                   ora       2,s
                   bra       :done
 
 :not_up
                   cmp       config_input_key_left
                   bne       :not_left
-                  lda       #PAD_LEFT
+                  lda       #>PAD_LEFT
                   ora       2,s
                   bra       :done
 
 :not_left
                   cmp       config_input_key_right
                   bne       :not_right
-                  lda       #PAD_RIGHT
+                  lda       #>PAD_RIGHT
                   ora       2,s
                   bra       :done
 
 :not_right
                   cmp       #9           ; TAB
                   bne       :not_select
-                  lda       #PAD_SELECT
+                  lda       #>PAD_SELECT
                   ora       2,s
                   bra       :done
 
 :not_select
                   cmp       #13          ; Return
                   bne       :not_start
-                  lda       #PAD_START
+                  lda       #>PAD_START
                   ora       2,s
                   bra       :done
 

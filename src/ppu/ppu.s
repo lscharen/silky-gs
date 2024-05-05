@@ -1739,7 +1739,7 @@ shadowBitmapToList
 
 :one_next
         iny
-        cpy  #y_height_rows+y_offset_rows+1
+        cpy  #y_height_rows+y_offset_rows
         bcc  :one_loop
 
 ; If we end while tracking a sprite, add to the list as the last item
@@ -1790,6 +1790,11 @@ LOAD_CURRENT mac
         lda  (walk_curr),y
         <<<
 
+LOAD_INV_CURRENT mac
+        lda  (walk_curr),y
+        eor  #$FF
+        <<<
+
 ; (prev | background) & ~current
 ;
 ; de Morgan: A & ~B = ~(~A | B)
@@ -1806,6 +1811,8 @@ LOAD_INTERSECTION  mac
         and  shadowBitmap1,y
         <<<
 
+; Scan the bitmap list and execute a callback funtion on each 1->0 transition with the [start, finish) coordinates
+; saved
 WALK_BITMAP mac
         stz  walk_top
         stz  walk_bottom

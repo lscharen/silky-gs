@@ -93,7 +93,7 @@ ALLOW_SPRITE_0    equ 1   ; Sprite 0 is the lightning spark
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 1
+NO_INTERRUPTS     equ 0
 
 ; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
@@ -214,11 +214,11 @@ InitPlayfield
             lda   #24
             sta   NesTop
 
-            lda   VideoMode
-            cmp   #0
-            beq   :good
-            cmp   #2
-            beq   :better
+;            lda   VideoMode
+;            cmp   #0
+;            beq   :good
+;            cmp   #2
+;            beq   :better
 
             lda   #0
             sta   MinYScroll
@@ -602,14 +602,14 @@ RenderScreen
             jsr   DrawByte
 :skip_fps
 
-            lda   disableDirtyRendering
+            lda   InputPlayer1
             ldx   #8*160
             ldy   #$FFFF
-            jsr   DrawByte
+            jsr   DrawWord
             FIN
 
             stz   DirtyBits
-            stz   LastPatchOffset
+;            stz   LastPatchOffset
             rts
 
 ; For this game, we utilize multiple palettes to conserve palette colors and reserve colors for the sprites
@@ -678,7 +678,7 @@ config_audio_quality   ds  2  ; good / better / best audio quality (60Hz, 120Hz,
 config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
 config_video_notwinkle ds  2  ; disable the background star animation
-config_input_type      dw  0  ; keyboard / joystick / snes max
+config_input_p1_type   dw  2  ; keyboard / snes max
 config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
@@ -691,6 +691,8 @@ TILE_TOP_RIGHT       equ $1E2
 TILE_BOTTOM_LEFT     equ $1FE
 TILE_BOTTOM_RIGHT    equ $1FE
 TILE_HORIZONTAL      equ $1FE
+TILE_HORIZONTAL_TOP  equ $1FE
+TILE_HORIZONTAL_BOTTOM  equ $1FE
 TILE_VERTICAL_LEFT   equ $1FE
 TILE_VERTICAL_RIGHT  equ $1FE
 TILE_ZERO            equ $100
@@ -700,9 +702,9 @@ TILE_CURSOR          equ $0A0  ; $10A
 
 AUDIO_TITLE_STR     str 'AUDIO'
 AUDIO_QUALITY_STR   str 'QUALITY'
-AUDIO_QUALITY_OPT_1 str ' 60 HZ'
-AUDIO_QUALITY_OPT_2 str '120 HZ'
-AUDIO_QUALITY_OPT_3 str '240 HZ'
+AUDIO_QUALITY_60HZ  str ' 60 HZ'
+AUDIO_QUALITY_120HZ str '120 HZ'
+AUDIO_QUALITY_240HZ str '240 HZ'
 
 VIDEO_TITLE_STR      str 'VIDEO'
 VIDEO_FASTMODE_STR   str 'FAST BLIT'
@@ -752,17 +754,17 @@ AUDIO_ITEM_1 dw   RADIO                 ; A radio button (mutually exclusive) op
              dw   AUDIO_QUALITY_STR     ; Title
              dw   config_audio_quality  ; Memory address to write the configuration value
              dw   3                     ; Three options
-             
-             dw   0                     ; config value
-             dw   AUDIO_QUALITY_OPT_1   ; config label
+
+             dw   APU_60HZ              ; config value
+             dw   AUDIO_QUALITY_60HZ    ; config label
+             dw   0                     ; conditional control (if null, nothing)
+
+             dw   APU_120HZ
+             dw   AUDIO_QUALITY_120HZ
              dw   0
 
-             dw   2
-             dw   AUDIO_QUALITY_OPT_2
-             dw   0
-             
-             dw   4
-             dw   AUDIO_QUALITY_OPT_3
+             dw   APU_240HZ
+             dw   AUDIO_QUALITY_240HZ
              dw   0
 
 VIDEO_CONFIG dw   VIDEO_TITLE_STR
@@ -803,7 +805,7 @@ INPUT_ITEM_1 dw   RADIO
              dw   0                    ; No NEXT defined, use the selected item
              dw   3,2
              dw   INPUT_TYPE_STR
-             dw   config_input_type
+             dw   config_input_p1_type
              dw   2
 ;             dw   3
 
@@ -815,7 +817,7 @@ INPUT_ITEM_1 dw   RADIO
 ;             dw   INPUT_TYPE_OPT_2
 ;             dw   0
 
-             dw   4
+             dw   2
              dw   INPUT_TYPE_OPT_3
              dw   SNESMAX_LIST
 

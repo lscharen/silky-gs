@@ -34,9 +34,9 @@ NES_StartUp
             stz   ShowFPS
             stz   YOrigin
 
-            lda   #4                      ; Default to "Best" mode
-            sta   VideoMode
-            sta   AudioMode
+;            lda   #4                      ; Default to "Best" mode
+;            sta   VideoMode
+;            sta   AudioMode
 
             lda   #$0008
             sta   LastEnable
@@ -70,7 +70,7 @@ NES_StartUp
 
             DO    NO_INTERRUPTS
             ELSE
-            lda   #1
+            lda   config_audio_quality
             jsr   APUStartUp              ; 0 = 240Hz, 1 = 120Hz, 2 = 60Hz (external)
             FIN
 
@@ -204,9 +204,9 @@ NES_EvtLoop
 
             cmp   #'?'
             bne   :not_config
-            jsr   NES_StopExecution
-            jsr   ShowConfig
-            jsr   ApplyConfig
+            jsr   NES_StopExecution                       ; Pause emulation nicely
+            jsr   ShowConfig                              ; Let the user reconfigure
+            jsr   ApplyConfig                             ; Apply to the running configuration
             lda   #DIRTY_BIT_BG0_REFRESH                  ; Force a full page refresh on config exit
             tsb   DirtyBits
             jsr   NES_StartExecution

@@ -89,7 +89,7 @@ PPU_PALETTE_DISPATCH equ SMB_PALETTE_DISPATCH
 SHOW_ROM_EXECUTION_TIME equ 0
 
 ; Turn on some off-screen information
-SHOW_DEBUG_VARS equ 0
+SHOW_DEBUG_VARS equ 1
 
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 2
@@ -114,10 +114,10 @@ x_offset    equ   16                      ; number of bytes from the left edge
 
 ; Show the configuration screen
 
-            ldx   #CONFIG_BLK
-            jsr   ShowConfig
-            bcc   *+5
-            jmp   quit
+;            ldx   #CONFIG_BLK
+;            jsr   ShowConfig
+;            bcc   *+5
+;            jmp   quit
 
 ; Start the FPS counter
             ldal  OneSecondCounter
@@ -187,25 +187,6 @@ Greyscale   dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
 
-            DO    SHOW_DEBUG_VARS
-drawStats
-            ldx   #0
-            ldy   #$FFFF
-            sec
-            lda  at_queue_head          ; Calculate the number of elements in the queue
-            sbc  at_queue_tail
-            and  #AT_QUEUE_MASK
-            jsr  DrawWord
-
-            ldx   #8*160
-            ldy   #$FFFF
-            sec
-            lda  nt_queue_head          ; Calculate the number of elements in the queue
-            sbc  nt_queue_tail
-            and  #NT_QUEUE_MASK
-            jmp  DrawWord
-            FIN
-
 TmpPalette  ds    32
 
 ; Program variables
@@ -219,11 +200,11 @@ InitPlayfield
             lda   #16            ; We render starting at line 16 in the NES video buffer
             sta   NesTop
 
-            lda   VideoMode
-            cmp   #0
-            beq   :good
-            cmp   #2
-            beq   :better
+;            lda   VideoMode
+;            cmp   #0
+;            beq   :good
+;            cmp   #2
+;            beq   :better
 
             lda   #0
             sta   MinYScroll
@@ -455,7 +436,15 @@ RenderScreen
             ldy   nesBottomOffset         ; offset to patch
             jsr   _RestoreBG0OpcodesAltLite
 
-            stz   LastPatchOffset
+            DO    SHOW_DEBUG_VARS
+            lda   InputPlayer1
+            ldx   #8*160
+            ldy   #$FFFF
+            jsr   DrawWord
+            FIN
+
+            stz   DirtyBits
+;            stz   LastPatchOffset
             rts
 
 SetDefaultPalette
@@ -497,8 +486,24 @@ SwizzleTables adrl AT0_T0,AT1_T0,AT2_T0,AT3_T0,AT2_T0
 
 ; ApplyConfig
 ;
-; Read the variabled set up the configuration screen and apply them to the runtime engine.
+; Read the variables set up the configuration screen and apply them to the runtime engine.
 ApplyConfig
+            lda   config_video_fastmode
+            beq   :normal_video
+            lda   #CTRL_EVEN_RENDER
+            tsb   GTEControlBits
+            bra   :apply_video
+:normal_video
+            lda   #CTRL_EVEN_RENDER
+            trb   GTEControlBits
+:apply_video
+            lda   #0
+            jsr   FillScreen
+            jsr   _InitRenderMode
+
+
+            lda   config_audio_quality
+            jsr   APUReload
             rts
 
 ; Copy just the tiles that change directly to the graphics screen
@@ -563,16 +568,20 @@ config_audio_quality   ds  2  ; good / better / best audio quality (60Hz, 120Hz,
 config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
 config_video_small     ds  2  ; use a smaller playfield screen size
-config_input_type      dw  0  ; keyboard / joystick / snes max
+config_input_p1_type   dw  0  ; keyboard  / snes max
 config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
+config_input_snesmax_port dw 4
 
 CONFIG_PALETTE      equ 1
 TILE_TOP_LEFT       equ $144
 TILE_TOP_RIGHT      equ $149
-TILE_HORIZONTAL     equ $148
+TILE_BOTTOM_LEFT    equ $15F
+TILE_BOTTOM_RIGHT   equ $17A
+TILE_HORIZONTAL_TOP equ $148
+TILE_HORIZONTAL_BOTTOM equ $178
 TILE_VERTICAL_LEFT  equ $146
 TILE_VERTICAL_RIGHT equ $14A
 TILE_ZERO           equ $100
@@ -582,9 +591,9 @@ TILE_CURSOR         equ $1CE
 
 AUDIO_TITLE_STR     str 'AUDIO'
 AUDIO_QUALITY_STR   str 'QUALITY'
-AUDIO_QUALITY_OPT_1 str ' 60 HZ'
-AUDIO_QUALITY_OPT_2 str '120 HZ'
-AUDIO_QUALITY_OPT_3 str '240 HZ'
+AUDIO_QUALITY_60HZ  str ' 60 HZ'
+AUDIO_QUALITY_120HZ str '120 HZ'
+AUDIO_QUALITY_240HZ str '240 HZ'
 
 VIDEO_TITLE_STR      str 'VIDEO'
 VIDEO_FASTMODE_STR   str 'FAST BLIT'
@@ -600,12 +609,14 @@ INPUT_LEFT_MAP_STR  str 'LEFT'
 INPUT_RIGHT_MAP_STR str 'RIGHT'
 INPUT_UP_MAP_STR    str 'UP'
 INPUT_DOWN_MAP_STR  str 'DOWN'
+INPUT_SNESMAX_PORT_STR str 'SLOT'
 
 ; The configuration screen leverages the NES runtime itself
 CONFIG_BLK   db   CONFIG_PALETTE        ; Which background palette to use
              db   TILE_TOP_LEFT         ; Define the tiles to use for the UI
              db   TILE_TOP_RIGHT
-             db   TILE_HORIZONTAL
+             db   TILE_HORIZONTAL_TOP
+             db   TILE_HORIZONTAL_BOTTOM
              db   TILE_VERTICAL_LEFT
              db   TILE_VERTICAL_RIGHT
              db   TILE_ZERO             ; First tile for the 0 - 9 characters
@@ -631,16 +642,16 @@ AUDIO_ITEM_1 dw   RADIO                 ; A radio button (mutually exclusive) op
              dw   config_audio_quality  ; Memory address to write the configuration value (set to zero if not saved)
              dw   3                     ; Three options
 
-             dw   0                     ; config value
-             dw   AUDIO_QUALITY_OPT_1   ; config label
+             dw   APU_60HZ              ; config value
+             dw   AUDIO_QUALITY_60HZ    ; config label
              dw   0                     ; conditional control (if null, nothing)
 
-             dw   2
-             dw   AUDIO_QUALITY_OPT_2
+             dw   APU_120HZ
+             dw   AUDIO_QUALITY_120HZ
              dw   0                     ; conditional control (if null, nothing)
 
-             dw   4
-             dw   AUDIO_QUALITY_OPT_3
+             dw   APU_240HZ
+             dw   AUDIO_QUALITY_240HZ
              dw   0                     ; conditional control (if null, nothing)
 
 VIDEO_CONFIG dw   VIDEO_TITLE_STR
@@ -677,29 +688,41 @@ INPUT_CONFIG dw   INPUT_TITLE_STR
              dw   VIDEO_CONFIG          ; previous menu item
              dw   0                     ; next menu item
 
-             dw   5
+             dw   1
              dw   INPUT_ITEM_1
-             dw   INPUT_ITEM_2
-             dw   INPUT_ITEM_3
-             dw   INPUT_ITEM_4
-             dw   INPUT_ITEM_5
 
 INPUT_ITEM_1 dw   RADIO
              dw   0
-             dw   INPUT_ITEM_2
+             dw   0
              dw   3,2
              dw   INPUT_TYPE_STR
-             dw   config_input_type
-             dw   3
+             dw   config_input_p1_type
+             dw   2
 
              dw   0
              dw   INPUT_TYPE_OPT_1
+             dw   KEYBOARD_LIST
 
              dw   2
-             dw   INPUT_TYPE_OPT_2
-
-             dw   4
              dw   INPUT_TYPE_OPT_3
+             dw   SNESMAX_LIST
+
+SNESMAX_LIST  dw  NUMBER_SELECT
+              dw  INPUT_ITEM_1
+              dw  0
+              dw  3,8
+              dw  INPUT_SNESMAX_PORT_STR
+              dw  config_input_snesmax_port
+
+              dw  1            ; minimum value
+              dw  7            ; maximum value
+
+KEYBOARD_LIST dw  CTRL_LIST
+              dw  4
+              dw  INPUT_ITEM_2
+              dw  INPUT_ITEM_3
+              dw  INPUT_ITEM_4
+              dw  INPUT_ITEM_5
 
 INPUT_ITEM_2 dw   KEYMAP
              dw   INPUT_ITEM_1

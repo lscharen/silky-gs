@@ -80,6 +80,8 @@ _SetScreenMode
                   plx
 
                   jsr       SetScreenRect
+
+                  lda       #0
                   jmp       FillScreen          ; tail return
 :exit
                   rts
@@ -278,7 +280,13 @@ SetScreenRect      sty   ScreenHeight               ; Save the screen height and
                    rts
 
 ; Clear the SHR screen and then infill the defined field
-FillScreen         lda   #0
+FillScreen         cmp   #0
+                   bne   :fullfill
+                   jmp   _ClearToColor
+
+:fullfill
+                   pha
+                   lda   #0
                    jsr   _ClearToColor
 
                    ldy   ScreenY0
@@ -295,7 +303,7 @@ FillScreen         lda   #0
                    lda   ScreenWidth
                    lsr
                    tay
-                   lda   #$FFFF
+                   lda   1,s
 :xloop             stal  $E10000,x                  ; X is the absolute address
                    inx
                    inx
@@ -306,6 +314,8 @@ FillScreen         lda   #0
                    iny
                    cpy   ScreenY1
                    bcc   :yloop
+
+                   pla
                    rts
 
 
