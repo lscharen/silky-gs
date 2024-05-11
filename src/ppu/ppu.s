@@ -1342,12 +1342,17 @@ scanOAMSprites
          bcc    :skip
 
          and    #$00FF              ; Isolate the Y-coordinate
-;         cmp    #{max_nes_y-8}+1    ; Skip anything that is beyond this line
+         DO     NO_VERTICAL_CLIP
          cmp    #max_nes_y
          bcs    :skip
-;         cmp    #y_offset
          cmp    #y_offset-7
          bcc    :skip
+         ELSE
+         cmp    #{max_nes_y-8}+1    ; Skip anything that is beyond this line
+         bcs    :skip
+         cmp    #y_offset
+         bcc    :skip
+         FIN
 
          phx
          phy
@@ -1415,10 +1420,17 @@ useOtherBitmap
          bcc    :skip
 
          and    #$00FF              ; Isolate the Y-coordinate
+         DO     NO_VERTICAL_CLIP
+         cmp    #max_nes_y
+         bcs    :skip
+         cmp    #y_offset-7
+         bcc    :skip
+         ELSE
          cmp    #{max_nes_y-8}+1    ; Skip anything that is beyond this line
          bcs    :skip
          cmp    #y_offset
          bcc    :skip
+         FIN
 
          phx
          phy

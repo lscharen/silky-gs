@@ -216,6 +216,7 @@ EngineReset
                   stz       CompileBankTop
 
                   stz       OneSecondCounter
+                  stz       LastKey
 
 ; Fill in the state register values
 
@@ -395,6 +396,7 @@ _ReadControl
 ; status in the high bit.
 _ReadKeypress
                   pea       $0000               ; temporary space
+                  sep       #$20
 
                   ldal      KBD_STROBE_REG      ; read the keyboard
                   bit       #$80

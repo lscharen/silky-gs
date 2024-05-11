@@ -76,6 +76,11 @@ DIRECT_OAM_READ   equ 0
 ; special sprite 0 collision behavior, which is not supported in this runtime
 ALLOW_SPRITE_0    equ 0
 
+; Flag to determine if sprites are not drawn when any part of them goes out
+; side of the defined playfield area.  When the playfield is full-height,
+; this prevents *any* access to memory outside of the SHR screen.
+NO_VERTICAL_CLIP equ 1
+
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
 NO_INTERRUPTS     equ 0

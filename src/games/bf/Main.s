@@ -91,6 +91,11 @@ DIRECT_OAM_READ   equ $200
 ; special sprite 0 collision behavior, which is not supported in this runtime
 ALLOW_SPRITE_0    equ 1   ; Sprite 0 is the lightning spark
 
+; Flag to determine if sprites are not drawn when any part of them goes out
+; side of the defined playfield area.  When the playfield is full-height,
+; this prevents *any* access to memory outside of the SHR screen.
+NO_VERTICAL_CLIP equ 0
+
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
 NO_INTERRUPTS     equ 0
@@ -660,7 +665,22 @@ LevelHeader1 dw    $0F, $2A, $09, $07, $30, $27, $16, $11, $21, $00, $10, $12, $
 ;
 ; Read the variabled set up the configuration screen and apply them to the runtime engine.
 ApplyConfig
+            lda   config_video_fastmode
+            beq   :normal_video
+            lda   #CTRL_EVEN_RENDER
+            tsb   GTEControlBits
+            bra   :apply_video
+:normal_video
+            lda   #CTRL_EVEN_RENDER
+            trb   GTEControlBits
+:apply_video
+            lda   #0
+            jsr   FillScreen
+            jsr   _InitRenderMode
 
+
+            lda   config_audio_quality
+            jsr   APUReload
             rts
 
 ; Configuration screen and variables
