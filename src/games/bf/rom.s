@@ -3711,7 +3711,8 @@ ld60c
 ld60d_updatestarbganim
     lda $4c		;  \ If [$4C] == 0
 ;    beq ld63a	;  / Then Do Nothing
-    bra ld63a   ; IIgs -- patch to disable background animation
+star_patch ENT
+    bra ld63a   ; IIgs -- patch to disable background animation (BEQ = $F0, BRA = $80)
     dec $4c
     lda $4f		;  \
     clc			;  |

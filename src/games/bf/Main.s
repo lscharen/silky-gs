@@ -145,6 +145,7 @@ x_offset      equ 16                      ; number of bytes from the left edge
             jsr   ShowConfig
             bcc   *+5
             jmp   quit
+            jsr   ApplyConfig
 
 ; Initialize the graphics for the main game mode
 
@@ -664,6 +665,7 @@ LevelHeader1 dw    $0F, $2A, $09, $07, $30, $27, $16, $11, $21, $00, $10, $12, $
 ; ApplyConfig
 ;
 ; Read the variabled set up the configuration screen and apply them to the runtime engine.
+star_patch EXT
 ApplyConfig
             lda   config_video_fastmode
             beq   :normal_video
@@ -678,9 +680,17 @@ ApplyConfig
             jsr   FillScreen
             jsr   _InitRenderMode
 
-
             lda   config_audio_quality
             jsr   APUReload
+
+            sep   #$30
+            lda   #$80          ; BRA instruction
+            ldx   config_video_twinkle
+            beq   :turn_off
+            lda   #$F0          ; BEQ instruction
+:turn_off   stal  star_patch
+            
+            rep   #$30
             rts
 
 ; Configuration screen and variables
@@ -697,7 +707,7 @@ ApplyConfig
 config_audio_quality   ds  2  ; good / better / best audio quality (60Hz, 120Hz, 240Hz audio interrupts)
 config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
-config_video_notwinkle ds  2  ; disable the background star animation
+config_video_twinkle   ds  2  ; disable the background star animation
 config_input_p1_type   dw  2  ; keyboard / snes max
 config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
@@ -899,7 +909,7 @@ GAME_ITEM_1  dw   CHKBOX
              dw   0
              dw   3,2
              dw   GAME_NO_ANIM_STR
-             dw   config_video_notwinkle
+             dw   config_video_twinkle
 
             DO    SHOW_DEBUG_VARS
             put   ../../misc/App.Msg.s
