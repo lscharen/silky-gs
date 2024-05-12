@@ -114,6 +114,8 @@ SHOW_DEBUG_VARS equ 0
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 3 
 y_height_rows equ 25
+y_ending_row  equ {y_offset_rows+y_height_rows}
+
 y_offset      equ {y_offset_rows*8}
 y_height      equ {y_height_rows*8}
 min_nes_y     equ 24

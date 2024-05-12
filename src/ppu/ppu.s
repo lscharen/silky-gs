@@ -1211,6 +1211,7 @@ ppu_3F1F rts
 
         mx   %11
 * ; Trigger a copy from a page of memory to OAM.  Since this is a DMA operation, we can cheat a little and do a 16-bit copy
+PPU_OAM equ 0                       ; direct page base address
 PPUDMA_WRITE ENT
         DO DIRECT_OAM_READ
         rtl                         ; Cheat a lot and pretend it didn't happen.  Read from NES RAM directly when we render
@@ -1220,21 +1221,27 @@ PPUDMA_WRITE ENT
         pha
 
         rep #$30
+        phd
+        ldal  DP_OAM
+        tcd
+
         DO  ALLOW_SPRITE_0
         lda   ROMBase+$200
-        stal  PPU_OAM
+        sta   PPU_OAM
         lda   ROMBase+$202
-        stal  PPU_OAM+2
+        sta   PPU_OAM+2
         FIN
 
 ]n      equ   1
         lup   63
         lda   ROMBase+$200+{]n*4}
-        stal  PPU_OAM+{]n*4}
+        sta   PPU_OAM+{]n*4}
         lda   ROMBase+$202+{]n*4}
-        stal  PPU_OAM+2+{]n*4}
+        sta   PPU_OAM+2+{]n*4}
 ]n      =     ]n+1
         --^
+
+        pld
         sep #$30
 
         pla
@@ -1329,11 +1336,15 @@ scanOAMSprites
          and   #CTRL_SPRITE_ENABLE
          beq   :disabled
 
+         phd
+         lda   DP_OAM
+         tcd
+
 :loop
          DO     DIRECT_OAM_READ
          ldal   ROMBase+DIRECT_OAM_READ,x      ; Copy the low word
          ELSE
-         ldal   PPU_OAM,x
+         lda    PPU_OAM,x
          FIN
          inc                          ; Increment the y-coordinate to match the PPU delay
          sta    OAM_COPY,y
@@ -1370,7 +1381,7 @@ scanOAMSprites
          DO     DIRECT_OAM_READ
          ldal   ROMBase+DIRECT_OAM_READ+2,x    ; Copy the high word
          ELSE
-         ldal   PPU_OAM+2,x
+         lda    PPU_OAM+2,x
          FIN
          sta    OAM_COPY+2,y
 
@@ -1386,6 +1397,8 @@ scanOAMSprites
          inx
          cpx  #$0100
          bcc  :loop
+
+         pld
 
 :disabled
          sty   spriteCount           ; spriteCount * 4 for easy comparison later
@@ -1407,11 +1420,15 @@ useOtherBitmap
          and   #CTRL_SPRITE_ENABLE
          beq   :disabled
 
+         phd
+         lda   DP_OAM
+         tcd
+
 :loop
          DO     DIRECT_OAM_READ
          ldal   ROMBase+DIRECT_OAM_READ,x      ; Copy the low word
          ELSE
-         ldal   PPU_OAM,x
+         lda    PPU_OAM,x
          FIN
          inc                          ; Increment the y-coordinate to match the PPU delay
          sta    OAM_COPY,y
@@ -1448,7 +1465,7 @@ useOtherBitmap
          DO     DIRECT_OAM_READ
          ldal   ROMBase+DIRECT_OAM_READ+2,x    ; Copy the high word
          ELSE
-         ldal   PPU_OAM+2,x
+         lda    PPU_OAM+2,x
          FIN
          sta    OAM_COPY+2,y
 
@@ -1464,6 +1481,8 @@ useOtherBitmap
          inx
          cpx  #$0100
          bcc  :loop
+
+         pld
 
          sty   spriteCount           ; spriteCount * 4 for easy comparison later
          rts
@@ -1975,13 +1994,13 @@ _exposeScreen
 
         mx   %00
 clearPreviousSprites
-        WALK_BITMAP LOAD_INTERSECTION;y_offset_rows;y_height_rows;_drawBackground
+        WALK_BITMAP LOAD_INTERSECTION;y_offset_rows;y_ending_row;_drawBackground
 
 exposeCurrentSprites
-        WALK_BITMAP LOAD_CURRENT;y_offset_rows;y_height_rows;_exposeScreen
+        WALK_BITMAP LOAD_CURRENT;y_offset_rows;y_ending_row;_exposeScreen
 
 drawOtherLines
-        WALK_BITMAP LOAD_OTHERS;y_offset_rows;y_height_rows;_drawBackground
+        WALK_BITMAP LOAD_OTHERS;y_offset_rows;y_ending_row;_drawBackground
 
 ; Update the minimal amount of the screen just based on what had changed from the prior
 ; frame.  We track three bitmaps of information that identify which lines different

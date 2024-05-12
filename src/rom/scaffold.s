@@ -19,6 +19,10 @@ NES_StartUp
             tdc
             sta   DPSave
 
+            clc
+            adc   #$100
+            sta   DP_OAM                  ; Use direct page space for the PPU OAM memory
+
 ; Set up the initial register values when transferring control to the NES ROM code
 
             sep   #$20
@@ -277,6 +281,7 @@ NES_ShutDown
 
 OneSecondCounter  dw  0
 DPSave            dw  0
+DP_OAM            dw  0
 BorderColor       dw  0            ; save/restore border color
 
 ; Built-in user key actions
