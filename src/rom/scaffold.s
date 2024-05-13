@@ -321,10 +321,20 @@ NES_RenderFrame
             lda  at_queue_head
             sta  :at_head
 
+            DO   CUSTOM_PPU_CTRL_LOCK
+            CUSTOM_PPU_CTRL_LOCK_CODE
+            ELSE
             lda  ppuctrl                  ;  Cache these values that are used to set the view port
+            FIN
             sta  _ppuctrl
+
+            DO   CUSTOM_PPU_SCROLL_LOCK
+            CUSTOM_PPU_SCROLL_LOCK_CODE
+            ELSE
             lda  ppuscroll
-            sta  _ppuscroll
+            FIN
+            ldal  ROMBase+$073f
+            sta  _ppuscroll+1
 
             plp
 

@@ -70,7 +70,7 @@ ROM_DRIVER_MODE   equ 0
 ;
 ; 0  = use OAM DMA
 ; >0 = read $100 bytes directly from NES RAM
-DIRECT_OAM_READ   equ 0
+DIRECT_OAM_READ   equ $0200
 
 ; Flag whether to ignore Sprite 0.  Somce games use this sprite only for the 
 ; special sprite 0 collision behavior, which is not supported in this runtime
@@ -95,6 +95,22 @@ SHOW_ROM_EXECUTION_TIME equ 0
 
 ; Turn on some off-screen information
 SHOW_DEBUG_VARS equ 0
+
+; Provide alternative ways of locking in the scroll and ppu control values after a frame
+CUSTOM_PPU_CTRL_LOCK equ 1
+CUSTOM_PPU_SCROLL_LOCK equ 1
+
+;Mirror_PPU_CTRL_REG1  = $0778
+;HorizontalScroll      = $073f
+;VerticalScroll        = $0740
+CUSTOM_PPU_CTRL_LOCK_CODE mac
+                          ldal ROMBase+$0778
+                          <<<
+CUSTOM_PPU_SCROLL_LOCK_CODE mac
+                          ldal ROMBase+$073f
+                          xba
+                          <<<
+
 
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 2
@@ -125,6 +141,7 @@ x_offset    equ   16                      ; number of bytes from the left edge
 ;            jsr   ShowConfig
 ;            bcc   *+5
 ;            jmp   quit
+;            jsr   ApplyConfig
 
 ; Start the FPS counter
             ldal  OneSecondCounter
@@ -384,7 +401,7 @@ RenderScreen
             sep   #$20
             lda   _ppuctrl                ; Bit 0 is the high bit of the X scroll position
             lsr                           ; put in the carry bit
-            lda   _ppuscroll+1             ; load the scroll value
+            lda   _ppuscroll+1            ; load the scroll value
             ror                           ; put the high bit and divide by 2 for the engine
             rep   #$20
             and   #$00FF                  ; make sure nothing is in the high byte

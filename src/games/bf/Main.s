@@ -111,6 +111,15 @@ SHOW_ROM_EXECUTION_TIME equ 0
 ; Turn on some off-screen information
 SHOW_DEBUG_VARS equ 0
 
+; Provide alternative ways of locking in the scroll and ppu control values after a frame
+CUSTOM_PPU_CTRL_LOCK equ 0
+CUSTOM_PPU_SCROLL_LOCK equ 0
+CUSTOM_PPU_CTRL_LOCK_CODE mac
+;
+                          <<<
+CUSTOM_PPU_SCROLL_LOCK_CODE mac
+;
+                          <<<
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 3 
 y_height_rows equ 25
@@ -143,11 +152,11 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
 ; Show the configuration screen
 
-            ldx   #CONFIG_BLK
-            jsr   ShowConfig
-            bcc   *+5
-            jmp   quit
-            jsr   ApplyConfig
+;            ldx   #CONFIG_BLK
+;            jsr   ShowConfig
+;            bcc   *+5
+;            jmp   quit
+;            jsr   ApplyConfig
 
 ; Initialize the graphics for the main game mode
 
