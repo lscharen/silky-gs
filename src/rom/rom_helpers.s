@@ -98,6 +98,25 @@ ROM_LoadSpriteTiles
             cpy  #128
             bcc  :cploop
 
+; If this sprite is in the compilation list, also compile it
+
+            lda  1,s
+            jsr  FindInList
+            bcc  :no_match
+
+; Y = address in the compile bank
+; A = low address of bitmap
+; X = high address of bitmap
+
+            phx
+            ldy  SpriteBankPos
+            lda  #TileBuff
+            ldx  #^TileBuff
+            jsr  CompileSprite
+            sty  SpriteBankPos
+            plx
+:no_match
+
             txy
             pla
             clc
@@ -107,6 +126,27 @@ ROM_LoadSpriteTiles
             cpx  #16*256         ; Have we done the last sprite tile?
             bcc  :sloop
             rts
+
+; Find a value in the compiled sprite list
+; A = value
+; Can use y-reg
+FindInList
+            ldy #2*{COMPILED_SPRITE_LIST_COUNT-1}
+            bmi :no_match
+
+:loop
+            cmp :compiled_sprite_list,y
+            beq :match
+            dey
+            dey
+            bpl :loop
+:no_match
+            clc
+            rts
+:match
+            sec
+            rts
+:compiled_sprite_list COMPILED_SPRITE_LIST
 
 ; Low-level utility functions to extract the NES Tile data and convert it
 ; from the interleaved format into something that the runtime can handle

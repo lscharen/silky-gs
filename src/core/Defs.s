@@ -46,7 +46,7 @@ StartYMod240           equ   28
 
 GTEControlBits         equ   30          ; Enable / disable things
 
-SpriteBanks            equ   32          ; Bank bytes for the sprite data and sprite mask
+;SpriteBanks            equ   32          ; Bank bytes for the sprite data and sprite mask
 LastRender             equ   34          ; Record which render function was last executed
 CompileBankTop         equ   36          ; First free byte in the compile bank.  Grows upward in memeory.
 
@@ -64,19 +64,21 @@ pputmp                 equ   56          ; 16 bytes of temporary storage for the
 ;shadowBitmap           equ   52          ; Provide enough space for the full ppu range (240 lines) + 16 since the y coordinate can be off-screen
 ;_next                  equ   shadowBitmap+32
 
-RenderCount            equ   102         ; 8-bit value tracking the number of times the PPU queues have been rendered to the PEA field
+;RenderCount            equ   102         ; 8-bit value tracking the number of times the PPU queues have been rendered to the PEA field
 LastRead               equ   104
+
+SpriteBank0            equ   106          ; Always zero to allow [CompileBank0],y addressing
+SpriteBank             equ   108          ; Data bank that holds compiled sprite code
+SpriteBankPos          equ   110          ; Current free location in the sprite compile bank
 
 ;TileStoreBankAndBank01 equ   106
 ;TileStoreBankAndTileDataBank equ 108
 ;TileStoreBankDoubled   equ   110
+
 UserId                 equ   112          ; Memory manager user Id to use
 LastKey                equ   116
 InputPlayer1           equ   118          ; Filled in by _ReadContollers
 InputPlayer2           equ   120
-;LastTick               equ   118
-;ForceSpriteFlag        equ   120
-;RenderFlags            equ   124         ; Flags passed to the Render() function
 
 ShowFPS                equ   126
 YOrigin                equ   128

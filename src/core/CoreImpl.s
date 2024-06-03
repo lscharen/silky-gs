@@ -207,16 +207,19 @@ EngineReset
                   stz       DirtyBits
                   stz       LastRender             ; Initialize as if a full render was performed
 ;                  stz       LastPatchOffset
-                  stz       RenderCount
+;                  stz       RenderCount
 
                   lda       #CTRL_EVEN_RENDER
                   sta       GTEControlBits
                   stz       GTEControlBits
 
-                  stz       CompileBankTop
+                  stz       CompileBankTop         ; Bank for compiled tiles
 
                   stz       OneSecondCounter
                   stz       LastKey
+
+                  lda       #1                     ; $0000 is a sentinel address, so start at $0001 for
+                  sta       SpriteBankPos          ; compiled sprites
 
 ; Fill in the state register values
 

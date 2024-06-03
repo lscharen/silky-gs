@@ -83,7 +83,7 @@ NO_VERTICAL_CLIP equ 1
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 0
+NO_INTERRUPTS     equ 1
 
 ; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
@@ -111,6 +111,11 @@ CUSTOM_PPU_SCROLL_LOCK_CODE mac
                           xba
                           <<<
 
+; Define a list of sprites that should be compiled (must be in order and the tile address offset (x16))
+COMPILED_SPRITE_LIST_COUNT equ 0
+COMPILED_SPRITE_LIST       mac
+                           dw  $70*16,$71*16,$72*16,$73*16     ; goombas
+                           <<<
 
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 2
@@ -847,3 +852,4 @@ WaterPalette dw     $22, $00, $15, $12, $25, $3A, $1A, $0F, $30, $12, $27, $10, 
             put   ../../core/blitter/HorzLite.s
             put   ../../core/blitter/VertLite.s
             put   ../../core/tiles/CompileTile.s
+            put   ../../core/sprites/CompileSprites.s

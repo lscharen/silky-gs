@@ -62,6 +62,9 @@ PPUStartUp
         sta   patch3+2
         sta   patch4+2
 
+        lda   SpriteBank0+1             ; Patch some dispatch addresses with the sprite compilation bank
+        sta   csd+2
+
         jsr   _InitPPUTileMapping       ; Set up the lookup tables in the PPU shadow RAM
 
         lda   #$FFFF                    ; Set initial palette values to out-of-range values
@@ -2155,28 +2158,46 @@ oam_loop
         rep  #$20
         and  #$00FF
         adc  sprTmp0                   ; Add to the base address calculated fom the Y-coordinate
-;        tay                           ; This is the SHR address at which to draw the sprite
-        sta  sprTmp1
+        sta  sprTmp1                   ; This is the SHR address at which to draw the sprite
 
-; Calculate the address of the tile data
+; This is the point to check if there is a compiled version of this sprite
 
-;        lda  OAM_COPY,x
-        ldal OAM_COPY,x
-        and  #$FF00
-        lsr                           ; Each tile is 128 bytes of data
-        sta  sprTmp0                  ; This is loaded in the draw routines
+        ldal spr_comp_tbl,x
+        beq  as_bitmap
 
-; Now, examine the other control bits.  We dispatch differently based on the herizontal flip, vertical
+; Vector through the compiled sprite table.  The compiled sprites are in a different bank, so just check
+; for a sentinel value and manually jump into the compiled sprite code to avoid a double-jump and having to
+; have a second jump table in the compile sprite code bank.
+
+        stal csd+1                     ; patch in the long address directly
+        ldal OAM_COPY+2,x              ; abort if the sprite has the priority bit set
+        bit  #$0020
+        bne  cs_abort
+csd     jml  $00000
+
+; Finish calculating the jump address. We dispatch differently based on the horizontal flip, vertical
 ; flip and priority bits. when calling the rendering function, Y = screen address, X = tile data address
 
-;        lda  OAM_COPY+2,x
+as_bitmap
         ldal OAM_COPY+2,x
+cs_abort
         and  #$00E0
         lsr
         lsr
         lsr
         lsr
-        tax
+        tay
+
+; Calculate the address of the tile data
+
+        ldal OAM_COPY,x
+        and  #$FF00
+        lsr                           ; Each tile is 128 bytes of data
+        sta  sprTmp0                  ; This is loaded in the draw routines
+
+; Put the dispatch address back in X
+
+        tyx
         jmp  (drawProcs,x)
 
 draw_rtn
@@ -2196,6 +2217,8 @@ draw_rtn
 drawProcs
         dw drawTileToScreen,drawTileToScreenP,drawTileToScreenH,drawTileToScreenPH
         dw drawTileToScreenV,drawTileToScreenPV,drawTileToScreenHV,drawTileToScreenPHV
+
+spr_comp_tbl ds 512,$00
 
 ; Draw a tile directly to the screen
 ;

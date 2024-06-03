@@ -39,6 +39,10 @@ InitMemory
                sta       CompileBank
                stz       CompileBank0
 
+               jsr       AllocOneBank2
+               sta       SpriteBank
+               stz       SpriteBank0
+
 ; Initialize some memory tables that point to addresses in the blitter code
 InitLiteBlitter
 
@@ -83,27 +87,6 @@ InitLiteBlitter
                inx
                cpx       #_LINES_PER_BANK*2*2
                bcc       :loop1b
-
-; Now, fill in an alternate array that returns the address based on the tile
-
-;               ldx       #120*2
-;               ldy       #lite_base_2
-;:loop2
-;               lda       BTableHigh                  ; This is the same value for the lite blitter
-;               sta       BRowTableHigh,x
-;               sta       BRowTableHigh+{26*2},x
-
-;               tya
-;               sta       BRowTableLow,x
-;               sta       BRowTableLow+{26*2},x
-;               clc
-;               adc       #{8*_LINE_SIZE}
-;               tay
-
-;               inx
-;               inx
-;               cpx       #26*2
-;               bcc       :loop2
 
                clc
 :mem_err
