@@ -141,6 +141,10 @@ FindInList
             ldy #2*{COMPILED_SPRITE_LIST_COUNT-1}
             bmi :no_match
 
+            ldy :compiled_sprite_list
+            bmi :match_first_n
+            ldy #2*{COMPILED_SPRITE_LIST_COUNT-1}
+
 :loop
             cmp :compiled_sprite_list,y
             beq :match
@@ -153,6 +157,12 @@ FindInList
 :match
             sec
             rts
+
+:match_first_n
+            cmp  #16*COMPILED_SPRITE_LIST_COUNT
+            bcc  :match
+            bra  :no_match
+
 :compiled_sprite_list COMPILED_SPRITE_LIST
 
 ; Low-level utility functions to extract the NES Tile data and convert it
