@@ -31,15 +31,12 @@
 ;
 ;  ...
 
-BOTH_ADDR_OFFSET equ 14
-HORZ_ADDR_OFFSET equ 22
-VERT_ADDR_OFFSET equ 25
+BOTH_ADDR_OFFSET equ 13
+VERT_ADDR_OFFSET equ 21
+HORZ_ADDR_OFFSET equ 24
+PREAMBLE_SIZE    equ 26
 
 CompileSprite
-:target equ tmp4
-:source equ tmp5
-:copy   equ tmp7
-:flags  equ tmp8
 :base   equ tmp9                 ; start of the sprite
 
 ; Sprite are called with OAM Byte 2 in the accumulator and X set to the sprite index. The
@@ -56,34 +53,27 @@ CompileSprite
 ;            jmp   both            ; 3 bytes
 ;            bit   #$0080          ; 3 bytes
 ;            beq   *+5             ; 2 bytes
-;            jmp   horizontal      ; 3 bytes
-;            jmp   vertical        ; 3 bytes = 26 bytes
+;            jmp   vertical        ; 3 bytes
+;            jmp   horizontal      ; 3 bytes = 26 bytes
 ; normal     ...
 ; horizontal ...
 ;            ...
-;            jml   draw_rtn
+;            jml   draw_rtn2
 
         sty  :base               ; base address of the sprite
-        tya
-        clc
-        adc  #26                 ; first byte after the preamble
-        sta  :target             ; Pointer to the target code address
 
 ; Gerenate the preamble
 
-        ldy  :base
         jsr  CompileSpritePreamble
 
 ; Build each sprite and insert it's address into the preamble code.  The normal sprite
 ; (no horizontal or vertical flip) doesn't need any patching because it's always located
 ; immediately after the preable
 
-        ldy  :target
         jsr  CompileSpriteNormal
 
 ; Build the horizontally flipped version
 
-        jsr  CompileSpriteHorz
         phy
         lda  :base
         clc
@@ -92,10 +82,10 @@ CompileSprite
         lda  1,s
         sta  [SpriteBank0],y
         ply
+        jsr  CompileSpriteHorz
 
 ; Build the vertically flipped version
 
-        jsr  CompileSpriteVert
         phy
         lda  :base
         clc
@@ -104,10 +94,10 @@ CompileSprite
         lda  1,s
         sta  [SpriteBank0],y
         ply
+        jsr  CompileSpriteVert
 
 ; Build the vertically and horizontally flipped version
 
-        jsr  CompileSpriteBoth
         phy
         lda  :base
         clc
@@ -116,10 +106,10 @@ CompileSprite
         lda  1,s
         sta  [SpriteBank0],y
         ply
+        jsr  CompileSpriteBoth
 
-; Return with the new address
+; Return with the new address in the Y-register
 
-        tya
         rts
 
 CompileSpritePreamble
@@ -189,10 +179,8 @@ CompileSpritePreamble
         rts
 
 CompileSpriteNormal
-:target equ tmp4
-:flags  equ tmp5
+:flags  equ tmp8
 
-        ldy  :target             ; This is the pointer to the compilation bank address
         lda  #$FFFF
         sta  :flags              ; When this value is zero, all 16 words have been generated
 
@@ -204,6 +192,7 @@ CompileSpriteNormal
         and  :flags              ; Has this word already been generated?
         beq  :skip
 
+        lda  word_addr,x
         jsr  emit_op
 
 :skip
@@ -216,10 +205,8 @@ CompileSpriteNormal
         jmp  _EmitReturn
 
 CompileSpriteHorz
-:target equ tmp4
-:flags  equ tmp5
+:flags  equ tmp8
 
-        ldy  :target             ; This is the pointer to the compilation bank address
         lda  #$FFFF
         sta  :flags              ; When this value is zero, all 16 words have been generated
 
@@ -231,6 +218,7 @@ CompileSpriteHorz
         and  :flags              ; Has this word already been generated?
         beq  :skip
 
+        lda  word_addr-64,x
         jsr  emit_op
 
 :skip
@@ -243,10 +231,8 @@ CompileSpriteHorz
         jmp  _EmitReturn
 
 CompileSpriteVert
-:target equ tmp4
-:flags  equ tmp5
+:flags  equ tmp8
 
-        ldy  :target             ; This is the pointer to the compilation bank address
         lda  #$FFFF
         sta  :flags              ; When this value is zero, all 16 words have been generated
 
@@ -258,6 +244,7 @@ CompileSpriteVert
         and  :flags              ; Has this word already been generated?
         beq  :skip
 
+        lda  word_addr_flip,x
         jsr  emit_op_flip
 
 :skip
@@ -270,10 +257,8 @@ CompileSpriteVert
         jmp  _EmitReturn
 
 CompileSpriteBoth
-:target equ tmp4
-:flags  equ tmp5
+:flags  equ tmp8
 
-        ldy  :target             ; This is the pointer to the compilation bank address
         lda  #$FFFF
         sta  :flags              ; When this value is zero, all 16 words have been generated
 
@@ -285,6 +270,7 @@ CompileSpriteBoth
         and  :flags              ; Has this word already been generated?
         beq  :skip
 
+        lda  word_addr_flip-64,x
         jsr  emit_op_flip
 
 :skip
@@ -300,17 +286,24 @@ _EmitReturn
         lda  #$005C           ; return instruction jumps back to draw_rtn
         sta  [SpriteBank0],y
         iny
-        lda  #draw_rtn
+        lda  #draw_rtn2
         sta  [SpriteBank0],y
         iny
         iny
-        lda  #^draw_rtn
+        lda  #^draw_rtn2
         sta  [SpriteBank0],y
         iny
 
         rts
 
 emit_op
+        sta  tmp7
+
+        lda  TileBuff+32,x            ; Check if the mask is zero of not
+        beq  :no_mask
+        cmp  #$FFFF
+        beq  :no_data
+
         lda  #$00A0                 ; ldy #imm
         sta  [SpriteBank0],y
         iny
@@ -319,13 +312,10 @@ emit_op
         iny
         iny
 
-        lda  TileBuff+32,x            ; Check if the mask is zero of not
-        beq  :no_mask
-
         lda  #$00BD                 ; lda abs,x
         sta  [SpriteBank0],y
         iny
-        lda  word_addr,x
+        lda  tmp7
         sta  [SpriteBank0],y
         iny
         iny
@@ -346,13 +336,22 @@ emit_op
         lda  #$009D                 ; sta abs,x
         sta  [SpriteBank0],y
         iny
-        lda  word_addr,x
+        lda  tmp7
         sta  [SpriteBank0],y
         iny
         iny
+:no_data
         rts
 
 :no_mask
+        lda  #$00A0                 ; ldy #imm
+        sta  [SpriteBank0],y
+        iny
+        lda  TileBuff,x
+        sta  [SpriteBank0],y
+        iny
+        iny
+
         lda  #$B7+{ActivePtr*256}   ; lda [ActivePtr],y
         sta  [SpriteBank0],y
         iny
@@ -361,13 +360,20 @@ emit_op
         lda  #$009D                 ; sta abs,x
         sta  [SpriteBank0],y
         iny
-        lda  word_addr,x
+        lda  tmp7
         sta  [SpriteBank0],y
         iny
         iny
         rts
 
 emit_op_flip
+        sta  tmp7
+
+        lda  TileBuff+32,x            ; Check if the mask is zero or not
+        beq  :no_mask_flip
+        cmp  #$FFFF
+        beq  :no_data_flip
+
         lda  #$00A0                 ; ldy #imm
         sta  [SpriteBank0],y
         iny
@@ -376,13 +382,10 @@ emit_op_flip
         iny
         iny
 
-        lda  TileBuff+32,x            ; Check if the mask is zero or not
-        beq  :no_mask_flip
-
         lda  #$00BD                 ; lda abs,x
         sta  [SpriteBank0],y
         iny
-        lda  word_addr_flip,x
+        lda  tmp7
         sta  [SpriteBank0],y
         iny
         iny
@@ -403,13 +406,22 @@ emit_op_flip
         lda  #$009D                 ; sta abs,x
         sta  [SpriteBank0],y
         iny
-        lda  word_addr_flip,x
+        lda  tmp7
         sta  [SpriteBank0],y
         iny
         iny
+:no_data_flip
         rts
 
 :no_mask_flip
+        lda  #$00A0                 ; ldy #imm
+        sta  [SpriteBank0],y
+        iny
+        lda  TileBuff,x
+        sta  [SpriteBank0],y
+        iny
+        iny
+
         lda  #$B7+{ActivePtr*256}   ; lda [ActivePtr],y
         sta  [SpriteBank0],y
         iny
@@ -418,7 +430,7 @@ emit_op_flip
         lda  #$009D                 ; sta abs,x
         sta  [SpriteBank0],y
         iny
-        lda  word_addr_flip,x
+        lda  tmp7
         sta  [SpriteBank0],y
         iny
         iny

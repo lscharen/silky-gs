@@ -109,7 +109,14 @@ ROM_LoadSpriteTiles
 ; X = high address of bitmap
 
             phx
-            ldy  SpriteBankPos
+            lsr                  ; A = sprite_idx * 16
+            lsr
+            lsr                  ; Make it sprite_idx * 2
+            tax
+            lda  SpriteBankPos
+            sta  spr_comp_tbl,x  ; Put the compiled sprite address in the table
+
+            tay
             lda  #TileBuff
             ldx  #^TileBuff
             jsr  CompileSprite

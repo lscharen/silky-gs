@@ -2091,6 +2091,7 @@ drawSprites
 ;:mul160      equ tmp8    ; Setting this to tmp5 causes problems -- need to investigate
 :spriteCount equ pputmp+8
 :mul160      equ pputmp+10
+:cmplbank    equ pputmp+14  ; $0100 | ^tiledata
 
 ; Run through the copy of the OAM memory and render each sprite to the graphics screen.  Typically,
 ; shadowing is disabled during this routine.
@@ -2111,8 +2112,14 @@ drawSprites
 
 ; Set up the data bank to point to the tile data
 
-        phb
-        pea   #^tiledata
+        phb                          ; Save the current data bank
+        pea   #^tiledata             ; Put the tile data bank on the stack
+
+        lda   1,s                    ; Construct a work with Bank $01 and tilebank for 
+        xba                          ; compiled sprites to quickly set and restore the
+        ora   #$0001
+        sta   :cmplbank
+
         plb
 
 oam_loop
@@ -2120,15 +2127,11 @@ oam_loop
 
 ; First, calculate the physical location on the SHR screen at which to draw the sprite
 
-;        lda   OAM_COPY,x              ; Y-coordinate
-        ldal  OAM_COPY,x
+        ldal  OAM_COPY,x               ; Y-coordinate
         and   #$00FF
         asl
         tay
-;        lda   Mul160Tbl,y
         lda  [:mul160],y
-
-;        clc
         adc  #$2000-{y_offset*160}+x_offset
         sta  sprTmp0
 
@@ -2138,7 +2141,6 @@ oam_loop
 
 ; Set the palette pointer for this sprite
 
-;        lda  OAM_COPY+2,x             ; Put attribute byte in the high byte
         ldal OAM_COPY+2,x             ; Put attribute byte in the high byte
         and  #$03
         asl
@@ -2147,11 +2149,8 @@ oam_loop
 
 ; Convert the x-coordinate.
 
-;        lda  _ppuscroll+1
         ldal _ppuscroll+1
         and  #$01
-;        clc
-;        adc  OAM_COPY+3,x             ; X-coordinate (In NES pixels, need to convert to IIgs bytes)
         adcl OAM_COPY+3,x             ; X-coordinate (In NES pixels, need to convert to IIgs bytes)
         and  #$FE                     ; Mask before the shift so that we know a 0 goes into the carry
         ror                           ; Rotate to bring the carry into the high bit in case of overflow
@@ -2162,6 +2161,11 @@ oam_loop
 
 ; This is the point to check if there is a compiled version of this sprite
 
+        txy
+        ldal OAM_COPY+1,x
+        and  #$00FF
+        asl
+        tax
         ldal spr_comp_tbl,x
         beq  as_bitmap
 
@@ -2169,16 +2173,20 @@ oam_loop
 ; for a sentinel value and manually jump into the compiled sprite code to avoid a double-jump and having to
 ; have a second jump table in the compile sprite code bank.
 
+        tyx
         stal csd+1                     ; patch in the long address directly
         ldal OAM_COPY+2,x              ; abort if the sprite has the priority bit set
         bit  #$0020
         bne  cs_abort
+        pei  :cmplbank
+        plb
 csd     jml  $00000
 
 ; Finish calculating the jump address. We dispatch differently based on the horizontal flip, vertical
 ; flip and priority bits. when calling the rendering function, Y = screen address, X = tile data address
 
 as_bitmap
+        tyx
         ldal OAM_COPY+2,x
 cs_abort
         and  #$00E0
@@ -2200,6 +2208,8 @@ cs_abort
         tyx
         jmp  (drawProcs,x)
 
+draw_rtn2
+        plb                           ; Return from compiled sprite
 draw_rtn
         plx                           ; Restore the counter
         inx
@@ -2283,12 +2293,6 @@ drawTileToScreenH
 
 drawTileToScreen
 
-;          sty   tmp1        ; screen address
-
-;          phb               ; 3
-;          pea   #^tiledata  ; 5
-;          plb               ; 4
-
 ]line     equ   0
           lup   8
 
@@ -2311,8 +2315,6 @@ drawTileToScreen
 ]line     equ   ]line+1
           --^
 
-;          plb               ; 4
-;          plb               ; 4 = 20 cycles per sprite
           jmp   draw_rtn
 
 drawTileToScreenHV
@@ -2323,12 +2325,6 @@ drawTileToScreenHV
           sta   sprTmp0
 
 drawTileToScreenV
-
-;          sty   tmp1        ; screen address
-
-;          phb
-;          pea   #^tiledata
-;          plb
 
 ]line     equ   0
           lup   8
@@ -2352,8 +2348,6 @@ drawTileToScreenV
 ]line     equ   ]line+1
           --^
 
-;          plb
-;          plb
           jmp   draw_rtn
 
 drawTileToScreenPHV
@@ -2366,12 +2360,6 @@ drawTileToScreenPH
 
 drawTileToScreenPV
 drawTileToScreenP
-
-;          sty   tmp1        ; screen address
-
-;          phb
-;          pea   #^tiledata
-;          plb
 
 ]line     equ   0
           lup   8
@@ -2456,8 +2444,6 @@ drawTileToScreenP
 ]line     equ   ]line+1
           --^
 
-;          plb
-;          plb
           jmp   draw_rtn
 
 incborder
