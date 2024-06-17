@@ -112,9 +112,13 @@ CUSTOM_PPU_SCROLL_LOCK_CODE mac
                           <<<
 
 ; Define a list of sprites that should be compiled (must be in order and the tile address offset (x16))
-COMPILED_SPRITE_LIST_COUNT equ 4
+; If the COMPILED_SPRITE_LIST is a single negative value, then the first COMPILED_SPRITE_LIST_COUNT
+; sprites will be compiled
+COMPILED_SPRITE_LIST_COUNT equ 100
+;COMPILED_SPRITE_LIST_COUNT equ 0
 COMPILED_SPRITE_LIST       mac
-                           dw  $70*16,$71*16,$72*16,$73*16     ; goombas
+;                           dw  $70*16,$71*16,$72*16,$73*16     ; goombas
+                           dw  $FFFF
                            <<<
 
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
@@ -151,6 +155,8 @@ x_offset    equ   16                      ; number of bytes from the left edge
 ; Start the FPS counter
             ldal  OneSecondCounter
             sta   OldOneSec
+            lda   frameCount
+            sta   oldFrameCount
 
 ; Set an internal flag to tell the VBL interrupt handler that it is
 ; ok to start invoking the game logic.  The ROM code has to be run
@@ -216,13 +222,11 @@ Greyscale   dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
 
-TmpPalette  ds    32
-
 ; Program variables
-singleStepMode    dw  0
 LastAreaType      dw  0
 show_vbl_cpu      dw  0
 user_break        dw  0
+oldFrameCount     dw  0
 
 ; Helper to initialize the playfield based on the selected VideoMode
 InitPlayfield
@@ -466,10 +470,25 @@ RenderScreen
             jsr   _RestoreBG0OpcodesAltLite
 
             DO    SHOW_DEBUG_VARS
-            lda   InputPlayer1
-            ldx   #8*160
+            ldal  OneSecondCounter
+            cmp   OldOneSec
+            beq   :skip_fps
+
+            sta   OldOneSec
+            ldx   frameCount
+            txa
+            sec
+            sbc   oldFrameCount
+            stx   oldFrameCount
+            ldx   #0
             ldy   #$FFFF
-            jsr   DrawWord
+            jsr   DrawByte
+:skip_fps
+
+;            lda   InputPlayer1
+;            ldx   #8*160
+;            ldy   #$FFFF
+;            jsr   DrawWord
             FIN
 
             stz   DirtyBits

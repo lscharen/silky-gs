@@ -120,6 +120,12 @@ CUSTOM_PPU_CTRL_LOCK_CODE mac
 CUSTOM_PPU_SCROLL_LOCK_CODE mac
 ;
                           <<<
+
+COMPILED_SPRITE_LIST_COUNT equ 100
+COMPILED_SPRITE_LIST       mac
+                           dw  $FFFF
+                           <<<
+
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 3 
 y_height_rows equ 25
@@ -214,10 +220,7 @@ Greyscale   dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
 
-TmpPalette  ds    32
-
 ; Program variables
-singleStepMode    dw  0
 LastAreaType      dw  0
 show_vbl_cpu      dw  0
 user_break        dw  0
@@ -951,3 +954,4 @@ GAME_ITEM_1  dw   CHKBOX
             put   ../../core/blitter/HorzLite.s
             put   ../../core/blitter/VertLite.s
             put   ../../core/tiles/CompileTile.s
+            put   ../../core/sprites/CompileSprites.s

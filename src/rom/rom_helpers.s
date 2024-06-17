@@ -655,6 +655,9 @@ NES_SetPalette
             pla
             ldx   #TmpPalette
             jmp   _SetPalette
+
+TmpPalette  ds    32
+
 ; Initialize the swizzle pointer to the set of palette maps.  The pointer must
 ;
 ; 1. Be page-aligned
