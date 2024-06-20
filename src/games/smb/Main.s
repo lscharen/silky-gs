@@ -171,11 +171,11 @@ x_offset    equ   16                      ; number of bytes from the left edge
 ;WorldNumber           = $075f
 ;LevelNumber           = $075c
 ;AreaNumber            = $0760
-ContinueWorld         = $07fd
+ContinueWorld          = $07fd
 ;OffScr_WorldNumber    = $0766
 ;OffScr_AreaNumber     = $0767
 ;OffScr_LevelNumber    = $0763
-ContinueArea          = $7E00   ; patches operand
+ContinueArea           = $7E00   ; patches operand
 
 ; We _never_ scroll vertically, so just set it once.  This is to make sure these kinds of optimizations
 ; can be set up in the generic structure
@@ -188,12 +188,12 @@ ContinueArea          = $7E00   ; patches operand
 ; Start up the NES
 :start
 ; Hack for testing
-            sep   #$20
-            lda   #3
-            stal  ROMBase+ContinueWorld
-            lda   #1
-            stal  ROMBase+ContinueArea
-            rep   #$20
+;            sep   #$20
+;            lda   #3
+;            stal  ROMBase+ContinueWorld
+;            lda   #1
+;            stal  ROMBase+ContinueArea
+;            rep   #$20
 
             jsr   NES_EvtLoop
 
