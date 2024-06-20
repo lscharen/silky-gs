@@ -115,13 +115,13 @@ COMPILED_SPRITE_LIST       mac
                            <<<
 
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
-y_offset_rows equ 3 
+y_offset_rows equ 2 
 y_height_rows equ 25
 y_ending_row  equ {y_offset_rows+y_height_rows}
 
 y_offset      equ {y_offset_rows*8}
 y_height      equ {y_height_rows*8}
-min_nes_y     equ 24
+min_nes_y     equ y_offset
 max_nes_y     equ min_nes_y+y_height
 
 x_offset      equ 16                      ; number of bytes from the left edge
@@ -196,8 +196,6 @@ PALETTE_DISPATCH
 exitOffset    ds 2
 
 RenderScreen
-            rts
-
 ; Do the basic setup
 
             sep   #$20
@@ -220,7 +218,7 @@ RenderScreen
             jsr   EnableSprites
 
             clc
-            lda   #16*2
+            lda   #y_offset*2
             sta   tmp1                    ; virt_line_x2
             lda   ScreenHeight
             asl
@@ -235,7 +233,7 @@ RenderScreen
 
 ; Restore the buffer
 
-            lda   #16                     ; virt_line
+            lda   #y_offset               ; virt_line
             ldx   ScreenHeight            ; lines_left
             ldy   exitOffset              ; offset to patch
             jsr   _RestoreBG0OpcodesAltLite
