@@ -1461,7 +1461,8 @@ scanOAMSprites
          stx   :pb1+1
          stx   :pb2+1
 
-         ldx   #{1-ALLOW_SPRITE_0}*4  ; Select 0 or 1 as the starting point
+         ldx   #OAM_START_INDEX*4
+;         ldx   #{1-ALLOW_SPRITE_0}*4  ; Select 0 or 1 as the starting point
          ldy   #0                     ; This is the destination index
 
          phd
@@ -1523,7 +1524,8 @@ scanOAMSprites
          inx
          inx
          inx
-         cpx  #$0100
+;         cpx  #$0100
+         cpx  #OAM_END_INDEX*4
          bcc  :loop
 
          pld
@@ -1544,7 +1546,8 @@ scan8x16
 
 ; Same code as above with extra handling for 8x16 mode
 
-         ldx   #{1-ALLOW_SPRITE_0}*4  ; Select 0 or 1 as the starting point
+         ldx   #OAM_START_INDEX*4
+;         ldx   #{1-ALLOW_SPRITE_0}*4  ; Select 0 or 1 as the starting point
          ldy   #0                     ; This is the destination index
 
          phd
@@ -1613,7 +1616,8 @@ scan8x16
          inx
          inx
          inx
-         cpx  #$0100
+         cpx  #OAM_END_INDEX*4
+;         cpx  #$0100
          bcc  :loop
 
          pld
@@ -1621,94 +1625,11 @@ scan8x16
          sty   spriteCount           ; spriteCount * 4 for easy comparison later
          rts
 
-; This is identical to the code aove, but we're using shadowBitmap1 instead
-;useOtherBitmap
-;
-;]n       equ   0
-;         lup   15
-;         stz   shadowBitmap1+]n
-;]n       =     ]n+2
-;         --^
-;
-;         ldx   #{1-ALLOW_SPRITE_0}*4  ; Select 0 or 1 as the starting point
-;         ldy   #0                     ; This is the destination index
-;
-;         lda   GTEControlBits
-;         and   #CTRL_SPRITE_ENABLE
-;         beq   :disabled
-;
-;         phd
-;         lda   DP_OAM
-;         tcd
-;
-;:loop
-;         DO     DIRECT_OAM_READ
-;         ldal   ROMBase+DIRECT_OAM_READ,x      ; Copy the low word
-;         ELSE
-;         lda    PPU_OAM,x
-;         FIN
-;         inc                          ; Increment the y-coordinate to match the PPU delay
-;         sta    OAM_COPY,y
-;
-;         SCAN_OAM_XTRA_FILTER
-;         bcc    :skip
-;
-;         and    #$00FF              ; Isolate the Y-coordinate
-;         DO     NO_VERTICAL_CLIP
-;         cmp    #max_nes_y
-;         bcs    :skip
-;         cmp    #y_offset-7
-;         bcc    :skip
-;         ELSE
-;         cmp    #{max_nes_y-8}+1    ; Skip anything that is beyond this line
-;         bcs    :skip
-;         cmp    #y_offset
-;         bcc    :skip
-;         FIN
-;
-;         phx
-;         phy
-;
-;         asl
-;         tay                      ; We are drawing this sprite, so mark it in the shadow list
-;         ldx    y2idx,y           ; Get the index into the shadowBitmap array for this y coordinate (y -> blk_y)
-;         lda    y2bits,y          ; Get the bit pattern for the first byte
-;         ora    shadowBitmap1,x
-;         sta    shadowBitmap1,x
-;
-;         ply
-;         plx
-;
-;         DO     DIRECT_OAM_READ
-;         ldal   ROMBase+DIRECT_OAM_READ+2,x    ; Copy the high word
-;         ELSE
-;         lda    PPU_OAM+2,x
-;         FIN
-;         sta    OAM_COPY+2,y
-;
-;         iny
-;         iny
-;         iny
-;         iny
-;
-;:skip
-;         inx
-;         inx
-;         inx
-;         inx
-;         cpx  #$0100
-;         bcc  :loop
-;
-;         pld
-;
-;         sty   spriteCount           ; spriteCount * 4 for easy comparison later
-;         rts
+; Screen is 200 lines tall. It's worth it be exact when building the list because one extra
+; draw + shadow sequence takes at least 1,000 cycles.
+;shadowBitmap    ds 32              ; Provide enough space for the full ppu range (240 lines) + 16 since the y coordinate can be off-screen
 
-* ; Screen is 200 lines tall. It's worth it be exact when building the list because one extra
-* ; draw + shadow sequence takes at least 1,000 cycles.
-* ;shadowBitmap    ds 32              ; Provide enough space for the full ppu range (240 lines) + 16 since the y coordinate can be off-screen
-
-* ; A representation of the list as [top, bot) pairs
+; A representation of the list as [top, bot) pairs
 shadowListCount dw 0            ; Pad for 16-bit comparisons
 shadowListTop   ds 64
 shadowListBot   ds 64
@@ -1955,7 +1876,6 @@ shadowBitmapToList
         tax
         and  offsetMask,x
         sta  :bitfield
-;        sta  (:bitmap),y
 
         lda  {mul8-y_offset_rows},y
         clc
@@ -1972,8 +1892,6 @@ shadowBitmapToList
 
         lda  :bitfield
         bra  :zero_chk
-;        bra  :zero_loop
-
 
 :one_next
         iny
@@ -2291,8 +2209,7 @@ sprTmp2      equ pputmp+4
 sprTmp3      equ pputmp+6
 
 drawSprites
-;:spriteCount equ tmp4    ; tmp0 - tmp3 are used in the blitters
-;:mul160      equ tmp8    ; Setting this to tmp5 causes problems -- need to investigate
+
 :spriteCount equ pputmp+8
 :mul160      equ pputmp+10
 :cmplbank    equ pputmp+14  ; $0100 | ^tiledata
@@ -2469,8 +2386,6 @@ drawSprites
         bit  #$2000         ; Is the priority bit set?
         bne  as_bitmap     ; If yes, no compiled sprite option
 
-;        txy                ;Save the x-regi
-;        ldal OAM_COPY+1,x
         and  #$00FF
         asl
         tax
@@ -2481,12 +2396,7 @@ drawSprites
 ; for a sentinel value and manually jump into the compiled sprite code to avoid a double-jump and having to
 ; have a second jump table in the compile sprite code bank.
 
-;        tyx
         stal  csd+1                     ; patch in the long address directly
-;        ldal OAM_COPY+2,x              ; abort if the sprite has the priority bit set
-;        lda  sprTmp2+1
-;        bit  #$0020
-;        bne  cs_abort
         pei  :cmplbank
         plb
 csd     jml  $00000
@@ -2496,7 +2406,6 @@ csd     jml  $00000
 
 as_bitmap
         lda  sprTmp2+1
-;cs_abort
         and  #$00E0
         lsr
         lsr
@@ -2513,7 +2422,6 @@ as_bitmap
 
 ; Put the dispatch address back in X
 
-;        tyx
         jmp  (drawProcs,x)
 
 draw_rtn2
