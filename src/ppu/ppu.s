@@ -2384,7 +2384,7 @@ drawSprites
 ; This is the point to check if there is a compiled version of this sprite
 
         bit  #$2000         ; Is the priority bit set?
-        bne  as_bitmap     ; If yes, no compiled sprite option
+        bne  as_bitmap      ; If yes, no compiled sprite option
 
         and  #$00FF
         asl
@@ -2396,7 +2396,8 @@ drawSprites
 ; for a sentinel value and manually jump into the compiled sprite code to avoid a double-jump and having to
 ; have a second jump table in the compile sprite code bank.
 
-        stal  csd+1                     ; patch in the long address directly
+        stal csd+1                     ; patch in the long address directly
+        lda  sprTmp2+1                 ; load OAM[2] into accumulator
         pei  :cmplbank
         plb
 csd     jml  $00000

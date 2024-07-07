@@ -87,9 +87,11 @@ ROM_DRIVER_MODE   equ 1
 ; >0 = read $100 bytes directly from NES RAM at this address (typically $200)
 DIRECT_OAM_READ   equ $200
 
-; Flag whether to ignore Sprite 0.  Some games use this sprite only for the 
-; special sprite 0 collision behavior, which is not supported in this runtime
-ALLOW_SPRITE_0    equ 1   ; Sprite 0 is the lightning spark
+; Define a range of OAM entries to scan.  Many games do not use all 64
+; sprite slots, so we can avoid doing unecessary work by only scanning
+; OAM entries that may be on-screen
+OAM_START_INDEX   equ 0
+OAM_END_INDEX     equ 64
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
@@ -125,6 +127,10 @@ COMPILED_SPRITE_LIST_COUNT equ 100
 COMPILED_SPRITE_LIST       mac
                            dw  $FFFF
                            <<<
+
+; Do we have a custom routine to execute RenderScreen.  If yes, put its address here
+CUSTOM_RENDER_SCREEN equ 1
+CUSTOM_RENDER_SCREEN_ADDR equ _RenderScreen
 
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 3 
@@ -557,7 +563,7 @@ _ResetPEAField
 ; Track if the PEA field is patched or not
 peaFieldIsPatched dw 0
 
-RenderScreen
+_RenderScreen
 
 ; Do the basic setup
 

@@ -356,7 +356,7 @@ NES_RenderFrame
 ; in some games -- especially early games that do not use a scrolling playfield.
 
             DO    CUSTOM_RENDER_SCREEN
-            jsr   CUSTOM_RENDER_SCREEN
+            jsr   CUSTOM_RENDER_SCREEN_ADDR
             ELSE
             jsr   RenderScreen
             FIN
