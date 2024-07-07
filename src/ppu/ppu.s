@@ -110,7 +110,7 @@ _InitPPUTileMapping
         bcc  :loop
         rts
 
-; Load the information about the PEA tile at (:col, :row) and store it inthe appropriate PPU address location
+; Load the information about the PEA tile at (:col, :row) and store it in the appropriate PPU address location
 :setHorizontalMirror
 
 ; First, do some pre-calculations that are the same regardless which nametable we're in
@@ -497,6 +497,7 @@ _UpdateShadowTiles
 ; background tiles.  This is used by the dirty renderer to determine which lines actually need to be drawn
 ; on this frame.
 
+           mx  %00
 PPUFlushQueues
 :nt_head   equ tmp3
 :at_head   equ tmp4
@@ -1426,112 +1427,43 @@ tileBitmap    ds 32                ; Bitmap that marks which rows had background
          mx   %00
 scanOAMSprites
 
+         ldx   #shadowBitmap0
          lda   frameCount          ; Determine which bitmap to use for this frame
          bit   #$0001
          beq   *+5
-         brl   useOtherBitmap
+         ldx   #shadowBitmap1
 
 ; This is the code path using shadowBitmap0
 
 ]n       equ   0
          lup   15
-         stz   shadowBitmap0+]n
+         stz:  ]n,x
 ]n       =     ]n+2
          --^
-
-         ldx   #{1-ALLOW_SPRITE_0}*4  ; Select 0 or 1 as the starting point
-         ldy   #0                     ; This is the destination index
 
 ; Check if sprites are disabled
 
          lda   GTEControlBits
          and   #CTRL_SPRITE_ENABLE
-         beq   :disabled
-
-         phd
-         lda   DP_OAM
-         tcd
-
-:loop
-         DO     DIRECT_OAM_READ
-         ldal   ROMBase+DIRECT_OAM_READ,x      ; Copy the low word
-         ELSE
-         lda    PPU_OAM,x
-         FIN
-         inc                          ; Increment the y-coordinate to match the PPU delay
-         sta    OAM_COPY,y
-
-         SCAN_OAM_XTRA_FILTER
-         bcc    :skip
-
-         and    #$00FF              ; Isolate the Y-coordinate
-         DO     NO_VERTICAL_CLIP
-         cmp    #max_nes_y
-         bcs    :skip
-         cmp    #y_offset-7
-         bcc    :skip
-         ELSE
-         cmp    #{max_nes_y-8}+1    ; Skip anything that is beyond this line
-         bcs    :skip
-         cmp    #y_offset
-         bcc    :skip
-         FIN
-
-         phx
-         phy
-
-         asl
-         tay                      ; We are drawing this sprite, so mark it in the shadow list
-         ldx    y2idx,y           ; Get the index into the shadowBitmap array for this y coordinate (y -> blk_y)
-         lda    y2bits,y          ; Get the bit pattern for the first byte
-         ora    shadowBitmap0,x
-         sta    shadowBitmap0,x
-
-         ply
-         plx
-
-         DO     DIRECT_OAM_READ
-         ldal   ROMBase+DIRECT_OAM_READ+2,x    ; Copy the high word
-         ELSE
-         lda    PPU_OAM+2,x
-         FIN
-         sta    OAM_COPY+2,y
-
-         iny
-         iny
-         iny
-         iny
-
-:skip
-         inx
-         inx
-         inx
-         inx
-         cpx  #$0100
-         bcc  :loop
-
-         pld
-
-:disabled
-         sty   spriteCount           ; spriteCount * 4 for easy comparison later
+         bne   *+6
+         stz   spriteCount
          rts
 
-; This is identical to the code aove, but we're using shadowBitmap1 instead
-useOtherBitmap
+; Check if the PPU is in 8x8 or 8x16 mode
 
-]n       equ   0
-         lup   15
-         stz   shadowBitmap1+]n
-]n       =     ]n+2
-         --^
+         lda   _ppuctrl
+         bit   #NES_PPUCTRL_SPRSIZE
+         beq   *+5
+         brl   scan8x16
+
+; We're committed to 8x8 mode, so patch things
+
+         stx   :pb1+1
+         stx   :pb2+1
 
          ldx   #{1-ALLOW_SPRITE_0}*4  ; Select 0 or 1 as the starting point
          ldy   #0                     ; This is the destination index
 
-         lda   GTEControlBits
-         and   #CTRL_SPRITE_ENABLE
-         beq   :disabled
-
          phd
          lda   DP_OAM
          tcd
@@ -1568,8 +1500,8 @@ useOtherBitmap
          tay                      ; We are drawing this sprite, so mark it in the shadow list
          ldx    y2idx,y           ; Get the index into the shadowBitmap array for this y coordinate (y -> blk_y)
          lda    y2bits,y          ; Get the bit pattern for the first byte
-         ora    shadowBitmap1,x
-         sta    shadowBitmap1,x
+:pb1     ora:   $0000,x
+:pb2     sta:   $0000,x
 
          ply
          plx
@@ -1598,6 +1530,179 @@ useOtherBitmap
 
          sty   spriteCount           ; spriteCount * 4 for easy comparison later
          rts
+
+; Handle 8x16 sprite mode. We cheat and pretend that there are 2 8x8 sprites.  Fix once we have to handle
+; a game that has >32 8x16 sprites
+scan8x16
+
+; We're committed to 8x16 mode, so patch things
+
+         stx   :pb1+1
+         stx   :pb2+1
+         stx   :pb3+1
+         stx   :pb4+1
+
+; Same code as above with extra handling for 8x16 mode
+
+         ldx   #{1-ALLOW_SPRITE_0}*4  ; Select 0 or 1 as the starting point
+         ldy   #0                     ; This is the destination index
+
+         phd
+         lda   DP_OAM
+         tcd
+
+:loop
+         DO     DIRECT_OAM_READ
+         ldal   ROMBase+DIRECT_OAM_READ,x      ; Copy the low word
+         ELSE
+         lda    PPU_OAM,x
+         FIN
+         inc                          ; Increment the y-coordinate to match the PPU delay
+         sta    OAM_COPY,y
+
+         SCAN_OAM_XTRA_FILTER
+         bcc    :skip
+
+         and    #$00FF                ; Isolate the Y-coordinate
+         DO     NO_VERTICAL_CLIP
+         cmp    #max_nes_y
+         bcs    :skip
+         cmp    #y_offset-7
+         bcc    :skip
+         ELSE
+         cmp    #{max_nes_y-8}+1      ; Skip anything that is beyond this line
+         bcs    :skip
+         cmp    #y_offset
+         bcc    :skip
+         FIN
+
+         phx
+         phy
+
+         asl
+         tay                      ; We are drawing this sprite, so mark it in the shadow list
+         ldx    y2idx,y           ; Get the index into the shadowBitmap array for this y coordinate (y -> blk_y)
+         lda    y2bits,y          ; Get the bit pattern for the first byte
+:pb1     ora:   $0000,x
+:pb2     sta:   $0000,x
+
+; Do some extra work for the bottom part of the sprite
+         
+         ldx    y2idx+16,y
+         lda    y2bits+16,y
+:pb3     ora:   $0000,x
+:pb4     sta:   $0000,x
+
+         ply
+         plx
+
+         DO     DIRECT_OAM_READ
+         ldal   ROMBase+DIRECT_OAM_READ+2,x    ; Copy the high word
+         ELSE
+         lda    PPU_OAM+2,x
+         FIN
+         sta    OAM_COPY+2,y
+
+         iny
+         iny
+         iny
+         iny
+
+:skip
+         inx
+         inx
+         inx
+         inx
+         cpx  #$0100
+         bcc  :loop
+
+         pld
+
+         sty   spriteCount           ; spriteCount * 4 for easy comparison later
+         rts
+
+; This is identical to the code aove, but we're using shadowBitmap1 instead
+;useOtherBitmap
+;
+;]n       equ   0
+;         lup   15
+;         stz   shadowBitmap1+]n
+;]n       =     ]n+2
+;         --^
+;
+;         ldx   #{1-ALLOW_SPRITE_0}*4  ; Select 0 or 1 as the starting point
+;         ldy   #0                     ; This is the destination index
+;
+;         lda   GTEControlBits
+;         and   #CTRL_SPRITE_ENABLE
+;         beq   :disabled
+;
+;         phd
+;         lda   DP_OAM
+;         tcd
+;
+;:loop
+;         DO     DIRECT_OAM_READ
+;         ldal   ROMBase+DIRECT_OAM_READ,x      ; Copy the low word
+;         ELSE
+;         lda    PPU_OAM,x
+;         FIN
+;         inc                          ; Increment the y-coordinate to match the PPU delay
+;         sta    OAM_COPY,y
+;
+;         SCAN_OAM_XTRA_FILTER
+;         bcc    :skip
+;
+;         and    #$00FF              ; Isolate the Y-coordinate
+;         DO     NO_VERTICAL_CLIP
+;         cmp    #max_nes_y
+;         bcs    :skip
+;         cmp    #y_offset-7
+;         bcc    :skip
+;         ELSE
+;         cmp    #{max_nes_y-8}+1    ; Skip anything that is beyond this line
+;         bcs    :skip
+;         cmp    #y_offset
+;         bcc    :skip
+;         FIN
+;
+;         phx
+;         phy
+;
+;         asl
+;         tay                      ; We are drawing this sprite, so mark it in the shadow list
+;         ldx    y2idx,y           ; Get the index into the shadowBitmap array for this y coordinate (y -> blk_y)
+;         lda    y2bits,y          ; Get the bit pattern for the first byte
+;         ora    shadowBitmap1,x
+;         sta    shadowBitmap1,x
+;
+;         ply
+;         plx
+;
+;         DO     DIRECT_OAM_READ
+;         ldal   ROMBase+DIRECT_OAM_READ+2,x    ; Copy the high word
+;         ELSE
+;         lda    PPU_OAM+2,x
+;         FIN
+;         sta    OAM_COPY+2,y
+;
+;         iny
+;         iny
+;         iny
+;         iny
+;
+;:skip
+;         inx
+;         inx
+;         inx
+;         inx
+;         cpx  #$0100
+;         bcc  :loop
+;
+;         pld
+;
+;         sty   spriteCount           ; spriteCount * 4 for easy comparison later
+;         rts
 
 * ; Screen is 200 lines tall. It's worth it be exact when building the list because one extra
 * ; draw + shadow sequence takes at least 1,000 cycles.
@@ -2104,17 +2209,17 @@ exposeCurrentSprites
 drawOtherLines
         WALK_BITMAP LOAD_OTHERS;y_offset_rows;y_ending_row;_drawBackground
 
-; Update the minimal amount of the screen just based on what had changed from the prior
+; Update the minimal amount of the screen just based on what has changed from the prior
 ; frame.  We track three bitmaps of information that identify which lines different
 ; components are on.
 ;
 ; shadowBitmap0 and shadowBitmap1 track the lines that hold sprites from the previous
-; and current frame. tileBitmap marks lines that had a tile updated since the last frame.
+; and current frame. tileBitmap marks lines that had a tiles updated since the last frame.
         mx   %00
 drawDirtyScreen
 
-; Put pointers to the "current" and "previous".  This could br optimized by maintaining
-; these pointer in the app direct page and toggling them every time the frame counter is
+; Put pointers to the "current" and "previous".  This could be optimized by maintaining
+; these pointers in the app direct page and toggling them every time the frame counter is
 ; incremented
 
         lda   frameCount
@@ -2219,12 +2324,94 @@ drawSprites
         ora   #$0001
         sta   :cmplbank
 
+; Determine if we are in 8x8 sprite mode, or 8x16 sprite mode.  Have a specialized loop for
+; each.
+
+        lda   _ppuctrl
+        bit   #NES_PPUCTRL_SPRSIZE
+        bne   :is_8x16
+
         plb
 
-oam_loop
+:oam_loop_8x8
         phx                           ; Save x
 
-; First, calculate the physical location on the SHR screen at which to draw the sprite
+; Regardless of whether the PPUCTRL is in 8x8 or 8x16 mode, the 
+; starting SHR address and palette selection is the same
+
+        jsr   :setupSprite
+
+; Copy bytes 1 and 2 into temp space
+
+        ldal  OAM_COPY+1,x
+        sta   sprTmp2
+
+; Draw the tile
+
+        jsr   :drawSprite8x8
+
+; Restore and continue processing the OAMtable
+
+        plx
+        inx
+        inx
+        inx
+        inx
+        cpx   :spriteCount
+        bcc   :oam_loop_8x8
+
+        plb
+        plb
+        rts
+
+:is_8x16
+        plb
+
+:oam_loop_8x16
+        phx                           ; Save x
+
+; Setup the sprite
+
+        jsr   :setupSprite
+
+; Copy bytes 1 and 2 into temp space
+;  (only support the first nametable at the moment)
+
+        ldal  OAM_COPY+1,x
+        and   #$FFFE           ; mask low bit
+        sta   sprTmp2
+
+; Draw the top tile
+
+        jsr   :drawSprite8x8
+
+        lda   sprTmp1          ; Advance the address on screen
+        clc
+        adc   #8*160
+        sta   sprTmp1
+
+        lda   sprTmp2          ; Advance to the next tile index
+        inc
+        sta   sprTmp2
+
+; Draw the bottom tile
+
+        jsr   :drawSprite8x8
+
+        plx
+        inx
+        inx
+        inx
+        inx
+        cpx   :spriteCount
+        bcc   :oam_loop_8x16
+
+        plb
+        plb
+        rts
+
+; X = OAM index
+:setupSprite
 
         ldal  OAM_COPY,x               ; Y-coordinate
         and   #$00FF
@@ -2232,15 +2419,15 @@ oam_loop
         tay
         lda  [:mul160],y
         adc  #$2000-{y_offset*160}+x_offset
-        sta  sprTmp0
+        sta  sprTmp1
 
-; Do some stuff faster in 8-bit mode
+; Do some stuff is faster in 8-bit mode
 
         sep  #$20
 
 ; Set the palette pointer for this sprite
 
-        ldal OAM_COPY+2,x             ; Put attribute byte in the high byte
+        ldal OAM_COPY+2,x              ; Put attribute byte in the high byte
         and  #$03
         asl
         adc  SwizzlePtr2+1             ; Carry is clear from the asl
@@ -2255,13 +2442,35 @@ oam_loop
         ror                           ; Rotate to bring the carry into the high bit in case of overflow
         rep  #$20
         and  #$00FF
-        adc  sprTmp0                   ; Add to the base address calculated fom the Y-coordinate
+        adc  sprTmp1                   ; Add to the base address calculated fom the Y-coordinate
         sta  sprTmp1                   ; This is the SHR address at which to draw the sprite
+        rts
+
+; Calculate the on-screen address for the sprite
+;
+; Input:
+;  X = OAM index (0, 4, 8, ..., 248, 252)
+;
+; Output:
+;  sprTmp1 = SHR address
+;
+; Modified:
+;  sprTmp0 used for temporary data
+;  ActivePtr set to sprite palette
+
+; Draw a single 8x8 sprite
+;
+; X = OAM index (0, 4, 8, ..., 248, 252)
+; A = OAM[1] and OAM[2], also in sprTmp2
+:drawSprite8x8
 
 ; This is the point to check if there is a compiled version of this sprite
 
-        txy
-        ldal OAM_COPY+1,x
+        bit  #$2000         ; Is the priority bit set?
+        bne  as_bitmap     ; If yes, no compiled sprite option
+
+;        txy                ;Save the x-regi
+;        ldal OAM_COPY+1,x
         and  #$00FF
         asl
         tax
@@ -2272,11 +2481,12 @@ oam_loop
 ; for a sentinel value and manually jump into the compiled sprite code to avoid a double-jump and having to
 ; have a second jump table in the compile sprite code bank.
 
-        tyx
-        stal csd+1                     ; patch in the long address directly
-        ldal OAM_COPY+2,x              ; abort if the sprite has the priority bit set
-        bit  #$0020
-        bne  cs_abort
+;        tyx
+        stal  csd+1                     ; patch in the long address directly
+;        ldal OAM_COPY+2,x              ; abort if the sprite has the priority bit set
+;        lda  sprTmp2+1
+;        bit  #$0020
+;        bne  cs_abort
         pei  :cmplbank
         plb
 csd     jml  $00000
@@ -2285,42 +2495,30 @@ csd     jml  $00000
 ; flip and priority bits. when calling the rendering function, Y = screen address, X = tile data address
 
 as_bitmap
-        tyx
-        ldal OAM_COPY+2,x
-cs_abort
+        lda  sprTmp2+1
+;cs_abort
         and  #$00E0
         lsr
         lsr
         lsr
         lsr
-        tay
+        tax
 
 ; Calculate the address of the tile data
 
-        ldal OAM_COPY,x
+        lda  sprTmp2-1
         and  #$FF00
         lsr                           ; Each tile is 128 bytes of data
         sta  sprTmp0                  ; This is loaded in the draw routines
 
 ; Put the dispatch address back in X
 
-        tyx
+;        tyx
         jmp  (drawProcs,x)
 
 draw_rtn2
         plb                           ; Return from compiled sprite
 draw_rtn
-        plx                           ; Restore the counter
-        inx
-        inx
-        inx
-        inx
-        cpx   :spriteCount
-        bcc   oam_loop
-
-        plb
-        plb
-
         rts
 
 drawProcs
@@ -2328,6 +2526,14 @@ drawProcs
         dw drawTileToScreenV,drawTileToScreenPV,drawTileToScreenHV,drawTileToScreenPHV
 
 ; Minimal sprite dispatch
+;
+; sprTmp0 = palette select ($00,$02,$04,$06)
+; sprTmp1 = SHR address
+; sprTmp2 = tile index (x2)
+; sprTmp3 = copy of OAM[2]
+; 
+:dispatchSpriteTile
+
 * oam_loop
 *         phx                           ; Save x
 
@@ -2387,9 +2593,8 @@ drawProcs
 *         bcc   oam_loop
 
 
-; Array of dispatch addresses.  There is a special address of $0000 i nthe table that immediately returns
+; Array of dispatch addresses.  There is a special address of $0000 in the table that immediately returns
 ; from the compiled sprite code bank for sprites that do not have a compiled representation.
-; Array of compiled sprite addresses
 spr_comp_tbl ds 512,$00
 
 ; Draw a tile directly to the screen
@@ -2402,7 +2607,7 @@ blitTile
         pea   #^tiledata
         plb
 
-        cmp   #$0100
+        cmp   #$0100                  ; fancy multiply by 128
         xba
         ror
         sta   sprTmp0

@@ -68,12 +68,14 @@ apu_write_tbl
 STA_4000    jsl  APU_PULSE1_REG1_WRITE
 NO_OP       rts
 
-STX_4000    phx
+STX_4000    php
+            phx
             pha
             txa
             jsl  APU_PULSE1_REG1_WRITE
             pla
             plx
+            plp
             rts
 
 STA_4000_Y
@@ -262,6 +264,17 @@ STY_2006
             ply
             plp
             rts
+STX_2006
+            php
+            phx
+            pha
+            txa
+            jsl  PPUADDR_WRITE
+            pla
+            plx
+            plp
+            rts
+
 LDA_2007
             jsl  PPUDATA_READ
             rts

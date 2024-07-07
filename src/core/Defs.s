@@ -187,14 +187,16 @@ TILE_TARGET  equ $8000          ; value of last rendered byte. If TILE_VERSION =
 TILE_ROW     equ $9000          ; pre-calculated row of the PPU address
 
 ; Return codes from the Event Loop harness
-USER_SAYS_QUIT equ 'q'
+USER_SAYS_QUIT  equ 'q'
 USER_SAYS_RESET equ 'r'
 
 ; APU emulation constants
-APU_60HZ equ 0
+APU_60HZ  equ 0
 APU_120HZ equ 1
 APU_240HZ equ 2
 
 ; NES Register definitions
 NES_PPUMASK_BG  equ $08
 NES_PPUMASK_SPR equ $10
+
+NES_PPUCTRL_SPRSIZE equ $20

@@ -333,8 +333,7 @@ NES_RenderFrame
             ELSE
             lda  ppuscroll
             FIN
-            ldal  ROMBase+$073f
-            sta  _ppuscroll+1
+            sta  _ppuscroll
 
             plp
 
@@ -356,7 +355,11 @@ NES_RenderFrame
 ; back to a dirty-rectangle mode when the NES PPUSCROLL does not change, will be important to support good performance
 ; in some games -- especially early games that do not use a scrolling playfield.
 
+            DO    CUSTOM_RENDER_SCREEN
+            jsr   CUSTOM_RENDER_SCREEN
+            ELSE
             jsr   RenderScreen
+            FIN
 
 ; Game specific post-render logic
 
@@ -366,6 +369,61 @@ NES_RenderFrame
 
             inc   frameCount       ; Tick over to a new frame
             rts
+
+
+; Default render screen implementation.  The user-code can override this and provide their
+; own to improve performance.
+RenderScreen
+            sep   #$20
+            lda   _ppuctrl                ; Bit 0 is the high bit of the X scroll position
+            lsr                           ; put in the carry bit
+            lda   _ppuscroll+1            ; load the scroll value
+            ror                           ; put the high bit and divide by 2 for the engine
+            rep   #$20
+            and   #$00FF                  ; make sure nothing is in the high byte
+            jsr   _SetBG0XPos
+
+            lda   _ppuscroll              ; update the y-scroll position
+            clc
+            adc   #y_offset               ; Shift down by the offset
+            and   #$00FF
+            jsr   _SetBG0YPos
+
+            lda   ppumask                 ; honor the PPU enable flags for sprites and background
+            and   ppumask_override
+            and   #NES_PPUMASK_BG
+            jsr   EnableBackground
+
+            lda   ppumask
+            and   ppumask_override
+            and   #NES_PPUMASK_SPR
+            jsr   EnableSprites
+
+; See if the verical position needs to be updates
+
+            jsr   _ApplyBG0YPosPreLite
+            jsr   _ApplyBG0YPosLite
+
+; See if the horizontal position needs to be updated for this frame
+
+            jsr   _ApplyBG0XPosLite
+            sta   exitOffset              ; cache the :exit_offset value returned from this function
+
+; Copy the sprites and buffer to the graphics screen
+
+            jsr   drawScreen
+;            jsr   drawDirtyScreen
+
+; Restore the buffer
+
+            ldy   exitOffset              ; offset to patch
+            jsr   _RestoreBG0OpcodesLite
+
+            stz   DirtyBits
+            rts
+
+; PEA field offset for the right edge where the BRA instructions are patched in
+exitOffset   ds 2
 
 ; Tracks the number of times NES_RenderFrame has been called
 frameCount   dw  0

@@ -108,8 +108,10 @@ _Apply
 ; A = starting virtual line in the code field (0 - 239)
 ; X = number of lines to render (0 - 200)
 
-;_RestoreBG0OpcodesLite
+_RestoreBG0OpcodesLite
 ;                    ldy   LastPatchOffset
+                    lda   StartYMod240
+                    ldx   ScreenHeight
 _RestoreBG0OpcodesAltLite
 :exit_offset        equ   tmp4
                     sty   :exit_offset
@@ -190,84 +192,84 @@ _RestoreBG0OpcodesCallback
 ;   x_enter = (164 - x - width) % 164
 ;
 
-* _ApplyBG0XPosLite
-* :virt_line_x2       equ   tmp1
-* :lines_left_x2      equ   tmp2
+_ApplyBG0XPosLite
+:virt_line_x2       equ   tmp1
+:lines_left_x2      equ   tmp2
 
 * ; If there are saved opcodes that have not been restored, do not run this routine
 *                     lda   LastPatchOffset
 *                     beq   *+3
 *                     rts
 
-* ; This code is fairly succinct.  See the corresponding code in Vert.s for more detailed comments.
+; This code is fairly succinct.  See the corresponding code in Vert.s for more detailed comments.
 
-*                     lda   StartYMod240               ; This is the base line of the virtual screen
-*                     asl
-*                     sta   :virt_line_x2              ; Keep track of it
+                    lda   StartYMod240               ; This is the base line of the virtual screen
+                    asl
+                    sta   :virt_line_x2              ; Keep track of it
 
-*                     lda   ScreenHeight
-*                     asl
-*                     sta   :lines_left_x2
+                    lda   ScreenHeight
+                    asl
+                    sta   :lines_left_x2
 
-* ; Calculate the exit and entry offsets into the code fields.
-* ;
-* ;   ... +----+----+----+----+----+- ... -+----+----+----+----+----+
-* ;       | 04 | 06 | 08 | 0A | 0C |       | 44 | 46 | 48 | 4A |
-* ;   ... +----+----+----+----+----+- ... -+----+----+----+----+----+
-* ;                 |                                |
-* ;                 +---- screen width --------------+
-* ;           entry |                                | exit
-* ;
-* ; Here is an example of a screen 64 bytes wide. When everything is aligned to an even offset
-* ; then the entry point is column $08 and the exit point is column $48
-* ;
-* ; If we move the screen forward one byte (which means the pointers move backwards) then the low-byte
-* ; of column $06 will be on the right edge of the screen and the high-byte of column $46 will left-edge
-* ; of the screen. Since the one-byte edges are handled specially, the exit point shifts one column, but
-* ; the entry point does not.
-* ;
-* ;   ... +----+----+----+----+----+- ... -+----+----+----+----+----+
-* ;       | 04 | 06 | 08 | 0A | 0C |       | 44 | 46 | 48 | 4A |
-* ;   ... +----+----+----+----+----+- ... -+----+----+----+----+----+
-* ;              |  |                           |  |
-* ;              +--|------ screen width -------|--+
-* ;           entry |                           | exit
-* ;
-* ; When the screen is moved one more byte forward, then the entry point will move to the 
-* ; next column.
-* ;
-* ;   ... +----+----+----+----+----+- ... -+----+----+----+----+----+
-* ;       | 04 | 06 | 08 | 0A | 0C |       | 44 | 46 | 48 | 4A |
-* ;   ... +----+----+----+----+----+- ... -+----+----+----+----+----+
-* ;            |                                |
-* ;            +------ screen width ------------+
-* ;      entry |                                | exit
-* ;
-* ; So, in short, the entry position is rounded up from the x-position and the exit
-* ; position is rounded down.
-* ;
-* ; Now, the left edge of the screen is pushed last, so we need to exit one instruction *after*
-* ; the location
-* ;
-* ; x = 0
-* ;
-* ;  | PEA $0000 |
-* ;  +-----------+
-* ;  | PEA $0000 | 
-* ;  +-----------+ 
-* ;  | JMP loop  | <-- Exit here
-* ;  +-----------+
-* ;
-* ; x = 1 and 2
-* ;
-* ;  | PEA $0000 |
-* ;  +-----------+
-* ;  | PEA $0000 | <-- Exit Here
-* ;  +-----------+ 
-* ;  | JMP loop  |
-* ;  +-----------+
+; Calculate the exit and entry offsets into the code fields.
+;
+;   ... +----+----+----+----+----+- ... -+----+----+----+----+----+
+;       | 04 | 06 | 08 | 0A | 0C |       | 44 | 46 | 48 | 4A |
+;   ... +----+----+----+----+----+- ... -+----+----+----+----+----+
+;                 |                                |
+;                 +---- screen width --------------+
+;           entry |                                | exit
+;
+; Here is an example of a screen 64 bytes wide. When everything is aligned to an even offset
+; then the entry point is column $08 and the exit point is column $48
+;
+; If we move the screen forward one byte (which means the pointers move backwards) then the low-byte
+; of column $06 will be on the right edge of the screen and the high-byte of column $46 will left-edge
+; of the screen. Since the one-byte edges are handled specially, the exit point shifts one column, but
+; the entry point does not.
+;
+;   ... +----+----+----+----+----+- ... -+----+----+----+----+----+
+;       | 04 | 06 | 08 | 0A | 0C |       | 44 | 46 | 48 | 4A |
+;   ... +----+----+----+----+----+- ... -+----+----+----+----+----+
+;              |  |                           |  |
+;              +--|------ screen width -------|--+
+;           entry |                           | exit
+;
+; When the screen is moved one more byte forward, then the entry point will move to the 
+; next column.
+;
+;   ... +----+----+----+----+----+- ... -+----+----+----+----+----+
+;       | 04 | 06 | 08 | 0A | 0C |       | 44 | 46 | 48 | 4A |
+;   ... +----+----+----+----+----+- ... -+----+----+----+----+----+
+;            |                                |
+;            +------ screen width ------------+
+;      entry |                                | exit
+;
+; So, in short, the entry position is rounded up from the x-position and the exit
+; position is rounded down.
+;
+; Now, the left edge of the screen is pushed last, so we need to exit one instruction *after*
+; the location
+;
+; x = 0
+;
+;  | PEA $0000 |
+;  +-----------+
+;  | PEA $0000 | 
+;  +-----------+ 
+;  | JMP loop  | <-- Exit here
+;  +-----------+
+;
+; x = 1 and 2
+;
+;  | PEA $0000 |
+;  +-----------+
+;  | PEA $0000 | <-- Exit Here
+;  +-----------+ 
+;  | JMP loop  |
+;  +-----------+
 
-*                     lda   StartX          ; For vertical mirroring, x can range from [0, 255]. For horizontal, x is [0, 127]
+                    lda   StartX          ; For vertical mirroring, x can range from [0, 255]. For horizontal, x is [0, 127]
 
 ; Alternate entry point if the virt_line_x2 and lines_left_x2 and XMod256 values are passed in externally
 
