@@ -78,6 +78,10 @@ DIRECT_OAM_READ   equ $0200
 OAM_START_INDEX   equ 1
 OAM_END_INDEX     equ 64
 
+; Allow the engine to use dirty rendering (drawing only lines where sprites
+; have changed) if the background did not scroll compared to the previous frame
+ENABLE_DIRTY_RENDERING equ 0
+
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
 ; this prevents *any* access to memory outside of the SHR screen.

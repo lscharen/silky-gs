@@ -370,6 +370,24 @@ NES_RenderFrame
             inc   frameCount       ; Tick over to a new frame
             rts
 
+; Helper functions for patching and restoring the PEA field.  These could
+; be overridden for games that want to preserve the ability to switch between
+; dirty an full rendering, but still have a custom screen layout
+_SetupPEAField
+            jsr   _ApplyBG0YPosPreLite
+            jsr   _ApplyBG0YPosLite
+            jsr   _ApplyBG0XPosLite
+            sta   exitOffset              ; cache the :exit_offset value returned from this function
+
+            lda   #1
+            sta   peaFieldIsPatched
+            rts
+
+_ResetPEAField
+            stz   peaFieldIsPatched
+
+            ldy   exitOffset              ; offset to patch
+            jmp   _RestoreBG0OpcodesLite
 
 ; Default render screen implementation.  The user-code can override this and provide their
 ; own to improve performance.
@@ -399,12 +417,42 @@ RenderScreen
             and   #NES_PPUMASK_SPR
             jsr   EnableSprites
 
-; See if the verical position needs to be updates
+; Allow dirty rendering or not
+
+            DO    ENABLE_DIRTY_RENDERING
+
+; If this frame did not scroll, we can perform a dirty update
+
+            lda   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_Y+DIRTY_BIT_BG0_REFRESH
+            bit   DirtyBits
+            bne   :full_update
+            lda   disableDirtyRendering
+            bne   :full_update
+
+; This is code path for performing dirty rendering. PEA patching is deferred until needed
+
+            lda   peaFieldIsPatched
+            bne   :no_patch
+            jsr   _SetupPEAField
+:no_patch   jsr   drawDirtyScreen
+            bra   :complete
+
+:full_update
+            lda   peaFieldIsPatched
+            beq   :no_restore
+            jsr   _ResetPEAField
+:no_restore
+            jsr   _SetupPEAField
+            jsr   drawScreen
+:complete
+            ELSE
+
+; Set the verical position for this frame
 
             jsr   _ApplyBG0YPosPreLite
             jsr   _ApplyBG0YPosLite
 
-; See if the horizontal position needs to be updated for this frame
+; Set the horizontal position for this frame
 
             jsr   _ApplyBG0XPosLite
             sta   exitOffset              ; cache the :exit_offset value returned from this function
@@ -412,15 +460,21 @@ RenderScreen
 ; Copy the sprites and buffer to the graphics screen
 
             jsr   drawScreen
-;            jsr   drawDirtyScreen
 
 ; Restore the buffer
 
             ldy   exitOffset              ; offset to patch
             jsr   _RestoreBG0OpcodesLite
+            FIN
 
             stz   DirtyBits
             rts
+
+; Track if the PEA field is patched or not (for dirty rendering)
+peaFieldIsPatched dw 0
+
+; If dirty rendering is turned on, provide a way to override it
+disableDirtyRendering dw 0
 
 ; PEA field offset for the right edge where the BRA instructions are patched in
 exitOffset   ds 2

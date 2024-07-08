@@ -38,7 +38,12 @@ EVT_LOOP_END mac
 ; Pre-render check to see if there are any background tiles queued for updates.  If so, we will do
 ; a regular rendering.  If not, use dirty rendering.
 PRE_RENDER   mac
-;
+             stz  disableDirtyRendering
+             lda  at_queue_tail
+             cmp  tmp4                    ; If there are any attribute changes, render the full screen
+             bne  do_full
+             inc  disableDirtyRendering
+do_full
              <<<
 
 POST_RENDER  mac
@@ -50,7 +55,7 @@ POST_RENDER  mac
 ;
 ; Input: The accumulator holds the first two OAM bytes (y-position and tile id)
 SCAN_OAM_XTRA_FILTER mac
-;
+            sec               ; pass everything
             <<<
 
 ; Define which PPU address has the background and sprite tiles
@@ -75,9 +80,15 @@ ROM_DRIVER_MODE   equ 1
 ; >0 = read $100 bytes directly from NES RAM at this address (typically $200)
 DIRECT_OAM_READ   equ $200
 
-; Flag whether to ignore Sprite 0.  Some games use this sprite only for the 
-; special sprite 0 collision behavior, which is not supported in this runtime
-ALLOW_SPRITE_0    equ 1
+; Define a range of OAM entries to scan.  Many games do not use all 64
+; sprite slots, so we can avoid doing unecessary work by only scanning
+; OAM entries that may be on-screen
+OAM_START_INDEX   equ 1
+OAM_END_INDEX     equ 2
+
+; Allow the engine to use dirty rendering (drawing only lines where sprites
+; have changed) if the background did not scroll compared to the previous frame
+ENABLE_DIRTY_RENDERING equ 1
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
@@ -114,8 +125,11 @@ COMPILED_SPRITE_LIST       mac
 ;
                            <<<
 
+; Do we have a custom routine to execite RenderScreen.  If yes, put its address here
+CUSTOM_RENDER_SCREEN equ 0
+
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
-y_offset_rows equ 2 
+y_offset_rows equ 3 
 y_height_rows equ 25
 y_ending_row  equ {y_offset_rows+y_height_rows}
 
@@ -143,10 +157,13 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
 ; We _never_ scroll vertically, so just set it once.
 
-            lda   #24
-            jsr   _SetBG0YPos
-            jsr   _ApplyBG0YPosPreLite
-            jsr   _ApplyBG0YPosLite
+;            lda   #24+8
+;            jsr   _SetBG0YPos
+;            jsr   _ApplyBG0YPosPreLite
+;            jsr   _ApplyBG0YPosLite
+;
+;            lda   #4
+;            jsr   _SetBG0XPos
 
 ; Start up the NES
 :start
@@ -192,54 +209,6 @@ PALETTE_DISPATCH
         dw   ppu_3F18,ppu_3F19,ppu_3F1A,ppu_3F1B
         dw   ppu_3F1C,ppu_3F1D,ppu_3F1E,ppu_3F1F
 
-; Hold the blit offset value
-exitOffset    ds 2
-
-RenderScreen
-; Do the basic setup
-
-            sep   #$20
-            lda   _ppuctrl                ; Bit 0 is the high bit of the X scroll position
-            lsr                           ; put in the carry bit
-            lda   _ppuscroll+1            ; load the scroll value
-            ror                           ; put the high bit and divide by 2 for the engine
-            rep   #$20
-            and   #$00FF                  ; make sure nothing is in the high byte
-            jsr   _SetBG0XPos
-
-            lda   ppumask
-            and   ppumask_override
-            and   #NES_PPUMASK_BG
-            jsr   EnableBackground
-
-            lda   ppumask
-            and   ppumask_override
-            and   #NES_PPUMASK_SPR
-            jsr   EnableSprites
-
-            clc
-            lda   #y_offset*2
-            sta   tmp1                    ; virt_line_x2
-            lda   ScreenHeight
-            asl
-            sta   tmp2                    ; lines_left_x2
-            lda   #0                      ; Xmod256
-            jsr   _ApplyBG0XPosAltLite
-            sta   exitOffset              ; cache the :exit_offset value returned from this function
-
-; Copy the sprites and buffer to the graphics screen
-
-            jsr   drawScreen
-
-; Restore the buffer
-
-            lda   #y_offset               ; virt_line
-            ldx   ScreenHeight            ; lines_left
-            ldy   exitOffset              ; offset to patch
-            jsr   _RestoreBG0OpcodesAltLite
-
-            stz   DirtyBits
-            rts
 
 ; For this game, we utilize multiple palettes to conserve palette colors and reserve colors for the sprites
 SetDefaultPalette

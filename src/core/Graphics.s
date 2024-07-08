@@ -3,17 +3,19 @@
 InitGraphics
                  jsr   _ShadowOn
                  jsr   _GrafOn
-                 lda   #0
-                 jsr   _SetSCBs
-                 ldx   #SystemPalette
-                 lda   #0
-                 jsr   _SetPalette
 
-;                 ldx   #SHR_LINE_WIDTH
-;                 ldy   #SHR_SCREEN_HEIGHT
+; Clear the SCBs and Palettes
+
+                 ldx   #$2FE
+                 lda   #0
+:lp              stal  $E19D00,x
+                 dex
+                 dex
+                 bpl   :lp
+
                  ldx   #2                    ; NES screen size
                  jsr   _SetScreenMode        ; Calls SetScreenRect
-;                 jsr   _InitBG0             ; Initialize the background layer
+
                  clc
                  rts
 
