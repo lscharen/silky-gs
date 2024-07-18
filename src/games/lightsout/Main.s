@@ -108,7 +108,7 @@ PPU_PALETTE_DISPATCH equ PALETTE_DISPATCH
 SHOW_ROM_EXECUTION_TIME equ 0
 
 ; Turn on some off-screen information
-SHOW_DEBUG_VARS equ 0
+SHOW_DEBUG_VARS equ 1
 
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 0
@@ -268,19 +268,19 @@ config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
 
 CONFIG_PALETTE       equ 0
-TILE_TOP_LEFT        equ $1E0
-TILE_TOP_RIGHT       equ $1E2
-TILE_BOTTOM_LEFT     equ $1FE
-TILE_BOTTOM_RIGHT    equ $1FE
-TILE_HORIZONTAL      equ $1FE
-TILE_HORIZONTAL_TOP  equ $1FE
-TILE_HORIZONTAL_BOTTOM  equ $1FE
-TILE_VERTICAL_LEFT   equ $1FE
-TILE_VERTICAL_RIGHT  equ $1FE
+TILE_TOP_LEFT        equ $105
+TILE_TOP_RIGHT       equ $106
+TILE_BOTTOM_LEFT     equ $107
+TILE_BOTTOM_RIGHT    equ $108
+TILE_HORIZONTAL      equ $10A
+TILE_HORIZONTAL_TOP  equ $10A
+TILE_HORIZONTAL_BOTTOM  equ $10A
+TILE_VERTICAL_LEFT   equ $10E
+TILE_VERTICAL_RIGHT  equ $10D
 TILE_ZERO            equ $100
-TILE_A               equ $10A
-TILE_SPACE           equ $124
-TILE_CURSOR          equ $0A0  ; $10A
+TILE_A               equ $12E
+TILE_SPACE           equ $100
+TILE_CURSOR          equ $149  ; $10A
 
 AUDIO_TITLE_STR     str 'AUDIO'
 AUDIO_QUALITY_STR   str 'QUALITY'
@@ -307,13 +307,14 @@ INPUT_SNESMAX_PORT_STR str 'SLOT'
 CONFIG_BLK   db   CONFIG_PALETTE        ; Which background palette to use
              db   TILE_TOP_LEFT         ; Define the tiles to use for the UI
              db   TILE_TOP_RIGHT
-             db   TILE_HORIZONTAL
+             db   TILE_HORIZONTAL_TOP
+             db   TILE_HORIZONTAL_BOTTOM
              db   TILE_VERTICAL_LEFT
              db   TILE_VERTICAL_RIGHT
              db   TILE_ZERO             ; First tile for the 0 - 9 characters
              db   TILE_A                ; First tile for the alphabet A - Z characters
              db   TILE_SPACE
-CONFIG_MENU  dw   4                     ; Four screens "Audio", "Video", "Input", "Game"
+CONFIG_MENU  dw   3                     ; Four screens "Audio", "Video", "Input", "Game"
              dw   AUDIO_CONFIG
              dw   VIDEO_CONFIG
              dw   INPUT_CONFIG
