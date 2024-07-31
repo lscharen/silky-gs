@@ -46,13 +46,16 @@ main    ;; Draw the initial screen, except for the board cells
         beq     :done
         iny
         lda     screen_base+1,y
-        sta     $2006
+;        sta     $2006
+        jsr     STA_2006
         lda     screen_base,y
-        sta     $2006
+;        sta     $2006
+        jsr     STA_2006
         iny
         iny
 :blk    lda     screen_base,y
-        sta     $2007
+;        sta     $2007
+        jsr     STA_2007
         iny
         dex
         bne     :blk
@@ -68,9 +71,11 @@ main    ;; Draw the initial screen, except for the board cells
         bne     :l0
         ;; Enable graphics
         lda     #$a0
-        sta     $2000
+;        sta     $2000
+        jsr     STA_2000
         lda     #$1e
-        sta     $2001
+;        sta     $2001
+        jsr     STA_2001
 
         ;; Draw the cells one row per frame...
         vload   cell_row_tiles
@@ -97,6 +102,7 @@ main    ;; Draw the initial screen, except for the board cells
 
 game_start
         ;; Nothing to do until player hits START.
+        jsl     yield
         lda     #$10
         and     j0stat
         beq     game_start
@@ -108,7 +114,8 @@ new_game
 
         ;; Since any still-running SFX
         lda     #$00
-        sta     $4015
+;        sta     $4015
+        jsr     STA_4015
 
         ;; Update status bar.
         vload   randomizing_msg
@@ -119,6 +126,7 @@ scramble
         jsr     randomize_board
         jsr     grid_to_attr
         ;; If start button is pressed, keep randomizing...
+        jsl     yield
         lda     #$10
         and     j0stat
         bne     scramble
@@ -149,6 +157,7 @@ puzzle_ok
         sta     crsr_y
 
 player_move
+        jsl     yield
         lda     j0stat
         and     #$10            ; Pressed START?
         bne     new_game
@@ -214,7 +223,10 @@ anim_loop
         sta     cy
 :l6     lda     nx              ; If we're perfectly cell-aligned
         ora     ny              ; go back and check other buttons
-        beq     player_move
+;        beq     player_move
+        bne     :next
+        jmp     player_move
+:next
         lda     j0stat
         jsr     decode_dirs
         lda     dx
@@ -318,7 +330,8 @@ animate_move
         jsr     is_solved       ; Is this a winning move?
         beq     :l16            ; If so, skip the move-sound
         jsr     make_ding       ; Otherwise, make a ding based on state
-:l16    lda     j0stat          ; Wait for A to be released
+:l16    jsl     yield
+        lda     j0stat          ; Wait for A to be released
         bmi     :l16
         ;; Unpush the button on the way out
         ldy     #$03
@@ -352,7 +365,8 @@ vblit
 next_frame
         pha
         lda     frames
-:lp     cmp     frames
+:lp     jsl     yield
+        cmp     frames
         beq     :lp
         pla
         rts
@@ -386,14 +400,16 @@ grid_to_attr
         vflush
         rts
 
-
 make_ding
         lda     #$01            ; Enable Pulse 1
-        sta     $4015
+;        sta     $4015
+        jsr     STA_4015
         lda     #$84            ; 50% Duty cycle, 1.25-frame envelope
-        sta     $4000
+;        sta     $4000
+        jsr     STA_4000
         lda     #$00            ; No sweep
-        sta     $4001
+;        sta     $4001
+        jsr     STA_4001
 
         ldx     crsr_y
         lda     grid,x
@@ -402,40 +418,55 @@ make_ding
         beq     low_ding
         ;; Otherwise, high ding
         lda     #$d5
-        sta     $4002
+;        sta     $4002
+        jsr     STA_4002
         lda     #$08
-        sta     $4003
+;        sta     $4003
+        jsr     STA_4003
         rts
 low_ding
         lda     #$AA
-        sta     $4002
+;        sta     $4002
+        jsr     STA_4002
         lda     #$09
-        sta     $4003
+;        sta     $4003
+        jsr     STA_4003
         rts
 
 
 tada
         lda     #$03            ; Enable Pulse 1 and 2
-        sta     $4015
+;        sta     $4015
+        jsr     STA_4015
         lda     #$8f            ; 50% Duty cycle, 4-frame envelope
-        sta     $4000
-        sta     $4004
+;        sta     $4000
+        jsr     STA_4000
+;        sta     $4004
+        jsr     STA_4004
         lda     #$00            ; No sweep
-        sta     $4001
-        sta     $4005
+;        sta     $4001
+        jsr     STA_4001
+;        sta     $4005
+        jsr     STA_4005
         lda     #$69
-        sta     $4002           ; C6 on Pulse 1
+;        sta     $4002           ; C6 on Pulse 1
+        jsr     STA_4002
         lda     #$a8
-        sta     $4006           ; E5 on Pulse 2
+;        sta     $4006           ; E5 on Pulse 2
+        jsr     STA_4006
         lda     #$08            ; Maximum length counter
-        sta     $4003
-        sta     $4007
+;        sta     $4003
+        jsr     STA_4003
+;        sta     $4007
+        jsr     STA_4007
         ldx     #$08            ; 8 frames for first note
 :lp     jsr     next_frame
         dex
         bne     :lp
-        sta     $4003           ; Regate notes
-        sta     $4007
+;        sta     $4003           ; Regate notes
+        jsr     STA_4003
+;        sta     $4007
+        jsr     STA_4007
         rts                     ; And let them reverberate
 
 
@@ -497,8 +528,13 @@ screen_base
         ;; Initial instructions
         db   63
         dw   $2321
-        asc  "   BUMBERSHOOT SOFTWARE, 2022   "
-        asc  "      PRESS START TO BEGIN     "
+; Manually apply the charmap
+;        asc  '   BUMBERSHOOT SOFTWARE, 2022   '
+;        db   20 20 20 42 55 4D 42 45 52 53 48 4F 4F 54 20 53 4F 46 54 57 41 52 45 2C 20 32 30 32 32 20 20 20
+        db   $00,$00,$00,$2F,$3F,$38,$2F,$32,$3C,$3D,$35,$3A,$3A,$3E,$00,$3D,$3A,$33,$3E,$41,$2E,$3C,$32,$46,$00,$44,$43,$44,$44,$00,$00,$00
+;        asc  '      PRESS START TO BEGIN     '
+;        db   20 20 20 20 20 20 50 52 45 53 53 20 53 54 41 52 54 20 54 4F 20 42 45 47 49 4E 20 20 20 20 20
+        db   $00,$00,$00,$00,$00,$00,$3B,$3C,$32,$3D,$3D,$00,$3D,$3E,$2E,$3C,$3E,$00,$3E,$3A,$00,$2F,$32,$34,$36,$39,$00,$00,$00,$00,$00
         db   0
 
 cell_row_tiles
@@ -512,20 +548,28 @@ cell_row_tiles
 randomizing_msg
         db   63
         dw   $2321
-        asc  "         RANDOMIZING...         "
-        asc  "                               "
+;        asc  '         RANDOMIZING...         '
+;                       52 41 4E 44 4F 4D 49 5A  49 4E 47 2E 2E 2E
+        db   $00,$00,$00,$00,$00,$00,$00,$00,$00, 60,46,57,49,58,56,54,66,54,57,52,72,72,72, $00,$00,$00,$00,$00,$00,$00,$00,$00
+;        asc  "                               "
+        db   $00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00,$00
         db   0
 
 instructions
         db   63
         dw   $2321
-        asc  "   D-PAD: MOVE        A: FLIP   "
-        asc  "      START:  RESET PUZZLE     "
+;        asc  '   D-PAD: MOVE        A: FLIP   '
+;            20 20 20 44 2D 50 41 44 3A 20 4D 4F 56 45 20 20 20 20 20 20 20 20 41 3A 20 46 4C 49 50 20 20 20
+        db   0,0,0,49,71,59,46,49,73,0,56,58,64,50,0,0,0,0,0,0,0,0,46,73,0,51,55,54,59,0,0,0
+;        asc  '      START:  RESET PUZZLE     '
+        db   0,0,0,0,0,0,$3D,$3E,$2E,$3C,$3E,73,0,0,60,50,61,50,62,0,59,63,66,66,55,50,0,0,0,0,0
         db   0
 
 victory_msg
         db   63
         dw   $2321
-        asc  "        CONGRATULATIONS!        "
-        asc  "      PRESS START TO RESET     "
+        asc  '        CONGRATULATIONS!        '
+        db   0,0,0,0,0,0,0,0   0,0,0,0,0,0,0,0
+;        asc  '      PRESS START TO RESET     '
+        db   $00,$00,$00,$00,$00,$00,$3B,$3C,$32,$3D,$3D,$00,$3D,$3E,$2E,$3C,$3E,$00,$3E,$3A,$00,60,50,61,50,62,$00,$00,$00,$00,$00
         db   0
