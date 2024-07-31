@@ -1,0 +1,62 @@
+
+SHORT_REST equ $83
+REST equ $8F
+SIXTEENTH_NOTE equ $7
+EIGHTH_NOTE equ $12
+THREE_EIGTHS_NOTE equ $1A
+THREE_EIGHTHS_NOTE equ $1A
+QUARTER_NOTE equ $14
+HALF_NOTE equ  $16
+WHOLE_NOTE equ $18
+STOP_MUSIC equ 0
+
+
+;notes
+B1 equ 15
+C2 equ 16
+CS2 equ 17
+D2 equ 18
+DS2 equ 19
+E2 equ 20
+F2 equ 21
+FS2 equ 22
+G2 equ 23
+GS2 equ 24
+A2 equ 25
+AS2 equ 26
+B2 equ 27
+C3 equ 28
+CS3 equ 29
+D3 equ 30
+DS3 equ 31 
+E3 equ 32
+F3 equ 33
+FS3 equ 34
+G3 equ 35
+GS3 equ 36
+A3 equ 37
+AS3 equ 38
+B3 equ 39
+C4 equ 40
+CS4 equ 41
+D4 equ 42
+DS4 equ 43 
+E4 equ 44
+F4 equ 45
+FS4 equ 46
+G4 equ 47
+GS4 equ 48
+A4 equ 49
+AS4 equ 50
+B4 equ 51
+C5 equ 52
+
+
+;notes are 11 bit values
+Notes
+    dw 2152,4063,3835,3620,3417,3225,3044,2873,2712,2560,2416,2280
+    dw 2152,2032,1918,1810,1708,1612,1522,1437,1356,1280,1208,1140 ;-24
+    dw 1076,1016,959,905,854,806,761,718,678,640,604,570 ;36
+    dw 538,508,479,452,427,403,380,359,339,320,302,285 ; -48
+    dw 269,254,240,226,214,202,190,180,169,160,151,143,135,127,120,113
+
