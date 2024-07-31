@@ -1,11 +1,3 @@
-;        .zeropage
-;x_:     .res    2
-;y_:
-;rndval: .res    4
-
-;        .export   srnd, rnd
-;        .exportzp rndval
-
 srnd
         sta     x_
         sta     y_

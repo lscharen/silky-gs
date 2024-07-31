@@ -85,3 +85,7 @@
         ;; 74-75: cursor sprite
         db   $80,$c0,$e0,$f0,$f8,$fc,$fe,$ff,$00,$00,$40,$60,$70,$78,$7c,$7e
         db   $fe,$fc,$ee,$ce,$07,$07,$02,$00,$78,$68,$44,$04,$02,$02,$00,$00
+
+; This is just $4C0 bytes, pad to 4kb
+        ds   $40
+        ds   $B00

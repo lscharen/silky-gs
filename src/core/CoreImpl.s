@@ -382,12 +382,25 @@ _ReadControl
 ; Now read the specific input device for each player
 
                   ldx       config_input_p1_type ; Load the input type for player 1
-;                  jsr       (:input_proc,x)
-                  jsr       _ReadKeyboard1
+                  beq       :ok
+                  cpx       #2
+                  beq       :ok
+                  brk       $ab
+:ok
+;                jsr          _ReadKeyboard1
+                  jsr       (:input_proc,x)
+;                  jsr       _ReadKeyboard
+;                  and       #$FF00
+;                  tsb       InputPlayer1
+;                  jsr       _ReadSNESMAX
+;                  and       #$FF00
+;                  tsb       InputPlayer1
                   tsb       InputPlayer1
+
+                  lda       InputPlayer1
                   rts
 
-;                  ldx       config_input_player2
+;                  ldx       config_input_p2_type
 ;                  jsr       (:input_proc,x)
 ;                  tsb       InputPlayer2
 ;                  rts
@@ -395,8 +408,8 @@ _ReadControl
 :input_proc       dw        _ReadKeyboard1,_ReadSNESMAX1
                   dw        _ReadKeyboard2,_ReadSNESMAX2
 
-; Poll the keyboard and return the current keypress in the lower 7 bits and the KEYDOWN
-; status in the high bit.
+; Poll the keyboard and return the current keypress in the lower 7 bits and the KEY_DOWN
+; status in the high bit. This routine does apply debounce logic.
 _ReadKeypress
                   pea       $0000               ; temporary space
                   sep       #$20
@@ -404,18 +417,22 @@ _ReadKeypress
                   ldal      KBD_STROBE_REG      ; read the keyboard
                   bit       #$80
                   beq       :KbdNotDwn          ; check the key-down status
-                  and       #$7f                ; save the new key code
-                  sta       1,s
 
-                  cmp       LastKey             ; is it different than the last key?
-                  beq       :KbdDown            ; if not, just return the key code
+; debounce the new input
+
+                  and       #$7F                ; save the new key code
+                  cmp       LastKey             ; is it different than the last key press?
+                  bne       :KbdDifferent       ; If yes, the input has no settled
+
                   sta       LastKey             ; save it as the current 'active' keypress
+                  stal      KBD_REG             ; clear the key strobe
 
-                  lda       #PAD_KEY_DOWN       ; set the keydown flag
-                  ora       1,s
+                  ora       #PAD_KEY_DOWN       ; set the keydown flag and save the return value
                   sta       1,s
                   bra       :KbdDown
-
+:KbdDifferent
+                  sta       LastKey             ; Just save the current key for the next time, but don't return the key code
+                  bra       :KbdDown
 :KbdNotDwn
                   stz       LastKey             ; If no key is currently pressed, set the 'active' key to 0
 :KbdDown
@@ -425,9 +442,7 @@ _ReadKeypress
 
 ; Map the current keypress to directional bits and read the command and option registers for buttons
 _ReadKeyboard1    lda       InputPlayer1
-                  jsr       _ReadKeyboard
-                  sta       InputPlayer1
-                  rts
+                  jmp       _ReadKeyboard
 
 _ReadKeyboard2    lda       InputPlayer2
                   jsr       _ReadKeyboard
@@ -456,7 +471,7 @@ _ReadKeyboard     pha                           ; low byte = key code, high byte
 
 :ANotDown
                   lda       1,s                 ; read the current keypress
-                  and       #$7f
+                  and       #$7F
                   cmp       config_input_key_down
                   bne       :not_down
                   lda       #>PAD_DOWN
@@ -534,22 +549,26 @@ _ReadKeyboard     pha                           ; low byte = key code, high byte
 ;  Bit6 X
 ;  Bit7 A
 _ReadSNESMAX1     lda      InputPlayer1
-                  jsr      _ReadSNESMAX
-                  sta      InputPlayer1
-                  rts
+                  jmp      _ReadSNESMAX
+;                  and      #$FF00
+;                  ora      InputPlayer1
+;                  sta      InputPlayer1
+;                  rts
 
 _ReadSNESMAX2     lda      InputPlayer2
                   jsr      _ReadSNESMAX
                   sta      InputPlayer2
                   rts
 
+SNESMAX_P1        ds       1
+SNESMAX_P2        ds       1
+
 _ReadSNESMAX
-SNESMAX_P1        equ      tmp8
-SNESMAX_P2        equ      tmp9
+                  php
+                  sei
 
                   pha                           ; low byte = key code, high byte = %ABsSUDLR  S = Start, s = select
-
-                  sep      #$20
+                  sep      #$30
 
                   lda      config_input_snesmax_port    ; Set to 1 - 7
                   asl
@@ -559,9 +578,14 @@ SNESMAX_P2        equ      tmp9
                   and      #$70
                   tax
 
+                  lda      #$ff
+                  sta      SNESMAX_P1
+                  sta      SNESMAX_P2
+
                   ldy      #8
                   stal     $E0C080,x           ; clock the latch
-:loop             ldal     $E0C080,x           ; first read
+:loop
+                  ldal     $E0C080,x           ; first read
                   rol
                   rol      SNESMAX_P1
                   rol
@@ -573,6 +597,8 @@ SNESMAX_P2        equ      tmp9
                   lda      SNESMAX_P1
                   eor      #$FF                ; SNESMAX returns 0 when button is pressed
                   sta      2,s
+
                   rep      #$30
                   pla
+                  plp
                   rts

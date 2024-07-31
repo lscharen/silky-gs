@@ -36,6 +36,7 @@ APU_NOISE_REG3_WRITE    EXT
 APU_NOISE_REG4_WRITE    EXT
 
 APU_STATUS_WRITE        EXT
+APU_STATUS_READ         EXT
 
 ; Cooperative multitasking return vector.  Allows the non-interrupt ROM code to yield
 ; control back to the IIgs runtime.  Control will be returned the the caller of the
@@ -64,6 +65,12 @@ apu_write_tbl
 
 ; These function are expected to be called in 8-bit mode from the ROM code
             mx    %11
+
+APU_PULSE1  EXT
+ORA_4000    oral APU_PULSE1+0
+            rts
+LDA_4000    ldal APU_PULSE1+0
+            rts
 
 STA_4000    jsl  APU_PULSE1_REG1_WRITE
 NO_OP       rts
@@ -139,6 +146,11 @@ STA_4003_X
             plp
             rts
 
+APU_PULSE2  EXT
+ORA_4004    oral APU_PULSE2+0
+            rts
+LDA_4004    ldal APU_PULSE2+0
+            rts
 
 STA_4004    jsl  APU_PULSE2_REG1_WRITE
             rts
@@ -222,6 +234,13 @@ STA_4010
 STA_4011
 STA_4012
 STA_4013
+STX_4010
+STX_4011
+STX_4012
+STX_4013
+            rts
+
+LDA_4015    jsl   APU_STATUS_READ
             rts
 
 STA_4015    jsl   APU_STATUS_WRITE
@@ -239,9 +258,34 @@ STX_4015    phx
 STA_2000
             jsl  PPUCTRL_WRITE
             rts
+STX_2000
+            php
+            phx
+            pha
+            txa
+            jsl  PPUCTRL_WRITE
+            pla
+            plx
+            plp
+            rts
+
+
 STA_2001
             jsl  PPUMASK_WRITE
             rts
+STX_2001
+            php
+            phx
+            pha
+            txa
+            jsl  PPUMASK_WRITE
+            pla
+            plx
+            plp
+            rts
+
+
+
 LDA_2002
             jsl  PPUSTATUS_READ
             rts
@@ -297,6 +341,7 @@ STA_4014
 
 LDA_4017
 STA_4017
+STX_4017
             rts
 
 

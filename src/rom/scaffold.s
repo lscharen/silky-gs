@@ -206,6 +206,8 @@ NES_EvtLoop
 
 ; '?' to bring up the configuration screen and reapply the settings
 
+            DO    NO_CONFIG
+            ELSE
             cmp   #'?'
             bne   :not_config
             jsr   stop_playing                            ; Turn off the APU (restarted in Apply Config)
@@ -217,6 +219,7 @@ NES_EvtLoop
             jsr   NES_StartExecution
             brl   NES_EvtLoop
 :not_config
+            FIN
 
 ; '0': force all of the APU channels to be turned off
             cmp   #'0'

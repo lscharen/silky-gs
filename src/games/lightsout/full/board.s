@@ -1,8 +1,3 @@
-;        .export make_move, randomize_board, is_solved, move_edge
-;        .importzp crsr_x, crsr_y, grid, rndval, scratch
-
-;        .code
-
         ;; Makes a move at (crsr_x, crsr_y). Doesn't touch scratch.
 make_move
         ldx     crsr_y
@@ -53,7 +48,6 @@ randomize_board
         sta     crsr_x
         sta     crsr_y
         rts
-
 
         ;; Checks to see if the puzzle is solved. Zero flag set if it is.
 is_solved

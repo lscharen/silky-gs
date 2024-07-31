@@ -46,13 +46,17 @@ reset
 
         ;; Mask out sound IRQs.
         lda     #$40
-        sta     $4017
+;        sta     $4017
+        jsr     STA_4017
         lda     #$00
-        sta     $4010
+;        sta     $4010
+        jsr     STA_4010
 
         ;; Disable all graphics.
-        sta     $2000
-        sta     $2001
+;        sta     $2000
+        jsr     STA_2000
+;        sta     $2001
+        jsr     STA_2001
 
         ;; Clear out RAM.
         tax
@@ -69,8 +73,8 @@ reset
         bne     :l0
 
         ;; Reset the stack pointer.
-        dex
-        txs
+;        dex
+;        txs
 
         ;; Clear out SPR-RAM.
         lda     #>__OAM_START__
@@ -78,12 +82,15 @@ reset
 
         ;; Clear out the name tables at $2000-$2400.
         lda     #$20
-        sta     $2006
+;        sta     $2006
+        jsr     STA_2006
         lda     #$00
-        sta     $2006
+;        sta     $2006
+        jsr     STA_2006
         ldx     #$08
         tay
-:l1     sta     $2007
+:l1     ; sta     $2007
+        jsr     STA_2007
         iny
         bne     :l1
         dex
@@ -104,7 +111,9 @@ vblank  pha
         pha
 
         lda     #>__OAM_START__ ; Update sprite data
-        sta     $4014
+;        sta     $4014
+        jsr     STA_4014
+
 
         bit     vstat
         bpl     :no_vram
@@ -115,13 +124,16 @@ vblank  pha
         beq     :done
         iny
         lda     vidbuf+1,y
-        sta     $2006
+;        sta     $2006
+        jsr     STA_2006
         lda     vidbuf,y
-        sta     $2006
+;        sta     $2006
+        jsr     STA_2006
         iny
         iny
 :blk    lda     vidbuf,y
-        sta     $2007
+;        sta     $2007
+        jsr     STA_2007
         iny
         dex
         bne     :blk
@@ -130,31 +142,42 @@ vblank  pha
 
 :no_vram
         lda     #$08            ; Reset scroll
-        sta     $2005
-        sta     $2005
+;        sta     $2005
+;        sta     $2005
+        jsr     STA_2005
+        jsr     STA_2005
 
         inc     frames          ; Bump frame counter
         jsr     rnd             ; Burn an RNG value
 
         ;; Read joystick
-        ldx     #$01
-        stx     $4016
-        dex
-        stx     $4016
-        stx     j0stat
-        ldx     #$08
-:l3     lda     $4016
-        lsr     a
-        rol     j0stat
-        dex
-        bne     :l3
+;        ldx     #$01
+;;        stx     $4016
+;        jsr     STX_2006
+;        dex
+;;        stx     $4016
+;        jsr     STX_2006
+;        stx     j0stat
+
+;        ldx     #$08
+;:l3     lda     $4016           ; IIgs -- insert joystick shim here
+;;        lsr     a
+;        lsr
+;        rol     j0stat
+;        dex
+;        bne     :l3
+
+native_joy    EXT
+        ldal  native_joy
+        sta   j0stat
 
         pla
         tay
         pla
         tax
         pla
-irq     rti
+irq     ; rti
+        rts
 
         put main.s
         put board.s

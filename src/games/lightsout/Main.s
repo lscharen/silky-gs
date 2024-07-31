@@ -97,7 +97,10 @@ NO_VERTICAL_CLIP  equ 0
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 1
+NO_INTERRUPTS     equ 0
+
+; Flag to turn off the configuration support
+NO_CONFIG         equ 0
 
 ; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
@@ -108,7 +111,7 @@ PPU_PALETTE_DISPATCH equ PALETTE_DISPATCH
 SHOW_ROM_EXECUTION_TIME equ 0
 
 ; Turn on some off-screen information
-SHOW_DEBUG_VARS equ 1
+SHOW_DEBUG_VARS equ 0
 
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 0
@@ -155,16 +158,6 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
             jsr   NES_ColdBoot
 
-; We _never_ scroll vertically, so just set it once.
-
-;            lda   #24+8
-;            jsr   _SetBG0YPos
-;            jsr   _ApplyBG0YPosPreLite
-;            jsr   _ApplyBG0YPosLite
-;
-;            lda   #4
-;            jsr   _SetBG0XPos
-
 ; Start up the NES
 :start
             jsr   NES_EvtLoop
@@ -210,7 +203,7 @@ PALETTE_DISPATCH
         dw   ppu_3F1C,ppu_3F1D,ppu_3F1E,ppu_3F1F
 
 
-; For this game, we utilize multiple palettes to conserve palette colors and reserve colors for the sprites
+; For this game, we utilize a single, static palette
 SetDefaultPalette
 
 ; Set the tile/sprite mapping
@@ -259,8 +252,7 @@ ApplyConfig
 config_audio_quality   ds  2  ; good / better / best audio quality (60Hz, 120Hz, 240Hz audio interrupts)
 config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
-config_video_twinkle   ds  2  ; disable the background star animation
-config_input_p1_type   dw  2  ; keyboard / snes max
+config_input_p1_type   dw  0  ; keyboard / snes max
 config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW

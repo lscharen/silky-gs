@@ -1471,11 +1471,11 @@ scanOAMSprites
 
 :loop
          DO     DIRECT_OAM_READ
-         ldal   ROMBase+DIRECT_OAM_READ,x      ; Copy the low word
+         ldal   ROMBase+DIRECT_OAM_READ,x  ; Copy the low word
          ELSE
          lda    PPU_OAM,x
          FIN
-         inc                          ; Increment the y-coordinate to match the PPU delay
+         inc                               ; Increment the y-coordinate to match the PPU delay
          sta    OAM_COPY,y
 
          SCAN_OAM_XTRA_FILTER

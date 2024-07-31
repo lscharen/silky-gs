@@ -91,6 +91,9 @@ NO_VERTICAL_CLIP equ 1
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
 NO_INTERRUPTS     equ 0
 
+; Flag to turn off the configuration support
+NO_CONFIG         equ 0
+
 ; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
 ; set the background color.
@@ -154,14 +157,6 @@ x_offset    equ   16                      ; number of bytes from the left edge
 
             jsr   SetDefaultPalette
 
-; Show the configuration screen
-
-;            ldx   #CONFIG_BLK
-;            jsr   ShowConfig
-;            bcc   *+5
-;            jmp   quit
-;            jsr   ApplyConfig
-
 ; Start the FPS counter
             ldal  OneSecondCounter
             sta   OldOneSec
@@ -177,6 +172,7 @@ x_offset    equ   16                      ; number of bytes from the left edge
 
             jsr   NES_ColdBoot
 
+;            jsr   ShowConfig
 ; Apply hacks
 ;WorldNumber           = $075f
 ;LevelNumber           = $075c
@@ -495,14 +491,18 @@ _RenderScreen
             jsr   DrawByte
 :skip_fps
 
-;            lda   InputPlayer1
-;            ldx   #8*160
-;            ldy   #$FFFF
-;            jsr   DrawWord
+            lda   InputPlayer1
+            ldx   #8*160
+            ldy   #$FFFF
+            jsr   DrawWord
+
+            lda   LastRead
+            ldx   #16*160
+            ldy   #$FFFF
+            jsr   DrawWord
             FIN
 
             stz   DirtyBits
-;            stz   LastPatchOffset
             rts
 
 SetDefaultPalette
@@ -577,38 +577,38 @@ ScreenOffsets dw    12, 16, 20, 24, 28,                        72, 76, 80, 84, 8
 
 CopyStatusToScreen
 
-            lda   ScreenBase
-            sec
-            sbc   #160*16
-            sta   tmp0
-
-            ldy   #0
-:loop
-            phy                             ; preserve reg
-            ldx   MemOffsets,y
-            ldal  PPU_MEM+TILE_SHADOW,x
+;            lda   ScreenBase
+;            sec
+;            sbc   #160*16
+;            sta   tmp0
+;
+;            ldy   #0
+;:loop
+;            phy                             ; preserve reg
+;            ldx   MemOffsets,y
+;            ldal  PPU_MEM+TILE_SHADOW,x
 ;            and   #$00FF
 ;            ora   #$0100+TILE_USER_BIT
 ;            pha
 
-            lda   ScreenOffsets,y
-            clc
-            adc   tmp0
+;            lda   ScreenOffsets,y
+;            clc
+;            adc   tmp0
 ;            pha
 
-            lda   #$8002
-            cpx   #107                      ; This one is palette 3
-            bne   *+5
-            ora   #$0001
+;            lda   #$8002
+;            cpx   #107                      ; This one is palette 3
+;            bne   *+5
+;            ora   #$0001
 ;            pha
 ;            _GTEDrawTileToScreen           ; call NESTileBlitter
 
-            ply
-            iny
-            iny
-            cpy   #30*2
-            bcc   :loop
-            rts
+;            ply
+;            iny
+;            iny
+;            cpy   #30*2
+;            bcc   :loop
+;            rts
 
 
 ; Configuration screen and variables
@@ -627,6 +627,7 @@ config_video_statusbar dw  1  ; exclude the status bar from the animate playfiel
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
 config_video_small     ds  2  ; use a smaller playfield screen size
 config_input_p1_type   dw  0  ; keyboard  / snes max
+config_input_p2_type   dw  0
 config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
@@ -822,25 +823,25 @@ INPUT_ITEM_5 dw   KEYMAP
 ; Mapping tables to take a nametable address and return the appropriate attribute memory location.  This is a table with
 ; 960 entries.  This table is just the 64 offsets above address $2xC0 stored as bytes to keep the table size reasonably
 ; conpact
-PPU_ATTR_ADDR
-]row        =     0
-            lup   30
-            db    $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1,
-            db    $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3,
-            db    $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5,
-            db    $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7,
-]row        =     ]row+1
-            --^
+* PPU_ATTR_ADDR
+* ]row        =     0
+*             lup   30
+*             db    $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1,
+*             db    $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3,
+*             db    $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5,
+*             db    $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7,
+* ]row        =     ]row+1
+*             --^
             
-PPU_ATTR_MASK
-            lup   7
-            db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-            db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-            db    $30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0
-            db    $30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0
-            --^
-            db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-            db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
+* PPU_ATTR_MASK
+*             lup   7
+*             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
+*             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
+*             db    $30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0
+*             db    $30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0
+*             --^
+*             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
+*             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
 
 ; Palette for the configuration screen
 ConfScrnPal  dw     $0F, $00, $29, $1A, $0F, $36, $17, $30, $21, $27, $1A, $16, $00, $00, $16, $18

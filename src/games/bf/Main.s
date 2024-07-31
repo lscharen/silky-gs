@@ -105,6 +105,9 @@ NO_VERTICAL_CLIP equ 0
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
 NO_INTERRUPTS     equ 0
 
+; Flag to turn off the configuration support
+NO_CONFIG         equ 0
+
 ; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
 ; set the background color.
@@ -132,9 +135,9 @@ COMPILED_SPRITE_LIST       mac
                            <<<
 
 ; Do we have a custom routine to execute RenderScreen.  If yes, put its address here
-CUSTOM_RENDER_SCREEN equ 0
-;CUSTOM_RENDER_SCREEN equ 1
-;CUSTOM_RENDER_SCREEN_ADDR equ _RenderScreen
+;CUSTOM_RENDER_SCREEN equ 0
+CUSTOM_RENDER_SCREEN equ 1
+CUSTOM_RENDER_SCREEN_ADDR equ _RenderScreen
 
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 3 
@@ -474,130 +477,130 @@ BF_3F1F ldal PPU_MEM+$3F1F
 nesTopOffset    ds 2
 nesBottomOffset ds 2
 
-* ; Patch the PEA field based on the current PPU parameters
-* _SetupPEAField
-* ; Now render the top 16 lines to show the status bar area
+; Patch the PEA field based on the current PPU parameters
+_BFSetupPEAField
+; Now render the top 16 lines to show the status bar area
 
-*             clc
-*             lda   #24*2
-*             sta   tmp1                    ; virt_line_x2
-*             lda   #16*2
-*             sta   tmp2                    ; lines_left_x2
-*             lda   #0                      ; Xmod256
-*             jsr   _ApplyBG0XPosAltLite
-*             sta   nesTopOffset            ; cache the :exit_offset value returned from this function
+            clc
+            lda   #24*2
+            sta   tmp1                    ; virt_line_x2
+            lda   #16*2
+            sta   tmp2                    ; lines_left_x2
+            lda   #0                      ; Xmod256
+            jsr   _ApplyBG0XPosAltLite
+            sta   nesTopOffset            ; cache the :exit_offset value returned from this function
 
-* ; Next render the remaining lines
+; Next render the remaining lines
 
-*             lda   #40*2
-*             sta   tmp1                ; virt_line_x2
-*             lda   ScreenHeight
-*             sec
-*             sbc   #16
-*             asl
-*             sta   tmp2                ; lines_left_x2
-*             lda   StartX              ; Xmod256
-*             jsr   _ApplyBG0XPosAltLite
-*             sta   nesBottomOffset
+            lda   #40*2
+            sta   tmp1                ; virt_line_x2
+            lda   ScreenHeight
+            sec
+            sbc   #16
+            asl
+            sta   tmp2                ; lines_left_x2
+            lda   StartX              ; Xmod256
+            jsr   _ApplyBG0XPosAltLite
+            sta   nesBottomOffset
 
-*             lda   #1
-*             sta   peaFieldIsPatched
-*             rts
+            lda   #1
+            sta   peaFieldIsPatched
+            rts
 
 ; Restore the patched PEA field to put it back into a clean state
-* _ResetPEAField
-*             stz   peaFieldIsPatched
+_BFResetPEAField
+            stz   peaFieldIsPatched
 
-*             lda   #24                     ; virt_line
-*             ldx   #16                     ; lines_left
-*             ldy   nesTopOffset            ; offset to patch
-*             jsr   _RestoreBG0OpcodesAltLite
+            lda   #24                     ; virt_line
+            ldx   #16                     ; lines_left
+            ldy   nesTopOffset            ; offset to patch
+            jsr   _RestoreBG0OpcodesAltLite
 
-*             lda   ScreenHeight
-*             sec
-*             sbc   #16
-*             tax                           ; lines_left
-*             lda   #40                     ; virt_line
-*             ldy   nesBottomOffset         ; offset to patch
-*             jmp   _RestoreBG0OpcodesAltLite
+            lda   ScreenHeight
+            sec
+            sbc   #16
+            tax                           ; lines_left
+            lda   #40                     ; virt_line
+            ldy   nesBottomOffset         ; offset to patch
+            jmp   _RestoreBG0OpcodesAltLite
 
 * ; Track if the PEA field is patched or not
 * peaFieldIsPatched dw 0
 
-* _RenderScreen
+_RenderScreen
 
-* ; Do the basic setup
+; Do the basic setup
 
-*             sep   #$20
-*             lda   ppuctrl                 ; Bit 0 is the high bit of the X scroll position
-*             lsr                           ; put in the carry bit
-*             lda   ppuscroll+1             ; load the scroll value
-*             ror                           ; put the high bit and divide by 2 for the engine
-*             rep   #$20
-*             and   #$00FF                  ; make sure nothing is in the high byte
-*             jsr   _SetBG0XPos
+            sep   #$20
+            lda   ppuctrl                 ; Bit 0 is the high bit of the X scroll position
+            lsr                           ; put in the carry bit
+            lda   ppuscroll+1             ; load the scroll value
+            ror                           ; put the high bit and divide by 2 for the engine
+            rep   #$20
+            and   #$00FF                  ; make sure nothing is in the high byte
+            jsr   _SetBG0XPos
 
-*             lda   ppumask
-*             and   ppumask_override
-*             and   #NES_PPUMASK_BG
-*             jsr   EnableBackground
+            lda   ppumask
+            and   ppumask_override
+            and   #NES_PPUMASK_BG
+            jsr   EnableBackground
 
-*             lda   ppumask
-*             and   ppumask_override
-*             and   #NES_PPUMASK_SPR
-*             jsr   EnableSprites
+            lda   ppumask
+            and   ppumask_override
+            and   #NES_PPUMASK_SPR
+            jsr   EnableSprites
 
-* ; Determine if this will be a dirty update or not
+; Determine if this will be a dirty update or not
 
-*             lda   DirtyBits
-*             bit   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_REFRESH
-*             bne   :full_update
-*             lda   disableDirtyRendering
-*             bne   :full_update
-*             lda   use_dirty
-*             bne   :dirty_update
-* :full_update
-*             lda   peaFieldIsPatched
-*             beq   :no_restore
-*             jsr   _ResetPEAField          ; A full update needs to restore the PEA field before changing the XPos
-* :no_restore
-*             jsr   _SetupPEAField
-*             jsr   drawScreen
-*             bra   :complete
-* :dirty_update
-*             lda   peaFieldIsPatched
-*             bne   :no_patch
-*             jsr   _SetupPEAField
-* :no_patch
-*             jsr   drawDirtyScreen
-* :complete
+            lda   DirtyBits
+            bit   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_REFRESH
+            bne   :full_update
+            lda   disableDirtyRendering
+            bne   :full_update
+            lda   disableDirtyRendering
+            beq   :dirty_update
+:full_update
+            lda   peaFieldIsPatched
+            beq   :no_restore
+            jsr   _BFResetPEAField          ; A full update needs to restore the PEA field before changing the XPos
+:no_restore
+            jsr   _BFSetupPEAField
+            jsr   drawScreen
+            bra   :complete
+:dirty_update
+            lda   peaFieldIsPatched
+            bne   :no_patch
+            jsr   _BFSetupPEAField
+:no_patch
+            jsr   drawDirtyScreen
+:complete
 
-* ; Optionally show the frames per second
-*             DO    SHOW_DEBUG_VARS
-*             ldal  OneSecondCounter
-*             cmp   OldOneSec
-*             beq   :skip_fps
+; Optionally show the frames per second
+            DO    SHOW_DEBUG_VARS
+            ldal  OneSecondCounter
+            cmp   OldOneSec
+            beq   :skip_fps
 
-*             sta   OldOneSec
-*             ldx   frameCount
-*             txa
-*             sec
-*             sbc   oldFrameCount
-*             stx   oldFrameCount
-*             ldx   #0
-*             ldy   #$FFFF
-*             jsr   DrawByte
-* :skip_fps
+            sta   OldOneSec
+            ldx   frameCount
+            txa
+            sec
+            sbc   oldFrameCount
+            stx   oldFrameCount
+            ldx   #0
+            ldy   #$FFFF
+            jsr   DrawByte
+:skip_fps
 
-*             lda   InputPlayer1
-*             ldx   #8*160
-*             ldy   #$FFFF
-*             jsr   DrawWord
-*             FIN
+            lda   InputPlayer1
+            ldx   #8*160
+            ldy   #$FFFF
+            jsr   DrawWord
+            FIN
 
-*             stz   DirtyBits
-* ;            stz   LastPatchOffset
-*             rts
+            stz   DirtyBits
+;            stz   LastPatchOffset
+            rts
 
 ; For this game, we utilize multiple palettes to conserve palette colors and reserve colors for the sprites
 SetDefaultPalette
@@ -689,7 +692,7 @@ config_audio_quality   ds  2  ; good / better / best audio quality (60Hz, 120Hz,
 config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
 config_video_twinkle   ds  2  ; disable the background star animation
-config_input_p1_type   dw  2  ; keyboard / snes max
+config_input_p1_type   dw  0  ; keyboard / snes max
 config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW

@@ -2,6 +2,7 @@
 PPU_MEM     ENT
 CHR_ROM     ENT
             put   chr.s          ; 8K of CHR-ROM at PPU memory $0000 - $2000
+            put   chr.s          ; Mirror $0000 and $1000
 PPU_NT      ENT
             ds    $2000          ; Nametable memory from $2000 - $3000, $3F00 - $3F14 is palette RAM
 
