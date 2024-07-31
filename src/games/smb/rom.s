@@ -1305,7 +1305,7 @@ InitScores   sta ScoreAndCoinDisplay,x   ;clear player scores and coin displays
 ExitMenu     rts
 GoContinue    sta WorldNumber             ;start both players at the first area
               sta OffScr_WorldNumber      ;of the previously saved world number
-              ldx #$00                    ;note that on power-up using this function
+_iigsHack1    ldx #$00                    ;note that on power-up using this function
               stx AreaNumber              ;will make no difference
               stx OffScr_AreaNumber   
               rts

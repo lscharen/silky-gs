@@ -206,6 +206,8 @@ NES_EvtLoop
 
 ; '?' to bring up the configuration screen and reapply the settings
 
+            DO    NO_CONFIG
+            ELSE
             cmp   #'?'
             bne   :not_config
             jsr   stop_playing                            ; Turn off the APU (restarted in Apply Config)
@@ -217,6 +219,7 @@ NES_EvtLoop
             jsr   NES_StartExecution
             brl   NES_EvtLoop
 :not_config
+            FIN
 
 ; '0': force all of the APU channels to be turned off
             cmp   #'0'
@@ -333,8 +336,7 @@ NES_RenderFrame
             ELSE
             lda  ppuscroll
             FIN
-            ldal  ROMBase+$073f
-            sta  _ppuscroll+1
+            sta  _ppuscroll
 
             plp
 
@@ -356,7 +358,11 @@ NES_RenderFrame
 ; back to a dirty-rectangle mode when the NES PPUSCROLL does not change, will be important to support good performance
 ; in some games -- especially early games that do not use a scrolling playfield.
 
+            DO    CUSTOM_RENDER_SCREEN
+            jsr   CUSTOM_RENDER_SCREEN_ADDR
+            ELSE
             jsr   RenderScreen
+            FIN
 
 ; Game specific post-render logic
 
@@ -366,6 +372,115 @@ NES_RenderFrame
 
             inc   frameCount       ; Tick over to a new frame
             rts
+
+; Helper functions for patching and restoring the PEA field.  These could
+; be overridden for games that want to preserve the ability to switch between
+; dirty an full rendering, but still have a custom screen layout
+_SetupPEAField
+            jsr   _ApplyBG0YPosPreLite
+            jsr   _ApplyBG0YPosLite
+            jsr   _ApplyBG0XPosLite
+            sta   exitOffset              ; cache the :exit_offset value returned from this function
+
+            lda   #1
+            sta   peaFieldIsPatched
+            rts
+
+_ResetPEAField
+            stz   peaFieldIsPatched
+
+            ldy   exitOffset              ; offset to patch
+            jmp   _RestoreBG0OpcodesLite
+
+; Default render screen implementation.  The user-code can override this and provide their
+; own to improve performance.
+RenderScreen
+            sep   #$20
+            lda   _ppuctrl                ; Bit 0 is the high bit of the X scroll position
+            lsr                           ; put in the carry bit
+            lda   _ppuscroll+1            ; load the scroll value
+            ror                           ; put the high bit and divide by 2 for the engine
+            rep   #$20
+            and   #$00FF                  ; make sure nothing is in the high byte
+            jsr   _SetBG0XPos
+
+            lda   _ppuscroll              ; update the y-scroll position
+            clc
+            adc   #y_offset               ; Shift down by the offset
+            and   #$00FF
+            jsr   _SetBG0YPos
+
+            lda   ppumask                 ; honor the PPU enable flags for sprites and background
+            and   ppumask_override
+            and   #NES_PPUMASK_BG
+            jsr   EnableBackground
+
+            lda   ppumask
+            and   ppumask_override
+            and   #NES_PPUMASK_SPR
+            jsr   EnableSprites
+
+; Allow dirty rendering or not
+
+            DO    ENABLE_DIRTY_RENDERING
+
+; If this frame did not scroll, we can perform a dirty update
+
+            lda   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_Y+DIRTY_BIT_BG0_REFRESH
+            bit   DirtyBits
+            bne   :full_update
+            lda   disableDirtyRendering
+            bne   :full_update
+
+; This is code path for performing dirty rendering. PEA patching is deferred until needed
+
+            lda   peaFieldIsPatched
+            bne   :no_patch
+            jsr   _SetupPEAField
+:no_patch   jsr   drawDirtyScreen
+            bra   :complete
+
+:full_update
+            lda   peaFieldIsPatched
+            beq   :no_restore
+            jsr   _ResetPEAField
+:no_restore
+            jsr   _SetupPEAField
+            jsr   drawScreen
+:complete
+            ELSE
+
+; Set the verical position for this frame
+
+            jsr   _ApplyBG0YPosPreLite
+            jsr   _ApplyBG0YPosLite
+
+; Set the horizontal position for this frame
+
+            jsr   _ApplyBG0XPosLite
+            sta   exitOffset              ; cache the :exit_offset value returned from this function
+
+; Copy the sprites and buffer to the graphics screen
+
+            jsr   drawScreen
+
+; Restore the buffer
+
+            ldy   exitOffset              ; offset to patch
+            jsr   _RestoreBG0OpcodesLite
+            FIN
+
+            stz   DirtyBits
+            rts
+
+; Track if the PEA field is patched or not (for dirty rendering)
+peaFieldIsPatched dw 0
+
+; If dirty rendering is turned on, provide a way to override it
+disableDirtyRendering dw 0
+
+; PEA field offset for the right edge where the BRA instructions are patched in
+exitOffset   ds 2
 
 ; Tracks the number of times NES_RenderFrame has been called
 frameCount   dw  0

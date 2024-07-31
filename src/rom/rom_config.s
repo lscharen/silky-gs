@@ -130,12 +130,12 @@ ShowConfig
             jsr _DrawActiveMenuControls
             jsr _UpdateControlCursor
 
-:waitloop
-            jsr  _ReadKeypress
-            bit  #PAD_KEY_DOWN
-            beq  :waitloop
-
+; Wait for a key to be released before committing it
+:keyloop
+            jsr  _WaitForKeyUp
+            jsr  _WaitForKeyUp    ; wait twice to work around crossrunner bug
             and  #$007F
+
             cmp  #UP_ARROW
             beq  :decrement
             cmp  #DOWN_ARROW
@@ -149,7 +149,7 @@ ShowConfig
             cmp  #'q'
             beq  :abort
             cmp  #13
-            bne  :waitloop
+            bne  :keyloop
 
             jsr  _ConfigExit
             clc
@@ -267,6 +267,7 @@ ShowConfig
 :no_items
             rts
 
+config_keypress    ds 2    ; use to wait until a keyup event
 config_active_menu ds 2    ; currently selected menu item
 config_active_ctrl ds 2    ; currently selected control
 config_focus       ds 2
@@ -574,6 +575,22 @@ _ToggleNumber
 
             rts
 
+; Wait for a new key press
+_WaitForKeyUp
+:waitloop1
+            jsr  _ReadKeypress                       ; Read keyboard directly, and only for raw keystrokes
+            bit  #PAD_KEY_DOWN
+            beq  :waitloop1
+            sta  config_keypress
+:waitloop2
+            jsr  _ReadKeypress
+            beq  :keyup
+            cmp  config_keypress
+            beq  :waitloop2
+:keyup
+            lda  config_keypress
+            rts
+
 ; X = control addr
 ;
 ; Wait for the user to press a key
@@ -583,9 +600,7 @@ _ToggleKeymap
             lda: CTRL_VALUE_ADDR,x
             sta  :addr   ; address of the value
 
-:waitloop   jsr  _ReadKeypress                       ; Read keyboard directly, and only for raw keystrokes
-            bit  #PAD_KEY_DOWN
-            beq  :waitloop
+            jsr  _WaitForKeyUp
 
             and  #$007F
             sta  (:addr)

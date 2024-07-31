@@ -72,9 +72,15 @@ ROM_DRIVER_MODE   equ 0
 ; >0 = read $100 bytes directly from NES RAM
 DIRECT_OAM_READ   equ $0200
 
-; Flag whether to ignore Sprite 0.  Somce games use this sprite only for the 
-; special sprite 0 collision behavior, which is not supported in this runtime
-ALLOW_SPRITE_0    equ 0
+; Define a range of OAM entries to scan.  Many games do not use all 64
+; sprite slots, so we can avoid doing unecessary work by only scanning
+; OAM entries that may be on-screen
+OAM_START_INDEX   equ 1
+OAM_END_INDEX     equ 64
+
+; Allow the engine to use dirty rendering (drawing only lines where sprites
+; have changed) if the background did not scroll compared to the previous frame
+ENABLE_DIRTY_RENDERING equ 0
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
@@ -84,6 +90,9 @@ NO_VERTICAL_CLIP equ 1
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
 NO_INTERRUPTS     equ 0
+
+; Flag to turn off the configuration support
+NO_CONFIG         equ 0
 
 ; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
@@ -121,6 +130,10 @@ COMPILED_SPRITE_LIST       mac
                            dw  $FFFF
                            <<<
 
+; Do we have a custom routine to execute RenderScreen.  If yes, put its address here
+CUSTOM_RENDER_SCREEN equ 1
+CUSTOM_RENDER_SCREEN_ADDR equ _RenderScreen
+
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 2
 y_height_rows equ 25
@@ -144,14 +157,6 @@ x_offset    equ   16                      ; number of bytes from the left edge
 
             jsr   SetDefaultPalette
 
-; Show the configuration screen
-
-;            ldx   #CONFIG_BLK
-;            jsr   ShowConfig
-;            bcc   *+5
-;            jmp   quit
-;            jsr   ApplyConfig
-
 ; Start the FPS counter
             ldal  OneSecondCounter
             sta   OldOneSec
@@ -167,6 +172,7 @@ x_offset    equ   16                      ; number of bytes from the left edge
 
             jsr   NES_ColdBoot
 
+;            jsr   ShowConfig
 ; Apply hacks
 ;WorldNumber           = $075f
 ;LevelNumber           = $075c
@@ -403,7 +409,7 @@ CheckForPaletteChange
 ; Make the screen appear
 nesTopOffset    ds 2
 nesBottomOffset ds 2
-RenderScreen
+_RenderScreen
 
 ; Do the basic setup
 
@@ -485,14 +491,18 @@ RenderScreen
             jsr   DrawByte
 :skip_fps
 
-;            lda   InputPlayer1
-;            ldx   #8*160
-;            ldy   #$FFFF
-;            jsr   DrawWord
+            lda   InputPlayer1
+            ldx   #8*160
+            ldy   #$FFFF
+            jsr   DrawWord
+
+            lda   LastRead
+            ldx   #16*160
+            ldy   #$FFFF
+            jsr   DrawWord
             FIN
 
             stz   DirtyBits
-;            stz   LastPatchOffset
             rts
 
 SetDefaultPalette
@@ -567,38 +577,38 @@ ScreenOffsets dw    12, 16, 20, 24, 28,                        72, 76, 80, 84, 8
 
 CopyStatusToScreen
 
-            lda   ScreenBase
-            sec
-            sbc   #160*16
-            sta   tmp0
-
-            ldy   #0
-:loop
-            phy                             ; preserve reg
-            ldx   MemOffsets,y
-            ldal  PPU_MEM+TILE_SHADOW,x
+;            lda   ScreenBase
+;            sec
+;            sbc   #160*16
+;            sta   tmp0
+;
+;            ldy   #0
+;:loop
+;            phy                             ; preserve reg
+;            ldx   MemOffsets,y
+;            ldal  PPU_MEM+TILE_SHADOW,x
 ;            and   #$00FF
 ;            ora   #$0100+TILE_USER_BIT
 ;            pha
 
-            lda   ScreenOffsets,y
-            clc
-            adc   tmp0
+;            lda   ScreenOffsets,y
+;            clc
+;            adc   tmp0
 ;            pha
 
-            lda   #$8002
-            cpx   #107                      ; This one is palette 3
-            bne   *+5
-            ora   #$0001
+;            lda   #$8002
+;            cpx   #107                      ; This one is palette 3
+;            bne   *+5
+;            ora   #$0001
 ;            pha
 ;            _GTEDrawTileToScreen           ; call NESTileBlitter
 
-            ply
-            iny
-            iny
-            cpy   #30*2
-            bcc   :loop
-            rts
+;            ply
+;            iny
+;            iny
+;            cpy   #30*2
+;            bcc   :loop
+;            rts
 
 
 ; Configuration screen and variables
@@ -617,6 +627,7 @@ config_video_statusbar dw  1  ; exclude the status bar from the animate playfiel
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
 config_video_small     ds  2  ; use a smaller playfield screen size
 config_input_p1_type   dw  0  ; keyboard  / snes max
+config_input_p2_type   dw  0
 config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
@@ -812,25 +823,25 @@ INPUT_ITEM_5 dw   KEYMAP
 ; Mapping tables to take a nametable address and return the appropriate attribute memory location.  This is a table with
 ; 960 entries.  This table is just the 64 offsets above address $2xC0 stored as bytes to keep the table size reasonably
 ; conpact
-PPU_ATTR_ADDR
-]row        =     0
-            lup   30
-            db    $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1,
-            db    $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3,
-            db    $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5,
-            db    $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7,
-]row        =     ]row+1
-            --^
+* PPU_ATTR_ADDR
+* ]row        =     0
+*             lup   30
+*             db    $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1,
+*             db    $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3,
+*             db    $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5,
+*             db    $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7,
+* ]row        =     ]row+1
+*             --^
             
-PPU_ATTR_MASK
-            lup   7
-            db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-            db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-            db    $30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0
-            db    $30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0
-            --^
-            db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-            db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
+* PPU_ATTR_MASK
+*             lup   7
+*             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
+*             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
+*             db    $30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0
+*             db    $30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0
+*             --^
+*             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
+*             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
 
 ; Palette for the configuration screen
 ConfScrnPal  dw     $0F, $00, $29, $1A, $0F, $36, $17, $30, $21, $27, $1A, $16, $00, $00, $16, $18

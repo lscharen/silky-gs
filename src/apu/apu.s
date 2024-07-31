@@ -501,8 +501,12 @@ clock_length_counter    mac
                         bit   ]2
                         bne   no_count
                         lda   ]1+{APU_PULSE1_LENGTH_COUNTER-APU_PULSE1}
-                        beq   no_count
-                        dec
+                        bne   dec_count
+                        lda   ]2
+                        ora   ]1+{APU_PULSE1_REG1-APU_PULSE1}
+                        sta   ]1+{APU_PULSE1_REG1-APU_PULSE1}
+                        bra   no_count
+dec_count               dec
                         sta   ]1+{APU_PULSE1_LENGTH_COUNTER-APU_PULSE1}
 no_count                <<<
 
@@ -645,7 +649,7 @@ quarter_frame_clock
 
 apu_frame_steps      equ 5
 PULSE_HALT_FLAG      equ $20
-NOISE_HALT_FLAG      equ $20     ; noise and pulse channels have halt flagin same bit position in REG1
+NOISE_HALT_FLAG      equ $20     ; noise and pulse channels have halt flag in same bit position in REG1
 PULSE_CONST_VOL_FLAG equ $10
 NOISE_CONST_VOL_FLAG equ $10
 TRIANGLE_HALT_FLAG   equ $80
@@ -1072,7 +1076,7 @@ dividend        dw 0                    ; Used when converting from NES APU valu
 divisor         dw 0
 
 ; Pulse Channel 1
-APU_PULSE1
+APU_PULSE1      ENT
 APU_PULSE1_REG1 ds 1    ; DDLC NNNN - Duty, length counter halt, constant volume/evelope, envelope period/volume
 APU_PULSE1_REG2 ds 1    ; EPPP NSSS - Sweep unit: enabled, period, negative, shift count
 APU_PULSE1_REG3 ds 1    ; LLLL LLLL - Timer Low
@@ -1091,7 +1095,7 @@ APU_PULSE1_ENVELOPE         dfb 0
 _apu_pulse1_last_period     dw  $FFFF ; optimization
 
 
-APU_PULSE2
+APU_PULSE2      ENT
 APU_PULSE2_REG1 ds 1    ; DDLC NNNN - Duty, length counter halt, constant volume/evelope, envelope period/volume
 APU_PULSE2_REG2 ds 1    ; EPPP NSSS - Sweep unit: enabled, period, negative, shift count
 APU_PULSE2_REG3 ds 1    ; LLLL LLLL - Timer Low
@@ -1364,13 +1368,51 @@ APU_STATUS_FORCE
     phk
     plb
     pha
+    sta   APU_STATUS
     bra   force_entry
+
+APU_STATUS_READ ENT
+    ldal  APU_NOISE
+    and   #NOISE_HALT_FLAG
+    bne   :noise_halted
+    lda   #$08
+:noise_halted
+    pha                           ; build the return value
+
+    ldal  APU_TRIANGLE
+    and   #TRIANGLE_HALT_FLAG
+    bne   :triangle_halted
+    lda   #$04
+    ora   1,s
+    sta   1,s
+:triangle_halted
+
+    ldal  APU_PULSE2
+    and   #PULSE_HALT_FLAG
+    bne   :pulse2_halted
+    lda   #$02
+    ora   1,s
+    sta   1,s
+:pulse2_halted
+
+    ldal  APU_PULSE1
+    and   #PULSE_HALT_FLAG
+    bne   :pulse1_halted
+    pla
+    ora   #$01
+    rtl
+
+:pulse1_halted
+    pla
+    rtl
+
 
 APU_STATUS_WRITE ENT
     phb
     phk
     plb
     pha
+    sta   APU_STATUS
 
     phx
     ldx   APU_FORCE_OFF
@@ -1378,7 +1420,6 @@ APU_STATUS_WRITE ENT
     plx
 
 force_entry
-    sta   APU_STATUS
 
 ; From NESDev Wiki: When the enabled bit is cleared (via $4015), the length counter is forced to 0
 ;             and cannot be changed until enabled is set again (the length counter's previous value is lost).

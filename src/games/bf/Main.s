@@ -43,12 +43,11 @@ not_d
 ; Pre-render check to see if there are any background tiles queued for updates.  If so, we will do
 ; a regular rendering.  If not, use dirty rendering.
 PRE_RENDER   mac
-
-             stz  use_dirty
+             stz  disableDirtyRendering
              lda  at_queue_tail
              cmp  tmp4                    ; If there are any attribute changes, render the full screen
              bne  do_full
-             inc  use_dirty
+             inc  disableDirtyRendering
 do_full
              <<<
 
@@ -87,9 +86,15 @@ ROM_DRIVER_MODE   equ 1
 ; >0 = read $100 bytes directly from NES RAM at this address (typically $200)
 DIRECT_OAM_READ   equ $200
 
-; Flag whether to ignore Sprite 0.  Some games use this sprite only for the 
-; special sprite 0 collision behavior, which is not supported in this runtime
-ALLOW_SPRITE_0    equ 1   ; Sprite 0 is the lightning spark
+; Define a range of OAM entries to scan.  Many games do not use all 64
+; sprite slots, so we can avoid doing unecessary work by only scanning
+; OAM entries that may be on-screen
+OAM_START_INDEX   equ 0
+OAM_END_INDEX     equ 64
+
+; Allow the engine to use dirty rendering (drawing only lines where sprites
+; have changed) if the background did not scroll compared to the previous frame
+ENABLE_DIRTY_RENDERING equ 1
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
@@ -99,6 +104,9 @@ NO_VERTICAL_CLIP equ 0
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
 NO_INTERRUPTS     equ 0
+
+; Flag to turn off the configuration support
+NO_CONFIG         equ 0
 
 ; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
@@ -126,6 +134,11 @@ COMPILED_SPRITE_LIST       mac
                            dw  $FFFF
                            <<<
 
+; Do we have a custom routine to execute RenderScreen.  If yes, put its address here
+;CUSTOM_RENDER_SCREEN equ 0
+CUSTOM_RENDER_SCREEN equ 1
+CUSTOM_RENDER_SCREEN_ADDR equ _RenderScreen
+
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 3 
 y_height_rows equ 25
@@ -145,24 +158,12 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
             jsr   NES_StartUp
 
-; Initialize the game-specific variables
-
-            stz   LastAreaType            ; Check if the palettes need to be updates
-
 ; This is set up to let the game define all colors.  We only need to set up a single, static
 ; swizzle table
 
             lda   SwizzleTables+2
             ldx   SwizzleTables
             jsr   NES_SetPaletteMap
-
-; Show the configuration screen
-
-;            ldx   #CONFIG_BLK
-;            jsr   ShowConfig
-;            bcc   *+5
-;            jmp   quit
-;            jsr   ApplyConfig
 
 ; Initialize the graphics for the main game mode
 
@@ -221,12 +222,9 @@ Greyscale   dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
 
 ; Program variables
-LastAreaType      dw  0
-show_vbl_cpu      dw  0
-user_break        dw  0
-use_dirty         dw  0        ; can use dirty rendering for this frame
+;use_dirty         dw  0        ; can use dirty rendering for this frame
 oldFrameCount     dw  0
-disableDirtyRendering dw 0
+;disableDirtyRendering dw 0
 
 ; Helper to initialize the playfield based on the selected VideoMode
 InitPlayfield
@@ -234,39 +232,11 @@ InitPlayfield
             lda   #24
             sta   NesTop
 
-;            lda   VideoMode
-;            cmp   #0
-;            beq   :good
-;            cmp   #2
-;            beq   :better
-
             lda   #0
             sta   MinYScroll
 
             lda   #200
             sta   ScreenHeight
-            bra   :common
-
-:better
-;            lda   #16            ; Keep the GTE playfield below the status bar in PPU RAM
-            lda   #24
-            sta   MinYScroll
-
-            lda   #160           ; 160 lines high for 'better'
-            sta   ScreenHeight
-            bra   :common
-
-:good
-;            lda   #16            ; Keep the GTE playfield below the status bar in PPU RAM
-            lda   #24
-            sta   MinYScroll
-
-            lda   #128           ; Only 128 lines tall for speed
-            sta   ScreenHeight
-
-; Common follow-on initialization
-:common
-            lda   ScreenHeight
             lsr
             lsr
             lsr
@@ -508,7 +478,7 @@ nesTopOffset    ds 2
 nesBottomOffset ds 2
 
 ; Patch the PEA field based on the current PPU parameters
-_SetupPEAField
+_BFSetupPEAField
 ; Now render the top 16 lines to show the status bar area
 
             clc
@@ -538,7 +508,7 @@ _SetupPEAField
             rts
 
 ; Restore the patched PEA field to put it back into a clean state
-_ResetPEAField
+_BFResetPEAField
             stz   peaFieldIsPatched
 
             lda   #24                     ; virt_line
@@ -554,10 +524,10 @@ _ResetPEAField
             ldy   nesBottomOffset         ; offset to patch
             jmp   _RestoreBG0OpcodesAltLite
 
-; Track if the PEA field is patched or not
-peaFieldIsPatched dw 0
+* ; Track if the PEA field is patched or not
+* peaFieldIsPatched dw 0
 
-RenderScreen
+_RenderScreen
 
 ; Do the basic setup
 
@@ -587,20 +557,20 @@ RenderScreen
             bne   :full_update
             lda   disableDirtyRendering
             bne   :full_update
-            lda   use_dirty
-            bne   :dirty_update
+            lda   disableDirtyRendering
+            beq   :dirty_update
 :full_update
             lda   peaFieldIsPatched
             beq   :no_restore
-            jsr   _ResetPEAField          ; A full update needs to restore the PEA field before changing the XPos
+            jsr   _BFResetPEAField          ; A full update needs to restore the PEA field before changing the XPos
 :no_restore
-            jsr   _SetupPEAField
+            jsr   _BFSetupPEAField
             jsr   drawScreen
             bra   :complete
 :dirty_update
             lda   peaFieldIsPatched
             bne   :no_patch
-            jsr   _SetupPEAField
+            jsr   _BFSetupPEAField
 :no_patch
             jsr   drawDirtyScreen
 :complete
@@ -722,7 +692,7 @@ config_audio_quality   ds  2  ; good / better / best audio quality (60Hz, 120Hz,
 config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
 config_video_twinkle   ds  2  ; disable the background star animation
-config_input_p1_type   dw  2  ; keyboard / snes max
+config_input_p1_type   dw  0  ; keyboard / snes max
 config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
