@@ -408,35 +408,58 @@ _ReadControl
 :input_proc       dw        _ReadKeyboard1,_ReadSNESMAX1
                   dw        _ReadKeyboard2,_ReadSNESMAX2
 
+; Reset the keypress state to clear the current keypress and set up to wait until the next key
+; is pressed to regiter
+_ClearKeypress    
+                  stz       LastKey
+                  rts
+
+; Acknowledge that a keypress has been read.  This is similar to physically clearing
+; the keyboard strobe and will clear the PAD_KEY_DOWN bit, which is held so that a new
+; keypress can be picked up by the user code on a differnt frame than the initial read
+_AckKeypress
+                  lda       LastKey
+                  and       #$FF7F
+                  sta       LastKey
+                  rts
+
 ; Poll the keyboard and return the current keypress in the lower 7 bits and the KEY_DOWN
 ; status in the high bit. This routine does apply debounce logic.
 _ReadKeypress
                   pea       $0000               ; temporary space
                   sep       #$20
 
-                  ldal      KBD_STROBE_REG      ; read the keyboard
-                  bit       #$80
-                  beq       :KbdNotDwn          ; check the key-down status
+                  ldal      KBD_REG             ; read the keyboard
+                  bit       #$80                ; was the strobe bit set? If yes, then this is a new key
+                  beq       :no_new_key
 
-; debounce the new input
-
-                  and       #$7F                ; save the new key code
-                  cmp       LastKey             ; is it different than the last key press?
-                  bne       :KbdDifferent       ; If yes, the input has no settled
-
-                  sta       LastKey             ; save it as the current 'active' keypress
-                  stal      KBD_REG             ; clear the key strobe
-
-                  ora       #PAD_KEY_DOWN       ; set the keydown flag and save the return value
+                  stal      KBD_STROBE_REG      ; reset the strobe
+;                  and       #$7F                ; isolate the key code
+                  sta       LastKey
+;                  ora       #PAD_KEY_DOWN       ; set the keydown flag
                   sta       1,s
-                  bra       :KbdDown
-:KbdDifferent
-                  sta       LastKey             ; Just save the current key for the next time, but don't return the key code
-                  bra       :KbdDown
-:KbdNotDwn
+                  bra       :done               ; return the key value
+
+:no_new_key
+                  ldal      KBD_STROBE_REG      ; see if the key is being held
+                  bit       #$80
+                  beq       :no_key_down
+
+                  lda       LastKey             ; otherwise place the last key value as the current keypress
+                  sta       1,s                 ; without PAD_KEY_DOWN flag set
+                  bra       :done
+
+:no_key_down
                   stz       LastKey             ; If no key is currently pressed, set the 'active' key to 0
-:KbdDown
+
+:done
                   rep       #$20
+
+;                  lda   1,s
+;                  ldx   #32*160
+;                  ldy   #$FFFF
+;                  jsr   DrawWord
+
                   pla
                   rts
 

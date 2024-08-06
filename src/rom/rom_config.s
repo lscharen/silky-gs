@@ -61,6 +61,7 @@ CONFIG_PANEL_HEIGHT equ 144
 ; Palette select for normal / selected / yes / no test
 TEXT_NORMAL equ CONFIG_PALETTE*2
 TEXT_SELECTED equ 2
+TEXT_HIGHLIGHTED equ 4
 TEXT_YES equ 2
 TEXT_NO equ 0
 
@@ -92,7 +93,9 @@ _ConfigExit
             stal $E19D00,x
             dex
             dex
-            bpl  :loop 
+            bpl  :loop
+
+            jsr  _ClearKeypress
             rts
 
 ; Creates a UI for the runtime configuration
@@ -133,7 +136,6 @@ ShowConfig
 ; Wait for a key to be released before committing it
 :keyloop
             jsr  _WaitForKeyUp
-            jsr  _WaitForKeyUp    ; wait twice to work around crossrunner bug
             and  #$007F
 
             cmp  #UP_ARROW
@@ -267,7 +269,7 @@ ShowConfig
 :no_items
             rts
 
-config_keypress    ds 2    ; use to wait until a keyup event
+; config_keypress    ds 2    ; use to wait until a keyup event
 config_active_menu ds 2    ; currently selected menu item
 config_active_ctrl ds 2    ; currently selected control
 config_focus       ds 2
@@ -441,7 +443,15 @@ _DrawControlList
 ;
 ; Where XX is the character hex code
 _DrawKeymap
+            lda  #0
+
+_DrawKeymap0
 :addr       equ  tmp15
+:highlight  equ  tmp14
+
+; Save the palette select
+
+            sta  :highlight
 
 ; First two words are the offset coordinates of the control
 
@@ -467,9 +477,9 @@ _DrawKeymap
             ldx: 0,y                    ; load the variable value
 
             ldy  :addr
-            lda  #TEXT_NORMAL
+            lda  :highlight
             jmp  ConfigDrawByte
-             rts
+            rts
 
 ; Y = screen addr
 ; X = control addr
@@ -581,14 +591,10 @@ _WaitForKeyUp
             jsr  _ReadKeypress                       ; Read keyboard directly, and only for raw keystrokes
             bit  #PAD_KEY_DOWN
             beq  :waitloop1
-            sta  config_keypress
-:waitloop2
-            jsr  _ReadKeypress
-            beq  :keyup
-            cmp  config_keypress
-            beq  :waitloop2
-:keyup
-            lda  config_keypress
+            jsr  _AckKeypress
+;            sta  config_keypress
+;            lda  config_keypress
+            and  #$7F
             rts
 
 ; X = control addr
@@ -596,6 +602,11 @@ _WaitForKeyUp
 ; Wait for the user to press a key
 _ToggleKeymap
 :addr       equ  tmp15
+
+            phx
+            lda  #TEXT_HIGHLIGHTED
+            jsr  _DrawKeymap0
+            plx
 
             lda: CTRL_VALUE_ADDR,x
             sta  :addr   ; address of the value
@@ -808,7 +819,7 @@ _DrawControl
 :not_number
             rts
 
-; Switchthe value of the active control
+; Switch the value of the active control
 _ToggleActiveControl
             lda  config_focus
             bit  #$FF00
