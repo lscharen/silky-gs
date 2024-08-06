@@ -151,7 +151,8 @@ x_offset    equ   16                      ; number of bytes from the left edge
 
             jsr   NES_StartUp
 
-            stz   LastAreaType            ; Check if the palettes need to be updates
+            stz   LastAreaType            ; Check if the palettes need to be updated
+            stz   LastAreaStyle
 
 ; Set the palettes and swizzle tables
 
@@ -230,6 +231,8 @@ Greyscale   dw    $0000,$5555,$AAAA,$FFFF
 
 ; Program variables
 LastAreaType      dw  0
+LastAreaStyle     dw  0
+
 show_vbl_cpu      dw  0
 user_break        dw  0
 oldFrameCount     dw  0
@@ -402,8 +405,18 @@ CheckForPaletteChange
             cmp   LastAreaType            ;   order is WaterPaletteData, <GroundPaletteData, <UndergroundPaletteData, <CastlePaletteData
             beq   :no_area_change
             sta   LastAreaType
-            jsr   SetAreaPalette
+            jmp   SetAreaPalette
+
 :no_area_change
+            lda   ROMBase+$0733
+            and   #$0001
+            cmp   LastAreaStyle
+            beq   :no_style_change
+            sta   LastAreaStyle
+            lda   LastAreaType
+            jmp   SetAreaPalette
+
+:no_style_change
             rts
 
 ; Make the screen appear
@@ -521,8 +534,13 @@ SetAreaPalette
             lda   SwizzleTables+2,y
             ldx   SwizzleTables,y
             jsr   NES_SetPaletteMap
-            
+
             plx
+            lda   LastAreaStyle       ; Check area style
+            bit   #$0001
+            beq   *+5
+            ldx   #MushroomPalette
+
             lda   #TmpPalette
             jsr   NES_PaletteToIIgs
 
@@ -859,6 +877,9 @@ Area3Palette dw     $0F, $00, $30, $10, $00, $16, $17, $27, $1C, $36, $1D, $00, 
 
 ; Water
 WaterPalette dw     $22, $00, $15, $12, $25, $3A, $1A, $0F, $30, $12, $27, $10, $16, $00, $16, $18
+
+; AreaStyle = $01 (almost the same as Area1Palette)
+MushroomPalette dw  $22, $00, $27, $16, $0F, $36, $17, $30, $21, $27, $1A, $16, $00, $00, $16, $18
 
 ; Palette remapping
             put   pal_w11.s
