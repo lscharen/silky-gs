@@ -1197,6 +1197,7 @@ PPUDATA_WRITE ENT
         mx   %00
 ; Background color
 ppu_3F00  ldal PPU_MEM+$3F00
+          jsr  NES_ColorToIIgs
           stal $E19E00
           rts
 
