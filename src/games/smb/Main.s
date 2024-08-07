@@ -536,11 +536,18 @@ SetAreaPalette
             jsr   NES_SetPaletteMap
 
             plx
+
+            ldal  ROMBase+$075f       ; World number
+            and   #$00FF
+            beq   :no_alt
+
             lda   LastAreaStyle       ; Check area style
-            bit   #$0001
-            beq   *+5
+            and   #$00FF
+            cmp   #$0001
+            bne   :no_alt
             ldx   #MushroomPalette
 
+:no_alt
             lda   #TmpPalette
             jsr   NES_PaletteToIIgs
 
