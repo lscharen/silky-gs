@@ -289,6 +289,15 @@ STX_2001
 LDA_2002
             jsl  PPUSTATUS_READ
             rts
+LDX_2002
+            pha
+            pha
+            jsl  PPUSTATUS_READ
+            sta  2,s
+            pla
+            plx
+            rts
+
 STA_2003
             jsl  OAMADDR_WRITE
             rts
@@ -353,7 +362,7 @@ LDA_ABS_Y   mac
             phx
             tyx
             lda  ]1,x
-            sta  tmp_byte+1
+            sta  lay_patch+1
             plx
             plp
 lay_patch   lda  #0
