@@ -43,8 +43,6 @@ JOYPAD_PORT           = $4016
 JOYPAD_PORT1          = $4016
 JOYPAD_PORT2          = $4017
 
-GTE_TMP               = $7000       ; No zero page references in the assembly to this location
-
 ; GAME SPECIFIC DEFINES
 
 ObjectOffset          = $08
@@ -670,39 +668,39 @@ GameOverModeValue     = 3
 ;       .mem 8
 
 ;       .org $8000
-; External wrapper is responsible for setting the stack
-PPUCTRL_WRITE    EXT
-PPUMASK_WRITE    EXT
-PPUSTATUS_READ   EXT
-PPUSTATUS_READ_X EXT
-OAMADDR_WRITE    EXT
-PPUSCROLL_WRITE  EXT
-PPUADDR_WRITE    EXT
-PPUDATA_READ     EXT
-PPUDATA_WRITE    EXT
-PPUDMA_WRITE     EXT
 
-APU_PULSE1_REG1_WRITE EXT
-APU_PULSE1_REG2_WRITE EXT
-APU_PULSE1_REG3_WRITE EXT
-APU_PULSE1_REG4_WRITE EXT
-APU_PULSE2_REG1_WRITE EXT
-APU_PULSE2_REG2_WRITE EXT
-APU_PULSE2_REG3_WRITE EXT
-APU_PULSE2_REG4_WRITE EXT
-APU_TRIANGLE_REG1_WRITE EXT
-;APU_TRIANGLE_REG2_WRITE EXT
-APU_TRIANGLE_REG3_WRITE EXT
-APU_TRIANGLE_REG4_WRITE EXT
-APU_NOISE_REG1_WRITE EXT
-;APU_NOISE_REG2_WRITE EXT
-APU_NOISE_REG3_WRITE EXT
-APU_NOISE_REG4_WRITE EXT
+ROMBase  ENT
+         ds    $7900
+         put  ../../rom/rom_inject.s
 
-APU_STATUS_WRITE EXT
+; Absolute address in zero page helpers
+JMP_IND_06  JMP_ABS_IND $06
+LDA_Block_PageLoc_Y    LDA_ABS_Y Block_PageLoc
+LDA_Block_X_Position_Y LDA_ABS_Y Block_X_Position
+LDA_Block_Y_Position_Y LDA_ABS_Y Block_Y_Position
+LDA_Enemy_PageLoc_Y    LDA_ABS_Y Enemy_PageLoc
+LDA_Enemy_X_Position_Y LDA_ABS_Y Enemy_X_Position
+LDA_Enemy_Y_Position_Y LDA_ABS_Y Enemy_Y_Position
+LDA_Enemy_Flag_Y       LDA_ABS_Y Enemy_Flag
+LDA_Enemy_State_Y      LDA_ABS_Y Enemy_State
+LDA_Misc_State_Y       LDA_ABS_Y Misc_State
+LDA_Enemy_ID_Y         LDA_ABS_Y Enemy_ID
 
-ROMBase     ENT
-            ds    $7A00
+STA_Misc_PageLoc_Y     STA_ABS_Y Misc_PageLoc
+STA_Misc_X_Position_Y  STA_ABS_Y Misc_X_Position
+STA_Misc_Y_Position_Y  STA_ABS_Y Misc_Y_Position
+STA_Misc_Y_Speed_Y     STA_ABS_Y Misc_Y_Speed
+STA_Misc_Y_HighPos_Y   STA_ABS_Y Misc_Y_HighPos
+STA_Misc_State_Y       STA_ABS_Y Misc_State
+STA_Enemy_X_Position_Y STA_ABS_Y Enemy_X_Position
+STA_Enemy_Y_Position_Y STA_ABS_Y Enemy_Y_Position
+STA_Enemy_Y_HighPos_Y  STA_ABS_Y Enemy_Y_HighPos
+STA_Enemy_Flag_Y       STA_ABS_Y Enemy_Flag
+STA_Enemy_PageLoc_Y    STA_ABS_Y Enemy_PageLoc
+STA_Enemy_State_Y      STA_ABS_Y Enemy_State
+STA_Enemy_MovingDir_Y  STA_ABS_Y Enemy_MovingDir
+
+ADC_Enemy_State_Y      ADC_ABS_Y Enemy_State
 
 ; Define a helper for the ROM InitializeMemory routine to properly deal with the 
 ; direct page and stack being in a different bank
@@ -730,195 +728,15 @@ GteInitMem
 
             plp
             rts
-
-            mx    %11
-; Hooks to call back to the GTE harness for APU register access
-APU_IND_X_REG3_W
-; x is 0, 4 or 8 -- dispatch to the correct underlying routine
-            jmp  (:reg_tbl,x)
-:reg_tbl    dw   APU_PULSE1_REG3_W,APU_PULSE1_REG3_W
-            dw   APU_PULSE2_REG3_W,APU_PULSE2_REG3_W,
-            dw   APU_TRIANGLE_REG3_W,APU_TRIANGLE_REG3_W
-            dw   NO_OP,NO_OP
-
-APU_IND_X_REG4_W
-            jmp  (:reg_tbl,x)
-:reg_tbl    dw   APU_PULSE1_REG4_W,APU_PULSE1_REG4_W
-            dw   APU_PULSE2_REG4_W,APU_PULSE2_REG4_W,
-            dw   APU_TRIANGLE_REG4_W,APU_TRIANGLE_REG4_W
-            dw   NO_OP,NO_OP
-
-APU_PULSE1_REG1_W
-            jsl  APU_PULSE1_REG1_WRITE
-NO_OP
-            rts
-APU_PULSE1_REG1_WX
-            phx
-            pha
-            txa
-            jsl  APU_PULSE1_REG1_WRITE
-            pla
-            plx
-            rts
-APU_PULSE1_REG2_W
-            jsl  APU_PULSE1_REG2_WRITE
-            rts
-APU_PULSE1_REG2_WY
-            phy
-            pha
-            tya
-            jsl  APU_PULSE1_REG2_WRITE
-            pla
-            ply
-            rts
-APU_PULSE1_REG3_W
-            jsl  APU_PULSE1_REG3_WRITE
-            rts
-APU_PULSE1_REG4_W
-            jsl  APU_PULSE1_REG4_WRITE
-            rts
-
-APU_PULSE2_REG1_W
-            jsl  APU_PULSE2_REG1_WRITE
-            rts
-APU_PULSE2_REG1_WX
-            phx
-            pha
-            txa
-            jsl  APU_PULSE2_REG1_WRITE
-            pla
-            plx
-            rts
-APU_PULSE2_REG2_W
-            jsl  APU_PULSE2_REG2_WRITE
-            rts
-APU_PULSE2_REG2_WY
-            phy
-            pha
-            tya
-            jsl  APU_PULSE2_REG2_WRITE
-            pla
-            ply
-            rts
-APU_PULSE2_REG2_WX
-            phx
-            pha
-            txa
-            jsl  APU_PULSE2_REG2_WRITE
-            pla
-            plx
-            rts
-APU_PULSE2_REG3_W
-            jsl  APU_PULSE2_REG3_WRITE
-            rts
-APU_PULSE2_REG4_W
-            jsl  APU_PULSE2_REG4_WRITE
-            rts
-
-APU_TRIANGLE_REG1_W
-            jsl  APU_TRIANGLE_REG1_WRITE
-            rts
-;APU_TRIANGLE_REG2_W
-;            jsl  APU_TRIANGLE_REG2_WRITE
-;            rts
-APU_TRIANGLE_REG3_W
-            jsl  APU_TRIANGLE_REG3_WRITE
-            rts
-APU_TRIANGLE_REG4_W
-            jsl  APU_TRIANGLE_REG4_WRITE
-            rts
-
-APU_NOISE_REG1_W
-            jsl  APU_NOISE_REG1_WRITE
-            rts
-;APU_TRIANGLE_REG2_W
-;            jsl  APU_TRIANGLE_REG2_WRITE
-;            rts
-APU_NOISE_REG3_W
-            jsl  APU_NOISE_REG3_WRITE
-            rts
-APU_NOISE_REG3_WX
-            phx
-            pha
-            txa
-            jsl  APU_NOISE_REG3_WRITE
-            pla
-            plx
-            rts
-APU_NOISE_REG4_W
-            jsl  APU_NOISE_REG4_WRITE
-            rts
-
-APU_NOISE_REG4_WY
-            phy
-            pha
-            tya
-            jsl  APU_NOISE_REG4_WRITE
-            pla
-            ply
-            rts
-
-APU_STATUS_W
-            jsl   APU_STATUS_WRITE
-            rts
-APU_STATUS_WX
-            phx
-            pha
-            txa
-            jsl   APU_STATUS_WRITE
-            pla
-            plx
-            rts
-; Hooks to call back to the GTE harness for PPU memory-mapped accesses
-PPU_CTRL_W
-            jsl  PPUCTRL_WRITE
-            rts
-PPU_MASK_W
-            jsl  PPUMASK_WRITE
-            rts
-PPU_STATUS_R
-            jsl  PPUSTATUS_READ
-            rts
-PPU_STATUS_RX
-            jsl  PPUSTATUS_READ_X
-            rts
-OAM_ADDR_W
-            jsl  OAMADDR_WRITE
-            rts
-PPU_SCROLL_W
-            jsl  PPUSCROLL_WRITE
-            rts
-PPU_ADDRESS_W
-            jsl  PPUADDR_WRITE
-            rts
-PPU_DATA_R
-            jsl  PPUDATA_READ
-            rts
-PPU_DATA_W
-            jsl  PPUDATA_WRITE
-            rts
-SPR_DMA_W
-            jsl  PPUDMA_WRITE
-            rts
-
-; Enter via a JML. X = target address, Stack and Direct page set up properly. B = ROM bank. Called in 16-bit native mode
-            mx    %00
-ExtRtn      EXT
-ExtIn       ENT
-            stx  :patch+1
-            sep  #$30
-:patch      jsr  $0000
-            rep  #$30
-            jml  ExtRtn
+         ds   \,$00
 
 ;-------------------------------------------------------------------------------------
              mx    %11
-ROMReset     ENT
 Start
 ;             sei                          ;pretty standard 6502 type init here
 ;             cld
              lda #%00010000               ;init PPU control register 1 
-             jsr PPU_CTRL_W
+             jsr STA_2000
 ;             ldx #$ff                     ;reset stack pointer
 ;             txs
 ;VBlank1     lda PPU_STATUS               ;wait two frames
@@ -944,9 +762,9 @@ ColdBoot     jsr InitializeMemory         ;clear memory using pointer in Y
              sta PseudoRandomBitReg       ;set seed for pseudorandom register
              lda #%00001111
 ;             sta SND_MASTERCTRL_REG       ;enable all sound channels except dmc
-             jsr APU_STATUS_W
+             jsr STA_4015
              lda #%00000110
-             jsr PPU_MASK_W            ;turn off clipping for OAM and background
+             jsr STA_2001            ;turn off clipping for OAM and background
              jsr MoveAllSpritesOffscreen
              jsr InitializeNameTables     ;initialize both name tables
              inc DisableScreenFlag        ;set flag to disable screen output
@@ -985,7 +803,7 @@ NonMaskableInterrupt ENT
                and #%01111111            ;save all other bits
                sta Mirror_PPU_CTRL_REG1
                and #%01111110            ;alter name table address to be $2800
-               jsr PPU_CTRL_W            ;(essentially $2000) but save other bits
+               jsr STA_2000            ;(essentially $2000) but save other bits
                lda Mirror_PPU_CTRL_REG2  ;disable OAM and background display by default
                and #%11100110
                ldy DisableScreenFlag     ;get screen disable flag
@@ -994,15 +812,15 @@ NonMaskableInterrupt ENT
                ora #%00011110
 ScreenOff      sta Mirror_PPU_CTRL_REG2  ;save bits for later but not in register at the moment
                and #%11100111            ;disable screen for now
-               jsr PPU_MASK_W
-               jsr PPU_STATUS_RX         ;reset flip-flop and reset scroll registers to zero
+               jsr STA_2001
+               jsr LDX_2002         ;reset flip-flop and reset scroll registers to zero
                lda #$00
                jsr InitScroll
-               jsr OAM_ADDR_W            ;reset spr-ram address register
+               jsr STA_2003            ;reset spr-ram address register
 
 ; PPU harness just reads from $200 before calling the NMI task
                lda #$02                  ;perform spr-ram DMA access on $0200-$02ff
-               jsr SPR_DMA_W
+               jsr STA_4014
 
                ldx VRAM_Buffer_AddrCtrl  ;load control for pointer to buffer contents
                lda VRAM_AddrTable_Low,x  ;set indirect at $00 to pointer
@@ -1021,7 +839,7 @@ InitBuffer     ldx VRAM_Buffer_Offset,y
                sta VRAM_Buffer1,x
                sta VRAM_Buffer_AddrCtrl  ;reinit address control to $0301
                lda Mirror_PPU_CTRL_REG2  ;copy mirror of $2001 to register
-               jsr PPU_MASK_W
+               jsr STA_2001
                jsr SoundEngine           ;play sound
                jsr ReadJoypads           ;read joypads
                jsr PauseRoutine          ;handle pause
@@ -1079,20 +897,20 @@ Sprite0Hit
 ;               bne HBlankDelay
 
 SkipSprite0    lda HorizontalScroll      ;set scroll registers from variables
-               jsr PPU_SCROLL_W
+               jsr STA_2005
                lda VerticalScroll
-               jsr PPU_SCROLL_W
+               jsr STA_2005
                lda Mirror_PPU_CTRL_REG1  ;load saved mirror of $2000
                pha
-               jsr PPU_CTRL_W
+               jsr STA_2000
                lda GamePauseStatus       ;if in pause mode, do not perform operation mode stuff
                lsr
                bcs SkipMainOper
                jsr OperModeExecutionTree ;otherwise do one of many, many possible subroutines
-SkipMainOper   jsr PPU_STATUS_R            ;reset flip-flop
+SkipMainOper   jsr LDA_2002            ;reset flip-flop
                pla
                ora #%10000000            ;reactivate NMIs
-               jsr PPU_CTRL_W
+               jsr STA_2000
 ;               rti                       ;we are done until the next frame!
                rts
 
@@ -1838,15 +1656,15 @@ DrawTitleScreen
             lda OperMode                 ;are we in title screen mode?
             bne IncModeTask_B            ;if not, exit
             lda #>TitleScreenDataOffset  ;load address $1ec0 into
-            jsr PPU_ADDRESS_W              ;the vram address register
+            jsr STA_2006              ;the vram address register
             lda #<TitleScreenDataOffset
-            jsr PPU_ADDRESS_W
+            jsr STA_2006
             lda #$03                     ;put address $0300 into
             sta $01                      ;the indirect at $00
             ldy #$00
             sty $00
-            jsr PPU_DATA_R                 ;do one garbage read
-OutputTScr  jsr PPU_DATA_R                 ;get title screen from chr-rom
+            jsr LDA_2007                 ;do one garbage read
+OutputTScr  jsr LDA_2007                 ;get title screen from chr-rom
             sta ($00),y                  ;store 256 bytes into buffer
             iny
             bne ChkHiByte                ;if not past 256 bytes, do not increment
@@ -2626,23 +2444,17 @@ JumpEngine
               sta   $05
               iny
               lda   ($04),y                    ;load pointer from indirect
-;             sta   $06                        ;note that if an RTS is performed in next routine
-              sta   :je_patch+1
+              sta   $06                        ;note that if an RTS is performed in next routine
               iny                              ;it will return to the execution before the sub
               lda   ($04),y                    ;that called this routine
-;             sta   $07
-              sta   :je_patch+2
+              sta   $07
 ;             jmp   ($06)                      ;jump to the address we loaded
-
-; GTE Note: We run in a different bank with a direct page != 0, so jmp (abs) cannot work, but we're in RAM now
-; so self-modifying code to the rescue
-:je_patch     jmp   $0000
-
+              jmp   JMP_IND_06
 
 ;-------------------------------------------------------------------------------------
 
 InitializeNameTables
-              jsr PPU_STATUS_R            ;reset flip-flop
+              jsr LDA_2002            ;reset flip-flop
               lda Mirror_PPU_CTRL_REG1  ;load mirror of ppu reg $2000
               ora #%00010000            ;set sprites for first 4k and background for second 4k
               and #%11110000            ;clear rest of lower nybble, leave higher alone
@@ -2650,13 +2462,13 @@ InitializeNameTables
               lda #$24                  ;set vram address to start of name table 1
               jsr WriteNTAddr
               lda #$20                  ;and then set it to name table 0
-WriteNTAddr  jsr PPU_ADDRESS_W
+WriteNTAddr  jsr STA_2006
               lda #$00
-              jsr PPU_ADDRESS_W
+              jsr STA_2006
               ldx #$04                  ;clear name table with blank tile #24
               ldy #$c0
               lda #$24
-InitNTLoop   jsr PPU_DATA_W              ;count out exactly 768 tiles
+InitNTLoop   jsr STA_2007              ;count out exactly 768 tiles
               dey
               bne InitNTLoop
               dex
@@ -2665,7 +2477,7 @@ InitNTLoop   jsr PPU_DATA_W              ;count out exactly 768 tiles
               txa
               sta VRAM_Buffer1_Offset   ;init vram buffer 1 offset
               sta VRAM_Buffer1          ;init vram buffer 1
-InitATLoop   jsr PPU_DATA_W
+InitATLoop   jsr STA_2007
               dey
               bne InitATLoop
               sta HorizontalScroll      ;reset scroll variables
@@ -2715,10 +2527,10 @@ Save8Bits    pla
 ;$01 - vram buffer address table high
 
 WriteBufferToScreen
-               jsr PPU_ADDRESS_W           ;store high byte of vram address
+               jsr STA_2006           ;store high byte of vram address
                iny
                lda ($00),y               ;load next byte (second)
-               jsr PPU_ADDRESS_W           ;store low byte of vram address
+               jsr STA_2006           ;store low byte of vram address
                iny
                lda ($00),y               ;load next byte (third)
                asl                       ;shift to left and save in stack
@@ -2739,7 +2551,7 @@ GetLength     lsr                       ;shift back to the right to get proper l
 OutputToVRAM  bcs RepeatByte            ;if carry set, repeat loading the same byte
                iny                       ;otherwise increment Y to load next byte
 RepeatByte    lda ($00),y               ;load more data from buffer and write to vram
-               jsr PPU_DATA_W
+               jsr STA_2007
                dex                       ;done writing?
                bne OutputToVRAM
                sec          
@@ -2750,23 +2562,23 @@ RepeatByte    lda ($00),y               ;load more data from buffer and write to
                adc $01
                sta $01
                lda #$3f                  ;sets vram address to $3f00
-               jsr PPU_ADDRESS_W
+               jsr STA_2006
                lda #$00
-               jsr PPU_ADDRESS_W
-               jsr PPU_ADDRESS_W           ;then reinitializes it for some reason
-               jsr PPU_ADDRESS_W
-UpdateScreen  jsr PPU_STATUS_RX            ;reset flip-flop
+               jsr STA_2006
+               jsr STA_2006           ;then reinitializes it for some reason
+               jsr STA_2006
+UpdateScreen  jsr LDX_2002            ;reset flip-flop
                ldy #$00                  ;load first byte from indirect as a pointer
                lda ($00),y  
                bne WriteBufferToScreen   ;if byte is zero we have no further updates to make here
-InitScroll     jsr PPU_SCROLL_W        ;store contents of A into scroll registers
-               jsr PPU_SCROLL_W        ;and end whatever subroutine led us here
+InitScroll     jsr STA_2005        ;store contents of A into scroll registers
+               jsr STA_2005        ;and end whatever subroutine led us here
                rts
 
 ;-------------------------------------------------------------------------------------
 
 WritePPUReg1
-               jsr PPU_CTRL_W         ;write contents of A to PPU register 1
+               jsr STA_2000         ;write contents of A to PPU register 1
                sta Mirror_PPU_CTRL_REG1  ;and its mirror
                rts
 
@@ -6959,27 +6771,14 @@ Setup_Vine
         sta Enemy_Flag,x         ;set flag for enemy object buffer
 
 ;        lda Block_PageLoc,y
-;        sta Enemy_PageLoc,x      ;copy page location from previous object
+        jsr LDA_Block_PageLoc_Y
+        sta Enemy_PageLoc,x      ;copy page location from previous object
 ;        lda Block_X_Position,y
-;        sta Enemy_X_Position,x   ;copy horizontal coordinate from previous object
+        jsr LDA_Block_X_Position_Y
+        sta Enemy_X_Position,x   ;copy horizontal coordinate from previous object
 ;        lda Block_Y_Position,y
-;        sta Enemy_Y_Position,x   ;copy vertical coordinate from previous object
-      stx   GTE_TMP
-      tyx
-
-      lda   Block_PageLoc,x            ; FIXME
-      pha
-      lda   Block_X_Position,x         ; FIXME
-      pha
-      lda   Block_Y_Position,x         ; FIXME
-
-      ldx   GTE_TMP
-      sta   Enemy_Y_Position,x         ;copy vertical coordinate from previous object
-      pla
-      sta   Enemy_X_Position,x         ;copy horizontal coordinate from previous object
-      pla
-      sta   Enemy_PageLoc,x            ;copy page location from previous object
-      lda   Enemy_Y_Position,x         ; GTE: reload into accumulator
+        jsr LDA_Block_Y_Position_Y
+        sta Enemy_Y_Position,x   ;copy vertical coordinate from previous object
 
         ldy VineFlagOffset       ;load vine flag/offset to next available vine slot
         bne NextVO               ;if set at all, don't bother to store vertical
@@ -7247,29 +7046,19 @@ SetHSpd   lda #$fe
           sta Misc_X_Speed,x         ;set hammer's horizontal speed
 SetHPos   dec Misc_State,x           ;decrement hammer's state
 
-          stx GTE_TMP
-;         lda Enemy_X_Position,y     ;get enemy's horizontal position
-          tyx
-          lda Enemy_X_Position,x
-          ldx GTE_TMP
-
+;          lda Enemy_X_Position,y     ;get enemy's horizontal position
+          jsr LDA_Enemy_X_Position_Y
           clc
           adc #$02                   ;set position 2 pixels to the right
           sta Misc_X_Position,x      ;store as hammer's horizontal position
 
 ;          lda Enemy_PageLoc,y        ;get enemy's page location
-          tyx
-          lda Enemy_PageLoc,x
-          ldx GTE_TMP
-
+          jsr LDA_Enemy_PageLoc_Y
           adc #$00                   ;add carry
           sta Misc_PageLoc,x         ;store as hammer's page location
 
 ;          lda Enemy_Y_Position,y     ;get enemy's vertical position
-          tyx
-          lda Enemy_Y_Position,x
-          ldx GTE_TMP
-
+          jsr LDA_Enemy_Y_Position_Y
           sec
           sbc #$0a                   ;move position 10 pixels upward
           sta Misc_Y_Position,x      ;store as hammer's vertical position
@@ -7290,45 +7079,24 @@ RunHSubs jsr GetMiscOffscreenBits   ;get offscreen information
 CoinBlock
       jsr FindEmptyMiscSlot   ;set offset for empty or last misc object buffer slot
 
-;      lda Block_PageLoc,x     ;get page location of block object
+      lda Block_PageLoc,x     ;get page location of block object
 ;      sta Misc_PageLoc,y      ;store as page location of misc object
-;      lda Block_X_Position,x  ;get horizontal coordinate of block object
-;      ora #$05                ;add 5 pixels
+      jsr STA_Misc_PageLoc_Y
+      lda Block_X_Position,x  ;get horizontal coordinate of block object
+      ora #$05                ;add 5 pixels
 ;      sta Misc_X_Position,y   ;store as horizontal coordinate of misc object
-;      lda Block_Y_Position,x  ;get vertical coordinate of block object
-;      sbc #$10                ;subtract 16 pixels
+      jsr STA_Misc_X_Position_Y
+      lda Block_Y_Position,x  ;get vertical coordinate of block object
+      sbc #$10                ;subtract 16 pixels
 ;      sta Misc_Y_Position,y   ;store as vertical coordinate of misc object
-
-       stx GTE_TMP
-       lda Block_PageLoc,x     ;get page location of block object
-       pha
-       lda Block_X_Position,x  ;get horizontal coordinate of block object
-       ora #$05                ;add 5 pixels
-       pha
-       lda Block_Y_Position,x  ;get vertical coordinate of block object
-       sbc #$10                ;subtract 16 pixels
-       tyx
-       sta Misc_Y_Position,x   ;store as vertical coordinate of misc object
-       pla
-       sta Misc_X_Position,x   ;store as horizontal coordinate of misc object
-       pla
-       sta Misc_PageLoc,x      ;store as page location of misc object
-
-       lda Misc_Y_Position,x
-       pha
-       ldx GTE_TMP
-       pla
-
+      jsr STA_Misc_Y_Position_Y
       jmp JCoinC              ;jump to rest of code as applies to this misc object
 
 SetupJumpCoin
         jsr FindEmptyMiscSlot  ;set offset for empty or last misc object buffer slot
         lda Block_PageLoc2,x   ;get page location saved earlier
 ;        sta Misc_PageLoc,y     ;and save as page location for misc object
-        phx
-        tyx
-        sta   Misc_PageLoc,x
-
+        jsr  STA_Misc_PageLoc_Y
         lda $06                ;get low byte of block buffer offset
         asl
         asl                    ;multiply by 16 to use lower nybble
@@ -7336,27 +7104,21 @@ SetupJumpCoin
         asl
         ora #$05               ;add five pixels
 ;        sta Misc_X_Position,y  ;save as horizontal coordinate for misc object
-        sta Misc_X_Position,x  ;save as horizontal coordinate for misc object
+        jsr STA_Misc_X_Position_Y
 
         lda $02                ;get vertical high nybble offset from earlier
         adc #$20               ;add 32 pixels for the status bar
 ;        sta Misc_Y_Position,y  ;store as vertical coordinate
-        sta Misc_Y_Position,x  ;store as vertical coordinate
-        plx
+        jsr STA_Misc_Y_Position_Y
 
 JCoinC  lda #$fb
 ;        sta Misc_Y_Speed,y     ;set vertical speed
-        phx
-        tyx
-        sta   Misc_Y_Speed,x
-
+        jsr STA_Misc_Y_Speed_Y
         lda #$01
 ;        sta Misc_Y_HighPos,y   ;set vertical high byte
 ;        sta Misc_State,y       ;set state for misc object
-        sta Misc_Y_HighPos,x   ;set vertical high byte
-        sta Misc_State,x       ;set state for misc object
-        plx
-
+        jsr STA_Misc_Y_HighPos_Y
+        jsr STA_Misc_State_Y
         sta Square2SoundQueue  ;load coin grab sound
         stx ObjectOffset       ;store current control bit as misc object offset 
         jsr GiveOneCoin        ;update coin tally on the screen and coin amount variable
@@ -7364,29 +7126,15 @@ JCoinC  lda #$fb
         rts
 
 FindEmptyMiscSlot
-;           ldy #$08                ;start at end of misc objects buffer
+           ldy #$08                ;start at end of misc objects buffer
 ;FMiscLoop  lda Misc_State,y        ;get misc object state
-;           beq UseMiscS            ;branch if none found to use current offset
-;           dey                     ;decrement offset
-;           cpy #$05                ;do this for three slots
-;           bne FMiscLoop           ;do this until all slots are checked
-;           ldy #$08                ;if no empty slots found, use last slot
-;UseMiscS   sty JumpCoinMiscOffset  ;store offset of misc object buffer here (residual)
-;           rts
-
-           phx
-           ldx   #$08                       ;start at end of misc objects buffer
-:FMiscLoop lda   Misc_State,x               ;get misc object state
-           beq   :UseMiscS                   ;branch if none found to use current offset
-           dex                              ;decrement offset
-           cpx   #$05                       ;do this for three slots
-           bne   :FMiscLoop                  ;do this until all slots are checked
-           ldx   #$08                       ;if no empty slots found, use last slot
-:UseMiscS  stx   JumpCoinMiscOffset         ;store offset of misc object buffer here (residual)
-           txy
-           plx
-           phy
-           ply
+FMiscLoop  jsr LDA_Misc_State_Y    ;get misc object state
+           beq UseMiscS            ;branch if none found to use current offset
+           dey                     ;decrement offset
+           cpy #$05                ;do this for three slots
+           bne FMiscLoop           ;do this until all slots are checked
+           ldy #$08                ;if no empty slots found, use last slot
+UseMiscS   sty JumpCoinMiscOffset  ;store offset of misc object buffer here (residual)
            rts
 
 ;-------------------------------------------------------------------------------------
@@ -8158,19 +7906,9 @@ ChkBowserF  pla                      ;get data from stack
             and #%00001111           ;mask out high nybble
             tay
 ;            lda Enemy_Flag,y         ;use as pointer and load same place with different offset
-;            bne ExitELCore
-;            sta Enemy_Flag,x         ;if second enemy flag not set, also clear first one
-
-            stx   GTE_TMP
-            tyx
-            lda   Enemy_Flag,x
-            bne   ExitELCore2
-            ldx   GTE_TMP
-            sta   Enemy_Flag,x        ;if second enemy flag not set, also clear first one
-ExitELCore2 ldx   GTE_TMP
-            pha                       ; reestablish loading flags
-            pla
-
+            jsr LDA_Enemy_Flag_Y
+            bne ExitELCore
+            sta Enemy_Flag,x         ;if second enemy flag not set, also clear first one
 ExitELCore  rts
 
 ;--------------------------------
@@ -8712,37 +8450,22 @@ CreateSpiny
           cmp #$2c
           bcc ExLSHand
 ;          lda Enemy_State,y          ;if lakitu is not in normal state, branch to leave
-          stx   GTE_TMP
-          tyx
-          lda   Enemy_State,x
-          ldx   GTE_TMP
-          pha
-          pla     ; GTE push/pull to set the BNE flag correctly
-
+          jsr LDA_Enemy_State_Y
           bne ExLSHand
 
 ;          lda Enemy_PageLoc,y        ;store horizontal coordinates (high and low) of lakitu
-;          sta Enemy_PageLoc,x        ;into the coordinates of the spiny we're going to create
+          jsr LDA_Enemy_PageLoc_Y
+          sta Enemy_PageLoc,x        ;into the coordinates of the spiny we're going to create
 ;          lda Enemy_X_Position,y
-;          sta Enemy_X_Position,x
+          jsr LDA_Enemy_X_Position_Y
+          sta Enemy_X_Position,x
           lda #$01                   ;put spiny within vertical screen unit
           sta Enemy_Y_HighPos,x
 ;          lda Enemy_Y_Position,y     ;put spiny eight pixels above where lakitu is
-;          sec
-;          sbc #$08
-;          sta Enemy_Y_Position,x
-
-          tyx
-          lda  Enemy_Y_Position,x
-          pha
-          lda  Enemy_X_Position,x
-          pha
-          lda  Enemy_PageLoc,x
-          ldx  GTE_TMP
-          sta  Enemy_PageLoc,x
-          pla
-          sta  Enemy_X_Position,x
-          pla
+          jsr LDA_Enemy_Y_Position_Y
+          sec
+          sbc #$08
+          sta Enemy_Y_Position,x
           sec
           sbc #$08
           sta Enemy_Y_Position,x
@@ -8948,56 +8671,29 @@ InitBowser
 ;--------------------------------
 
 DuplicateEnemyObj
-;        ldy #$ff                ;start at beginning of enemy slots
-;FSLoop  iny                     ;increment one slot
+        ldy #$ff                ;start at beginning of enemy slots
+FSLoop  iny                     ;increment one slot
 ;        lda Enemy_Flag,y        ;check enemy buffer flag for empty slot
-;        bne FSLoop              ;if set, branch and keep checking
-;        sty DuplicateObj_Offset ;otherwise set offset here
-;        txa                     ;transfer original enemy buffer offset
-;        ora #%10000000          ;store with d7 set as flag in new enemy
-;        sta Enemy_Flag,y        ;slot as well as enemy offset
-;        lda Enemy_PageLoc,x
-;        sta Enemy_PageLoc,y     ;copy page location and horizontal coordinates
-;        lda Enemy_X_Position,x  ;from original enemy to new enemy
-;        sta Enemy_X_Position,y
-;        lda #$01
-;        sta Enemy_Flag,x        ;set flag as normal for original enemy
-;        sta Enemy_Y_HighPos,y   ;set high vertical byte for new enemy
-;        lda Enemy_Y_Position,x
-;        sta Enemy_Y_Position,y  ;copy vertical coordinate from original to new
-
-        stx GTE_TMP
-        ldx #$ff                ;start at beginning of enemy slots
-:FSLoop inx                     ;increment one slot
-        lda Enemy_Flag,x        ;check enemy buffer flag for empty slot
-        bne :FSLoop              ;if set, branch and keep checking
-        stx DuplicateObj_Offset ;otherwise set offset here
-        txy
-
-        lda GTE_TMP             ;transfer original enemy buffer offset
+        jsr LDA_Enemy_Flag_Y
+        bne FSLoop              ;if set, branch and keep checking
+        sty DuplicateObj_Offset ;otherwise set offset here
+        txa                     ;transfer original enemy buffer offset
         ora #%10000000          ;store with d7 set as flag in new enemy
-        sta Enemy_Flag,x        ;slot as well as enemy offset
-
-        lda #$01
-        sta Enemy_Y_HighPos,x
-        ldx GTE_TMP
-        sta Enemy_Flag,x
-
-        lda Enemy_Y_Position,x
-        pha
-        lda Enemy_X_Position,x
-        pha
+;        sta Enemy_Flag,y        ;slot as well as enemy offset
+        jsr STA_Enemy_Flag_Y
         lda Enemy_PageLoc,x
-        tyx
-        sta Enemy_PageLoc,x     ;copy page location and horizontal coordinates
-        pla
-        sta Enemy_X_Position,x
-        pla
-        sta Enemy_Y_Position,x  ;copy vertical coordinate from original to new
-        ldx GTE_TMP
-        pha
-        pla
-
+;        sta Enemy_PageLoc,y     ;copy page location and horizontal coordinates
+        jsr STA_Enemy_PageLoc_Y
+        lda Enemy_X_Position,x  ;from original enemy to new enemy
+;        sta Enemy_X_Position,y
+        jsr STA_Enemy_X_Position_Y
+        lda #$01
+        sta Enemy_Flag,x        ;set flag as normal for original enemy
+;        sta Enemy_Y_HighPos,y   ;set high vertical byte for new enemy
+        jsr STA_Enemy_Y_HighPos_Y
+        lda Enemy_Y_Position,x
+;        sta Enemy_Y_Position,y  ;copy vertical coordinate from original to new
+        jsr STA_Enemy_Y_Position_Y
 FlmEx   rts                     ;and then leave
 
 ;--------------------------------
@@ -9054,32 +8750,18 @@ PutAtRightExtent
 
 SpawnFromMouth
 ;       lda Enemy_X_Position,y    ;get bowser's horizontal position
-;       sec
-;       sbc #$0e                  ;subtract 14 pixels
-;       sta Enemy_X_Position,x    ;save as flame's horizontal position
-;       lda Enemy_PageLoc,y
-;       sta Enemy_PageLoc,x       ;copy page location from bowser to flame
-;       lda Enemy_Y_Position,y
-;       clc                       ;add 8 pixels to bowser's vertical position
-;       adc #$08
-;       sta Enemy_Y_Position,x    ;save as flame's vertical position
-       stx GTE_TMP
-       tyx
-       lda Enemy_Y_Position,x
-       pha
-       lda Enemy_PageLoc,x
-       pha
-       lda Enemy_X_Position,x
+       jsr LDA_Enemy_X_Position_Y
        sec
-       sbc #$0e
-       ldx GTE_TMP
-       sta Enemy_X_Position,x
-       pla
-       sta Enemy_PageLoc,x
-       pla
+       sbc #$0e                  ;subtract 14 pixels
+       sta Enemy_X_Position,x    ;save as flame's horizontal position
+;       lda Enemy_PageLoc,y
+       jsr LDA_Enemy_PageLoc_Y
+       sta Enemy_PageLoc,x       ;copy page location from bowser to flame
+;       lda Enemy_Y_Position,y
+       jsr LDA_Enemy_Y_Position_Y
        clc                       ;add 8 pixels to bowser's vertical position
        adc #$08
-       sta Enemy_Y_Position,x
+       sta Enemy_Y_Position,x    ;save as flame's vertical position
 
        lda PseudoRandomBitReg,x
        and #%00000011            ;get 2 LSB from first part of LSFR
@@ -9121,35 +8803,27 @@ InitFireworks
           sta FrenzyEnemyTimer
           dec FireworksCounter         ;decrement for each explosion
           ldy #$06                     ;start at last slot
-;StarFChk  dey
+StarFChk  dey
 ;          lda Enemy_ID,y               ;check for presence of star flag object
-;          cmp #StarFlagObject          ;if there isn't a star flag object,
-;          bne StarFChk                 ;routine goes into infinite loop = crash
-          stx GTE_TMP
-          tyx
-:StarFChk dex
-          lda  Enemy_ID,x
-          cmp  #StarFlagObject
-          bne  :StarFChk
+          jsr LDA_Enemy_ID_Y
+          cmp #StarFlagObject          ;if there isn't a star flag object,
+          bne StarFChk                 ;routine goes into infinite loop = crash
 
 ;          lda Enemy_X_Position,y
-          lda Enemy_X_Position,x
-
+          jsr LDA_Enemy_X_Position_Y
           sec                          ;get horizontal coordinate of star flag object, then
           sbc #$30                     ;subtract 48 pixels from it and save to
           pha                          ;the stack
 
 ;          lda Enemy_PageLoc,y
-          lda Enemy_PageLoc,x
+          jsr LDA_Enemy_PageLoc_Y
           sbc #$00                     ;subtract the carry from the page location
           sta $00                      ;of the star flag object
           lda FireworksCounter         ;get fireworks counter
           clc
 
 ;          adc Enemy_State,y            ;add state of star flag object (possibly not necessary)
-          adc Enemy_State,x
-          ldx GTE_TMP
-
+          jsr ADC_Enemy_State_Y
           tay                          ;use as offset
           pla                          ;get saved horizontal coordinate of star flag - 48 pixels
           clc
@@ -9226,28 +8900,18 @@ AddFBit ora BitMFilter            ;add bit to already set bits in filter
          jmp CheckpointEnemyID     ;process our new enemy object
 
 DoBulletBills
-          stx GTE_TMP
-
           ldy #$ff                   ;start at beginning of enemy slots
 BB_SLoop  iny                        ;move onto the next slot
           cpy #$05                   ;branch to play sound if we've done all slots
-          bcs FireBulletBill2
+          bcs FireBulletBill
 ;          lda Enemy_Flag,y           ;if enemy buffer flag not set,
-;          beq BB_SLoop               ;loop back and check another slot
+          jsr LDA_Enemy_Flag_Y
+          beq BB_SLoop               ;loop back and check another slot
 ;          lda Enemy_ID,y
-;          cmp #BulletBill_FrenzyVar  ;check enemy identifier for
-;          bne BB_SLoop               ;bullet bill object (frenzy variant)
-          tyx
-          lda  Enemy_Flag,x
-          beq  BB_SLoop
-          lda  Enemy_ID,x
-          cmp  #BulletBill_FrenzyVar
-          bne  BB_SLoop
-          ldx  GTE_TMP
+          jsr LDA_Enemy_ID_Y
+          cmp #BulletBill_FrenzyVar  ;check enemy identifier for
+          bne BB_SLoop               ;bullet bill object (frenzy variant)
 ExF17     rts                        ;if found, leave
-
-FireBulletBill2
-      ldx GTE_TMP
 
 FireBulletBill
       lda Square2SoundQueue
@@ -9360,29 +9024,16 @@ NoFrenzyCode
 ;--------------------------------
 
 EndFrenzy
-           stx GTE_TMP
-           
-;           ldy #$05               ;start at last slot
+           ldy #$05               ;start at last slot
 ;:LakituChk lda Enemy_ID,y         ;check enemy identifiers
-;           cmp #Lakitu            ;for lakitu
-;           bne :NextFSlot
-;           lda #$01               ;if found, set state
-;           sta Enemy_State,y
-;:NextFSlot dey                    ;move onto the next slot
-;           bpl :LakituChk          ;do this until all slots are checked
-;           lda #$00
-
-           ldx #$05               ;start at last slot
-:LakituChk lda Enemy_ID,x         ;check enemy identifiers
+LakituChk  jsr LDA_Enemy_ID_Y
            cmp #Lakitu            ;for lakitu
-           bne :NextFSlot
+           bne NextFSlot
            lda #$01               ;if found, set state
-           sta Enemy_State,x
-:NextFSlot dex                    ;move onto the next slot
-           bpl :LakituChk          ;do this until all slots are checked
-           txy
-           ldx GTE_TMP
-
+;           sta Enemy_State,y
+           jsr STA_Enemy_State_Y
+NextFSlot  dey                    ;move onto the next slot
+           bpl LakituChk          ;do this until all slots are checked
            lda #$00
            sta EnemyFrenzyBuffer  ;empty enemy frenzy buffer
            sta Enemy_Flag,x       ;disable enemy buffer flag for this object
@@ -10812,34 +10463,17 @@ CopyFToR  tya                      ;move bowser's rear object position value to 
           ldy DuplicateObj_Offset  ;get bowser's rear object offset
 
 ;          sta Enemy_X_Position,y   ;store A as bowser's rear horizontal coordinate
-;          lda Enemy_Y_Position,x
-;          clc                      ;add eight pixels to bowser's front object
-;          adc #$08                 ;vertical coordinate and store as vertical coordinate
-;          sta Enemy_Y_Position,y   ;for bowser's rear
-;          lda Enemy_State,x
-;          sta Enemy_State,y        ;copy enemy state directly from front to rear
-;          lda Enemy_MovingDir,x
-;          sta Enemy_MovingDir,y    ;copy moving direction also
-
-          stx GTE_TMP
-          tyx
-          sta Enemy_X_Position,x
-          ldx GTE_TMP
-
-          lda Enemy_MovingDir,x
-          pha
-          lda Enemy_State,x
-          pha
+          jsr STA_Enemy_X_Position_Y
           lda Enemy_Y_Position,x
-          tyx
-          clc
-          adc #$08
-          sta Enemy_Y_Position,x
-          pla
-          sta Enemy_State,x
-          pla
-          sta Enemy_MovingDir,x
-;          ldx GTE_TMP
+          clc                      ;add eight pixels to bowser's front object
+          adc #$08                 ;vertical coordinate and store as vertical coordinate
+;          sta Enemy_Y_Position,y   ;for bowser's rear
+          jsr STA_Enemy_Y_Position_Y
+          lda Enemy_State,x
+;          sta Enemy_State,y        ;copy enemy state directly from front to rear
+          lda Enemy_MovingDir,x
+;          sta Enemy_MovingDir,y    ;copy moving direction also
+          jsr STA_Enemy_MovingDir_Y
 
           lda ObjectOffset         ;save enemy object offset of front to stack
           pha
@@ -12251,11 +11885,7 @@ ExitECRoutine
 
 ProcEnemyCollisions
 ;      lda Enemy_State,y        ;check both enemy states for d5 set
-      stx   GTE_TMP
-      tyx
-      lda   Enemy_State,x
-      ldx   GTE_TMP
-
+      jsr LDA_Enemy_State_Y
       ora Enemy_State,x
       and #%00100000           ;if d5 is set in either state, or both, branch
       bne ExitProcessEColl     ;to leave and do nothing else at this point
@@ -12266,10 +11896,7 @@ ProcEnemyCollisions
       cmp #HammerBro           ;if hammer bro found in alt state, branch to leave
       beq ExitProcessEColl
 ;      lda Enemy_State,y        ;check first enemy state for d7 set
-      tyx
-      lda   Enemy_State,x
-      ldx   GTE_TMP
-
+      jsr LDA_Enemy_State_Y
       asl
       bcc ShellCollisions      ;branch if d7 is clear
       lda #$06
@@ -12295,18 +11922,11 @@ ExitProcessEColl
 
 ProcSecondEnemyColl
 ;      lda Enemy_State,y        ;if first enemy state < $06, branch elsewhere
-      stx   GTE_TMP
-      tyx
-      lda   Enemy_State,x
-      ldx   GTE_TMP
-
+      jsr LDA_Enemy_State_Y
       cmp #$06
       bcc MoveEOfs
 ;      lda Enemy_ID,y           ;check first enemy identifier for hammer bro
-      tyx
-      lda   Enemy_ID,x
-      ldx   GTE_TMP
-
+      jsr LDA_Enemy_ID_Y
       cmp #HammerBro           ;if hammer bro found in alt state, branch to leave
       beq ExitProcessEColl
       jsr ShellOrBlockDefeat   ;otherwise, kill first enemy
@@ -15693,13 +15313,13 @@ SoundEngine
          lda OperMode              ;are we in title screen mode?
          bne SndOn
 ;         sta SND_MASTERCTRL_REG    ;if so, disable sound and leave
-         jsr APU_STATUS_W
+         jsr STA_4015
          rts
 SndOn    lda #$ff
          sta JOYPAD_PORT2          ;disable irqs and set frame counter mode???
          lda #$0f
 ;         sta SND_MASTERCTRL_REG    ;enable first four channels
-         jsr APU_STATUS_W
+         jsr STA_4015
          lda PauseModeFlag         ;is sound already in pause mode?
          bne InPause
          lda PauseSoundQueue       ;if not, check pause sfx queue    
@@ -15713,13 +15333,13 @@ InPause  lda PauseSoundBuffer      ;check pause sfx buffer
          sta PauseModeFlag         ;pause mode to interrupt game sounds
          lda #$00                  ;disable sound and clear sfx buffers
 ;         sta SND_MASTERCTRL_REG
-         jsr APU_STATUS_W
+         jsr STA_4015
          sta Square1SoundBuffer
          sta Square2SoundBuffer
          sta NoiseSoundBuffer
          lda #$0f
 ;         sta SND_MASTERCTRL_REG    ;enable sound again
-         jsr APU_STATUS_W
+         jsr STA_4015
          lda #$2a                  ;store length of sound in pause counter
          sta Squ1_SfxLenCounter
 PTone1F lda #$44                  ;play first tone
@@ -15739,7 +15359,7 @@ DecPauC dec Squ1_SfxLenCounter    ;decrement pause sfx counter
          bne SkipSoundSubroutines
          lda #$00                  ;disable sound if in pause mode and
 ;         sta SND_MASTERCTRL_REG    ;not currently playing the pause sfx
-         jsr APU_STATUS_W
+         jsr STA_4015
          lda PauseSoundBuffer      ;if no longer playing pause sfx, check to see
          cmp #$02                  ;if we need to be playing sound again
          bne SkipPIn
@@ -15782,8 +15402,8 @@ StrWave  sty SND_DELTA_REG+1    ;store into DMC load register (??)
 Dump_Squ1_Regs
 ;      sty SND_SQUARE1_REG+1  ;dump the contents of X and Y into square 1's control regs
 ;      stx SND_SQUARE1_REG
-      jsr  APU_PULSE1_REG2_WY
-      jsr  APU_PULSE1_REG1_WX
+      jsr  STY_4001
+      jsr  STX_4000
       rts
       
 PlaySqu1Sfx
@@ -15797,18 +15417,18 @@ Dump_Freq_Regs
         lda FreqRegLookupTbl+1,y  ;use previous contents of A for sound reg offset
         beq NoTone                ;if zero, then do not load
 ;        sta SND_REGISTER+2,x      ;first byte goes into LSB of frequency divider
-        jsr APU_IND_X_REG3_W
+        jsr STA_4002_X
         lda FreqRegLookupTbl,y    ;second byte goes into 3 MSB plus extra bit for 
         ora #%00001000            ;length counter
 ;        sta SND_REGISTER+3,x
-        jsr APU_IND_X_REG4_W
+        jsr STA_4003_X
 NoTone rts
 
 Dump_Sq2_Regs
 ;      stx SND_SQUARE2_REG    ;dump the contents of X and Y into square 2's control regs
 ;      sty SND_SQUARE2_REG+1
-      jsr APU_PULSE2_REG1_WX
-      jsr APU_PULSE2_REG2_WY
+      jsr STX_4004
+      jsr STY_4005
       rts
 
 PlaySqu2Sfx
@@ -15883,7 +15503,7 @@ ContinueBumpThrow
           bne DecJpFPS
           lda #$bb                ;load second part directly
 ;          sta SND_SQUARE1_REG+1
-          jsr APU_PULSE1_REG2_W
+          jsr STA_4001
 DecJpFPS bne BranchToDecLength1  ;unconditional branch
 
 
@@ -15939,12 +15559,12 @@ ContinueSwimStomp
       ldy Squ1_SfxLenCounter        ;look up reg contents in data section based on
       lda SwimStompEnvelopeData-1,y ;length of sound left, used to control sound's
 ;      sta SND_SQUARE1_REG           ;envelope
-      jsr APU_PULSE1_REG1_W
+      jsr STA_4000
       cpy #$06   
       bne BranchToDecLength1
       lda #$9e                      ;when the length counts down to a certain point, put this
 ;      sta SND_SQUARE1_REG+2         ;directly into the LSB of square 1's frequency divider
-      jsr APU_PULSE1_REG3_W
+      jsr STA_4002
 
 BranchToDecLength1 
       bne DecrementSfx1Length  ;unconditional branch (regardless of how we got here)
@@ -15964,12 +15584,12 @@ ContinueSmackEnemy
         bne SmSpc
         lda #$a0                ;if we're at the about-halfway point, make the second tone
 ;        sta SND_SQUARE1_REG+2   ;in the smack enemy sound
-        jsr APU_PULSE1_REG3_W
+        jsr STA_4002
         lda #$9f
         bne SmTick
 SmSpc   lda #$90                ;this creates spaces in the sound, giving it its distinct noise
 ;SmTick sta SND_SQUARE1_REG
-SmTick  jsr APU_PULSE1_REG1_W
+SmTick  jsr STA_4000
 
 DecrementSfx1Length
       dec Squ1_SfxLenCounter    ;decrement length of sfx
@@ -15980,10 +15600,10 @@ StopSquare1Sfx
         stx $f1                 ;and stop making the sfx
         ldx #$0e
 ;        stx SND_MASTERCTRL_REG
-         jsr APU_STATUS_WX
+         jsr STX_4015
         ldx #$0f
 ;        stx SND_MASTERCTRL_REG
-         jsr APU_STATUS_WX
+         jsr STX_4015
 ExSfx1 rts
 
 PlayPipeDownInj  
@@ -16044,7 +15664,7 @@ ContinueCGrabTTick
         bne N2Tone
         lda #$54                ;if so, load the tone directly into the reg
 ;        sta SND_SQUARE2_REG+2
-        jsr APU_PULSE2_REG3_W
+        jsr STA_4006
 N2Tone bne DecrementSfx2Length
 
 PlayBlast
@@ -16089,10 +15709,10 @@ EmptySfx2Buffer
 StopSquare2Sfx
         ldx #$0d                ;stop playing the sfx
 ;        stx SND_MASTERCTRL_REG 
-         jsr APU_STATUS_WX
+         jsr STX_4015
         ldx #$0f
 ;        stx SND_MASTERCTRL_REG
-         jsr APU_STATUS_WX
+         jsr STX_4015
 ExSfx2 rts
 
 Square2SfxHandler
@@ -16188,7 +15808,7 @@ GrowItemRegs
         sta Squ2_SfxLenCounter   
         lda #$7f                  ;load contents of reg for both sounds directly
 ;        sta SND_SQUARE2_REG+1
-        jsr APU_PULSE2_REG2_W
+        jsr STA_4005
         lda #$00                  ;start secondary counter for both sounds
         sta Sfx_SecondaryCounter
 
@@ -16201,7 +15821,7 @@ ContinueGrowItems
         beq StopGrowItems         ;if so, branch to jump, and stop playing sounds
         lda #$9d                  ;load contents of other reg directly
 ;        sta SND_SQUARE2_REG
-        jsr APU_PULSE2_REG1_W
+        jsr STA_4004
         lda PUp_VGrow_FreqData,y  ;use secondary counter / 2 as offset for frequency regs
         jsr SetFreq_Squ2
         rts
@@ -16230,18 +15850,18 @@ ContinueBrickShatter
 PlayNoiseSfx
 ;        sta SND_NOISE_REG        ;play the sfx
 ;        stx SND_NOISE_REG+2
-        jsr APU_NOISE_REG1_W
-        jsr APU_NOISE_REG3_WX
+        jsr STA_400C
+        jsr STX_400E
         lda #$18
 ;        sta SND_NOISE_REG+3
-        jsr APU_NOISE_REG4_W
+        jsr STA_400F
 
 DecrementSfx3Length
         dec Noise_SfxLenCounter  ;decrement length of sfx
         bne ExSfx3
         lda #$f0                 ;if done, stop playing the sfx
 ;        sta SND_NOISE_REG
-        jsr APU_NOISE_REG1_W
+        jsr STA_400C
         lda #$00
         sta NoiseSoundBuffer
 ExSfx3 rts
@@ -16363,10 +15983,10 @@ LoadHeader
         sta AltRegContentFlag        ;initialize alternate control reg data used by square 1
         lda #$0b                     ;disable triangle channel and reenable it
 ;        sta SND_MASTERCTRL_REG
-         jsr APU_STATUS_W
+         jsr STA_4015
         lda #$0f
 ;        sta SND_MASTERCTRL_REG
-         jsr APU_STATUS_W
+         jsr STA_4015
 
 HandleSquare2Music
         dec Squ2_NoteLenCounter  ;decrement square 2 note length
@@ -16393,12 +16013,12 @@ NotTRO and #VictoryMusic        ;check for victory music (the only secondary tha
         sta AreaMusicBuffer      ;control regs of square and triangle channels
         sta EventMusicBuffer
 ;        sta SND_TRIANGLE_REG
-        jsr APU_TRIANGLE_REG1_W
+        jsr STA_4008
         lda #$90    
 ;        sta SND_SQUARE1_REG
 ;        sta SND_SQUARE2_REG
-        jsr APU_PULSE1_REG1_W
-        jsr APU_PULSE2_REG1_W
+        jsr STA_4000
+        jsr STA_4004
         rts
 
 MusicLoopBack
@@ -16436,10 +16056,10 @@ MiscSqu2MusicTasks
            dec Squ2_EnvelopeDataCtrl  ;decrement unless already zero
 NoDecEnv1 jsr LoadEnvelopeData       ;do a load of envelope data to replace default
 ;           sta SND_SQUARE2_REG        ;based on offset set by first load unless playing
-          jsr APU_PULSE2_REG1_W
+          jsr STA_4004
            ldx #$7f                   ;death music or d4 set on secondary buffer
 ;           stx SND_SQUARE2_REG+1
-          jsr APU_PULSE2_REG2_WX
+          jsr STX_4005
 
 HandleSquare1Music
         ldy MusicOffset_Square1    ;is there a nonzero offset here?
@@ -16454,10 +16074,10 @@ FetchSqu1MusicData
         bne Squ1NoteHandler        ;if nonzero, then skip this part
         lda #$83
 ;        sta SND_SQUARE1_REG        ;store some data into control regs for square 1
-        jsr APU_PULSE1_REG1_W
+        jsr STA_4000
         lda #$94                   ;and fetch another byte of data, used to give
 ;        sta SND_SQUARE1_REG+1      ;death music its unique sound
-        jsr APU_PULSE1_REG2_W
+        jsr STA_4001
         sta AltRegContentFlag
         bne FetchSqu1MusicData     ;unconditional branch
 
@@ -16485,12 +16105,12 @@ MiscSqu1MusicTasks
               dec Squ1_EnvelopeDataCtrl  ;decrement unless already zero
 NoDecEnv2    jsr LoadEnvelopeData       ;do a load of envelope data
 ;              sta SND_SQUARE1_REG        ;based on offset set by first load
-             jsr APU_PULSE1_REG1_W
+             jsr STA_4000
 DeathMAltReg lda AltRegContentFlag      ;check for alternate control reg data
               bne DoAltLoad
               lda #$7f                   ;load this value if zero, the alternate value
 ;DoAltLoad    sta SND_SQUARE1_REG+1      ;if nonzero, and let's move on
-DoAltLoad     jsr APU_PULSE1_REG2_W
+DoAltLoad     jsr STA_4001
 
 HandleTriangleMusic
         lda MusicOffset_Triangle
@@ -16505,7 +16125,7 @@ HandleTriangleMusic
         sta Tri_NoteLenBuffer     ;save contents of A
         lda #$1f
 ;        sta SND_TRIANGLE_REG      ;load some default data for triangle control reg
-        jsr APU_TRIANGLE_REG1_W
+        jsr STA_4008
         ldy MusicOffset_Triangle  ;fetch another byte
         inc MusicOffset_Triangle
         lda (MusicData),y
@@ -16535,7 +16155,7 @@ LongN    lda #$ff                ;or any secondary (including win castle) except
 
 LoadTriCtrlReg
 ;        sta SND_TRIANGLE_REG      ;save final contents of A into control reg for triangle
-        jsr APU_TRIANGLE_REG1_W
+        jsr STA_4008
 
 HandleNoiseMusic
         lda AreaMusicBuffer       ;check if playing underground or castle music
@@ -16589,9 +16209,9 @@ PlayBeat
 ;        sta SND_NOISE_REG    ;load beat data into noise regs
 ;        stx SND_NOISE_REG+2
 ;        sty SND_NOISE_REG+3
-        jsr APU_NOISE_REG1_W
-        jsr APU_NOISE_REG3_WX
-        jsr APU_NOISE_REG4_WY
+        jsr STA_400C
+        jsr STX_400E
+        jsr STY_400F
 
 ExitMusicHandler
         rts

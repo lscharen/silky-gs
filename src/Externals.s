@@ -1,5 +1,3 @@
-ROMReset             EXT   ; Reset Vector for the ROM
-NonMaskableInterrupt EXT   ; Called every VBL
 ExtIn                EXT
 ROMBase              EXT
 

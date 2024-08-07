@@ -191,18 +191,23 @@ STA_4007    jsl  APU_PULSE2_REG4_WRITE
 STA_4008    jsl  APU_TRIANGLE_REG1_WRITE
             rts
 
+STA_400A
 STA_400a    jsl  APU_TRIANGLE_REG3_WRITE
             rts
 
+STA_400B
 STA_400b    jsl  APU_TRIANGLE_REG4_WRITE
             rts
 
+STA_400C
 STA_400c    jsl  APU_NOISE_REG1_WRITE
             rts
 
+STA_400E
 STA_400e    jsl  APU_NOISE_REG3_WRITE
             rts
 
+STX_400E
 STX_400e    phx
             pha
             txa
@@ -211,9 +216,11 @@ STX_400e    phx
             plx
             rts
 
+STA_400F
 STA_400f    jsl  APU_NOISE_REG4_WRITE
             rts
 
+STX_400F
 STX_400f    phx
             pha
             txa
@@ -222,6 +229,7 @@ STX_400f    phx
             plx
             rts
 
+STY_400F
 STY_400f    phy
             pha
             tya
@@ -404,6 +412,20 @@ SBC_ABS_Y   mac
             pla
             plp
 say_patch   sbc  #0
+            rts
+            <<<
+
+ADC_ABS_Y   mac
+            php
+            pha                ; make sure none of these instructions disturbs the carry flag
+            phx
+            tyx
+            lda  ]1,x
+            sta  aay_patch+1
+            plx
+            pla
+            plp
+aay_patch   adc  #0
             rts
             <<<
 

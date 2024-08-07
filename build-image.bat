@@ -20,4 +20,7 @@ REM Now copy files and folders as needed
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\lightsout\LightsOutGS
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\wumpus\WumpusGS
 
+%CADIUS% CREATEFOLDER %IMAGE% %FOLDER%Icons
+%CADIUS% ADDFILE %IMAGE% %FOLDER%Icons .\emu\Classics
+
 REM Copy in the image assets
