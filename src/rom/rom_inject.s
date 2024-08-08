@@ -246,6 +246,10 @@ STX_4010
 STX_4011
 STX_4012
 STX_4013
+STY_4010
+STY_4011
+STY_4012
+STY_4013
             rts
 
 LDA_4015    jsl   APU_STATUS_READ
@@ -260,6 +264,12 @@ STX_4015    phx
             jsl   APU_STATUS_WRITE
             pla
             plx
+            rts
+
+; Joystick port (unsupported)
+STA_4016
+LDA_4016
+LDA_4016_X
             rts
 
 ; Hooks to call back to the harness for PPU memory-mapped accesses
