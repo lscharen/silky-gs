@@ -78,8 +78,8 @@ DIRECT_OAM_READ   equ $200
 ; Define a range of OAM entries to scan.  Many games do not use all 64
 ; sprite slots, so we can avoid doing unecessary work by only scanning
 ; OAM entries that may be on-screen
-OAM_START_INDEX   equ 1
-OAM_END_INDEX     equ 2
+OAM_START_INDEX   equ 0
+OAM_END_INDEX     equ 64
 
 ; Allow the engine to use dirty rendering (drawing only lines where sprites
 ; have changed) if the background did not scroll compared to the previous frame
