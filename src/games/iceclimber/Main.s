@@ -183,7 +183,10 @@ InitPlayfield
             rts
 
 ConfScrnPal
-TitleScreen  dw    $0F, $00, $0F, $10, $16, $30, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+TitleScreen  dw    $0F,$31,$12,$30
+             dw    $25,$29,$0A,$21
+             dw    $01,$27,$17,$07
+             dw    $26,$15,$16,$13
 
 ; When the NES ROM code tried to write to the PPU palette space, intercept here.
 PALETTE_DISPATCH

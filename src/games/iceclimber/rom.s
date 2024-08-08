@@ -33,6 +33,13 @@ ADC_ram_plr_pos_X_Y ADC_ABS_Y ram_plr_pos_X
 STA_ram_plr_pos_X_Y STA_ABS_Y ram_plr_pos_X
 JMP_IND_02          JMP_ABS_IND $02
 
+IIGS_CLEAR
+        ldx  #$ff
+:loop
+        sta  00,x
+        dex
+        bpl  :loop
+        rts
         ds   \,$00
 
 tbl_C000_lo
@@ -64,21 +71,21 @@ tbl_C00A_hi
 
 
 vec_C014_RESET
-  SEI
+;  SEI
   CLD
   LDA #$10
   JSR STA_2000
   LDX #$FF
-  TXS
+;  TXS
 ; bzk optimize, BIT + BPL
-bra_C01E_infinite_loop
-  JSR LDA_2002
-  ASL
-  BCC bra_C01E_infinite_loop
-bra_C024_infinite_loop
-  JSR LDA_2002
-  ASL
-  BCC bra_C024_infinite_loop
+;bra_C01E_infinite_loop
+;  JSR LDA_2002
+;  ASL
+;  BCC bra_C01E_infinite_loop
+;bra_C024_infinite_loop
+;  JSR LDA_2002
+;  ASL
+;  BCC bra_C024_infinite_loop
   LDY #$07
   STY <ram_0001
   LDY #$00
@@ -100,12 +107,14 @@ bra_C041_loop
   BNE bra_C041_loop
   DEC <ram_0001
   BPL bra_C041_loop
+  JSR IIGS_CLEAR
   LDA #$5A
   STA ram_reset_check
   STA ram_reset_check + $01
   JSR sub_C05E
   JSR sub_C141_enable_nmi
 loc_C058_infinite_loop
+  jsl yield
   JSR sub_CACE_generate_random
   JMP loc_C058_infinite_loop
 
@@ -239,7 +248,8 @@ loc_C138_exit_nmi
   PLA
   TAX
   PLA
-  RTI
+;  RTI
+  rts
 
 
 
@@ -11876,7 +11886,7 @@ vec_FFF0_IRQ
 
 ;.out .sprintf("Free bytes in bank FF 0x%04X [%d]", ($FFFA - *), ($FFFA - *))
 
-
+  ds 7
 
 ;.segment "VECTORS"
   dw vec_C076_NMI

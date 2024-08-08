@@ -2,7 +2,10 @@
 PPU_MEM     ENT
 CHR_ROM     ENT
             putbin   CHR_ROM_1.chr          ; $0000 - $10A0
-            ds       $260                   ; Put PPU_bg here
+
+;            ds       $260                   ; Put PPU_bg here
+            put      PPU_bg.s
+
             putbin   CHR_ROM_2.chr          ; $1300 - $2000
 PPU_NT      ENT
             ds    $2000          ; Nametable memory from $2000 - $3000, $3F00 - $3F14 is palette RAM
