@@ -1924,7 +1924,7 @@ bra_CAE6_loop
   RTS
 
 
-
+native_joy    EXT
 sub_CAED_read_joy_regs
   JSR sub_CB35
   LDA #$01
@@ -1935,10 +1935,12 @@ sub_CAED_read_joy_regs
   JSR sub_CB00
   INX
 sub_CB00
+  ldal  native_joy,x
+  bra   :native_done  ; 6 bytes
   LDY #$08
-bra_CB02_loop
-  PHA
-  JSR LDA_4016_X
+; bra_CB02_loop
+;  PHA
+;  JSR LDA_4016_X
   STA ram_0000
   LSR
   ORA ram_0000
@@ -1946,7 +1948,8 @@ bra_CB02_loop
   PLA
   ROL
   DEY
-  BNE bra_CB02_loop
+;  BNE bra_CB02_loop
+:native_done
   STX ram_0000
   ASL ram_0000
   LDX ram_0000
