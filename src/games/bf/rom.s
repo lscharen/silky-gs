@@ -252,7 +252,6 @@
 ROMBase ENT
     ds  $bc00
     put  ../../rom/rom_inject.s
-    ds   \,$00
 
 JMP_IND_25  JMP_ABS_IND $25
 LDA_00B5_Y  LDA_ABS_Y $b5
