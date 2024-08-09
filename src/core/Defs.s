@@ -169,7 +169,8 @@ _EXIT_ODD   equ  475                     ; the odd enty point is just 3 bytes of
 _EXIT_EVEN  equ  478                     ; in the second page of the blitter line
 _LOW_SAVE   equ  {_EXIT_EVEN+4}          ; space to save the code field opcodes is right after the return jmp/jml
 _ENTRY_INT  equ  $E1                     ; pre-code area of the next line -- just change the bottom byte of the JMP
-_LINE_SIZE  equ  512                     ; number of bytes for each blitter line
+_LINE_SIZE  equ  512                     ; number of bytes for each blitter line (vertical mirroring)
+_LINE_SIZE_H  equ  512                   ; number of bytes for each blitter line (horizontal mirroring)
 
 _CODE_TOP   equ  21                      ; number of bytes from the base address of each blitter line to the first PEA instruction
 _LINES_PER_BANK equ 120
@@ -200,3 +201,7 @@ NES_PPUMASK_BG  equ $08
 NES_PPUMASK_SPR equ $10
 
 NES_PPUCTRL_SPRSIZE equ $20
+
+; NES Nametable Mirroring
+HORIZONTAL_MIRRORING equ $01
+VERTICAL_MIRRORING   equ $02

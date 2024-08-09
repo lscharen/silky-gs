@@ -34,12 +34,17 @@ STA_ram_plr_pos_X_Y STA_ABS_Y ram_plr_pos_X
 JMP_IND_02          JMP_ABS_IND $02
 
 IIGS_CLEAR
-        ldx  #$ff
+        rep  #$30
+        ldx  #$00fe   ; avoid clearing top of stack since we entered via the harness
+        lda  #0
 :loop
         sta  00,x
         dex
+        dex
         bpl  :loop
+        sep  #$30
         rts
+  
         ds   \,$00
 
 tbl_C000_lo

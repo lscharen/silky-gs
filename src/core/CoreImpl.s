@@ -292,20 +292,7 @@ _InitPEAFieldAll
 :loop
                   sep       #$20
                   tya
-;                  cmpl      lite_base,x
-;                  beq  :ok1
-;                  ldal      lite_base,x
-;                  brk  $04
-
-:ok1
                   stal      lite_base,x
-
-;                  cmpl      lite_base_2,x
-;                  beq  :ok2
-;                  ldal      lite_base_2,x
-;                  brk  $05
-
-:ok2
                   stal      lite_base_2,x
                   rep       #$20
 

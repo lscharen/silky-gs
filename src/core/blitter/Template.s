@@ -21,7 +21,13 @@
 ; $F300    LINE 120B
 ; $F400
 ; 
-; Template and equates for GTE blitter
+; Each LINE A/LINE B is an full independent blitter line.  When the NES is in vertical
+; mirroring mode (64x30 tiles), then LINE A is set to immediately transition to LINEB
+; and there is a single exit point at the end of LINE B.
+;
+; If the NES is in horizontal mirroring mode (32x60), the LINEA and LINEB are independent
+; and LINE 120A tranitions to LINE 1B.
+; 
 blt_return_lite    EXT
 lite_base_2        EXT
 
@@ -88,7 +94,14 @@ lite_prev          lup   64                         ; Set up 64 PEA instructions
                    jmp   lite_even_exit
                    jmp   lite_odd_exit
 
-                   ds    \,$00                      ; pad to the next page boundary
+                   ds    28                      ; pad to get the next set of PEA instruction to be page-aligned
+                   ldx   #0000
+                   txs
+                   brl   $0000
+                   ldal  *+1,x
+                   pha
+                   brl   $0000
+
                    jmp   lite_even_exit             ; Alternate exit point depending on whether the left edge is 
                    jmp   lite_odd_exit              ; odd-aligned
 lite_next          lup   64
@@ -201,7 +214,14 @@ lite_even_exit     jmp   $0400-15                   ; Jump to the next line.
                    jmp   ]page+$106
                    jmp   ]page+$1CF
                    jmp   ]page+$1CC
-                   ds    49
+                   ds    34
+
+                   ldx   #0000
+                   txs
+                   dfb   $82,$00,$00
+                   ldal  *+1,x
+                   pha
+                   dfb   $82,$00,$00
 
                    jmp   ]page+$1CF
                    jmp   ]page+$1CC

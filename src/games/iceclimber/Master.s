@@ -12,7 +12,8 @@
 
 ; Segment #2 & #3 -- PPU blitter
 
-            ASM   ../../core/blitter/TemplateLiteBank1.s
+;            ASM   ../../core/blitter/TemplateLiteBank1.s
+            ASM   ../../core/blitter/Template.s
             KND   #$1100
             SNA   PPU1
 

@@ -107,6 +107,7 @@ _Apply
 ;
 ; A = starting virtual line in the code field (0 - 239)
 ; X = number of lines to render (0 - 200)
+; Y = offset into the PEA field
 
 _RestoreBG0OpcodesLite
 ;                    ldy   LastPatchOffset

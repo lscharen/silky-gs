@@ -331,6 +331,10 @@ FillScreen         cmp   #0
 ;
 ; We assume that there is a clean code field in this routine
 _SetBG0XPos
+                    DO    NAMETABLE_MIRRORING-VERTICAL_MIRRORING   ; Take this branch is _not_ vertical mirroring
+                    and   #$007F                     ; X position capped for horizontal mirroring
+                    FIN
+
                     cmp   StartX
                     beq   :out                       ; Easy, if nothing changed, then nothing changes
 

@@ -65,7 +65,7 @@ PPUStartUp
         lda   SpriteBank0+1             ; Patch some dispatch addresses with the sprite compilation bank
         sta   csd+2
 
-        jsr   _InitPPUTileMapping       ; Set up the lookup tables in the PPU shadow RAM
+        jsr   _InitPPUTileMappingVert       ; Set up the lookup tables in the PPU shadow RAM
 
         lda   #$FFFF                    ; Set initial palette values to out-of-range values
         ldx   #0
@@ -82,7 +82,7 @@ PPUStartUp
 ; Set up the lookup table to map the PPU Nametable tiles to the PEA field.
 ;
 ; The mapping vary depending on whether horizontal or vertical mirroring is set up.
-_InitPPUTileMapping
+_InitPPUTileMappingHorz
 :row     equ  tmp3
 :col     equ  tmp4
 :ppuaddr equ  tmp5
@@ -165,6 +165,91 @@ _InitPPUTileMapping
         lda  :row
         stal PPU_MEM+TILE_ROW,x
         stal PPU_MEM+TILE_ROW+$800,x
+
+        rep  #$21
+        rts
+
+_InitPPUTileMappingVert
+:row     equ  tmp3
+:col     equ  tmp4
+:ppuaddr equ  tmp5
+; Run through the PEA field block addresses and then map the information to 
+; the appropriate PPU Nametable locations
+
+        stz  :row
+        stz  :col
+
+:loop
+        jsr  :setVerticalMirror
+
+        lda  :col
+        inc
+        sta  :col
+        cmp  #32
+        bcc  :loop
+
+        stz  :col
+        lda  :row
+        inc
+        sta  :row
+
+        cmp  #60                    ; There are 60 rows of tiles with the stacked nametables
+        bcc  :loop
+        rts
+
+; Load the information about the PEA tile at (:col, :row) and store it in the appropriate PPU address location
+:setVerticalMirror
+
+; First, do some pre-calculations that are the same regardless which nametable we're in
+
+        lda  #$2000
+        sta  :ppuaddr                ; Assume first nametable
+
+        lda  :row                    ; Multiple the row by 32
+        cmp  #30
+        bcc  :top
+        sbc  #30
+        ldy  #$2800                  ; In the bottom nametable
+        sty  :ppuaddr
+:top
+        asl
+        asl
+        asl
+        asl
+        tay                          ; Will use the for lookup later (line = row * 8)
+        asl
+        ora  :ppuaddr                ; Save
+        sta  :ppuaddr
+
+; Next, add the column (0 - 31)
+
+        lda  :col
+        ora  :ppuaddr                ; We already know the value is less than 32, merge with the base address
+        sta  :ppuaddr
+
+        lda  :col
+        asl
+        asl
+        tax                          ; Use this for a lookup
+        clc
+        lda  BTableLow,y             ; Load the base address of the PEA row
+        adc  Col2CodeOffset+2,x      ; Combine with the current column (get the left half of the tile)
+        ldx  :ppuaddr
+
+        sep  #$20                         ; Switch to 8-bit mode to store the values
+        stal PPU_MEM+TILE_ADDR_LO+$000,x  ; Store the low byte of the PEA tile address
+        stal PPU_MEM+TILE_ADDR_LO+$400,x
+        xba
+        stal PPU_MEM+TILE_ADDR_HI+$000,x  ; Store the high byte of the PEA tile address
+        stal PPU_MEM+TILE_ADDR_HI+$400,x
+
+        lda  BTableHigh,y              ; Load the bank byte
+        stal PPU_MEM+TILE_BANK+$000,x  ; Store it in the PPU bank (Nametable 1)
+        stal PPU_MEM+TILE_BANK+$400,x  ; Store it in the PPU bank (Nametable 3)
+
+        lda  :row
+        stal PPU_MEM+TILE_ROW,x
+        stal PPU_MEM+TILE_ROW+$400,x
 
         rep  #$21
         rts
@@ -430,10 +515,10 @@ _UpdateShadowTiles
         lda  #1
         stal PPU_MEM+TILE_VERSION,x  ; Set a flag to track the render status of all potential tiles
 
-        ldal PPU_MEM+TILE_ROW,x
-        tax                          ; The high byte of A must be zero.  Even though A is 8-bit, the full 16-bit value is copied to X
-        lda  #$FF
-        sta  tileBitmap,x
+;        ldal PPU_MEM+TILE_ROW,x
+;        tax                          ; The high byte of A must be zero.  Even though A is 8-bit, the full 16-bit value is copied to X
+;        lda  #$FF
+;        sta  tileBitmap,x
 
         iny                          ; Go to the next queue entry (wish this could be faster...)
         iny
