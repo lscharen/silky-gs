@@ -129,6 +129,14 @@ STA_4002_X
             plp
             rts
 
+STY_4002    phy
+            pha
+            tya
+            jsl  APU_PULSE1_REG3_WRITE
+            pla
+            ply
+            rts
+
 STA_4003    jsl  APU_PULSE1_REG4_WRITE
             rts
 
@@ -144,6 +152,14 @@ STA_4003_X
             jmp  (apu_write_tbl+6,x)
 :rtn        plx
             plp
+            rts
+
+STY_4003    phy
+            pha
+            tya
+            jsl  APU_PULSE1_REG4_WRITE
+            pla
+            ply
             rts
 
 APU_PULSE2  EXT
@@ -163,6 +179,14 @@ STX_4004    phx
             plx
             rts
 
+STY_4004    phy
+            pha
+            tya
+            jsl  APU_PULSE2_REG1_WRITE
+            pla
+            ply
+            rts
+    
 STA_4005    jsl  APU_PULSE2_REG2_WRITE
             rts
 
@@ -191,12 +215,29 @@ STA_4007    jsl  APU_PULSE2_REG4_WRITE
 STA_4008    jsl  APU_TRIANGLE_REG1_WRITE
             rts
 
+STY_4008    phy
+            pha
+            tya
+            jsl  APU_TRIANGLE_REG1_WRITE
+            pla
+            ply
+            rts
+
 STA_400A
 STA_400a    jsl  APU_TRIANGLE_REG3_WRITE
             rts
 
 STA_400B
 STA_400b    jsl  APU_TRIANGLE_REG4_WRITE
+            rts
+
+STY_400B
+STY_400b    phy
+            pha
+            tya
+            jsl  APU_TRIANGLE_REG4_WRITE
+            pla
+            ply
             rts
 
 STA_400C
