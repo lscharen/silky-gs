@@ -20,10 +20,12 @@
     "build:wump": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/games/wumpus/Wump.s",
     "build:lo": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/games/lightsout/Master.s",
     "build:ic": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/games/iceclimber/Master.s",
+    "build:eb": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/games/excitebike/Master.s",
     "debug:smb": "cd src/games/smb && %npm_package_config_crossrunner% SuperMarioGS -source SuperMarioGS_S02__Output.txt SuperMarioGS_S03__Output.txt SuperMarioGS_S04__Output.txt SuperMarioGS_S05__Output.txt SuperMarioGS_S06__Output.txt -map SMB.s -Debug -CompatibilityLayer",
     "debug:bf": "cd src/games/bf && %npm_package_config_crossrunner% BalloonFgtGS -source BalloonFgtGS_S02__Output.txt BalloonFgtGS_S03__Output.txt BalloonFgtGS_S04__Output.txt BalloonFgtGS_S05__Output.txt BalloonFgtGS_S06__Output.txt -map BF.s -Debug -CompatibilityLayer",
     "debug:lo": "cd src/games/lightsout && %npm_package_config_crossrunner% LightsOutGS -source LightsOutGS_S02__Output.txt LightsOutGS_S03__Output.txt LightsOutGS_S04__Output.txt LightsOutGS_S05__Output.txt LightsOutGS_S06__Output.txt -map Master.s -Debug -CompatibilityLayer",
     "debug:wump": "cd src/games/wumpus && %npm_package_config_crossrunner% WumpusGS -source WumpusGS_S02__Output.txt WumpusGS_S03__Output.txt WumpusGS_S04__Output.txt WumpusGS_S05__Output.txt -map Wump.s -Debug -CompatibilityLayer",
+    "debug:eb": "cd src/games/excitebike && %npm_package_config_crossrunner% ExciteBikeGS -source ExciteBikeGS_S02__Output.txt ExciteBikeGS_S03__Output.txt ExciteBikeGS_S04__Output.txt ExciteBikeGS_S05__Output.txt -map Master.s -Debug -CompatibilityLayer",
     "build-image": "build-image.bat %npm_package_config_cadius% .\\emu\\Target.2mg /ClassicsGS/"
   },
   "repository": {
