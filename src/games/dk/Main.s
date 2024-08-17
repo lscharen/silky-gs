@@ -42,7 +42,7 @@ PRE_RENDER   mac
              <<<
 
 POST_RENDER  mac
-;
+             jsr  CheckForPaletteChange
              <<<
 
 ; Put in additional conditions to skip sprites when scanning the OAM table to decide what to
@@ -176,17 +176,50 @@ quit
 qtRec       adrl  $0000
             da    $00
 
+PendingPhase dw   0
+LastPhaseNo dw    0
+
 InitPlayfield
             ldx   #TitleScreen
             lda   #0
             jsr   NES_SetPalette
             rts
 
+SwizzleTables
+        adrl L0_T0
+        adrl L1_T0
+        adrl L2_T0
+        adrl L3_T0
+
+PhasePalettes
+            dw    TitleScreen
+            dw    Phase1
+            dw    Phase2
+            dw    Phase3
+
+; Are there less than 15 total color combos?
+AllColors   dw     $02,$06,$12,$15,$16,$17,$24,$25,$27,$28,$2C,$30,$36,$37
 ConfScrnPal
-TitleScreen  dw    $0F,$15,$2C,$12
+TitleScreen
+             dw    $0F,$2C,$38,$12
+             dw    $27,$30,$24,$25
+             dw    $36,$16,$37,$06
+             dw    $02,$0F,$0F,$0F
+
+Phase1       dw    $0F,$15,$2C,$12
              dw    $27,$02,$17,$30
              dw    $36,$06,$24,$16
              dw    $37,$0F,$0F,$0F
+
+Phase2       dw    $0F,$15,$2C,$06
+             dw    $30,$27,$16,$36
+             dw    $24,$02,$37,$12
+             dw    $0F,$0F,$0F,$0F
+
+Phase3       dw    $0F,$2C,$27,$02
+             dw    $30,$12,$24,$36
+             dw    $06,$16,$37,$0F
+             dw    $0F,$0F,$0F,$0F
 
 ; When the NES ROM code tried to write to the PPU palette space, intercept here.
 PALETTE_DISPATCH
@@ -200,18 +233,50 @@ PALETTE_DISPATCH
         dw   ppu_3F18,ppu_3F19,ppu_3F1A,ppu_3F1B
         dw   ppu_3F1C,ppu_3F1D,ppu_3F1E,ppu_3F1F
 
+; The the phase changes, set a flag, but way for the transition time to drop below $70
+; before applying the change.
+CheckForPaletteChange
+        ldal $010043   ; Are we in a transition timer?
+        and  #$0070
+        bcs  :no_change
+
+        ldal $010053   ; PhaseNo 0, 1, 2, 3
+        and  #$0003
+        cmp  LastPhaseNo
+        beq  :no_change
+
+        phx
+
+        sta  LastPhaseNo
+        asl
+        pha
+        tay
+
+        ldx  PhasePalettes,y
+        lda  #0
+        jsr  NES_SetPalette
+
+        pla
+        asl
+        tay
+        ldx  SwizzleTables,y
+        lda  SwizzleTables+2,y
+        jsr  NES_SetPaletteMap
+
+        plx
+
+:no_change
+        rts
 
 ; For this game, we utilize a single, static palette
 SetDefaultPalette
 
 ; Set the tile/sprite mapping
 
-            lda   SwizzleTables+2
-            ldx   SwizzleTables
-            jsr   NES_SetPaletteMap
-            rts
-
-SwizzleTables adrl L1_T0
+        lda   SwizzleTables+2
+        ldx   SwizzleTables
+        jsr   NES_SetPaletteMap
+        rts
 
 ; ApplyConfig
 ;
@@ -434,6 +499,7 @@ INPUT_ITEM_5 dw   KEYMAP
             put   ../../ppu/ppu.s
 
 ; Palette remapping
+            ds    \,$00
             put   palettes.s
             put   ../../apu/apu.s
 
