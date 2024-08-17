@@ -1408,6 +1408,7 @@ APU_STATUS_READ ENT
 
 
 APU_STATUS_WRITE ENT
+    php
     phb
     phk
     plb
@@ -1451,10 +1452,12 @@ force_entry
 
     pla
     plb
+    plp
     rtl
 
 force_exit
     plx
     pla
     plb
+    plp
     rtl

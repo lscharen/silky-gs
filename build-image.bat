@@ -14,6 +14,8 @@ REM Cadius does not overwrite files, so clear the files first
 %CADIUS% DELETEFILE %IMAGE% %FOLDER%LightsOutGS
 %CADIUS% DELETEFILE %IMAGE% %FOLDER%WumpusGS
 %CADIUS% DELETEFILE %IMAGE% %FOLDER%IceClimberGS
+%CADIUS% DELETEFILE %IMAGE% %FOLDER%ExciteBikeGS
+%CADIUS% DELETEFILE %IMAGE% %FOLDER%DonkeyKongGS
 
 REM Now copy files and folders as needed
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\smb\SuperMarioGS
@@ -21,6 +23,8 @@ REM Now copy files and folders as needed
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\lightsout\LightsOutGS
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\wumpus\WumpusGS
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\iceclimber\IceClimberGS
+%CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\excitebike\ExciteBikeGS
+%CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\dk\DonkeyKongGS
 
 %CADIUS% CREATEFOLDER %IMAGE% %FOLDER%Icons
 %CADIUS% ADDFILE %IMAGE% %FOLDER%Icons .\emu\Classics

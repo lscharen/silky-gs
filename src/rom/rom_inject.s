@@ -103,12 +103,14 @@ STA_4000_Y
 STA_4001    jsl  APU_PULSE1_REG2_WRITE
             rts
 
-STY_4001    phy
+STY_4001    php
+            phy
             pha
             tya
             jsl  APU_PULSE1_REG2_WRITE
             pla
             ply
+            plp
             rts
 
 
@@ -129,6 +131,14 @@ STA_4002_X
             plp
             rts
 
+STY_4002    phy
+            pha
+            tya
+            jsl  APU_PULSE1_REG3_WRITE
+            pla
+            ply
+            rts
+
 STA_4003    jsl  APU_PULSE1_REG4_WRITE
             rts
 
@@ -146,6 +156,14 @@ STA_4003_X
             plp
             rts
 
+STY_4003    phy
+            pha
+            tya
+            jsl  APU_PULSE1_REG4_WRITE
+            pla
+            ply
+            rts
+
 APU_PULSE2  EXT
 ORA_4004    oral APU_PULSE2+0
             rts
@@ -155,31 +173,45 @@ LDA_4004    ldal APU_PULSE2+0
 STA_4004    jsl  APU_PULSE2_REG1_WRITE
             rts
 
-STX_4004    phx
+STX_4004    php
+            phx
             pha
             txa
             jsl  APU_PULSE2_REG1_WRITE
             pla
             plx
+            plp
             rts
 
+STY_4004    phy
+            pha
+            tya
+            jsl  APU_PULSE2_REG1_WRITE
+            pla
+            ply
+            rts
+    
 STA_4005    jsl  APU_PULSE2_REG2_WRITE
             rts
 
-STY_4005    phy
+STY_4005    php
+            phy
             pha
             tya
             jsl  APU_PULSE2_REG2_WRITE
             pla
             ply
+            plp
             rts
 
-STX_4005    phx
+STX_4005    php
+            phx
             pha
             txa
             jsl  APU_PULSE2_REG2_WRITE
             pla
             plx
+            plp
             rts
 
 STA_4006    jsl  APU_PULSE2_REG3_WRITE
@@ -191,12 +223,29 @@ STA_4007    jsl  APU_PULSE2_REG4_WRITE
 STA_4008    jsl  APU_TRIANGLE_REG1_WRITE
             rts
 
+STY_4008    phy
+            pha
+            tya
+            jsl  APU_TRIANGLE_REG1_WRITE
+            pla
+            ply
+            rts
+
 STA_400A
 STA_400a    jsl  APU_TRIANGLE_REG3_WRITE
             rts
 
 STA_400B
 STA_400b    jsl  APU_TRIANGLE_REG4_WRITE
+            rts
+
+STY_400B
+STY_400b    phy
+            pha
+            tya
+            jsl  APU_TRIANGLE_REG4_WRITE
+            pla
+            ply
             rts
 
 STA_400C
@@ -208,12 +257,14 @@ STA_400e    jsl  APU_NOISE_REG3_WRITE
             rts
 
 STX_400E
-STX_400e    phx
+STX_400e    php
+            phx
             pha
             txa
             jsl  APU_NOISE_REG3_WRITE
             pla
             plx
+            plp
             rts
 
 STA_400F
@@ -221,21 +272,25 @@ STA_400f    jsl  APU_NOISE_REG4_WRITE
             rts
 
 STX_400F
-STX_400f    phx
+STX_400f    php
+            phx
             pha
             txa
             jsl  APU_NOISE_REG4_WRITE
             pla
             plx
+            plp
             rts
 
 STY_400F
-STY_400f    phy
+STY_400f    php
+            phy
             pha
             tya
             jsl  APU_NOISE_REG4_WRITE
             pla
             ply
+            plp
             rts
 
 STA_4010
@@ -258,18 +313,21 @@ LDA_4015    jsl   APU_STATUS_READ
 STA_4015    jsl   APU_STATUS_WRITE
             rts
 
-STX_4015    phx
+STX_4015    php
+            phx
             pha
             txa
             jsl   APU_STATUS_WRITE
             pla
             plx
+            plp
             rts
 
 ; Joystick port (unsupported)
 STA_4016
 LDA_4016
 LDA_4016_X
+            lda #0          ; no input
             rts
 
 ; Hooks to call back to the harness for PPU memory-mapped accesses
