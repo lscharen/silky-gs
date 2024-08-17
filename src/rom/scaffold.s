@@ -38,10 +38,6 @@ NES_StartUp
             stz   ShowFPS
             stz   YOrigin
 
-;            lda   #4                      ; Default to "Best" mode
-;            sta   VideoMode
-;            sta   AudioMode
-
             lda   #$0008
             sta   LastEnable
 

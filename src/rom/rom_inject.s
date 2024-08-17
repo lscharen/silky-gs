@@ -103,12 +103,14 @@ STA_4000_Y
 STA_4001    jsl  APU_PULSE1_REG2_WRITE
             rts
 
-STY_4001    phy
+STY_4001    php
+            phy
             pha
             tya
             jsl  APU_PULSE1_REG2_WRITE
             pla
             ply
+            plp
             rts
 
 
@@ -171,12 +173,14 @@ LDA_4004    ldal APU_PULSE2+0
 STA_4004    jsl  APU_PULSE2_REG1_WRITE
             rts
 
-STX_4004    phx
+STX_4004    php
+            phx
             pha
             txa
             jsl  APU_PULSE2_REG1_WRITE
             pla
             plx
+            plp
             rts
 
 STY_4004    phy
@@ -190,20 +194,24 @@ STY_4004    phy
 STA_4005    jsl  APU_PULSE2_REG2_WRITE
             rts
 
-STY_4005    phy
+STY_4005    php
+            phy
             pha
             tya
             jsl  APU_PULSE2_REG2_WRITE
             pla
             ply
+            plp
             rts
 
-STX_4005    phx
+STX_4005    php
+            phx
             pha
             txa
             jsl  APU_PULSE2_REG2_WRITE
             pla
             plx
+            plp
             rts
 
 STA_4006    jsl  APU_PULSE2_REG3_WRITE
@@ -249,12 +257,14 @@ STA_400e    jsl  APU_NOISE_REG3_WRITE
             rts
 
 STX_400E
-STX_400e    phx
+STX_400e    php
+            phx
             pha
             txa
             jsl  APU_NOISE_REG3_WRITE
             pla
             plx
+            plp
             rts
 
 STA_400F
@@ -262,21 +272,25 @@ STA_400f    jsl  APU_NOISE_REG4_WRITE
             rts
 
 STX_400F
-STX_400f    phx
+STX_400f    php
+            phx
             pha
             txa
             jsl  APU_NOISE_REG4_WRITE
             pla
             plx
+            plp
             rts
 
 STY_400F
-STY_400f    phy
+STY_400f    php
+            phy
             pha
             tya
             jsl  APU_NOISE_REG4_WRITE
             pla
             ply
+            plp
             rts
 
 STA_4010
@@ -299,18 +313,21 @@ LDA_4015    jsl   APU_STATUS_READ
 STA_4015    jsl   APU_STATUS_WRITE
             rts
 
-STX_4015    phx
+STX_4015    php
+            phx
             pha
             txa
             jsl   APU_STATUS_WRITE
             pla
             plx
+            plp
             rts
 
 ; Joystick port (unsupported)
 STA_4016
 LDA_4016
 LDA_4016_X
+            lda #0          ; no input
             rts
 
 ; Hooks to call back to the harness for PPU memory-mapped accesses

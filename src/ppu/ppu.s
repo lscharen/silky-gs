@@ -836,6 +836,7 @@ PPUSTATUS_READ_X ENT
         stal w_bit             ; Reset the address latch used by PPUSCROLL and PPUADDR
 
         ldal ppustatus
+        ora  #$40              ; always set sprite 0 hit
         tax
         and  #$7F              ; Clear the VBL flag
         stal ppustatus
@@ -854,6 +855,7 @@ PPUSTATUS_READ ENT
         stal w_bit           ; Reset the address latch used by PPUSCROLL and PPUADDR
 
         ldal ppustatus
+        ora  #$40              ; always set sprite 0 hit
         pha
         and  #$7F              ; Clear the VBL flag
         stal ppustatus
@@ -1259,15 +1261,8 @@ PPUDMA_WRITE ENT
         ldal  DP_OAM
         tcd
 
-        DO  ALLOW_SPRITE_0
-        lda   ROMBase+$200
-        sta   PPU_OAM
-        lda   ROMBase+$202
-        sta   PPU_OAM+2
-        FIN
-
-]n      equ   1
-        lup   63
+]n      equ   {OAM_START_INDEX}
+        lup   {OAM_END_INDEX-OAM_START_INDEX}
         lda   ROMBase+$200+{]n*4}
         sta   PPU_OAM+{]n*4}
         lda   ROMBase+$202+{]n*4}

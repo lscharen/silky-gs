@@ -194,7 +194,7 @@ NES_TriggerNMI
 
             ldal  ppuctrl               ; If the ROM has not enabled VBL NMI, also skip
             bit   #$80
-            beq   :skip
+;            beq   :skip
 
             DO    SHOW_ROM_EXECUTION_TIME
             lda   #2
