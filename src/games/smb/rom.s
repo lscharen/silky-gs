@@ -670,7 +670,7 @@ GameOverModeValue     = 3
 ;       .org $8000
 
 ROMBase  ENT
-         ds    $7900
+         ds    $7800
          put  ../../rom/rom_inject.s
 
 ; Absolute address in zero page helpers

@@ -540,73 +540,70 @@ TileBuff    ds    128
 
 ; NES Palette (52 entries)
 nesPalette
-    dw  $0666  ; 0
-    dw  $0038  ; 1
-    dw  $011A  ; 2
-    dw  $040A  ; 3
-    dw  $0608  ; 4
-    dw  $0710  ; 5
-    dw  $0C10  ; 6
-    dw  $0520  ; 7
-    dw  $0330  ; 8
-    dw  $0140  ; 9
-    dw  $0050  ; A
-    dw  $0043
-    dw  $0046
-    dw  $0000  ; D
-    dw  $0000  ; E
-    dw  $0000  ; F
-
-    dw  $0CCC  ; 10
-    dw  $007F
-    dw  $025F
-    dw  $083F
-    dw  $0F3B
-    dw  $0F35
-    dw  $0F20
-    dw  $0D30
-    dw  $0C60
-    dw  $0380
-    dw  $0190
-    dw  $0095
-    dw  $00AD
-    dw  $0000  ; $1D
-    dw  $0000  ; $1E
-    dw  $0000  ; $1F
-
-    dw  $0FFF  ; $20
-    dw  $01DF
-    dw  $07AF
-    dw  $0D8F
-    dw  $0F4F
-    dw  $0F69
-    dw  $0F93
-    dw  $0F91
-    dw  $0FC2
-    dw  $0AE1
-    dw  $03F3
-    dw  $01FA
-    dw  $00FF
-    dw  $0555  ; $2D
-    dw  $0111
-    dw  $0111
-
-    dw  $0FFF  ; $30
-    dw  $0AFF
-    dw  $0BEF
-    dw  $0DAF
-    dw  $0FBF
-    dw  $0FAB
-    dw  $0FDB
-    dw  $0FEA
-    dw  $0FF9
-    dw  $0DE9
-    dw  $0AEB
-    dw  $0AFD
-    dw  $09FF
-    dw  $0BBB   ; $3D
-    dw  $0000   ; $3E
-    dw  $0000   ; $3F
+   dw $0777
+   dw $000f
+   dw $000b
+   dw $042b
+   dw $0908
+   dw $0a02
+   dw $0a10
+   dw $0810
+   dw $0530
+   dw $0070
+   dw $0060
+   dw $0050
+   dw $0045
+   dw $0000
+   dw $0000
+   dw $0000
+   dw $0bbb
+   dw $007f
+   dw $005f
+   dw $064f
+   dw $0d0c
+   dw $0d05
+   dw $0f30
+   dw $0d51
+   dw $0a70
+   dw $00b0
+   dw $00a0
+   dw $00a4
+   dw $0088
+   dw $0000
+   dw $0000
+   dw $0000
+   dw $0fff
+   dw $04bf
+   dw $068f
+   dw $097f
+   dw $0f7f
+   dw $0f59
+   dw $0f75
+   dw $0f94
+   dw $0fb0
+   dw $0bf1
+   dw $05d5
+   dw $05f9
+   dw $00ed
+   dw $0777
+   dw $0000
+   dw $0000
+   dw $0fff
+   dw $0adf
+   dw $0bbf
+   dw $0dbf
+   dw $0fbf
+   dw $0fab
+   dw $0eca
+   dw $0fda
+   dw $0fd7
+   dw $0df7
+   dw $0bfb
+   dw $0bfd
+   dw $00ff
+   dw $0fdf
+   dw $0000
+   dw $0000
 
 ; Convert a single NES palette entry to IIgs RGB
 ; A = NES color index

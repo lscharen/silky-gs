@@ -132,13 +132,11 @@ UP_ARROW        equ   $0B
 DOWN_ARROW      equ   $0A
 
 ; DirtyBits definitions
-DIRTY_BIT_BG0_X        equ   $0001
-DIRTY_BIT_BG0_Y        equ   $0002
-; DIRTY_BIT_BG1_X        equ   $0004
-; DIRTY_BIT_BG1_Y        equ   $0008
-DIRTY_BIT_BG0_REFRESH  equ   $0010
-; DIRTY_BIT_BG1_REFRESH  equ   $0020
-DIRTY_BIT_SPRITE_ARRAY equ   $0040
+DIRTY_BIT_BG0_X        equ   $0001     ; The horizontal scroll position has changed
+DIRTY_BIT_BG0_Y        equ   $0002     ; The veritcal scroll position has changed
+DIRTY_BIT_PAL_CHANGE   equ   $0004     ; There has been a palette change, force a repaint
+DIRTY_BIT_BG0_REFRESH  equ   $0010     ; Force a refresh of the full background
+DIRTY_BIT_SPRITE_ARRAY equ   $0040     
 
 ; ReadControl return value bits
 PAD_KEY_DOWN           equ   $0080

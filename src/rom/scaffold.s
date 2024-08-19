@@ -180,6 +180,13 @@ NES_EvtLoop
 
             and   #$007F
 
+; 'f': force a full repaint of the screen
+            cmp   #'f'
+            bne   :not_f
+            jsr   ForceMetatileRefresh
+            brl   NES_EvtLoop
+:not_f
+
 ; 'b': force the NES Background bit to be toggled
 
             cmp   #'b'

@@ -43,7 +43,6 @@ InitMemory
                sta       SpriteBank
                stz       SpriteBank0
 
-
 ; Initialize some memory tables that point to addresses in the blitter code
                jsr       InitLiteBlitter
                clc

@@ -65,7 +65,8 @@ PPUStartUp
         lda   SpriteBank0+1             ; Patch some dispatch addresses with the sprite compilation bank
         sta   csd+2
 
-        jsr   _InitPPUTileMappingVert       ; Set up the lookup tables in the PPU shadow RAM
+;        jsr   _InitPPUTileMappingVert       ; Set up the lookup tables in the PPU shadow RAM
+        jsr   _InitPPUTileMappingHorz       ; Set up the lookup tables in the PPU shadow RAM
 
         lda   #$FFFF                    ; Set initial palette values to out-of-range values
         ldx   #0
@@ -254,6 +255,53 @@ _InitPPUTileMappingVert
         rep  #$21
         rts
 
+; Wrapper to run through and re-sync the metatiles with the graphics screen.  Mostly used
+; as a debugging aid.
+        mx %00
+ForceMetatileRefresh
+        ldy  #0
+        pha                         ; work space on stack
+:loop
+        lda  #$2000
+        ora  metatile_corner,y      ; calculate the tile address of the metatile corner
+        tax                         ; use for indexing
+        sta  1,s                    ; save for later
+
+        phy
+
+        jsr  :do_metatile
+        lda  3,s
+        inc
+        inc
+        tax
+        jsr  :do_metatile
+        lda  3,s
+        clc
+        adc  #64
+        tax
+        jsr  :do_metatile
+        lda  3,s
+        clc
+        adc  #66
+        tax
+        jsr  :do_metatile
+
+        ply
+        iny
+        iny
+        cpy  #64*2                  ; end of the metatile array?
+        bcc  :loop
+
+        pla                         ; pop the work space
+        rts
+
+:do_metatile
+        sep  #$20
+        ldal PPU_MEM+ATTR_SHADOW+$00,x
+        jsr  RefreshMetatile
+        rep  #$20
+        rts
+
 ; Sync a metatile value to the PPU data bank and to the code field
 ;
 ; This is called "sync" instead of "draw" because this routine takes care
@@ -275,6 +323,7 @@ SyncPPUMetatile
         stal PPU_MEM+ATTR_SHADOW+$20,x
         stal PPU_MEM+ATTR_SHADOW+$21,x
 
+RefreshMetatile                            ; Alternate entry point is not setting a new value
         clc
         adc   SwizzlePtr+1                 ; Set the palette selection (used for all 4 tiles)
         sta   ActivePtr+1
@@ -383,7 +432,7 @@ DrawPPUAttribute
 
         txa
         and  #$2C00                 ; Keep the nametable bits
-        ora  :corner,y              ; Insert the relative offset within the nametable
+        ora  metatile_corner,y      ; Insert the relative offset within the nametable
         tax                         ; This is constant for the ATTR_SHADOW updates
         adc  #$0002                 ; adc #2 faster than two increments
         sta  :mt_base2              ; Calculate the other offsets while it's fast to do so
@@ -515,10 +564,10 @@ _UpdateShadowTiles
         lda  #1
         stal PPU_MEM+TILE_VERSION,x  ; Set a flag to track the render status of all potential tiles
 
-;        ldal PPU_MEM+TILE_ROW,x
-;        tax                          ; The high byte of A must be zero.  Even though A is 8-bit, the full 16-bit value is copied to X
-;        lda  #$FF
-;        sta  tileBitmap,x
+        ldal PPU_MEM+TILE_ROW,x
+        tax                          ; The high byte of A must be zero.  Even though A is 8-bit, the full 16-bit value is copied to X
+        lda  #$FF
+        sta  tileBitmap,x
 
         iny                          ; Go to the next queue entry (wish this could be faster...)
         iny
@@ -643,7 +692,7 @@ PPUFlushQueues
 
         txa
         and  #$2C00                 ; Keep the nametable bits
-        ora  :corner,y              ; Insert the relative offset within the nametable
+        ora  metatile_corner,y      ; Insert the relative offset within the nametable
         sta  :mt_base               ; This is constant for the ATTR_SHADOW updates
         adc  #$0002
         sta  :mt_base2              ; Calculate the tile address offsets for the four
@@ -812,7 +861,8 @@ PPUFlushQueues
         rep  #$30                      ; Restore 16-bit mode
         rts
 
-:corner 
+; offset from a nametable ($2000, $2400, $2800, $2C00) to the top-left tile of each metatile
+metatile_corner 
 ]row    =    0
         lup  8
         dw   {128*{]row}}+0
@@ -921,7 +971,7 @@ PPUSTATUS_READ_X ENT
         stal w_bit             ; Reset the address latch used by PPUSCROLL and PPUADDR
 
         ldal ppustatus
-        ora  #$40              ; always set sprite 0 hit
+;        ora  #$40              ; always set sprite 0 hit
         tax
         and  #$7F              ; Clear the VBL flag
         stal ppustatus
@@ -940,7 +990,7 @@ PPUSTATUS_READ ENT
         stal w_bit           ; Reset the address latch used by PPUSCROLL and PPUADDR
 
         ldal ppustatus
-        ora  #$40              ; always set sprite 0 hit
+;        ora  #$40              ; always set sprite 0 hit
         pha
         and  #$7F              ; Clear the VBL flag
         stal ppustatus
@@ -1306,6 +1356,135 @@ ppu_3F0C
 ppu_3F0D
 ppu_3F0E
 ppu_3F0F  rts
+
+
+* ; Lookup color from a fixed palette and adjust the swizzle table
+*           ldal PPU_MEM+$3F01      ; load the NES color index
+*           tax
+*           lda  MappedColor,x      ; See which IIgs palette index this maps to?
+*           bmi  :skip              ; A negative value means it's unsupported
+*           jsr  UpdateSwizzleTable
+* :skip
+*           rts
+
+* ; Update one color in a swizzle table.  A swizzle table is essentially a 4x4 table where each
+* ; subtable is also 4x4.  Updating a value means changing one row and one column in the 4x4 subtable
+* ; for each of the macro cell. For example, if we are updaing the first palette value, then the updated
+* ; locations are
+* ;
+* ; 0000 0001 0002 0003
+* ; 0010 0011 0012 0013 <-- this row
+* ; 0020 0021 0022 0023
+* ; 0030 0031 0032 0033
+* ;       ^
+* ;       |
+* ;       +-- this columns
+* ;
+* ; for a total of 7 updates.
+* UpdateSwizzleTable
+*         lda: 0,y               ; load  value
+*         and: mask
+*         ora  value
+*         sta: 0,y
+
+
+* ;               $0000,$0100,$0200,$0300,$1000,$1100,$1200,$1300,$2000,$2100,$2200,$2300,$3000,$3100,$3200,$3300
+* Index1Order  dw 2, 8,  10, 12, 14, 18, 22
+* ColumnMasks1 dw $0000,$0F00,$0000,$0000,$F000,$FF00,$F000,$F000,$0000,$0F00,$0000,$0000,$0000,$0F00,$0000,$0000
+
+* Index2Order  dw 4, 12, 16, 18, 20, 22, 28
+* ColumnMasks2 dw $0000,$0000,$0F00,$0000,$0000,$0000,$0F00,$0000,$F000,$F000,$FF00,$F000,$0000,$0000,$0F00,$0000
+
+* Index3Order  dw 6, 14, 22, 24, 26, 28, 30
+* ColumnMasks3 dw $0000,$0000,$0000,$0F00,$0000,$0000,$0000,$0F00,$0000,$0000,$0000,$0F00,$F000,$F000,$F000,$FF00
+
+* ; Identify the non-zero locations for palette indices 1, 2, and 3 -- multiply by 16 to get the row offset
+
+* IndexOrder   ds 14   ; Scratch space to fill for a given update
+
+* ; The row masks are the same as Column masks, with the bytes swapped
+*         cmp  :value       ; Is the color different than before?
+*         beq  :no_change   ; If not, no work to be done
+
+* ; We have to scan through all of the rows, but we have a table of non-zero columns
+* ; that we use to be more efficient
+* ;
+* ; 3 or the 4 macro blocks in each row needs 7 values updated, and one macroblock requires all 16 values to
+* ; be changed.  So updating a palette entry changes a total of 12 * 7 + 16 * 4 = 84 + 64 = 148 words
+
+* ; Fill in the IndexOrder table based on the X-register which points to the table to use
+
+*         txa
+*         sta  :ptr
+*         clc
+*         adc  #14
+*         sta  :ptr2
+
+*         ldy: 0,x
+*         lda  (:ptr2),y
+
+
+*         ldx  #0           ; Start in the top-left corner of the table
+*         txy
+
+*         ldy  #0           ; Start in the top-left corner of the table
+
+* ; Fill in a sparse row
+* :s_next
+*         ldy  IndexOrder,x
+*         lda  (:tbl),y         ; y is a row byte counter
+*         eor  :value
+*         and  :row_mask
+*         and: (:mask),y        ; x has the column mask array
+*         eor  :value
+*         sta  (:tbl),y
+
+*         inx
+*         inx
+
+*         cpx  #14
+*         bcc  :s_next
+
+* ; Fill in a non-sparse row
+* :ns_next
+*         lda  (:tbl),y         ; y is a row byte counter
+*         eor  :value
+*         and  :row_mask
+*         and: (:mask),y        ; x has the column mask array
+*         eor  :value
+*         sta  (:tbl),y
+
+*         iny
+*         iny
+
+*         cpy  #32
+*         bcc  :ns_next
+
+* ; Now we have the address offset into the swizzle table for this value
+
+*         lda  (:tbl),y     ; Load the existing value
+*         eor  :value       ; mix with the new index value
+*         and  :mask        ; punch out holes
+*         eor  :value       ; put the new index into the holes and restore the other values
+*         sta  (:tbl),y     ; Update the table value
+
+*         bcc  :next
+*         lda  mask,x
+*         xba
+*         ora  mask,y       ; Combine the row and column masks for this palette index
+*         beq  :next        ; This index is not present at this location, skip
+*         lda  (:tbl)       ; load the table value
+*         eor  :value       ; mix with the new IIgs palette index
+
+*         inc  :tbl
+*         inc  :tbl
+*         iny
+*         iny
+*         cpy  
+
+
+* :next
+; Find a color in the existing palette, otherwise look for a free slot
 
 ppu_3F10  ldal PPU_MEM+$3F10
           jsr  NES_ColorToIIgs

@@ -57,6 +57,9 @@ SCAN_OAM_XTRA_FILTER mac
 PPU_BG_TILE_ADDR  equ #$1000
 PPU_SPR_TILE_ADDR equ #$0000
 
+; What kind of Nametable mirroring for this game
+NAMETABLE_MIRRORING equ VERTICAL_MIRRORING
+
 ; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
 ; in addition to the compiled representation (usually yes, since this is used for the config
 ; screen)
@@ -188,14 +191,22 @@ InitPlayfield
 SwizzleTables
         adrl L0_T0
         adrl L1_T0
+        adrl L0_T0
         adrl L2_T0
         adrl L3_T0
+        adrl L0_T0
+        adrl L0_T0
+        adrl L0_T0
 
 PhasePalettes
-            dw    TitleScreen
-            dw    Phase1
-            dw    Phase2
-            dw    Phase3
+        dw    TitleScreen
+        dw    Phase1
+        dw    TitleScreen
+        dw    Phase2
+        dw    Phase3
+        dw    TitleScreen
+        dw    TitleScreen
+        dw    TitleScreen
 
 ; Are there less than 15 total color combos?
 AllColors   dw     $02,$06,$12,$15,$16,$17,$24,$25,$27,$28,$2C,$30,$36,$37
@@ -237,11 +248,12 @@ PALETTE_DISPATCH
 ; before applying the change.
 CheckForPaletteChange
         ldal $010043   ; Are we in a transition timer?
-        and  #$0070
+        and  #$00FF
+        cmp  #$0070
         bcs  :no_change
 
-        ldal $010053   ; PhaseNo 0, 1, 2, 3
-        and  #$0003
+        ldal $010053      ; PhaseNo 0, 1, 2, 3
+        and  #$0007       ; Title Screen = 0, Level 1 = 1, Level 2 = 3, Level 3 = 4 
         cmp  LastPhaseNo
         beq  :no_change
 
@@ -262,6 +274,8 @@ CheckForPaletteChange
         ldx  SwizzleTables,y
         lda  SwizzleTables+2,y
         jsr  NES_SetPaletteMap
+
+        jsr  ForceMetatileRefresh     ; Repaint the scene
 
         plx
 
