@@ -232,11 +232,22 @@ EngineReset
                   sta       STATE_REG_R0W1
                   ora       #$20                       ; R1W1
                   sta       STATE_REG_R1W1
+
+; Cache the bank values of the blitter banks
+
+                  lda       #^lite_base_1
+                  sta       BANK_VALUES
+                  lda       #^lite_base_2
+                  sta       BANK_VALUES+1
                   rep       #$20
+
+                  tdc
+                  ora       #BANK_VALUES-1
+                  sta       STK_SAVE_BANK              ; Save the address of the direct page variables
 
 ; Insert jumps to the interrupt enable code every 16 lines
 
-                  jsr       _InitPEAFieldInt
+;                  jsr       _InitPEAFieldInt
 
 ; If the even mode is turned on, adjust all of the even lines in the PEA field to skip their next line
 
@@ -252,64 +263,239 @@ _InitRenderMode
                   bit       #CTRL_EVEN_RENDER
                   beq       :no_even
                   jmp       _InitPEAFieldEven
-:no_even          jmp       _InitPEAFieldAll
+:no_even
+;          jmp       _InitPEAFieldAll
+                  DO    NAMETABLE_MIRRORING&HORIZONTAL_MIRRORING
+                  jsr   _InitHorizontalMirroring
+                  ELSE
+                  jsr   _InitVerticalMirroring
+                  FIN
 
+                  rts
 
 ; Insert jumps to the interrupt enable code every 16 lines. There are 120 lines in each bank, so
-; only 7 loops needed.  Interrups are set at the mid-point lines -- 4, 20, 36, 52, 68, 84, 100, 116
+; only 7 loops needed.  Interrupts are set at the mid-point lines -- 4, 20, 36, 52, 68, 84, 100, 116
 ;
 ; Notice that this routine sets the low byte of the EXIT_EVEN address, while _InitPEAFieldAll and
 ; _InitPEAFieldEven set the high byte of EXIT_EVEN.
-_InitPEAFieldInt
-                  lda       #7
-                  sta       tmp15
+;_InitPEAFieldInt
+;                  lda       #7
+;                  sta       tmp15
+;
+;                  ldx       #_EXIT_EVEN+{_LINE_SIZE_V*4}+1      ; Patch the JMP operand here
+;:loop
+;                  sep       #$20
+;                  lda       #_ENTRY_INT
+;                  stal      lite_base_1,x
+;                  stal      lite_base_2,x
+;                  rep       #$20
+;
+;                  txa
+;                  clc
+;                  adc       #{_LINE_SIZE_V*16}
+;                  tax
+;
+;                  dec       tmp15
+;                  bne       :loop
+;                  rts
 
-                  ldx       #_EXIT_EVEN+{_LINE_SIZE*4}+1      ; Patch the JMP operand here
-:loop
-                  sep       #$20
-                  lda       #_ENTRY_INT
-                  stal      lite_base,x
-                  stal      lite_base_2,x
-                  rep       #$20
+; Patch a PEA field address relative to a page offset that's in the X register
+; PATCH_FIELD offset,dest.
+;
+; Offset by the number of bytes from the lite_base entry address and the start of the
+; page-aligned line code.
+FIRST_PAGE        equ       $100       ; PEA code starts at $0100 in each respective bank
+PATCH_JMP         mac
+                  txa
+                  clc
+                  IF        #=]2
+                  adc       ]2+FIRST_PAGE
+                  ELSE
+                  adc       ]2
+                  adc       #FIRST_PAGE
+                  FIN
+                  stal      lite_start_page_1+1+{]1},x
+                  stal      lite_start_page_2+1+{]1},x
+                  <<<
+
+PATCH_VAL         mac
+                  lda       ]2
+                  stal      lite_start_page_1+{]1},x
+                  stal      lite_start_page_2+{]1},x
+                  <<<
+
+; Mirroring
+;
+; The array of PEA spans need to be reconfigured depending on whether the engine is in vertical or
+; horizontal mirroring mode.
+;
+; The configuration involved setting the prelude and epilogue instructions that bookend the core
+; PEA instructions.
+;
+; n00: jmp even_out     ; H = jmp ${n}CF,     V = jmp ${n+1}CF
+; n03: jmp odd_out      ; H = jmp ${n}CC,     V = jmp ${n+1}CC
+; ...
+; nC6: jmp next         ; H = jmp ${n}06,     V = jmp ${n+1}06
+; nC9: jmp even_out     ; H = jmp ${n}CF,     V = jmp ${n+1}CF
+; nCC: jmp odd_out      ; H = LDA #imm / PHA, V = jmp ${n+1}CC
+; nCF: jmp {n+2}F1      ; H = jmp ${n+2}F1,   V = -- -- --
+;
+; The last lines in each bank need to be adjusted to have proper JML instructions embedded within
+;
+; F0CF: jml ${b^1}01F1  ; H = jml ${b^1}01F1  V = -- -- -- --
+; F1CF: jml ${b^1}....  ; H = jml ${b^1}02F1  V = jml ${b^1}01F1
+
+
+; Set up the PEA field for horizontal mirroring.  This creates a virtual 256x480 rendering surface. In
+; this mode, each page-aligned line is updated
+_InitHorizontalMirroring
+                  lda       #$00FE
+                  sta       MirrorMaskX
+                  lda       #$01FE
+                  sta       MirrorMaskY
+
+                  ldx       #0
+:loop1
+                  PATCH_JMP _ENTRY_PATCH;#_PEA_OFFSET           ; The jump always enters this page
+                  PATCH_JMP _ODD_PATCH;#_PEA_OFFSET             ; ditto
+
+                  PATCH_JMP _OUT_OFFSET;#_WORD_OFFSET           ; Jump to the exit point of this line
+                  PATCH_JMP _LOOP_OFFSET;#_PEA_OFFSET           ; Jump around to the beginning of the line
+                  PATCH_JMP _EXIT_OFFSET;#{$0200+_ENTRY_OFFSET} ; Jump to the next line
 
                   txa
                   clc
-                  adc       #{_LINE_SIZE*16}
+                  adc       #_LINE_SIZE_H
+                  tax
+
+                  cpx       #{240*256}             ; Do 240 lines per bank
+                  bcc       :loop1
+
+; The last line needs to jump to beginning of the next bank
+;
+;          NT1 NT2
+;  Bank 1: A   C
+;  Bank 2: B   D
+;
+; Execution order is A -> B -> C -> D -> A
+
+                  ldx       #{238*256}
+                  PATCH_VAL _EXIT_OFFSET;#$005C                           ; JML opcode (in both nametables)
+                  PATCH_VAL _EXIT_OFFSET+$100;#$005C                           ; JML opcode (in both nametables)
+                  
+                  lda       #_BANK_ENTRY_NT1
+                  stal      lite_start_page_1+_EXIT_OFFSET+1,x       ; A -> B
+                  lda       #_BANK_ENTRY_NT2
+                  stal      lite_start_page_1+_EXIT_OFFSET+$0100+1,x ; C -> D
+
+                  lda       #_BANK_ENTRY_NT2
+                  stal      lite_start_page_2+_EXIT_OFFSET+1,x       ; B -> C
+                  lda       #_BANK_ENTRY_NT1
+                  stal      lite_start_page_2+_EXIT_OFFSET+$0100+1,x ; D -> A
+
+; Enable the interrupt code on every 16th line
+
+                  ldx       #{4*_LINE_SPAN}
+                  lda       #7
+                  sta       tmp15
+
+:loop2
+                  PATCH_JMP {$000+_EXIT_OFFSET};#{$0200+_ENTRY_OFFSET}      ; Jump to the interrupt enable code (left nametable)
+                  PATCH_JMP {$100+_EXIT_OFFSET};#{$0300+_ENTRY_OFFSET}      ; Jump to the interrupt enable code (right nametable)
+
+                  txa
+                  clc
+                  adc       #{16*_LINE_SPAN}
                   tax
 
                   dec       tmp15
-                  bne       :loop
+                  bne       :loop2
+
+                  rts
+
+_InitVerticalMirroring
+                  lda       #$01FE
+                  sta       MirrorMaskX
+                  lda       #$00FE
+                  sta       MirrorMaskY
+
+                  ldx       #0
+:loop1
+                  PATCH_JMP $00;#$01CF
+                  PATCH_JMP $03;#$01CC
+                  PATCH_JMP $C6;#$0106
+                  PATCH_JMP $C9;#$01CF
+                  PATCH_VAL $CC;#$00A9
+                  PATCH_JMP $CC;#$01CC
+                  PATCH_VAL $CD;#$4800
+
+                  PATCH_JMP $100;#$01CF
+                  PATCH_JMP $103;#$01CC
+                  PATCH_JMP $1C6;#$0006
+                  PATCH_JMP $1C9;#$01CF
+                  PATCH_VAL $1CC;#$00A9
+                  PATCH_VAL $1CD;#$4800
+
+                  PATCH_JMP $1CF;#$01F1
+
+                  txa
+                  clc
+                  adc       #_LINE_SIZE_V
+                  tax
+
+                  cpx       #{240*256}             ; Do 120 lines per bank
+                  bcs       :out
+                  brl       :loop1
+:out
+
+; Enable the interrupt code on every 16th line
+
+                  ldx       #{4*_LINE_SPAN}
+                  lda       #7
+                  sta       tmp15
+
+:loop2
+                  PATCH_JMP $1CF;#$01E1             ; Jump to the interrupt enable code
+
+                  txa
+                  clc
+                  adc       #{16*_LINE_SPAN}
+                  tax
+
+                  dec       tmp15
+                  bne       :loop2
+
                   rts
 
 
 ; Initialize the PEA fields for "normal" mode that draws all of the lines
-_InitPEAFieldAll
-                  lda       #119                   ; There are 120 lines in each bank
-                  sta       tmp15
-
-                  ldx       #_EXIT_EVEN+2
-                  ldy       #3                    ; The first even line jumps to $3F1
-:loop
-                  sep       #$20
-                  tya
-                  stal      lite_base,x
-                  stal      lite_base_2,x
-                  rep       #$20
-
-                  tya
-                  clc
-                  adc       #2                   ; Move this many pages up
-                  tay
-
-                  txa
-                  clc
-                  adc       #_LINE_SIZE          ; Step to the next line
-                  tax
-
-                  dec       tmp15
-                  bne       :loop
-
-                  rts
+;_InitPEAFieldAll
+;                  lda       #119                   ; There are 120 lines in each bank
+;                  sta       tmp15
+;
+;                  ldx       #_EXIT_EVEN+2
+;                  ldy       #3                    ; The first even line jumps to $3F1
+;:loop
+;                  sep       #$20
+;                  tya
+;                  stal      lite_base_1,x
+;                  stal      lite_base_2,x
+;                  rep       #$20
+;
+;                  tya
+;                  clc
+;                  adc       #2                   ; Move this many pages up
+;                  tay
+;
+;                  txa
+;                  clc
+;                  adc       #_LINE_SIZE_V          ; Step to the next line
+;                  tax
+;
+;                  dec       tmp15
+;                  bne       :loop
+;
+;                  rts
 
 ; Initialize the PEA fields for "even" mode where all of the odd lines are skipped
 _InitPEAFieldEven
@@ -321,7 +507,7 @@ _InitPEAFieldEven
 :loop
                   sep       #$20
                   tya
-                  stal      lite_base,x
+                  stal      lite_base_1,x
                   stal      lite_base_2,x
                   rep       #$20
 
@@ -332,7 +518,7 @@ _InitPEAFieldEven
 
                   txa
                   clc
-                  adc       #{_LINE_SIZE*2}      ; Step to the next even line
+                  adc       #{_LINE_SIZE_V*2}      ; Step to the next even line
                   tax
 
                   dec       tmp15

@@ -48,7 +48,7 @@ NES_StartUp
             lda   #0
             jsr   _SetBorderColor
 
-; Used for VOC rendering mode to togglee target of the PEA field render between
+; Used for VOC rendering mode to toggle target of the PEA field render between
 ; bank $01 and $00
 
             lda   #1

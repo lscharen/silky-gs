@@ -1,3 +1,9 @@
+                  DO    NAMETABLE_MIRRORING&HORIZONTAL_MIRRORING
+_Apply            equ   _ApplyHorzMirroring
+                  ELSE
+_Apply            equ   _ApplyVertMirroring
+                  FIN
+
 ; Helper function that takes care of the bookkeeping of iterating over a range of virtual
 ; lines while taking into consideration the fact that the blitter code spans multiple
 ; banks.
@@ -5,7 +11,7 @@
 ; A = starting virtual line in the code field (0 - 239)
 ; X = number of lines to render (0 - 200)
 ; Y = address of callback routine
-_Apply
+_ApplyVertMirroring
 :virt_line          equ   tmp1
 :lines_left         equ   tmp2
 
@@ -101,6 +107,199 @@ _Apply
 
 :patch              jmp   $0000
 
+
+; A = starting virtual line in the code field (0 - 479)
+; X = number of lines to render (0 - 200)
+; Y = address of callback routine
+;
+; This needs to be a bit more generalized that before.  Really, we don't need to care about the actual
+; bank, it's just a matter of rouding to the nearest 120-line boundary.
+_ApplyHorzMirroring
+:virt_line          equ   tmp1
+:lines_left         equ   tmp2
+
+                    stx   :lines_left
+                    sta   :virt_line
+                    sty   :patch+1
+
+; First, determine how many lines between the virtual line and the next bank boundary. If
+; there are more lines availble than need to be drawn, it is an early out.
+
+                    cmp   #_LINES_PER_BANK
+                    bcc   :bank_1
+
+                    cmp   #_LINES_PER_BANK*2
+                    bcc   :bank_2
+
+                    cmp   #_LINES_PER_BANK*3
+                    bcc   :bank_3
+
+                    eor   #$FFFF
+                    adc   #{4*_LINES_PER_BANK} ; carry is set
+                    cmp   :lines_left
+                    bcc   :split_bank_4
+
+                    lda   :virt_line            ; easy, all lines fit in this bank
+                    brl   :patch
+
+:split_bank_4
+                    tax
+                    eor   #$FFFF                ; Subtract from the number of lines remaining
+                    sec
+                    adc   :lines_left
+                    sta   :lines_left
+
+                    lda   :virt_line            ; set the virtual line number.
+                    jsr   :patch                ; call the subroutine
+
+                    lda   #_LINES_PER_BANK
+                    cmp   :lines_left
+                    bcc   :split_bank_4b
+
+                    ldx   :lines_left
+                    lda   #{0*_LINES_PER_BANK}
+                    brl   :patch
+
+:split_bank_4b
+                    tax
+                    lda   #{0*_LINES_PER_BANK}
+                    jsr   :patch
+
+                    sec
+                    lda   :lines_left
+                    sbc   #_LINES_PER_BANK
+                    tax
+                    lda   #{1*_LINES_PER_BANK}
+                    brl   :patch
+
+:bank_1             eor   #$FFFF
+                    adc   #_LINES_PER_BANK+1    ; carry is clear and we want to add +1
+                    cmp   :lines_left
+                    bcc   :split_bank_1
+
+                    lda   :virt_line            ; easy, all lines fit in this bank
+                    brl   :patch
+
+:bank_2             eor   #$FFFF
+                    adc   #{2*_LINES_PER_BANK}+1
+                    cmp   :lines_left
+                    bcc   :split_bank_2
+
+                    lda   :virt_line            ; easy, all lines fit in this bank
+                    brl   :patch
+
+:bank_3             eor   #$FFFF
+                    adc   #{3*_LINES_PER_BANK}+1
+                    cmp   :lines_left
+                    bcc   :split_bank_3
+
+                    lda   :virt_line            ; easy, all lines fit in this bank
+                    brl   :patch
+
+; At this point we know the number of lines_left is more than the space remaining in the bank.  The
+; number of lines that can be drawn is in the accumulator and A > lines_left
+; 
+:split_bank_1
+                    tax                         ; set the number of lines that will be drawn
+
+; Subtract from the number of lines remaining
+
+                    eor   #$FFFF
+                    sec
+                    adc   :lines_left
+                    sta   :lines_left
+
+; Call the worker with A = virtual line, X = number of lines
+
+                    lda   :virt_line            ; set the virtual line number.
+                    jsr   :patch                ; call the subroutine
+
+; Advance to the next bank
+
+                    lda   #_LINES_PER_BANK
+                    cmp   :lines_left
+                    bcc   :split_bank_1b
+
+                    ldx   :lines_left
+                    bra   :patch
+
+:split_bank_1b
+                    ldx   #_LINES_PER_BANK
+                    jsr   :patch
+
+; At this point, we know that this will be the last call.  A 200-line update can span, at most, three 120-line
+; segments
+
+                    sec
+                    lda   :lines_left
+                    sbc   #_LINES_PER_BANK
+                    tax
+                    lda   #{2*_LINES_PER_BANK}
+                    bra   :patch
+
+:split_bank_2
+                    tax
+                    eor   #$FFFF                ; Subtract from the number of lines remaining
+                    sec
+                    adc   :lines_left
+                    sta   :lines_left
+
+                    lda   :virt_line            ; set the virtual line number.
+                    jsr   :patch                ; call the subroutine
+
+                    lda   #_LINES_PER_BANK
+                    cmp   :lines_left
+                    bcc   :split_bank_2b
+
+                    ldx   :lines_left
+                    lda   #{2*_LINES_PER_BANK}
+                    bra   :patch
+
+:split_bank_2b
+                    tax
+                    lda   #{2*_LINES_PER_BANK}
+                    jsr   :patch
+
+                    sec
+                    lda   :lines_left
+                    sbc   #_LINES_PER_BANK
+                    tax
+                    lda   #{3*_LINES_PER_BANK}
+                    bra   :patch
+
+:split_bank_3
+                    tax
+                    eor   #$FFFF                ; Subtract from the number of lines remaining
+                    sec
+                    adc   :lines_left
+                    sta   :lines_left
+
+                    lda   :virt_line            ; set the virtual line number.
+                    jsr   :patch                ; call the subroutine
+
+                    lda   #_LINES_PER_BANK
+                    cmp   :lines_left
+                    bcc   :split_bank_3b
+
+                    ldx   :lines_left
+                    lda   #{3*_LINES_PER_BANK}
+                    bra   :patch
+
+:split_bank_3b
+                    tax
+                    lda   #{3*_LINES_PER_BANK}
+                    jsr   :patch
+
+                    sec
+                    lda   :lines_left
+                    sbc   #_LINES_PER_BANK
+                    tax
+                    lda   #{0*_LINES_PER_BANK}
+                    bra   :patch
+
+:patch              jmp   $0000
+
+
 ; Subroutines that deal with the horizontal scrolling in the blitter. These functions
 ; take in account the visible playfield and update the PEA fields in the two banks to
 ; set up the entry and exit points.
@@ -117,7 +316,7 @@ _RestoreBG0OpcodesAltLite
 :exit_offset        equ   tmp4
                     sty   :exit_offset
                     ldy   #_RestoreBG0OpcodesCallback
-                    jmp   _Apply
+                    jmp   _ApplyVertMirroring
 
 ; This will get called with A, X set and guaranteed to be within a contiguous range
 ; of the blitter code.  This allows the data bank to be set once and then all of the
@@ -452,10 +651,10 @@ _ApplyBG0XPosAltLite
                     lda   :exit_offset                ; This is the return value
                     rts
 
-; Odd case if very close to the even case, except that the code is entered a word later.  It is still
+; Odd case is very close to the even case, except that the code is entered a word later.  It is still
 ; exited at the same word.  There is extra work done because we have to save the third byte of the 
 ; exit location to fill in the left edge and we have to patch a different BRL to enter the code field
-; afte the right-edge byte is pushed onto the screen 
+; after the right-edge byte is pushed onto the screen 
 :odd_case
                     dec
                     tax
@@ -622,8 +821,8 @@ CopyXToYPrep        mac
                     <<<
 ]line               equ   119                     ; A maximum of 120 lines per bank (2 x 120 = 240)
                     lup   120
-                    lda:  {]line*_LINE_SIZE},x
-                    sta:  {]line*_LINE_SIZE},y
+                    lda:  {]line*_LINE_SIZE_V},x
+                    sta:  {]line*_LINE_SIZE_V},y
 ]line               equ   ]line-1
                     --^
 x2y_bottom          rts
@@ -639,7 +838,7 @@ LiteSetConstPrep    mac
 
 ]line               equ   119                     ; A maximum of 120 lines per bank (2 x 120 = 240)
                     lup   120
-                    sta:  {]line*_LINE_SIZE},y
+                    sta:  {]line*_LINE_SIZE_V},y
 ]line               equ   ]line-1
                     --^
 lsc_bottom          rts

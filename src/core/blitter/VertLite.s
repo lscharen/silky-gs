@@ -122,9 +122,10 @@ _ApplyBG0YPosAltLite
 ]line                equ   119
                      lup   120
                      ldal  RTable+{]line*2},x
-                     sta   {]line*_LINE_SIZE},y
+                     sta   {]line*_LINE_SIZE_V},y
 ]line                equ   ]line-1
                      --^
 :bottom
-                     plb
+copyr_bottom
+;                     plb
                      rts

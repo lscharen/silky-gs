@@ -65,8 +65,11 @@ PPUStartUp
         lda   SpriteBank0+1             ; Patch some dispatch addresses with the sprite compilation bank
         sta   csd+2
 
-;        jsr   _InitPPUTileMappingVert       ; Set up the lookup tables in the PPU shadow RAM
+        DO    NAMETABLE_MIRRORING&HORIZONTAL_MIRRORING
         jsr   _InitPPUTileMappingHorz       ; Set up the lookup tables in the PPU shadow RAM
+        ELSE
+        jsr   _InitPPUTileMappingVert       ; Set up the lookup tables in the PPU shadow RAM
+        FIN
 
         lda   #$FFFF                    ; Set initial palette values to out-of-range values
         ldx   #0
@@ -82,7 +85,34 @@ PPUStartUp
 
 ; Set up the lookup table to map the PPU Nametable tiles to the PEA field.
 ;
-; The mapping vary depending on whether horizontal or vertical mirroring is set up.
+; The mapping varies depending on whether horizontal or vertical mirroring is set up.  Since this
+; is core to the PPU emulation, some extra explanation.
+;
+; The PPU only has 2kb of RAM, which has to cover 4kb of address space ($2000 - $2FFF). The solution
+; in the NES is to mirror hald of the address space either "vertically" or "horizontally".  This
+; terminology comes from the fact that the 4kb address space is accessed by the PPU as a 2x2 grid
+;
+; +-----+-----+
+; |  A  |  B  |
+; +-----+-----+
+; |  C  |  D  |
+; +-----+-----+
+;
+; When horizontal mirroring is enabled, the left column (A+C) refrence the same RAM as the right columns (B+D),
+; so [$2000,$23FF] === [$2400,$27FF] and [$2800,$2BFF] === [$2C00,$2FFF]
+;
+; Vertical mirroring is similar, except that it is the rows that are paired, so (A+B) references the same RAM
+; as (C+D)
+;
+; This impacts the emulation layer is two ways.  First, we do not have a 2kb shadow RAM for the PPU.  Instead,
+; the PEA field that draws the graphics has two nametable's work of memory and is reconfigured based on the
+; mirroring, so when a PPU address is written, it need to be mapping into the appropriate PEA table location.
+; Second, the runtime maintains several shadow RAM areas that cover the full 4kb of memory to make it fast to
+; look up data
+;
+; HMIRROR_ADDR = PPU_ADDR & $FBFF
+; VMIRROR_ADDR = PPU_ADDR & $FDFF
+
 _InitPPUTileMappingHorz
 :row     equ  tmp3
 :col     equ  tmp4
@@ -149,7 +179,10 @@ _InitPPUTileMappingHorz
         tax                          ; Use this for a lookup
         clc
         lda  BTableLow,y             ; Load the base address of the PEA row
-        adc  Col2CodeOffset+2,x      ; Combine with the current column (get the left half of the tile)
+
+        and  #$FF00                  ; Just keep the page
+        ora  Col2PageOffset+2,x
+;        adc  Col2CodeOffset+2,x      ; Combine with the current column (get the left half of the tile)
         ldx  :ppuaddr
 
         sep  #$20                         ; Switch to 8-bit mode to store the values
@@ -271,18 +304,18 @@ ForceMetatileRefresh
 
         jsr  :do_metatile
         lda  3,s
-        inc
-        inc
+        clc
+        adc  #$0002
         tax
         jsr  :do_metatile
         lda  3,s
         clc
-        adc  #64
+        adc  #$0040
         tax
         jsr  :do_metatile
         lda  3,s
         clc
-        adc  #66
+        adc  #$0042
         tax
         jsr  :do_metatile
 
@@ -297,7 +330,7 @@ ForceMetatileRefresh
 
 :do_metatile
         sep  #$20
-        ldal PPU_MEM+ATTR_SHADOW+$00,x
+        ldal PPU_MEM+ATTR_SHADOW,x
         jsr  RefreshMetatile
         rep  #$20
         rts
@@ -502,6 +535,9 @@ _DrawPPUTile
         tya
         sep   #$20
         stal  PPU_MEM+TILE_SHADOW,x
+        jsr   DrawPPUTile
+        rep   #$20
+        rts
 
 ; Draw a tile from the PPU into the code field
 ;
@@ -1038,7 +1074,7 @@ PPUADDR_WRITE ENT
 
         ldx  w_bit
         sta  ppuaddr,x
-;        assert_lt #$40;$D0
+
         txa
         eor  #$01
         sta  w_bit
@@ -1058,7 +1094,7 @@ PPUADDR_WRITE ENT
 ;
 ; If reading from the $0000 - $3EFF range, the value from vram_buff is returned and the actual data is loaded
 ; post-fetch.
-PPUDATA_READ ENT
+PPUDATA_READ0 ENT
         php
         phb
         phk
@@ -1068,7 +1104,6 @@ PPUDATA_READ ENT
         rep  #$30       ; do a 16-bit update of the address
         ldx  ppuaddr
         txa
-;        assert_lt #$4000;$d1
 
         clc
         adc  ppuincr
@@ -1091,6 +1126,84 @@ PPUDATA_READ ENT
 
 :out
         sep #$10
+        plx
+        plb
+        plp
+
+        pha
+        pla
+        rtl
+
+PPUDATA_READ ENT
+        php
+        phb
+        phk
+        plb
+        phx
+
+        rep  #$31
+        lda  ppuaddr    ; Load and update the ppu address (guaranteed to be in the range $0000 - $3FFF)
+        tax
+        adc  ppuincr
+        sta  ppuaddr
+
+        cpx  #$3F00     ; If we're reading palette RAM, return the value immediately
+        bcc  :buff_read
+
+        ldal PPU_MEM,x  ; do a 16-bit read, but we'll ignore the top byte
+
+        sep  #$30
+        plx
+        plb
+        plp
+        pha
+        pla
+        rtl
+
+;        ldx  ppuaddr
+;        txa
+;        clc
+;        adc  ppuincr    ; 1 or 32 depending on PPUCTRL, bit 1
+;        and  #$3FFF
+;        sta  ppuaddr
+;        sep  #$20       ; back to 8-bit acc for the read itself
+
+;        cpx  #$3F00     ; check which range of memory we are accessing?
+;        bcc  :buff_read
+
+;        ldal PPU_MEM,x
+;        bra  :out
+
+        mx   %00
+:buff_read
+         cpx  #$2000
+         bcc  :not_in_nt   ; If we are not in the nametable space, just read the PPU memory and return
+
+; apply mirroring
+;
+; HMIRROR_ADDR = PPU_ADDR & $FBFF
+; VMIRROR_ADDR = PPU_ADDR & $FDFF
+
+        DO   NAMETABLE_MIRRORING&HORIZONTAL_MIRRORING
+        txa             ; horizontal mirroring
+        and  #$3BFF     ; 0011_1011_1111_1111 -> $2400 -> $2000
+        tax
+        ELSE
+        txa             ; vertical mirroring
+        and  #$37FF     ; 0011_0111_1111_111 -> $2800 -> $2000
+        tax
+        FIN
+
+:not_in_nt
+        sep  #$20       ; keep index as 16-bit
+        lda  vram_buff  ; read from the buffer
+        pha
+
+        ldal PPU_MEM,x  ; put the data in the buffer for the next read
+        sta  vram_buff
+        pla             ; pop the return value
+
+        sep #$30
         plx
         plb
         plp
@@ -1227,43 +1340,26 @@ PPUDATA_WRITE ENT
         phx
         phy
 
-        rep  #$10
-        ldx  ppuaddr
-
-        cpx  #$2000                   ; Restrict to the valid memory range.  May be able to remove
-        bcc  :hop                     ; these checks if we put PPU memory into its own bank
-        cpx  #$4000
-        bcs  :hop
-
-        ldal PPU_MEM,x                ; Load the old data byte
-        eor  3,s                      ; Compare it to the new data byte
-        beq  :hop                     ; Skip updating the underlying graphics if there is no change (A xor A = 0)
-
-        xba                           ; Stash the XOR in the high byte of the accumulator (for attribute updates)
-        lda  3,s                      ; Reload the original accumulator value
-        stal PPU_MEM,x                ; Update PPU memory (8-bit write)
-
-        cpx  #$3000                   ; Is it within the PPU nametables memory range?
-        bcc  :in_nt
-
-        rep  #$31                     ; Clear the carry, too
-        txa
+        rep  #$31
+        lda  ppuaddr                  ; Load and update the ppu address (guaranteed to be in the range $0000 - $3FFF)
+        tax
         adc  ppuincr
-        and  #$3FFF
-        sta  ppuaddr                  ; Advance to the new ppu address
+        sta  ppuaddr
 
-; Since we've updated some PPU memory, we need to determine what area of memory it is in and
-; take an appropriate action
-;
 ; 1. In the range $2{x}00 to $2{x+3}BF -- this is tile data, so it should be queued for an update
 ; 2. In the range $2{x+3}C0 to $2{x+3}FF -- this is tile attribute data and should be put on a separate queue
 ; 3. In the range $3F00-$3FFF -- this is the palette range and executes a callback function to take a game-specific action
 
+        cpx  #$2000                   ; Assume the tile memory is read-only
+        bcc  :hop
+
+        cpx  #$3000                   ; Is it within the PPU nametables memory range?
+        bcc  :in_nt
+
         cpx  #$3F00                   ; Is it within the PPU palette area?
-        bcc  :hop2                    ; Nope, it's in no-man's land. Nothing to do.
+        bcc  :hop                     ; Nope, it's in no-man's land. Nothing to do.
         brl  :extra                   ; Yep, do the palette updates in a game-specific manner
-:hop    brl  :nochange
-:hop2   brl  :done
+:hop    brl  :done
 
 ; The PPU wrote to some location in the Nametable RAM ($2000 - $2FFF).  Now we need to determine if it
 ; wrote to the nametable tile data area or the tile attribute area.  There are separate queues for each
@@ -1271,13 +1367,24 @@ PPUDATA_WRITE ENT
 ; attribute changes first to avoid having to redraw tiles since the IIgs does not have enough colors
 ; to directly support the palette indexes and has to redraw tiles when their palette assignment changes.
 :in_nt
-        tay                           ; Keep a copy of the value in the Y-register (moves all 16-bits, even in 8-bit acc mode)
+; apply mirroring
+;        txa
+;        DO   NAMETABLE_MIRRORING&HORIZONTAL_MIRRORING
+;        and  #$3BFF     ; 0011_1011_1111_1111 -> $2400 -> $2000
+;        ELSE
+;        and  #$37FF     ; 0011_0111_1111_111 -> $2800 -> $2000
+;        FIN
+;        tax
 
-        rep  #$31                     ; Clear the carry, too
-        txa
-        adc  ppuincr
-        and  #$3FFF
-        sta  ppuaddr                  ; Advance to the new ppu address
+        sep  #$20
+        ldal PPU_MEM,x                ; Load the old data byte
+        eor  3,s                      ; Compare it to the new data byte
+        beq  :hop                     ; Skip updating the underlying graphics if there is no change (A xor A = 0)
+        xba                           ; Stash the XOR in the high byte of the accumulator (for attribute updates)
+        lda  3,s                      ; Reload the original accumulator value
+        stal PPU_MEM,x                ; Update PPU memory (8-bit write)
+        tay                           ; Keep a copy of the value in the Y-register (moves all 16-bits, even in 8-bit acc mode)
+        rep  #$20
 
         txa
         and  #$03C0                   ; Is this in the tile attribute space?
@@ -1289,14 +1396,7 @@ PPUDATA_WRITE ENT
 
 :not_attr
         NTQueuePush
-        bra   :done
-
-:nochange
-        rep  #$31
-        txa
-        adc  ppuincr
-        and  #$3FFF
-        sta  ppuaddr
+;        bra   :done
 
 :done
         sep  #$30
@@ -1307,8 +1407,6 @@ PPUDATA_WRITE ENT
         plp
         rtl
 
-        mx   %00
-
 ; Do some extra work to keep palette data in sync. Because the IIgs palette is not
 ; large enough to accomodate all of the possible on-screen colors (16 colors vs 25 colors),
 ; palette handling is always a per-game issue.
@@ -1318,6 +1416,11 @@ PPUDATA_WRITE ENT
 
         mx   %00
 :extra
+        sep  #$20
+        lda  3,s
+        stal PPU_MEM,x
+        rep  #$20
+
         txa
         and  #$001F
         asl

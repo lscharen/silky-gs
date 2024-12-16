@@ -58,7 +58,7 @@ PPU_BG_TILE_ADDR  equ #$1000
 PPU_SPR_TILE_ADDR equ #$0000
 
 ; What kind of Nametable mirroring for this game
-NAMETABLE_MIRRORING equ VERTICAL_MIRRORING
+NAMETABLE_MIRRORING equ HORIZONTAL_MIRRORING
 
 ; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
 ; in addition to the compiled representation (usually yes, since this is used for the config
@@ -95,10 +95,10 @@ NO_VERTICAL_CLIP  equ 0
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 0
+NO_INTERRUPTS     equ 1
 
 ; Flag to turn off the configuration support
-NO_CONFIG         equ 0
+NO_CONFIG         equ 1
 
 ; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
@@ -152,6 +152,32 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
             jsr   SetDefaultPalette
 
+; Horizontal mirroring, so fill 2000 with a tile and 2800 with a different tile
+
+            ldx   #$2000
+:nt1_loop
+            ldy   #0
+            phx
+            jsr   _DrawPPUTile
+            plx
+            inx
+            cpx   #$23C0
+            bcc  :nt1_loop
+
+; Test the blit
+
+            ldx   #4               ; 4 pixels
+            ldy   #4               ; 4 lines
+            sty   StartYMod240
+            jsr   _BltSetup
+
+            ldx   #0
+            ldy   #200
+            jsr   _BltRangeLite
+
+            jsr   WaitForKey
+            jmp   quit
+
 ; Call the boot code in the ROM
 
             jsr   NES_ColdBoot
@@ -183,7 +209,7 @@ PendingPhase dw   0
 LastPhaseNo dw    0
 
 InitPlayfield
-            ldx   #TitleScreen
+            ldx   #AllColors
             lda   #0
             jsr   NES_SetPalette
             rts
@@ -198,39 +224,44 @@ SwizzleTables
         adrl L0_T0
         adrl L0_T0
 
-PhasePalettes
-        dw    TitleScreen
-        dw    Phase1
-        dw    TitleScreen
-        dw    Phase2
-        dw    Phase3
-        dw    TitleScreen
-        dw    TitleScreen
-        dw    TitleScreen
+;PhasePalettes
+;        dw    TitleScreen
+ ;       dw    Phase1
+ ;       dw    TitleScreen
+ ;       dw    Phase2
+ ;       dw    Phase3
+ ;       dw    TitleScreen
+ ;       dw    TitleScreen
+ ;       dw    TitleScreen
 
-; Are there less than 15 total color combos?
-AllColors   dw     $02,$06,$12,$15,$16,$17,$24,$25,$27,$28,$2C,$30,$36,$37
+; Are there less than 15 total color combos? Yes!
+;                      1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
 ConfScrnPal
-TitleScreen
-             dw    $0F,$2C,$38,$12
-             dw    $27,$30,$24,$25
-             dw    $36,$16,$37,$06
-             dw    $02,$0F,$0F,$0F
+AllColors   dw     $00,$02,$06,$12
+            dw     $15,$16,$17,$24
+            dw     $25,$27,$28,$2C
+            dw     $30,$36,$37,$38
 
-Phase1       dw    $0F,$15,$2C,$12
-             dw    $27,$02,$17,$30
-             dw    $36,$06,$24,$16
-             dw    $37,$0F,$0F,$0F
-
-Phase2       dw    $0F,$15,$2C,$06
-             dw    $30,$27,$16,$36
-             dw    $24,$02,$37,$12
-             dw    $0F,$0F,$0F,$0F
-
-Phase3       dw    $0F,$2C,$27,$02
-             dw    $30,$12,$24,$36
-             dw    $06,$16,$37,$0F
-             dw    $0F,$0F,$0F,$0F
+;TitleScreen
+;             dw    $0F,$2C,$38,$12
+;             dw    $27,$30,$24,$25
+;             dw    $36,$16,$37,$06
+;             dw    $02,$0F,$0F,$0F
+;
+;Phase1       dw    $0F,$15,$2C,$12
+;             dw    $27,$02,$17,$30
+;             dw    $36,$06,$24,$16
+;             dw    $37,$0F,$0F,$0F
+;
+;Phase2       dw    $0F,$15,$2C,$06
+;             dw    $30,$27,$16,$36
+;             dw    $24,$02,$37,$12
+;             dw    $0F,$0F,$0F,$0F
+;
+;Phase3       dw    $0F,$2C,$27,$02
+;             dw    $30,$12,$24,$36
+;             dw    $06,$16,$37,$0F
+;             dw    $0F,$0F,$0F,$0F
 
 ; When the NES ROM code tried to write to the PPU palette space, intercept here.
 PALETTE_DISPATCH
@@ -261,14 +292,14 @@ CheckForPaletteChange
 
         sta  LastPhaseNo
         asl
-        pha
-        tay
+;        pha
+;        tay
+;
+;        ldx  PhasePalettes,y
+;        lda  #0
+;        jsr  NES_SetPalette
 
-        ldx  PhasePalettes,y
-        lda  #0
-        jsr  NES_SetPalette
-
-        pla
+;        pla
         asl
         tay
         ldx  SwizzleTables,y
@@ -276,11 +307,17 @@ CheckForPaletteChange
         jsr  NES_SetPaletteMap
 
         jsr  ForceMetatileRefresh     ; Repaint the scene
+        jsr  RenderScreen
 
         plx
 
 :no_change
         rts
+
+; Palette
+;
+; 0 = background
+; 
 
 ; For this game, we utilize a single, static palette
 SetDefaultPalette

@@ -44,7 +44,8 @@ InitMemory
                stz       SpriteBank0
 
 ; Initialize some memory tables that point to addresses in the blitter code
-               jsr       InitLiteBlitter
+;               jsr       InitLiteBlitter
+               jsr       InitLiteBlitterHorz
                clc
 mem_err
                rts
@@ -53,7 +54,7 @@ mem_err
 ; Set up the data tables for horizontal mirroring
 InitLiteBlitterHorz
                ldx       #0
-               ldy       #lite_base
+               ldy       #lite_base_1
 :loop1a
                tya
                sta       BTableLow,x
@@ -63,7 +64,7 @@ InitLiteBlitterHorz
                adc       #_LINE_SIZE_H
                tay
 
-               lda       #^lite_base
+               lda       #^lite_base_1
                sta       BTableHigh,x
                sta       BTableHigh+{240*2},x
 
@@ -101,17 +102,17 @@ InitLiteBlitter
 ; nametable row
 
                ldx       #0
-               ldy       #lite_base
+               ldy       #lite_base_1
 
 :loop1a
                tya
                sta       BTableLow,x
                sta       BTableLow+{240*2},x
                clc
-               adc       #_LINE_SIZE
+               adc       #_LINE_SIZE_V
                tay
 
-               lda       #^lite_base
+               lda       #^lite_base_1
                sta       BTableHigh,x
                sta       BTableHigh+{240*2},x
 
@@ -126,7 +127,7 @@ InitLiteBlitter
                sta       BTableLow,x
                sta       BTableLow+{240*2},x
                clc
-               adc       #_LINE_SIZE
+               adc       #_LINE_SIZE_V
                tay
 
                lda       #^lite_base_2

@@ -148,22 +148,22 @@ CompileTile
 
 ; data tables for generating code
 :word_addr
-        dw {0*_LINE_SIZE}+$0004            ; reverse interleave to account for the within-tile reverse due to using push instructions
-        dw {0*_LINE_SIZE}+$0001
-        dw {1*_LINE_SIZE}+$0004
-        dw {1*_LINE_SIZE}+$0001
-        dw {2*_LINE_SIZE}+$0004
-        dw {2*_LINE_SIZE}+$0001
-        dw {3*_LINE_SIZE}+$0004
-        dw {3*_LINE_SIZE}+$0001
-        dw {4*_LINE_SIZE}+$0004
-        dw {4*_LINE_SIZE}+$0001
-        dw {5*_LINE_SIZE}+$0004
-        dw {5*_LINE_SIZE}+$0001
-        dw {6*_LINE_SIZE}+$0004
-        dw {6*_LINE_SIZE}+$0001
-        dw {7*_LINE_SIZE}+$0004
-        dw {7*_LINE_SIZE}+$0001
+        dw {0*_LINE_SPAN}+$0004            ; reverse interleave to account for the within-tile reverse due to using push instructions
+        dw {0*_LINE_SPAN}+$0001
+        dw {1*_LINE_SPAN}+$0004
+        dw {1*_LINE_SPAN}+$0001
+        dw {2*_LINE_SPAN}+$0004
+        dw {2*_LINE_SPAN}+$0001
+        dw {3*_LINE_SPAN}+$0004
+        dw {3*_LINE_SPAN}+$0001
+        dw {4*_LINE_SPAN}+$0004
+        dw {4*_LINE_SPAN}+$0001
+        dw {5*_LINE_SPAN}+$0004
+        dw {5*_LINE_SPAN}+$0001
+        dw {6*_LINE_SPAN}+$0004
+        dw {6*_LINE_SPAN}+$0001
+        dw {7*_LINE_SPAN}+$0004
+        dw {7*_LINE_SPAN}+$0001
 
 :bit_mask
         dw $8000,$4000,$2000,$1000,$0800,$0400,$0200,$0100,$0080,$0040,$0020,$0010,$0008,$0004,$0002,$0001
