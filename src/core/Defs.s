@@ -170,7 +170,7 @@ PER_TILE_SIZE equ 3
 ; mirroring mode, the line are independent and span 256 bytes.
 
 _BANK_ENTRY_NT1 equ $0004
-_BANK_ENTRY_NT2 equ $0012
+_BANK_ENTRY_NT2 equ $000C
 
 _INT_OFFSET   equ  $00                   ; page offset for the code to enable interrupt before the line
 _ENTRY_OFFSET equ  $11                   ; page offset for each line of code

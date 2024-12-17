@@ -164,18 +164,41 @@ x_offset      equ 16                      ; number of bytes from the left edge
             cpx   #$23C0
             bcc  :nt1_loop
 
+            ldx   #$2800
+:nt2_loop
+            ldy   #1
+            phx
+            jsr   _DrawPPUTile
+            plx
+            inx
+            cpx   #$2BC0
+            bcc  :nt2_loop
+
 ; Test the blit
 
-            ldx   #4               ; 4 pixels
-            ldy   #4               ; 4 lines
+            ldy   #0             
+:scroll_loop
+            ldx   #0               ; 4 pixels
             sty   StartYMod240
+            phy
             jsr   _BltSetup
+            pha                    ; Save the patch location
 
             ldx   #0
             ldy   #200
             jsr   _BltRangeLite
 
+            ply                    ; offset returned in A, but is passed in Y
+            jsr   _RestoreBG0OpcodesLite
+
+
             jsr   WaitForKey
+            ply
+            iny
+            cpy   #480
+            bcc   :scroll_loop
+
+
             jmp   quit
 
 ; Call the boot code in the ROM

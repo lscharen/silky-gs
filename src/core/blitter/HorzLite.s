@@ -313,22 +313,27 @@ _RestoreBG0OpcodesLite
                     lda   StartYMod240
                     ldx   ScreenHeight
 _RestoreBG0OpcodesAltLite
-:exit_offset        equ   tmp4
+:exit_addr          equ   tmp4                               ; only the botton 8-bits are valid
                     sty   :exit_offset
                     ldy   #_RestoreBG0OpcodesCallback
-                    jmp   _ApplyVertMirroring
+;                    jmp   _ApplyVertMirroring
+                    jmp   _Apply
 
 ; This will get called with A, X set and guaranteed to be within a contiguous range
 ; of the blitter code.  This allows the data bank to be set once and then all of the
 ; bank manipulations done without worrying about changing the bank.
 _RestoreBG0OpcodesCallback
 :draw_count_x2      equ   tmp3
-:exit_offset        equ   tmp4
+:exit_addr          equ   tmp4
+:save_addr          equ   tmp5
 
                     phb
 
-                    asl                              ; 2 x :virt_line
-                    tay                              ; use to load the base address
+                    asl                               ; 2 x :virt_line
+                    tay                               ; use to load the base address
+
+                    lda   #_SAVE_OFFSET-1             ; Fixed location
+                    sta   :save_addr
 
                     txa
                     asl
@@ -341,19 +346,17 @@ _RestoreBG0OpcodesCallback
                     adc   #x2y_bottom
                     sta   :do_restore+1
 
-                    clc
-                    lda   BTableLow,y                ; Get the address of the first code field line
-                    adc   #_LOW_SAVE
-                    tax                              ; address of the save location
-
                     sep   #$20
                     lda   BTableHigh,y               ; BTableHigh has the standard bank in the high word
                     pha                              ; Push two bytes
+
+                    lda   BTableLow+1,y              ; Get the address of the first code field line
+                    sta   :save_addr+1
+                    sta   :exit_addr+1
                     rep   #$21
 
-                    lda   BTableLow,y
-                    adc   :exit_offset               ; Add some offsets to get the base address in the code field line
-                    tay
+                    ldy   :exit_addr
+                    ldx   :save_addr
 
                     plb                              ; Pop one byte to set the bank to the code field
 :do_restore         jsr   $0000                      ; Jump in and copy the saved patch value back into the code field, copy abs,X -> abs,Y

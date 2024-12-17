@@ -113,7 +113,7 @@ PPUStartUp
 ; HMIRROR_ADDR = PPU_ADDR & $FBFF
 ; VMIRROR_ADDR = PPU_ADDR & $FDFF
 
-_InitPPUTileMappingHorz
+_InitPPUTileMappingVert
 :row     equ  tmp3
 :col     equ  tmp4
 :ppuaddr equ  tmp5
@@ -125,12 +125,12 @@ _InitPPUTileMappingHorz
         stz  :col
 
 :loop
-        jsr  :setHorizontalMirror
+        jsr  :setVerticalMirror
 
         lda  :col
         inc
         sta  :col
-        cmp  #64                    ; There are two sets of 32 tiles each in the PEA field
+        cmp  #32                    ; There are two sets of 32 tiles each in the PEA field
         bcc  :loop
 
         stz  :col
@@ -142,7 +142,7 @@ _InitPPUTileMappingHorz
         rts
 
 ; Load the information about the PEA tile at (:col, :row) and store it in the appropriate PPU address location
-:setHorizontalMirror
+:setVerticalMirror
 
 ; First, do some pre-calculations that are the same regardless which nametable we're in
 
@@ -203,10 +203,11 @@ _InitPPUTileMappingHorz
         rep  #$21
         rts
 
-_InitPPUTileMappingVert
+_InitPPUTileMappingHorz
 :row     equ  tmp3
 :col     equ  tmp4
 :ppuaddr equ  tmp5
+:row_idx equ  tmp6
 ; Run through the PEA field block addresses and then map the information to 
 ; the appropriate PPU Nametable locations
 
@@ -214,7 +215,7 @@ _InitPPUTileMappingVert
         stz  :col
 
 :loop
-        jsr  :setVerticalMirror
+        jsr  :setHorizontalMirror
 
         lda  :col
         inc
@@ -232,12 +233,13 @@ _InitPPUTileMappingVert
         rts
 
 ; Load the information about the PEA tile at (:col, :row) and store it in the appropriate PPU address location
-:setVerticalMirror
+:setHorizontalMirror
 
 ; First, do some pre-calculations that are the same regardless which nametable we're in
 
         lda  #$2000
         sta  :ppuaddr                ; Assume first nametable
+        stz  :row_idx
 
         lda  :row                    ; Multiple the row by 32
         cmp  #30
@@ -245,15 +247,21 @@ _InitPPUTileMappingVert
         sbc  #30
         ldy  #$2800                  ; In the bottom nametable
         sty  :ppuaddr
+        ldy  #30*16                  ; Index into the next table
+        sty  :row_idx
 :top
         asl
         asl
         asl
         asl
-        tay                          ; Will use the for lookup later (line = row * 8)
+        tay                          ; Will use the for lookup later (line = row * 8) where row = 0 to 59
         asl
         ora  :ppuaddr                ; Save
         sta  :ppuaddr
+
+        tya
+        adc  :row_idx
+        tay
 
 ; Next, add the column (0 - 31)
 
@@ -265,9 +273,12 @@ _InitPPUTileMappingVert
         asl
         asl
         tax                          ; Use this for a lookup
-        clc
-        lda  BTableLow,y             ; Load the base address of the PEA row
-        adc  Col2CodeOffset+2,x      ; Combine with the current column (get the left half of the tile)
+;        clc
+        lda  BTableLow,y             ; Load the base address of the PEA row (rows 0 - 59)
+
+        and  #$FF00                  ; Just keep the page
+        ora  Col2PageOffset+2,x
+;        adc  Col2CodeOffset+2,x      ; Combine with the current column (get the left half of the tile)
         ldx  :ppuaddr
 
         sep  #$20                         ; Switch to 8-bit mode to store the values

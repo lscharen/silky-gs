@@ -349,9 +349,9 @@ PATCH_VAL         mac
 ; Set up the PEA field for horizontal mirroring.  This creates a virtual 256x480 rendering surface. In
 ; this mode, each page-aligned line is updated
 _InitHorizontalMirroring
-                  lda       #$00FE
+                  lda       #$00FF
                   sta       MirrorMaskX
-                  lda       #$01FE
+                  lda       #$01FF
                   sta       MirrorMaskY
 
                   ldx       #0
@@ -414,9 +414,9 @@ _InitHorizontalMirroring
                   rts
 
 _InitVerticalMirroring
-                  lda       #$01FE
+                  lda       #$01FF
                   sta       MirrorMaskX
-                  lda       #$00FE
+                  lda       #$00FF
                   sta       MirrorMaskY
 
                   ldx       #0

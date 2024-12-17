@@ -264,15 +264,14 @@ _BltSetup
                 lda   NES2Virtual,y       ; Now we have virt_line in the register
                 sta   :virt_start
 
-                ldx   ScreenHeight        ; Need to do this many lines
-                ldy   #_SetupPEAFieldLines
-                jsr   _Apply              ; Handle the interations through the code fields
-
-                lda   :virt_start
                 ldx   ScreenHeight
                 ldy   #_SetupStack
                 jsr   _Apply
 
+                lda   :virt_start
+                ldx   ScreenHeight        ; Need to do this many lines
+                ldy   #_SetupPEAFieldLines
+                jsr   _Apply              ; Handle the interations through the code fields (the accumulator from here is returned)
                 rts
 
 _SetupStack
