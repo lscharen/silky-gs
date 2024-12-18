@@ -353,6 +353,8 @@ _InitHorizontalMirroring
                   sta       MirrorMaskX
                   lda       #$01FF
                   sta       MirrorMaskY
+                  lda       #480
+                  sta       MaxY
 
                   ldx       #0
 :loop1
@@ -418,6 +420,8 @@ _InitVerticalMirroring
                   sta       MirrorMaskX
                   lda       #$00FF
                   sta       MirrorMaskY
+                  lda       #240
+                  sta       MaxY
 
                   ldx       #0
 :loop1

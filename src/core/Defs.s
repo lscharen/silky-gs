@@ -80,6 +80,8 @@ InputPlayer2           equ   120
 
 ShowFPS                equ   126
 YOrigin                equ   128
+
+MaxY                   equ   130          ; Horizontal Mirroring = 480, Vertical Virroring = 240
 ; VideoMode              equ   130
 ; AudioMode              equ   132
 ; BGToggle               equ   134

@@ -176,10 +176,11 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
 ; Test the blit
 
-            ldy   #239
+            ldy   #0
+            ldx   #0
 :scroll_loop
-            ldx   #0               ; 4 pixels
             phy
+            phx
             jsr   NES_SetScroll    ; Setup the scroll origin
 
             jsr   _BltSetup        ; Setup the rendering based on the current origin
@@ -193,10 +194,15 @@ x_offset      equ 16                      ; number of bytes from the left edge
             jsr   _RestoreBG0OpcodesLite
 
 
-            jsr   WaitForKey
+;            jsr   WaitForKey
+            pla
+            inc
+            and   #$1FF
+            tax
+
             ply
             iny
-            cpy   #480
+            cpy   #512
             bcc   :scroll_loop
 
 

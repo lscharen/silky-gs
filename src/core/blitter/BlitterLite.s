@@ -2,8 +2,8 @@
 ; freedom to blit a range of lines.  This subroutine can assume that all of the
 ; data in the code fields is set up properly.
 ;
-; X = first line (inclusive), valid range of 0 to 239
-; Y = last line  (exclusive), valid range >X up to 240
+; X = first line (inclusive), valid range of 0 to 199
+; Y = last line  (exclusive), valid range >X up to 200
 
 ; This should only be called from _Render when it is determined to be safe
                 mx    %00
@@ -49,6 +49,9 @@ _BltRangeLite
                 dey
                 tya                  ; Get the address of the line that we want to return from
                 adc   StartYMod240   ; and create a pointer to it
+                cmp   MaxY           ; There are this many addresses
+                bcc   *+4
+                sbc   MaxY
                 asl
                 tay
                 lda   BTableLow,y    ; The blitter code spans two banks, so need to use long indirect addressing
@@ -57,7 +60,10 @@ _BltRangeLite
 ;                sta   :exit_ptr+2
 
                 txa                  ; get the first line (0 - 239)
-                adc   StartYMod240   ; add in the virtual offset (0, 239) -- max value of 478
+                adc   StartYMod240   ; add in the virtual offset -- max value of 478
+                cmp   MaxY
+                bcc   *+4
+                sbc   MaxY
                 asl
                 tax                  ; this is the offset into the blitter table
 
@@ -94,8 +100,11 @@ _BltRangeLite
                 plb                       ; set bank to PEA fields -- can be removed if we tweak the save/restore
                 php                       ; save the current processor flags
 
-;                sep   #$20                ; run the lite blitter in 8-bit accumulator mode for odd-alignment, 16-bit for even
-                ldy   #0                   ; Y = 0 for even alignment, Y = 1 for odd.
+                sep   #$20                ; run the lite blitter in 8-bit accumulator mode for odd-alignment, 16-bit for even
+                ldy   #1
+
+;                ldy   #0                   ; Y = 0 for even alignment, Y = 1 for odd.
+
 
 ;                lda   :exit_ptr+2         ; set the bank to the code field
 ;                pha
@@ -112,7 +121,7 @@ _BltRangeLite
 blt_entry_lite  jml   lite_base_1         ; Jump into the blitter code $ZZ/YYXX (Does not modify Y or X)
 
 blt_return_lite ENT
-                lda   STATE_REG_R0W0
+                lda   STATE_REG_R0W0      ; This is ok for both 8-bit and 16-bit
                 stal  STATE_REG
                 ldx   STK_SAVE
                 txs                       ; restore the stack
@@ -229,6 +238,8 @@ _BltSetup
 :draw_count_x2 equ tmp9
 :virt_start    equ tmp10
 :rtbl_idx_x2   equ tmp11
+:odd_addr      equ tmp12
+:odd_opcode    equ tmp13
 
                 stz   :rtbl_idx_x2
 
@@ -244,9 +255,7 @@ _BltSetup
 ; number.  The high bit will tell us which page the starting coordinate is on, because the value can only be
 ; >= 128 in vertical mirroring mode when adjacent PEA field lines are used for rendering.
 :blt_even
-;                cmp   #64                 ; set the carry bit if the starting location is in the next nametable
-
-                and   #$007E              ; LSB is already zero, this just zeros out the MSB
+                and   #$007E              ; LSB is already zero, this just zeros out the MSB and converts to words
                 tax                       ; look up the page offset for the left-edge word
                 lda   Col2PageOffset,x    ; this is the offset that control will exit from
                 sta   :exit_addr          ; This will be a 16-bit value later, but put the low byte in for now
@@ -284,15 +293,66 @@ _BltSetup
 
                 lda   :virt_start
                 ldx   ScreenHeight
-                ldy   #_SetupPEAFieldLines
+                ldy   #_SetupPEAFieldLinesEven
+                jsr   _Apply              ; Handle the interations through the code fields (the accumulator from here is returned)
+                rts
+
+; The odd case is very close to the even case, with the following differences
+;
+; 1. The JMP entry instruction is changed to a LDX (but the address is the same as the even case)
+; 2. The odd entry address needs to be set to the work that _follows_ the address in (1)
+; 3. The exit address is exactly the same
+:blt_odd
+                and   #$007E              ; LSB is one, this zeros out the LSB and MSB and converts to words
+                tax
+
+                lda   Col2PageOffset,x    ; Exit at the same word as the even case
+                sta   :exit_addr
+
+                lda   CodeFieldBRA,x      ; This is the instruction that will be patched into
+                sta   :exit_bra           ; each line
+
+; For horizontal mirroring where only a single PEA line is executed, the patched instruction
+; represents both the start and end of the line.  The low byte is the right edge of the screen
+; and the high byte is the left edge.  Therefore, the entry code need to load the data byte from
+; the save space
+
+                lda   #_ENTRY_PATCH       ; Fixed location
+                sta   :entry_addr
+
+                lda   #_SAVE_OFFSET       ; Fixed location
+                sta   :save_addr
+
+                lda   #_ODD_PATCH
+                sta   :odd_addr
+
+                lda   #$00A2+{{_SAVE_OFFSET-1}*256} ; Blitter loads from $0001,x so adjust
+                sta   :opcode
+
+                lda   Col2PageOffset-2,x  ; Jump into the field one word prior to the
+                sta   :odd_opcode
+
+                lda   StartYMod240        ; Load the starting virtual line within the PEA renderer
+                sta   :virt_start
+
+                ldx   ScreenHeight        ; Set up for a full screen
+                ldy   #_SetupStack
+                jsr   _Apply
+
+                lda   :virt_start
+                ldx   ScreenHeight
+                ldy   #_SetupPEAFieldLinesOdd
                 jsr   _Apply              ; Handle the interations through the code fields (the accumulator from here is returned)
                 rts
 
 _SetupStack
-:draw_count_x1  equ tmp9
-:draw_count_x7  equ tmp10
-:rtbl_idx_x2    equ tmp11
-:draw_count_x2  equ tmp12
+:draw_count_x2 equ tmp9
+:virt_start    equ tmp10
+:rtbl_idx_x2   equ tmp11
+:odd_addr      equ tmp12
+:odd_opcode    equ tmp13
+:draw_count_x1 equ tmp14
+:draw_count_x7 equ tmp15
 
                 phb
 
@@ -333,7 +393,7 @@ _SetupStack
                 plb
                 rts
 
-_SetupPEAFieldLines
+_SetupPEAFieldLinesEven
 :exit_addr     equ tmp4
 :exit_bra      equ tmp5
 :opcode        equ tmp6
@@ -399,6 +459,82 @@ _SetupPEAFieldLines
                 lda   :exit_addr          ; Return the calculated exit address to be used for restore
                 rts
 
-; There are a couple of small indexing adjustments to make for an odd-aligned blit, plus one extra patch instruction
-:blt_odd
+
+_SetupPEAFieldLinesOdd
+:exit_addr     equ tmp4
+:exit_bra      equ tmp5
+:opcode        equ tmp6
+:save_addr     equ tmp7
+:entry_addr    equ tmp8
+:draw_count_x2 equ tmp9
+:virt_start    equ tmp10
+:rtbl_idx_x2   equ tmp11
+:odd_addr      equ tmp12
+:odd_opcode    equ tmp13
+
+                phb
+
+                asl                              ; 2 x :virt_line
+                tay                              ; use to load the base address
+
+                txa
+                asl
+                sta   :draw_count_x2              ; this is the number of lines we will do right now
+                asl
+                adc   :draw_count_x2              ; multiple by 6 to calculate the jump offset
+                tax                               ; save for a moment
+
+                eor   #$FFFF
+                sec
+                adc   #x2y_bottom
+                sta   :save_operand+1             ; patch for saving the PEA instruction
+
+                txa
+                lsr
+                eor   #$FFFF
+                sec
+                adc   #lsc_bottom
+                sta   :set_bra+1                  ; patch for inserting the BRA instruction and entry jmp opcode
+                sta   :set_opcode+1
+                sta   :set_odd+1
+
+; Setup all of the copy routines
+
+                sep   #$20
+                lda   BTableHigh,y                ; Get the bank for this range of PEA field lines
+                pha
+
+                lda   BTableLow+1,y               ; Get the just the page of the code field
+                sta   :exit_addr+1
+                sta   :save_addr+1
+                sta   :entry_addr+1
+                sta   :odd_addr+1
+                rep   #$21
+
+; Perform all of the intra-bank copies
+
+                plb                       ; Set the data bank to the target PEA field range
+
+                ldx   :exit_addr          ; This is the 16-bit address where the BRA opcode is patched in (this is off by one word $DC vs $DF)
+                inx                       ; We are saving the PEA operand
+                ldy   :save_addr          ; This is location where the 16-bit PEA operand is saved
+:save_operand   jsr   $0000
+
+                ldy   :entry_addr         ; Set the LDX $xx-- instruction to enter the odd-aligned codepatch
+                lda   :opcode             ; Set the same constant value in every line
+:set_opcode     jsr   $0000
+
+                ldy   :exit_addr          ; Set the BRA instruction in the code field to exit
+                lda   :exit_bra           ; The same constant value is set for all lines
+:set_bra        jsr   $0000
+
+                sep   #$20                ; Only need to set the low byte -- save a few cycles
+                ldy   :odd_addr
+                iny
+                lda   :odd_opcode
+:set_odd        jsr   $0000
+                rep   #$20
+
+                plb                       ; Restore the data bank
+                lda   :exit_addr          ; Return the calculated exit address to be used for restore
                 rts
