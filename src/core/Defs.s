@@ -189,8 +189,8 @@ _ENTRY_ODD  equ  12                      ; $nFD: the brl for the odd entry is a 
 _EXIT_ODD   equ  475                     ; the odd enty point is just 3 bytes of code to load and push the edge byte
 _EXIT_EVEN  equ  478                     ; in the second page of the blitter line
 _LOW_SAVE   equ  {_EXIT_EVEN+4}          ; space to save the code field opcodes is right after the return jmp/jml
-_LINE_SIZE_V equ  512                     ; number of bytes for each blitter line (vertical mirroring)
-_LINE_SIZE_H equ  256                   ; number of bytes for each blitter line (horizontal mirroring)
+_LINE_SIZE_V equ  512                    ; number of bytes for each blitter line (vertical mirroring)
+_LINE_SIZE_H equ  256                    ; number of bytes for each blitter line (horizontal mirroring)
 _LINE_SPAN  equ  512                     ; always 512 bytes between adjacent vertical lines
 _CODE_TOP   equ  21                      ; number of bytes from the base address of each blitter line to the first PEA instruction
 _LINES_PER_BANK equ 120

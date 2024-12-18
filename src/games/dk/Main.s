@@ -176,15 +176,16 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
 ; Test the blit
 
-            ldy   #0             
+            ldy   #239
 :scroll_loop
             ldx   #0               ; 4 pixels
-            sty   StartYMod240
             phy
-            jsr   _BltSetup
+            jsr   NES_SetScroll    ; Setup the scroll origin
+
+            jsr   _BltSetup        ; Setup the rendering based on the current origin
             pha                    ; Save the patch location
 
-            ldx   #0
+            ldx   #0               ; Render the full screen
             ldy   #200
             jsr   _BltRangeLite
 

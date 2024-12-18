@@ -187,6 +187,26 @@ blt_return_lite ENT
 
                 rts
 
+; Helper routine that takes the horizontal and vertical scoll coordinated in the X and Y registers
+; and sets up the appropriate engine values.  
+;
+; The range of values is 0 - 511 for both X and Y.  This routine applies the mirroring masks and
+; adjusts the Y value to map onto the valid range of 0 - 479 renderable lines.
+NES_SetScroll
+                txa
+                and   MirrorMaskX
+                lsr
+                sta   StartXMod256
+
+                tya
+                and   MirrorMaskY
+                asl                       ; Lookup the correct virtual line
+                tay
+                lda   NES2Virtual,y
+                sta   StartYMod240
+
+                rts
+
 ; This is a rewrite of a routing that uses the NES scroll position + mirroring information to calculate
 ; the vertical and horizontal patch information to render the full screen.
 ;
@@ -197,7 +217,7 @@ blt_return_lite ENT
 ;  3. Unified odd/even exit code path (both load and push an extra value)
 ;  4. Entry and exit patching is done separately
 ;     a. This allows both horizontal and vertical mirroring to be handled uniformly
-;     b. All calculations and patching are limited to a single page of memory (supports item (1))
+;     b. All calculations and patches are limited to a single page of memory (supports item (1))
 
 _BltSetup
 ; tmp1 and tmp2 are reserved by the _Apply helper methods
@@ -215,9 +235,7 @@ _BltSetup
 ; Calculate where the horizontal entry and exit points are. The IIgs graphic screen has 2 pixels per byte,
 ; so the effective horizontal resolution is half the NES value.
 
-                txa                       ; Initial range is 0 - 511
-                and   MirrorMaskX         ; This is $01FF for vertical mirroring, $00FF for horizontal mirroring
-                lsr                       ; Convert pixels to bytes
+                lda   StartXMod256        ; This is the value in bytes
                 bit   #$0001              ; Check if the starting byte value is even or odd
                 beq   :blt_even
                 brl   :blt_odd
@@ -257,19 +275,15 @@ _BltSetup
 ; in the PEA field. So, instead the lookup table will map to an appropriate line such that the non-attribute
 ; lines appear correct.
 
-                tya                       ; Possible range is 0 - 511, but valid from 0 - 239 and 256 - 495
-                and   MirrorMaskY         ; This is $00FF for vertical mirroring, $01FF for horizontal
-                asl                       ; Lookup the correct virtual line
-                tay
-                lda   NES2Virtual,y       ; Now we have virt_line in the register
+                lda   StartYMod240        ; Load the starting virtual line within the PEA renderer
                 sta   :virt_start
 
-                ldx   ScreenHeight
+                ldx   ScreenHeight        ; Set up for a full screen
                 ldy   #_SetupStack
                 jsr   _Apply
 
                 lda   :virt_start
-                ldx   ScreenHeight        ; Need to do this many lines
+                ldx   ScreenHeight
                 ldy   #_SetupPEAFieldLines
                 jsr   _Apply              ; Handle the interations through the code fields (the accumulator from here is returned)
                 rts
