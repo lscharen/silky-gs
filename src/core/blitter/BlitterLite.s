@@ -100,9 +100,14 @@ _BltRangeLite
                 plb                       ; set bank to PEA fields -- can be removed if we tweak the save/restore
                 php                       ; save the current processor flags
 
-                sep   #$20                ; run the lite blitter in 8-bit accumulator mode for odd-alignment, 16-bit for even
-                ldy   #1
+                lda   StartXMod256
+                and   #1                  ; this is a 16-bit operation, so high byte is zero
+                beq   :even
+                sep   #$20
+:even           tay
 
+;                sep   #$20                ; run the lite blitter in 8-bit accumulator mode for odd-alignment, 16-bit for even
+;                ldy   #1
 ;                ldy   #0                   ; Y = 0 for even alignment, Y = 1 for odd.
 
 
@@ -214,7 +219,7 @@ NES_SetScroll
                 lda   NES2Virtual,y
  
                 clc
-                adc   #y_offset           ; Shift down by the screen offset
+                adc   #y_offset           ; Shift down by the viewport offset
                 cmp   MaxY
                 bcc   *+4
                 sbc   MaxY
