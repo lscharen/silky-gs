@@ -614,7 +614,7 @@ _UpdateShadowTiles
         ldal PPU_MEM+TILE_ROW,x
         tax                          ; The high byte of A must be zero.  Even though A is 8-bit, the full 16-bit value is copied to X
         lda  #$FF
-        sta  tileBitmap,x
+;        sta  tileBitmap,x
 
         iny                          ; Go to the next queue entry (wish this could be faster...)
         iny
@@ -1379,13 +1379,13 @@ PPUDATA_WRITE ENT
 ; to directly support the palette indexes and has to redraw tiles when their palette assignment changes.
 :in_nt
 ; apply mirroring
-;        txa
-;        DO   NAMETABLE_MIRRORING&HORIZONTAL_MIRRORING
-;        and  #$3BFF     ; 0011_1011_1111_1111 -> $2400 -> $2000
-;        ELSE
-;        and  #$37FF     ; 0011_0111_1111_111 -> $2800 -> $2000
-;        FIN
-;        tax
+        txa
+        DO   NAMETABLE_MIRRORING&HORIZONTAL_MIRRORING
+        and  #$3BFF     ; 0011_1011_1111_1111 -> $2400 -> $2000
+        ELSE
+        and  #$37FF     ; 0011_0111_1111_111 -> $2800 -> $2000
+        FIN
+        tax
 
         sep  #$20
         ldal PPU_MEM,x                ; Load the old data byte

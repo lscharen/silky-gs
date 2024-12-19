@@ -380,9 +380,10 @@ NES_RenderFrame
 ; be overridden for games that want to preserve the ability to switch between
 ; dirty an full rendering, but still have a custom screen layout
 _SetupPEAField
-            jsr   _ApplyBG0YPosPreLite
-            jsr   _ApplyBG0YPosLite
-            jsr   _ApplyBG0XPosLite
+;            jsr   _ApplyBG0YPosPreLite
+;            jsr   _ApplyBG0YPosLite
+;            jsr   _ApplyBG0XPosLite
+            jsr   _BltSetup
             sta   exitOffset              ; cache the :exit_offset value returned from this function
 
             lda   #1
@@ -405,13 +406,23 @@ RenderScreen
             ror                           ; put the high bit and divide by 2 for the engine
             rep   #$20
             and   #$00FF                  ; make sure nothing is in the high byte
-            jsr   _SetBG0XPos
+            asl                           ; Put back into the NES Pixel range
+            tax
+;            jsr   _SetBG0XPos
 
+            sep   #$20
+            lda   _ppuctrl
+            and   #$02
+            cmp   #$02
             lda   _ppuscroll              ; update the y-scroll position
-            clc
-            adc   #y_offset               ; Shift down by the offset
-            and   #$00FF
-            jsr   _SetBG0YPos
+            ror
+            rep   #$20
+            rol
+            and   #$01FF
+            tay
+
+;            jsr   _SetBG0YPos
+            jsr   NES_SetScroll
 
             lda   ppumask                 ; honor the PPU enable flags for sprites and background
             and   ppumask_override
@@ -455,12 +466,13 @@ RenderScreen
 
 ; Set the verical position for this frame
 
-            jsr   _ApplyBG0YPosPreLite
-            jsr   _ApplyBG0YPosLite
+;            jsr   _ApplyBG0YPosPreLite
+;            jsr   _ApplyBG0YPosLite
 
 ; Set the horizontal position for this frame
 
-            jsr   _ApplyBG0XPosLite
+;            jsr   _ApplyBG0XPosLite
+            jsr   _BltSetup
             sta   exitOffset              ; cache the :exit_offset value returned from this function
 
 ; Copy the sprites and buffer to the graphics screen

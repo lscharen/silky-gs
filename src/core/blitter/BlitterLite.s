@@ -212,6 +212,13 @@ NES_SetScroll
                 asl                       ; Lookup the correct virtual line
                 tay
                 lda   NES2Virtual,y
+ 
+                clc
+                adc   #y_offset           ; Shift down by the screen offset
+                cmp   MaxY
+                bcc   *+4
+                sbc   MaxY
+
                 sta   StartYMod240
 
                 rts
