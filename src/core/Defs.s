@@ -174,17 +174,22 @@ PER_TILE_SIZE equ 3
 _BANK_ENTRY_NT1 equ $0004
 _BANK_ENTRY_NT2 equ $000C
 
-_INT_OFFSET   equ  $00                   ; page offset for the code to enable interrupt before the line
-_ENTRY_OFFSET equ  $11                   ; page offset for each line of code
-_ENTRY_PATCH  equ  $15                   ; page offset for the jmp/ldx at the top of the line
-_ODD_PATCH    equ  $1C                   ; page offset for the jmp following the odd-aligned code
-_OUT_OFFSET   equ  $1F                   ; page offset for the top jump that leads to the last word code at $E5
-_PEA_OFFSET   equ  $22                   ; page offset to the first PEA instruction
-_LOOP_OFFSET  equ  $E2                   ; page offset for the jump after the PEA opcodes that continues drawing
-_WORD_OFFSET  equ  $E5                   ; page offset for the code that pushed the final byte/word onto the stack
-_EXIT_OFFSET  equ  $E9                   ; page offset of the jump that goes to the next line
-_SAVE_OFFSET  equ  $EE                   ; page offset to the location where the PEA operand is saved
-
+_INT_OFFSET    equ  $00                   ; page offset for the code to enable interrupt before the line
+_ENTRY_OFFSET  equ  $11                   ; page offset for each line of code
+_ENTRY_PATCH   equ  $15                   ; page offset for the jmp/ldx at the top of the line
+_ODD_PATCH     equ  $1C                   ; page offset for the jmp following the odd-aligned code
+_E_OUT_OFFSET  equ  $1F                   ; page offset for the top jump that leads to the last word code at $E5
+_O_OUT_OFFSET  equ  $22
+_PEA_OFFSET    equ  $25                   ; page offset to the first PEA instruction
+_LOOP_OFFSET   equ  $E5                   ; page offset for the jump after the PEA opcodes that continues drawing
+;_WORD_OFFSET  equ  $E5                   ; page offset for the code that pushes the final byte/word onto the stack
+_E_WORD_OFFSET equ  $E8
+_O_WORD_OFFSET equ  $EF
+_E_EXIT_OFFSET equ  $EB                   ; page offset of the jump that goes to the next line
+_O_EXIT_OFFSET equ  $F3                   ; page offset of the jump that goes to the next line
+_SAVE_OFFSET   equ  $E9                   ; page offset to the location where the PEA operand is saved
+_O_LOAD_HI_OFFSET equ $EF
+_O_LOAD_LO_OFFSET equ $18
 
 _ENTRY_JMP  equ  4                       ; $nF5: the jump (brl, actually) is 4 bytes after the entry byte
 _ENTRY_ODD  equ  12                      ; $nFD: the brl for the odd entry is a bit further in

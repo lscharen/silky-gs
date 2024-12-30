@@ -396,9 +396,7 @@ _ResetPEAField
             ldy   exitOffset              ; offset to patch
             jmp   _RestoreBG0OpcodesLite
 
-; Default render screen implementation.  The user-code can override this and provide their
-; own to improve performance.
-RenderScreen
+_GetPPUScrollX
             sep   #$20
             lda   _ppuctrl                ; Bit 0 is the high bit of the X scroll position
             lsr                           ; put in the carry bit
@@ -408,6 +406,12 @@ RenderScreen
             and   #$00FF                  ; make sure nothing is in the high byte
             asl                           ; Put back into the NES Pixel range
             tax
+            rts
+
+; Default render screen implementation.  The user-code can override this and provide their
+; own to improve performance.
+RenderScreen
+            jsr   _GetPPUScrollX          ; Return in X register
 ;            jsr   _SetBG0XPos
 
             sep   #$20

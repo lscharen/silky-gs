@@ -310,13 +310,22 @@ _ApplyHorzMirroring
 
 _RestoreBG0OpcodesLite
 ;                    ldy   LastPatchOffset
-                    lda   StartYMod240
+                    lda   #0
                     ldx   ScreenHeight
+
 _RestoreBG0OpcodesAltLite
 :exit_addr          equ   tmp4                               ; only the botton 8-bits are valid
-                    sty   :exit_offset
+
+                    sty   :exit_addr
+
+                    clc
+                    adc   StartYMod240        ; Load the starting virtual line within the PEA renderer
+                    cmp   MaxY
+                    bcc   *+4
+                    sbc   MaxY
+
                     ldy   #_RestoreBG0OpcodesCallback
-;                    jmp   _ApplyVertMirroring
+
                     jmp   _Apply
 
 ; This will get called with A, X set and guaranteed to be within a contiguous range
