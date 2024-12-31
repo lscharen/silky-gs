@@ -14,7 +14,7 @@
     "gsport": "%npm_package_config_gsport%",
     "cr": "%npm_package_config_crossrunner%",
     "test": "npm run build-image && %npm_package_config_gsport%",
-    "build": "npm run build:smb && npm run build:bf",
+    "build:all": "npm run build:smb && npm run build:bf && npm run build:wump && npm run build:lo && npm run build:ic && npm run build:eb && npm run build:dk",
     "build:smb": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/games/smb/SMB.s",
     "build:bf": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/games/bf/BF.s",
     "build:wump": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/games/wumpus/Wump.s",

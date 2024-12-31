@@ -92,7 +92,7 @@ NO_VERTICAL_CLIP equ 1
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 1
+NO_INTERRUPTS     equ 0
 
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 0

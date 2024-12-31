@@ -495,7 +495,7 @@ _InitVerticalMirroring
 ;                  PATCH_JMP {_E_EXIT_OFFSET+$100};#{$0200+_ENTRY_OFFSET}  ; Jump to the next line
 ;                  PATCH_JMP {_O_EXIT_OFFSET+$100};#{$0200+_ENTRY_OFFSET}  ; Jump to the next line
 
-                  PATCH_ADDR {_O_LOAD_LO_OFFSET+1};#{_SAVE_OFFSET+0}      ; All saved data is in the first page
+                  PATCH_ADDR {_O_LOAD_LO_OFFSET+1};#{$100+_O_SAVE_EDGE}      ; All saved data is in the first page
                   PATCH_ADDR {_O_LOAD_HI_OFFSET+1};#{_SAVE_OFFSET+1}
 ;                  PATCH_ADDR {_O_LOAD_LO_OFFSET+$101};#{_SAVE_OFFSET+0}
 ;                  PATCH_ADDR {_O_LOAD_HI_OFFSET+$101};#{_SAVE_OFFSET+1}

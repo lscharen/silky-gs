@@ -191,6 +191,8 @@ _SAVE_OFFSET   equ  $E9                   ; page offset to the location where th
 _O_LOAD_HI_OFFSET equ $EF
 _O_LOAD_LO_OFFSET equ $18
 
+_O_SAVE_EDGE   equ  $F7                  ; Empty byte to stash data in the second page for odd rendering
+
 _ENTRY_JMP  equ  4                       ; $nF5: the jump (brl, actually) is 4 bytes after the entry byte
 _ENTRY_ODD  equ  12                      ; $nFD: the brl for the odd entry is a bit further in
 _EXIT_ODD   equ  475                     ; the odd enty point is just 3 bytes of code to load and push the edge byte

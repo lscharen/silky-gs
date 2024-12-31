@@ -245,6 +245,7 @@ _BltSetupAlt
 :rtbl_idx_x2   equ tmp11
 :odd_addr      equ tmp12
 :odd_opcode    equ tmp13
+:last_addr     equ tmp15
 
 ; A = first virtual line
 ; X = number of lines
@@ -263,7 +264,7 @@ _BltSetupAlt
                 stx   :num_lines
                 tya                       ; Put the offset in the accumulator
 
-                and   #$FFFE ; force even only...
+;                and   #$FFFE ; force even only...
 
 ; Calculate where the horizontal entry and exit points are. The IIgs graphic screen has 2 pixels per byte,
 ; so the effective horizontal resolution is half the NES value.
@@ -353,8 +354,18 @@ _BltSetupAlt
                 adc   #_PEA_OFFSET
                 sta   :exit_addr
 
+                lda   Col2CodeOffset+{64*2},x  ; This is the word immediately following the left-most full word
+                adc   #_PEA_OFFSET+1       ; and need to have its high byte pushed onto the stack
+                sta   :last_addr
+
                 lda   CodeFieldOddBRA,x   ; This is the instruction that will be patched into
                 sta   :exit_bra           ; each line
+
+                stz   :opcode              ; First BRL continues execution
+
+                lda   Col2CodeOffset+{63*2},x  ; The entry point is always 63 words later
+                adc   #{_PEA_OFFSET-_ODD_PATCH-3}
+                sta   :odd_opcode         ; Convert to a relative branch
 
 ; For horizontal mirroring where only a single PEA line is executed, the patched instruction
 ; represents both the start and end of the line.  The low byte is the right edge of the screen
@@ -369,13 +380,6 @@ _BltSetupAlt
 
                 lda   #_ODD_PATCH+1
                 sta   :odd_addr
-
-                stz   :opcode              ; First BRL continues execution
-
-                lda   Col2CodeOffset+{63*2},x  ; The entry point is always 63 words later
-                clc
-                adc   #{_PEA_OFFSET-_ODD_PATCH-3}
-                sta   :odd_opcode         ; Convert to a relative branch
 
                 lda   :virt_start
                 ldx   :num_lines          ; Set up for a full screen
@@ -490,12 +494,9 @@ _SetupPEAFieldLinesEven
 
                 plb                       ; Set the data bank to the target PEA field range
 
-;                ldx   :exit_addr          ; This is the 16-bit address where the first BRA opcode is patched in
                 inx                       ; We are saving the PEA operand
-;                ldy   :save_addr          ; This is location where the 16-bit PEA operand is saved
 :save_operand   jsr   $0000
 
-;                ldy   :exit_addr          ; Set the BRA instruction in the code field to exit
                 txy
                 dey
                 lda   :exit_bra           ; The same constant value is set for all lines
@@ -525,6 +526,7 @@ _SetupPEAFieldLinesOdd
 :rtbl_idx_x2   equ tmp11
 :odd_addr      equ tmp12
 :odd_opcode    equ tmp13
+:btable_low    equ tmp14
 
                 phb
 
@@ -538,6 +540,20 @@ _SetupPEAFieldLinesOdd
                 adc   :draw_count_x2              ; multiple by 6 to calculate the jump offset
                 tax                               ; save for a moment
 
+; For the odd case, the saving is a bit different depending on the mirroring
+; mode.  For horizontal mirroring, the entry and exit points are the same, so
+; the saved PEA data is used for both the left and right edges.
+;
+; For vertical mirroring, the left and right edges come from differnt PEA
+; operands, so we take different actions depending on mirroring.
+
+                lda   MirrorMaskX
+                bit   #$0100
+                bne   :virt_mirroring
+
+; Horizontal mirroring
+
+                txa
                 eor   #$FFFF
                 sec
                 adc   #x2y_bottom
@@ -557,34 +573,118 @@ _SetupPEAFieldLinesOdd
                 sep   #$20
                 lda   BTableHigh,y                ; Get the bank for this range of PEA field lines
                 pha
-
-                lda   BTableLow+1,y               ; Get the just the page of the code field
-                sta   :exit_addr+1
-                sta   :save_addr+1
-                sta   :entry_addr+1
-                sta   :odd_addr+1
                 rep   #$21
 
-; Perform all of the intra-bank copies
+                lda   BTableLow,y                 ; Get the just the page of the code field
+                and   #$FF00                      ; Only need the page
+                sta   :btable_low
+                adc   :exit_addr
+                tax
 
-                plb                       ; Set the data bank to the target PEA field range
+                plb                               ; Everything uses direct page from this point
 
-                ldx   :exit_addr          ; This is the 16-bit address where the BRA opcode is patched in (this is off by one word $DC vs $DF)
+                lda   :save_addr
+                adc   :btable_low
+                tay
+
                 inx                       ; We are saving the PEA operand
-                ldy   :save_addr          ; This is location where the 16-bit PEA operand is saved
 :save_operand   jsr   $0000
 
-                ldy   :entry_addr         ; Set the BRL operand to zero to enter the odd-aligned code path
-                lda   :opcode             ; Set the same constant value in every line
-:set_opcode     jsr   $0000
-
-                ldy   :exit_addr          ; Set the BRA instruction in the code field to exit
+;                ldy   :exit_addr          ; Set the BRA instruction in the code field to exit
+                txy
+                dey
                 lda   :exit_bra           ; The same constant value is set for all lines
 :set_bra        jsr   $0000
 
-                ldy   :odd_addr
+                lda   :entry_addr
+                adc   :btable_low
+                tay
+;                ldy   :entry_addr         ; Set the BRL operand to zero to enter the odd-aligned code path
+                lda   :opcode             ; Set the same constant value in every line
+:set_opcode     jsr   $0000
+
+
+                lda   :odd_addr
+                adc   :btable_low
+                tay
+;                ldy   :odd_addr
                 lda   :odd_opcode         ; Set the BRL operand to jump into the PEA field
 :set_odd        jsr   $0000
+
+                plb                       ; Restore the data bank
+                lda   :exit_addr          ; Return the calculated exit address to be used for restore
+                rts
+
+:virt_mirroring
+
+                txa
+                eor   #$FFFF
+                sec
+                adc   #x2y_bottom
+                sta   :save_operand_lo+1             ; patch for saving the PEA instruction
+                sta   :save_operand_hi+1
+
+                txa
+                lsr
+                eor   #$FFFF
+                sec
+                adc   #lsc_bottom
+                sta   :set_bra_v+1                  ; patch for inserting the BRA instruction and entry jmp opcode
+                sta   :set_opcode_v+1
+                sta   :set_odd_v+1
+
+                sep   #$20
+                lda   BTableHigh,y                ; Get the bank for this range of PEA field lines
+                pha
+                rep   #$21
+
+                lda   BTableLow,y                 ; Get the just the page of the code field
+                and   #$FF00                      ; Only need the page
+                sta   :btable_low
+
+                plb                               ; Everything uses direct page from this point
+
+; First, copy from the right edge into the low save byte in the second page
+
+                lda   :last_addr
+                adc   :btable_low
+                tax
+                lda   :btable_low
+                adc   #$100+_O_SAVE_EDGE
+                tay
+                sep   #$20
+:save_operand_lo jsr   $0000
+                rep   #$20
+
+; Next copy from the left edge into the high save byte (and save the low to restore later)
+
+                lda   :exit_addr
+                adc   :btable_low
+                tax
+                inx
+                lda   :save_addr
+                adc   :btable_low
+                tay
+:save_operand_hi jsr   $0000
+
+;                ldy   :exit_addr          ; Set the BRA instruction in the code field to exit
+                txy
+                dey
+                lda   :exit_bra           ; The same constant value is set for all lines
+:set_bra_v      jsr   $0000
+
+                lda   :entry_addr
+                adc   :btable_low
+                tay
+                lda   :opcode             ; Set the same constant value in every line
+:set_opcode_v   jsr   $0000
+
+
+                lda   :odd_addr
+                adc   :btable_low
+                tay
+                lda   :odd_opcode         ; Set the BRL operand to jump into the PEA field
+:set_odd_v      jsr   $0000
 
                 plb                       ; Restore the data bank
                 lda   :exit_addr          ; Return the calculated exit address to be used for restore

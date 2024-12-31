@@ -77,7 +77,7 @@ ROM_DRIVER_MODE   equ 1
 ;
 ; 0  = use OAM DMA
 ; >0 = read $100 bytes directly from NES RAM at this address (typically $200)
-DIRECT_OAM_READ   equ 1
+DIRECT_OAM_READ   equ $0200
 
 ; Define a range of OAM entries to scan.  Many games do not use all 64
 ; sprite slots, so we can avoid doing unecessary work by only scanning
@@ -96,7 +96,7 @@ NO_VERTICAL_CLIP  equ 0
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 1
+NO_INTERRUPTS     equ 0
 
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 0
@@ -245,7 +245,8 @@ _RenderScreen
             ror                           ; put the high bit and divide by 2 for the engine
             rep   #$20
             and   #$00FF                  ; make sure nothing is in the high byte
-            jsr   _SetBG0XPos
+            tax
+            jsr   NES_SetScrollX
 
             sep   #$20
             ldal  $01004E                ; Bit 0 is the high bit of the X scroll position
@@ -256,8 +257,8 @@ _RenderScreen
             and   #$00FF                  ; make sure nothing is in the high byte
             sta   _top_bg_x
 
-            lda   #y_offset
-            jsr   _SetBG0YPos
+            tay
+            jsr   NES_SetScrollY
 
             lda   ppumask
             and   ppumask_override
@@ -269,39 +270,28 @@ _RenderScreen
             and   #NES_PPUMASK_SPR
             jsr   EnableSprites
 
-; Lock in the verical position
-
-            jsr   _ApplyBG0YPosPreLite
-            jsr   _ApplyBG0YPosLite       ; Set up the code field
-
 ; First, render the crowd (40 scanlines)
 
-            lda   #{y_offset*2}
-            sta   tmp1                ; virt_line_x2
-            lda   #40*2
-            sta   tmp2                ; lines_left_x2
-            lda   _top_bg_x           ; Xmod256
-            jsr   _ApplyBG0XPosAltLite
+            lda   #0
+            ldx   #40
+            ldy   _top_bg_x           ; Xmod256
+            jsr   _BltSetupAlt
             sta   nesCrowdOffset
 
 ; Next render top part of the screen to move with the player
 
-            lda   #{y_offset+40}*2
-            sta   tmp1                ; virt_line_x2
-            lda   #{200-32-40}*2
-            sta   tmp2                ; lines_left_x2
-            lda   StartX              ; Xmod256
-            jsr   _ApplyBG0XPosAltLite
+            lda   #40
+            ldx   #{200-32-40}
+            lda   StartXMod256              ; Xmod256
+            jsr   _BltSetupAlt
             sta   nesTopOffset
 
 ; Now render the bottom 32 lines to show the status bar area
 
-            lda   #{y_offset+200-32}*2
-            sta   tmp1                    ; virt_line_x2
-            lda   #{32*2}
-            sta   tmp2                    ; lines_left_x2
-            lda   #0                      ; Xmod256
-            jsr   _ApplyBG0XPosAltLite
+            lda   #200-32
+            ldx   #32
+            ldy   #0                         ; Xmod256
+            jsr   _BltSetupAlt
             sta   nesBottomOffset            ; cache the :exit_offset value returned from this function
 
 ; Copy the sprites and buffer to the graphics screen
@@ -310,18 +300,18 @@ _RenderScreen
 
 ; Restore the buffer
 
-            lda   #y_offset               ; virt_line
-            ldx   #40                     ; lines_left
+            lda   #0
+            ldx   #40
             ldy   nesCrowdOffset          ; offset to patch
             jsr   _RestoreBG0OpcodesAltLite
 
-            lda   #y_offset+40            ; virt_line
-            ldx   #{200-32-40}            ; lines_left
+            lda   #40
+            ldx   #{200-32-40}
             ldy   nesTopOffset            ; offset to patch
             jsr   _RestoreBG0OpcodesAltLite
 
-            lda   #{y_offset+200-32}      ; virt_line
-            ldx   #32                     ; lines_left
+            lda   #200-32
+            ldx   #32
             ldy   nesBottomOffset         ; offset to patch
             jsr   _RestoreBG0OpcodesAltLite
 
