@@ -86,7 +86,7 @@ OAM_END_INDEX     equ 64
 
 ; Allow the engine to use dirty rendering (drawing only lines where sprites
 ; have changed) if the background did not scroll compared to the previous frame
-ENABLE_DIRTY_RENDERING equ 1
+ENABLE_DIRTY_RENDERING equ 0
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
@@ -95,10 +95,10 @@ NO_VERTICAL_CLIP  equ 0
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 0
+NO_INTERRUPTS     equ 1
 
 ; Flag to turn off the configuration support
-NO_CONFIG         equ 0
+NO_CONFIG         equ 1
 
 ; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to

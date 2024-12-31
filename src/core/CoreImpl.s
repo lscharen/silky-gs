@@ -369,6 +369,18 @@ _InitHorizontalMirroring
                   lda       #480
                   sta       MaxY
 
+; Adjust lookup tables
+
+                  ldx       #126
+:loop0
+                  lda       Col2CodeOffset,x
+                  sta       Col2CodeOffset+128,x                  ; For horizontal mirroring, offsets 64 - 127 are the same as 0 - 63
+                  dex
+                  dex
+                  bpl       :loop0
+
+; Update the flow control in the PEA fields
+
                   ldx       #0
 :loop1
                   PATCH_JMP _LOOP_OFFSET;#_PEA_OFFSET             ; Jump around to the beginning of the line
@@ -376,6 +388,9 @@ _InitHorizontalMirroring
                   PATCH_JMP _O_OUT_OFFSET;#_O_WORD_OFFSET         ; Jump to the code to push the last byte for an odd blit
                   PATCH_JMP _E_EXIT_OFFSET;#{$0200+_ENTRY_OFFSET} ; Jump to the next line
                   PATCH_JMP _O_EXIT_OFFSET;#{$0200+_ENTRY_OFFSET} ; Jump to the next line
+
+                  PATCH_VAL {_E_WORD_OFFSET};#$00F4               ; PEA opcode (value is filled in by blitter)
+                  PATCH_VAL {_O_WORD_OFFSET};#$00AD               ; LDA abs opcode (addess filled in by _O_LOAD_HI_OFFSET)
                   PATCH_ADDR {_O_LOAD_LO_OFFSET+1};#{_SAVE_OFFSET+0}
                   PATCH_ADDR {_O_LOAD_HI_OFFSET+1};#{_SAVE_OFFSET+1}
 
@@ -437,6 +452,8 @@ _InitHorizontalMirroring
 
                   rts
 
+; Setting up for vertical mirroring is slightly different than horizontal mirroring to guarantee that the entry point
+; of each line corresponds to the first nametable. This creates a virtual 512x240 rendering surface.
 _InitVerticalMirroring
                   lda       #$01FF
                   sta       MirrorMaskX
@@ -445,18 +462,43 @@ _InitVerticalMirroring
                   lda       #240
                   sta       MaxY
 
+; Adjust lookup tables
+
+                  ldx       #126
+:loop0
+                  lda       Col2CodeOffset,x
+                  ora       #$0100
+                  sta       Col2CodeOffset+128,x                  ; For horizontal mirroring, offsets 64 - 127 are +$100 as 0 - 63
+                  dex
+                  dex
+                  bpl       :loop0
+
+; Update the flow control in the PEA fields
+
                   ldx       #0
 :loop1
-                  PATCH_JMP _ENTRY_PATCH;#_PEA_OFFSET           ; The jump always enters this page
-                  PATCH_JMP _ODD_PATCH;#_PEA_OFFSET             ; ditto
+                  PATCH_JMP _LOOP_OFFSET;#{_PEA_OFFSET+$100}              ; Loop around a double-width line
+                  PATCH_JMP {_LOOP_OFFSET+$100};#_PEA_OFFSET
 
-;                  PATCH_JMP _OUT_OFFSET;#_WORD_OFFSET           ; Jump to the exit point of this line
-                  PATCH_JMP _LOOP_OFFSET;#$100+_PEA_OFFSET      ; Jump to the beginning of the next line
+                  PATCH_JMP _E_OUT_OFFSET;#_E_WORD_OFFSET                 ; All exit points jump to code in the first page
+                  PATCH_JMP _O_OUT_OFFSET;#_O_WORD_OFFSET
+                  PATCH_JMP {_E_OUT_OFFSET+$100};#_E_WORD_OFFSET
+                  PATCH_JMP {_O_OUT_OFFSET+$100};#_O_WORD_OFFSET
 
-; Both exit addresses go to the first line of the next pair
+                  PATCH_VAL {_E_WORD_OFFSET+$100};#$004C                  ; JMP opcode (in second page to unify exit code)
+                  PATCH_VAL {_O_WORD_OFFSET+$100};#$004C
+                  PATCH_JMP {_E_WORD_OFFSET+$100};#_E_WORD_OFFSET
+                  PATCH_JMP {_O_WORD_OFFSET+$100};#_O_WORD_OFFSET
 
-;                  PATCH_JMP {$000+_EXIT_OFFSET};#{$0200+_ENTRY_OFFSET} ; Jump to the next line
-;                  PATCH_JMP {$100+_EXIT_OFFSET};#{$0200+_ENTRY_OFFSET} ; Jump to the next line
+                  PATCH_JMP _E_EXIT_OFFSET;#{$0200+_ENTRY_OFFSET}         ; Jump to the next line
+                  PATCH_JMP _O_EXIT_OFFSET;#{$0200+_ENTRY_OFFSET}
+;                  PATCH_JMP {_E_EXIT_OFFSET+$100};#{$0200+_ENTRY_OFFSET}  ; Jump to the next line
+;                  PATCH_JMP {_O_EXIT_OFFSET+$100};#{$0200+_ENTRY_OFFSET}  ; Jump to the next line
+
+                  PATCH_ADDR {_O_LOAD_LO_OFFSET+1};#{_SAVE_OFFSET+0}      ; All saved data is in the first page
+                  PATCH_ADDR {_O_LOAD_HI_OFFSET+1};#{_SAVE_OFFSET+1}
+;                  PATCH_ADDR {_O_LOAD_LO_OFFSET+$101};#{_SAVE_OFFSET+0}
+;                  PATCH_ADDR {_O_LOAD_HI_OFFSET+$101};#{_SAVE_OFFSET+1}
 
                   txa
                   clc
@@ -477,18 +519,21 @@ _InitVerticalMirroring
 ; Execution order is A -> B -> A, C -> D -> C
 
                   ldx       #{238*256}
-;                  PATCH_VAL _EXIT_OFFSET;#$005C                           ; JML opcode (in both nametables)
-;                  PATCH_VAL _EXIT_OFFSET+$100;#$005C                           ; JML opcode (in both nametables)
+                  PATCH_VAL _E_EXIT_OFFSET;#$005C                           ; JML opcode (in both nametables)
+                  PATCH_VAL _E_EXIT_OFFSET+$100;#$005C                           ; JML opcode (in both nametables)
+                  PATCH_VAL _O_EXIT_OFFSET;#$005C                           ; JML opcode (in both nametables)
+                  PATCH_VAL _O_EXIT_OFFSET+$100;#$005C                           ; JML opcode (in both nametables)
                   
                   lda       #_BANK_ENTRY_NT1
-;                  stal      lite_start_page_1+_EXIT_OFFSET+1,x       ; A -> B
-                  lda       #_BANK_ENTRY_NT2
-;                  stal      lite_start_page_1+_EXIT_OFFSET+$0100+1,x ; C -> D
+                  stal      lite_start_page_1+_E_EXIT_OFFSET+1,x       ; A -> B
+                  stal      lite_start_page_1+_O_EXIT_OFFSET+1,x       ; A -> B
+                  stal      lite_start_page_1+_E_EXIT_OFFSET+$0100+1,x ; C -> D
+                  stal      lite_start_page_1+_O_EXIT_OFFSET+$0100+1,x ; C -> D
 
-                  lda       #_BANK_ENTRY_NT1
-;                  stal      lite_start_page_2+_EXIT_OFFSET+1,x       ; B -> A
-                  lda       #_BANK_ENTRY_NT2
-;                  stal      lite_start_page_2+_EXIT_OFFSET+$0100+1,x ; D -> C
+                  stal      lite_start_page_2+_E_EXIT_OFFSET+1,x       ; A -> B
+                  stal      lite_start_page_2+_O_EXIT_OFFSET+1,x       ; A -> B
+                  stal      lite_start_page_2+_E_EXIT_OFFSET+$0100+1,x ; C -> D
+                  stal      lite_start_page_2+_O_EXIT_OFFSET+$0100+1,x ; C -> D
 
 ; Enable the interrupt code on every 16th line
 
@@ -497,8 +542,10 @@ _InitVerticalMirroring
                   sta       tmp15
 
 :loop2
-;                  PATCH_JMP {$000+_EXIT_OFFSET};#{$0200+_INT_OFFSET}      ; Jump to the interrupt enable code (left nametable)
-;                  PATCH_JMP {$100+_EXIT_OFFSET};#{$0200+_INT_OFFSET}      ; Jump to the interrupt enable code (right nametable)
+                  PATCH_JMP {$000+_E_EXIT_OFFSET};#{$0200+_INT_OFFSET}      ; Jump to the interrupt enable code (left nametable)
+                  PATCH_JMP {$000+_O_EXIT_OFFSET};#{$0200+_INT_OFFSET}
+                  PATCH_JMP {$100+_E_EXIT_OFFSET};#{$0200+_INT_OFFSET}
+                  PATCH_JMP {$100+_O_EXIT_OFFSET};#{$0200+_INT_OFFSET}
 
                   txa
                   clc

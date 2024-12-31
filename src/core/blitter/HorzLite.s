@@ -335,6 +335,7 @@ _RestoreBG0OpcodesCallback
 :draw_count_x2      equ   tmp3
 :exit_addr          equ   tmp4
 :save_addr          equ   tmp5
+:btable_low         equ   tmp6
 
                     phb
 
@@ -358,14 +359,17 @@ _RestoreBG0OpcodesCallback
                     sep   #$20
                     lda   BTableHigh,y               ; BTableHigh has the standard bank in the high word
                     pha                              ; Push two bytes
-
-                    lda   BTableLow+1,y              ; Get the address of the first code field line
-                    sta   :save_addr+1
-                    sta   :exit_addr+1
                     rep   #$21
 
-                    ldy   :exit_addr
-                    ldx   :save_addr
+                    lda   BTableLow,y                ; Get the address of the first code field line
+                    and   #$FF00
+                    sta   :btable_low
+                    adc   :save_addr
+                    tax
+
+                    lda   :btable_low
+                    adc   :exit_addr
+                    tay
 
                     plb                              ; Pop one byte to set the bank to the code field
 :do_restore         jsr   $0000                      ; Jump in and copy the saved patch value back into the code field, copy abs,X -> abs,Y

@@ -106,7 +106,7 @@ NO_VERTICAL_CLIP equ 0
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 0
+NO_INTERRUPTS     equ 1
 
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 0
@@ -191,10 +191,7 @@ x_offset      equ 16                      ; number of bytes from the left edge
 ; We _never_ scroll vertically, so just set it once.  This is to make sure these kinds of optimizations
 ; can be set up in the generic structure
 
-            lda   #24
-            jsr   _SetBG0YPos
-            jsr   _ApplyBG0YPosPreLite
-            jsr   _ApplyBG0YPosLite
+            jsr   NES_SetScrollY
 
 ; Start up the NES
 :start
@@ -484,26 +481,21 @@ nesBottomOffset ds 2
 _BFSetupPEAField
 ; Now render the top 16 lines to show the status bar area
 
-            clc
-            lda   #24*2
-            sta   tmp1                    ; virt_line_x2
-            lda   #16*2
-            sta   tmp2                    ; lines_left_x2
-            lda   #0                      ; Xmod256
-            jsr   _ApplyBG0XPosAltLite
+            lda   #0
+            ldx   #16
+            ldy   #0                      ; Xmod256
+            jsr   _BltSetupAlt
             sta   nesTopOffset            ; cache the :exit_offset value returned from this function
 
 ; Next render the remaining lines
 
-            lda   #40*2
-            sta   tmp1                ; virt_line_x2
             lda   ScreenHeight
             sec
             sbc   #16
-            asl
-            sta   tmp2                ; lines_left_x2
-            lda   StartX              ; Xmod256
-            jsr   _ApplyBG0XPosAltLite
+            tax
+            lda   #16
+            ldy   StartXMod256
+            jsr   _BltSetupAlt
             sta   nesBottomOffset
 
             lda   #1
@@ -514,7 +506,7 @@ _BFSetupPEAField
 _BFResetPEAField
             stz   peaFieldIsPatched
 
-            lda   #24                     ; virt_line
+            lda   #0                      ; virt_line
             ldx   #16                     ; lines_left
             ldy   nesTopOffset            ; offset to patch
             jsr   _RestoreBG0OpcodesAltLite
@@ -523,7 +515,7 @@ _BFResetPEAField
             sec
             sbc   #16
             tax                           ; lines_left
-            lda   #40                     ; virt_line
+            lda   #16                     ; virt_line
             ldy   nesBottomOffset         ; offset to patch
             jmp   _RestoreBG0OpcodesAltLite
 
@@ -534,14 +526,8 @@ _RenderScreen
 
 ; Do the basic setup
 
-            sep   #$20
-            lda   ppuctrl                 ; Bit 0 is the high bit of the X scroll position
-            lsr                           ; put in the carry bit
-            lda   ppuscroll+1             ; load the scroll value
-            ror                           ; put the high bit and divide by 2 for the engine
-            rep   #$20
-            and   #$00FF                  ; make sure nothing is in the high byte
-            jsr   _SetBG0XPos
+            jsr   _GetPPUScrollX
+            jsr   NES_SetScrollX
 
             lda   ppumask
             and   ppumask_override

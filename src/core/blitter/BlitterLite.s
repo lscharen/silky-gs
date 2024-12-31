@@ -101,10 +101,10 @@ _BltRangeLite
                 lda   STATE_REG_BLIT
                 stal  STATE_REG
 
-blt_entry_lite  jml   lite_base_1         ; Jump into the blitter code $ZZ/YYXX (Does not modify Y or X)
+blt_entry_lite  jml   lite_base_1         ; Jump into the blitter code $ZZ/YYXX
 
 blt_return_lite ENT
-                lda   STATE_REG_R0W0      ; This is ok for both 8-bit and 16-bit
+                lda   STATE_REG_R0W0
                 stal  STATE_REG
                 ldx   STK_SAVE
                 txs                       ; restore the stack
@@ -117,8 +117,8 @@ blt_return_lite ENT
 
 ; Restore the exit code in the blitter
 
-                ldy   #{_E_EXIT_OFFSET-_ENTRY_OFFSET+1}
                 lda   :jmp_low_save
+                ldy   #{_E_EXIT_OFFSET-_ENTRY_OFFSET+1}
                 sta   [:exit_ptr],y
                 ldy   #{_O_EXIT_OFFSET-_ENTRY_OFFSET+1}
                 sta   [:exit_ptr],y
@@ -194,8 +194,6 @@ NES_SetScrollX
                 sta   StartXMod256
                 rts
 
-NES_SetScroll   jsr   NES_SetScrollX      ; Call and then fall trough to NES_SetScrollY
-
 NES_SetScrollY
                 tya
                 and   MirrorMaskY
@@ -210,28 +208,11 @@ NES_SetScrollY
                 sbc   MaxY
 
                 sta   StartYMod240
-
-                
-                txa
-                and   MirrorMaskX
-                lsr
-                sta   StartXMod256
-
-                tya
-                and   MirrorMaskY
-                asl                       ; Lookup the correct virtual line
-                tay
-                lda   NES2Virtual,y
- 
-                clc
-                adc   #y_offset           ; Shift down by the viewport offset
-                cmp   MaxY
-                bcc   *+4
-                sbc   MaxY
-
-                sta   StartYMod240
-
                 rts
+
+NES_SetScroll   jsr   NES_SetScrollX
+                jmp   NES_SetScrollY
+
 
 ; This is a rewrite of a routing that uses the NES scroll position + mirroring information to calculate
 ; the vertical and horizontal patch information to render the full screen.
@@ -282,6 +263,8 @@ _BltSetupAlt
                 stx   :num_lines
                 tya                       ; Put the offset in the accumulator
 
+                and   #$FFFE ; force even only...
+
 ; Calculate where the horizontal entry and exit points are. The IIgs graphic screen has 2 pixels per byte,
 ; so the effective horizontal resolution is half the NES value.
 ;
@@ -317,21 +300,22 @@ _BltSetupAlt
                 and   #$00FE              ; LSB is already zero, this just converts to words
                 tax                       ; look up the page offset for the left-edge word
 
-                lda   Col2PageOffset,x    ; this is the offset that control will exit from
+                clc
+                lda   Col2CodeOffset,x    ; this is the offset that control will exit from
+                adc   #_PEA_OFFSET
                 sta   :exit_addr          ; This will be a 16-bit value later, but put the low byte in for now
 
                 lda   CodeFieldEvenBRA,x  ; This is the instruction that will be patched into
                 sta   :exit_bra           ; each line
 
-                lda   Col2CodeOffset-2,x  ; The entry point is always 63 words later (-1 with wrap-around)
-                clc
+                lda   Col2CodeOffset+{63*2},x  ; The entry point is always 63 words later
                 adc   #{_PEA_OFFSET-_ENTRY_PATCH-3}
                 sta   :opcode             ; Convert to a relative branch
 
-                lda   #_ENTRY_PATCH+1     ; Fixed location
+                lda   #_ENTRY_PATCH+1     ; Entry BRL alway happens on the first page
                 sta   :entry_addr
 
-                lda   #_SAVE_OFFSET       ; Fixed location
+                lda   #_SAVE_OFFSET       ; Saved data is always on the first page
                 sta   :save_addr
 
 ; Now, the constant values used to patch the PEA field are set.  Next, the vertical loop is performed
@@ -364,7 +348,9 @@ _BltSetupAlt
                 and   #$00FE              ; LSB is one, this zeros out the LSB and MSB and converts to words
                 tax
 
-                lda   Col2PageOffset,x    ; Exit at the same word as the even case
+                clc
+                lda   Col2CodeOffset,x    ; Exit at the same word as the even case
+                adc   #_PEA_OFFSET
                 sta   :exit_addr
 
                 lda   CodeFieldOddBRA,x   ; This is the instruction that will be patched into
@@ -378,15 +364,15 @@ _BltSetupAlt
                 lda   #_ENTRY_PATCH+1      ; Fixed location
                 sta   :entry_addr
 
-                lda   #_SAVE_OFFSET       ; Fixed location
+                lda   #_SAVE_OFFSET        ; Odd code always uses the first/only page
                 sta   :save_addr
 
                 lda   #_ODD_PATCH+1
                 sta   :odd_addr
 
-                stz   :opcode             ; First BRL continues execution
+                stz   :opcode              ; First BRL continues execution
 
-                lda   Col2CodeOffset-2,x  ; The entry point is always 63 words later (-1 with wrap-around)
+                lda   Col2CodeOffset+{63*2},x  ; The entry point is always 63 words later
                 clc
                 adc   #{_PEA_OFFSET-_ODD_PATCH-3}
                 sta   :odd_opcode         ; Convert to a relative branch
@@ -456,6 +442,7 @@ _SetupPEAFieldLinesEven
 :save_addr     equ tmp7
 :entry_addr    equ tmp8
 :draw_count_x2 equ tmp9
+:btable_low    equ tmp10
 
                 phb
 
@@ -487,29 +474,40 @@ _SetupPEAFieldLinesEven
                 sep   #$20
                 lda   BTableHigh,y                ; Get the bank for this range of PEA field lines
                 pha
-
-                lda   BTableLow+1,y               ; Get the just the page of the code field
-                sta   :exit_addr+1
-                sta   :save_addr+1
-                sta   :entry_addr+1
                 rep   #$21
+
+                lda   BTableLow,y
+                and   #$FF00                      ; Only need the page
+                sta   :btable_low
+                adc   :exit_addr
+                tax
+
+                lda   :save_addr
+                adc   :btable_low
+                tay
 
 ; Perform all of the intra-bank copies
 
                 plb                       ; Set the data bank to the target PEA field range
 
-                ldx   :exit_addr          ; This is the 16-bit address where the first BRA opcode is patched in
+;                ldx   :exit_addr          ; This is the 16-bit address where the first BRA opcode is patched in
                 inx                       ; We are saving the PEA operand
-                ldy   :save_addr          ; This is location where the 16-bit PEA operand is saved
+;                ldy   :save_addr          ; This is location where the 16-bit PEA operand is saved
 :save_operand   jsr   $0000
 
-                ldy   :entry_addr         ; Set the BRL operand to enter the even-aligned opcode
+;                ldy   :exit_addr          ; Set the BRA instruction in the code field to exit
+                txy
+                dey
+                lda   :exit_bra           ; The same constant value is set for all lines
+:set_bra        jsr   $0000
+
+                lda   :entry_addr
+                adc   :btable_low
+                tay
+;                ldy   :entry_addr         ; Set the BRL operand to enter the even-aligned opcode
                 lda   :opcode             ; Set the same constant value in every line
 :set_opcode     jsr   $0000
 
-                ldy   :exit_addr          ; Set the BRA instruction in the code field to exit
-                lda   :exit_bra           ; The same constant value is set for all lines
-:set_bra        jsr   $0000
 
                 plb                       ; Restore the data bank
                 lda   :exit_addr          ; Return the calculated exit address to be used for restore

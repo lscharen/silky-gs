@@ -98,15 +98,15 @@ PPUStartUp
 ; |  C  |  D  |
 ; +-----+-----+
 ;
-; When horizontal mirroring is enabled, the left column (A+C) refrence the same RAM as the right columns (B+D),
+; When horizontal mirroring is enabled, the left column (A+C) references the same RAM as the right columns (B+D),
 ; so [$2000,$23FF] === [$2400,$27FF] and [$2800,$2BFF] === [$2C00,$2FFF]
 ;
 ; Vertical mirroring is similar, except that it is the rows that are paired, so (A+B) references the same RAM
 ; as (C+D)
 ;
-; This impacts the emulation layer is two ways.  First, we do not have a 2kb shadow RAM for the PPU.  Instead,
-; the PEA field that draws the graphics has two nametable's work of memory and is reconfigured based on the
-; mirroring, so when a PPU address is written, it need to be mapping into the appropriate PEA table location.
+; This impacts the emulation layer in two ways.  First, we do not have a 2kb shadow RAM for the PPU.  Instead,
+; the PEA field that draws the graphics has two nametable's worth of memory and is reconfigured based on the
+; mirroring, so when a PPU address is written, it need to be mapped into the appropriate PEA table location.
 ; Second, the runtime maintains several shadow RAM areas that cover the full 4kb of memory to make it fast to
 ; look up data
 ;
@@ -130,7 +130,7 @@ _InitPPUTileMappingVert
         lda  :col
         inc
         sta  :col
-        cmp  #32                    ; There are two sets of 32 tiles each in the PEA field
+        cmp  #64                    ; There are two sets of 32 tiles each in the PEA field
         bcc  :loop
 
         stz  :col
@@ -181,8 +181,10 @@ _InitPPUTileMappingVert
         lda  BTableLow,y             ; Load the base address of the PEA row
 
         and  #$FF00                  ; Just keep the page
-        ora  Col2PageOffset+2,x
+;        ora  Col2PageOffset+2,x
 ;        adc  Col2CodeOffset+2,x      ; Combine with the current column (get the left half of the tile)
+        adc  Col2CodeOffset+2,x
+        adc  #_PEA_OFFSET
         ldx  :ppuaddr
 
         sep  #$20                         ; Switch to 8-bit mode to store the values
@@ -277,8 +279,10 @@ _InitPPUTileMappingHorz
         lda  BTableLow,y             ; Load the base address of the PEA row (rows 0 - 59)
 
         and  #$FF00                  ; Just keep the page
-        ora  Col2PageOffset+2,x
+;        ora  Col2PageOffset+2,x
 ;        adc  Col2CodeOffset+2,x      ; Combine with the current column (get the left half of the tile)
+        adc  Col2CodeOffset+2,x
+        adc  #_PEA_OFFSET
         ldx  :ppuaddr
 
         sep  #$20                         ; Switch to 8-bit mode to store the values
