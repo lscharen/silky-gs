@@ -1006,7 +1006,7 @@ ram_00FF                                = $FF ; 0001C5 000829 000A9C 001C47 001D
 ; ram_01FF                              = $01FF ; 0001C5 
 
 
-ram_spr_Y
+ram_spr_Y                               = $0200
 ; 0200-02FF (100) OAM sprites
 ram_oam                                 = $0200 ; for common links
                                = $0200 ; 0001C5 0002F9 0003FF 00085C 001269 

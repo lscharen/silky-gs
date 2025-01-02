@@ -77,7 +77,7 @@ ROM_DRIVER_MODE   equ 1
 ;
 ; 0  = use OAM DMA
 ; >0 = read $100 bytes directly from NES RAM at this address (typically $200)
-DIRECT_OAM_READ   equ $0200
+DIRECT_OAM_READ   equ 0
 
 ; Define a range of OAM entries to scan.  Many games do not use all 64
 ; sprite slots, so we can avoid doing unecessary work by only scanning
@@ -128,7 +128,7 @@ CUSTOM_PPU_CTRL_LOCK_CODE mac
                           <<<
 CUSTOM_PPU_SCROLL_LOCK_CODE mac
                           ldal $010050
-                          sta  _topscroll
+                          sta  _topscroll    ; order Y, X
                           ldal $010012
                           xba
                           <<<
@@ -226,40 +226,41 @@ _RenderScreen
 
 ; If we are not in-game, defer to the standard renderer
 
-;            ldal  $010047
-;            and   #$00FF
-;            bne   :racing
-;            jmp   RenderScreen
+            ldal  $010047
+            and   #$00FF
+            bne   :racing
+            jmp   RenderScreen
 
 :racing
+
 ; Do the basic setup
 ;
 ; ram_004E_base_nametable is for the crowd offset
 ; ram_004D_base_nametable is for the track offset
+;
+; These set the horizontal scroll position.  The vertical scroll position is never changed.
+;
+            ldy   #0
+            jsr   NES_SetScrollY
 
             sep   #$20
-;            lda   _ppuctrl                ; Bit 0 is the high bit of the X scroll position
             ldal  $01004D
-            lsr                           ; put in the carry bit
+            and   #$01                    ; Isolate the nametable select bit
+            xba                           ; put in the high byte
             lda   _ppuscroll+1            ; load the scroll value
-            ror                           ; put the high bit and divide by 2 for the engine
             rep   #$20
-            and   #$00FF                  ; make sure nothing is in the high byte
             tax
-            jsr   NES_SetScrollX
+            jsr   NES_SetScrollX          ; This takes a NES pixel position (0 - 511)
 
             sep   #$20
-            ldal  $01004E                ; Bit 0 is the high bit of the X scroll position
+            ldal  $01004E                 ; Bit 0 is the high bit of the X scroll position
             lsr                           ; put in the carry bit
             lda   _topscroll              ; load the scroll value
             ror                           ; put the high bit and divide by 2 for the engine
             rep   #$20
             and   #$00FF                  ; make sure nothing is in the high byte
-            sta   _top_bg_x
-
-            tay
-            jsr   NES_SetScrollY
-
+            sta   _top_bg_x               ; This is used directly so needs a byte offset (0 - 255)
+ 
             lda   ppumask
             and   ppumask_override
             and   #NES_PPUMASK_BG
@@ -282,7 +283,7 @@ _RenderScreen
 
             lda   #40
             ldx   #{200-32-40}
-            lda   StartXMod256              ; Xmod256
+            ldy   StartXMod256              ; Xmod256
             jsr   _BltSetupAlt
             sta   nesTopOffset
 
