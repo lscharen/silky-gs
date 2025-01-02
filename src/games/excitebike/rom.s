@@ -11,7 +11,7 @@ ROMBase ENT
         put  ../../rom/rom_inject.s
 
 STA_ram_00A4_obj_s1_Y STA_ABS_Y {ram_00A4_obj-1}
-STA_ram_0080_obj_a1_Y STA_ABS_Y {ram_0080_obj+1}
+STA_ram_0088_obj_a1_Y STA_ABS_Y {ram_0088+1}
 STA_ram_0098_obj_Y STA_ABS_Y ram_0098_obj
 STA_ram_0002_Y STA_ABS_Y ram_0002
 
@@ -1971,15 +1971,25 @@ loc_C9D5
   JSR sub_EA44
   JSR sub_F4FF
 
-  JSR sub_E4C8 ; swap ?? 
-  JSR sub_DEE2 ; from rom this is out of order?
-
   JSR sub_E359_display_temperature_meter_with_sprites
   JSR sub_E17F
   JSR sub_E456
   JSR sub_DA26
   JSR sub_E70B
   JSR sub_D19B
+
+  JSR sub_E4C8 ; move to here
+  JSR sub_DEE2 ; from rom this is out of order?
+
+;  JSR sub_E4C8 ; swap ?? 
+;  JSR sub_DEE2 ; from rom this is out of order?
+
+;  JSR sub_E359_display_temperature_meter_with_sprites
+;  JSR sub_E17F
+;  JSR sub_E456
+;  JSR sub_DA26
+;  JSR sub_E70B
+;  JSR sub_D19B
 
 ;  JSR sub_E4C8 ; move to here
 ;  JSR sub_DEE2 ; from rom this is out of order?
@@ -3219,13 +3229,20 @@ bra_D16D_loop
   JSR sub_D0F4
   LDX #$28
 bra_D17E
-bra_D17E_garbage_loop
-  LDY #$12
-bra_D180_garbage_loop
-  DEY
-  BNE bra_D180_garbage_loop
-  DEX
-  BNE bra_D17E_garbage_loop
+;bra_D17E_garbage_loop
+;  LDY #$12
+;bra_D180_garbage_loop
+;  DEY
+;  BNE bra_D180_garbage_loop
+;  DEX
+;  BNE bra_D17E_garbage_loop
+  ldx #0
+  ldy #0
+  nop
+  nop
+  nop
+  nop
+
   LDA ram_for_2000
   ORA ram_004D_base_nametable
   JSR STA_2000
@@ -6545,7 +6562,7 @@ bra_E40F_loop
 ;  LDA ram_0088,Y
   JSR LDA_ram_0088_obj_Y
 ;  STA ram_0088 + $01,Y
-  JSR STA_ram_0080_obj_a1_Y
+  JSR STA_ram_0088_obj_a1_Y
   STX ram_0088,Y
 bra_E421
   INY
