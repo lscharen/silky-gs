@@ -380,9 +380,6 @@ NES_RenderFrame
 ; be overridden for games that want to preserve the ability to switch between
 ; dirty an full rendering, but still have a custom screen layout
 _SetupPEAField
-;            jsr   _ApplyBG0YPosPreLite
-;            jsr   _ApplyBG0YPosLite
-;            jsr   _ApplyBG0XPosLite
             jsr   _BltSetup
             sta   exitOffset              ; cache the :exit_offset value returned from this function
 
@@ -468,14 +465,6 @@ RenderScreen
 :complete
             ELSE
 
-; Set the verical position for this frame
-
-;            jsr   _ApplyBG0YPosPreLite
-;            jsr   _ApplyBG0YPosLite
-
-; Set the horizontal position for this frame
-
-;            jsr   _ApplyBG0XPosLite
             jsr   _BltSetup
             sta   exitOffset              ; cache the :exit_offset value returned from this function
 
