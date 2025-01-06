@@ -38,11 +38,11 @@ EVT_LOOP_END mac
 ; Pre-render check to see if there are any background tiles queued for updates.  If so, we will do
 ; a regular rendering.  If not, use dirty rendering.
 PRE_RENDER   mac
-;
+             jsr  CheckForPaletteChange   ; Update the swizzle tables before drawing any tiles (cannot use tmp3 or tmp4)
              <<<
 
 POST_RENDER  mac
-             jsr  CheckForPaletteChange
+;
              <<<
 
 ; Put in additional conditions to skip sprites when scanning the OAM table to decide what to
@@ -104,6 +104,7 @@ NO_CONFIG         equ 1
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
 ; set the background color.
 PPU_PALETTE_DISPATCH equ PALETTE_DISPATCH
+PPU_PALETTE_MAP equ dk_palette_map
 
 ; Turn on code that visualizes the CPU time used by the ROM code
 SHOW_ROM_EXECUTION_TIME equ 0
@@ -246,23 +247,6 @@ InitPlayfield
 
 SwizzleTables
         adrl L0_T0
-        adrl L1_T0
-        adrl L0_T0
-        adrl L2_T0
-        adrl L3_T0
-        adrl L0_T0
-        adrl L0_T0
-        adrl L0_T0
-
-;PhasePalettes
-;        dw    TitleScreen
- ;       dw    Phase1
- ;       dw    TitleScreen
- ;       dw    Phase2
- ;       dw    Phase3
- ;       dw    TitleScreen
- ;       dw    TitleScreen
- ;       dw    TitleScreen
 
 ; Are there less than 15 total color combos? Yes!
 ;                      1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
@@ -295,53 +279,116 @@ AllColors   dw     $00,$02,$06,$12
 
 ; When the NES ROM code tried to write to the PPU palette space, intercept here.
 PALETTE_DISPATCH
-        dw   ppu_3F00,ppu_3F01,ppu_3F02,ppu_3F03
-        dw   ppu_3F04,ppu_3F05,ppu_3F06,ppu_3F07
-        dw   ppu_3F08,ppu_3F09,ppu_3F0A,ppu_3F0B
-        dw   ppu_3F0C,ppu_3F0D,ppu_3F0E,ppu_3F0F
+        dw   ppu_3F00,dk_3Fxx,dk_3Fxx,dk_3Fxx
+        dw   ppu_3F04,dk_3Fxx,dk_3Fxx,dk_3Fxx
+        dw   ppu_3F08,dk_3Fxx,dk_3Fxx,dk_3Fxx
+        dw   ppu_3F0C,dk_3Fxx,dk_3Fxx,dk_3Fxx
 
-        dw   ppu_3F10,ppu_3F11,ppu_3F12,ppu_3F13
-        dw   ppu_3F14,ppu_3F15,ppu_3F16,ppu_3F17
-        dw   ppu_3F18,ppu_3F19,ppu_3F1A,ppu_3F1B
-        dw   ppu_3F1C,ppu_3F1D,ppu_3F1E,ppu_3F1F
+        dw   ppu_3F10,dk_3Fxx,dk_3Fxx,dk_3Fxx
+        dw   ppu_3F14,dk_3Fxx,dk_3Fxx,dk_3Fxx
+        dw   ppu_3F18,dk_3Fxx,dk_3Fxx,dk_3Fxx
+        dw   ppu_3F1C,dk_3Fxx,dk_3Fxx,dk_3Fxx
+
+dk_palette_map
+            dw    0, -1, -1, -1
+            dw    0, -1, -1, -1
+            dw    0,  1,  2,  3    ; donkey kong background tiles are mapped to fixed colors
+            dw    0, -1, -1, -1
+
+            dw    0,  4,  5,  6    ; mario is always set to his own colors
+            dw    0, -1, -1, -1    ; everything else is dynamically assigned
+            dw    0, -1, -1, -1
+            dw    0, -1, -1, -1
 
 ; The the phase changes, set a flag, but way for the transition time to drop below $70
 ; before applying the change.
+HasPaletteChange dw 0
+nes_palette      ds 64
+
+; X = 2*nes_palette_index
+dk_3Fxx
+        txy
+        txa
+        lsr
+        tax
+
+        ldal PPU_MEM+$3F00,x
+        and  #$003F
+        sta  nes_palette,y
+
+        inc
+        sta  HasPaletteChange
+
+        rts
+
 CheckForPaletteChange
-        ldal $010043   ; Are we in a transition timer?
-        and  #$00FF
-        cmp  #$0070
-        bcs  :no_change
 
-        ldal $010053      ; PhaseNo 0, 1, 2, 3
-        and  #$0007       ; Title Screen = 0, Level 1 = 1, Level 2 = 3, Level 3 = 4 
-        cmp  LastPhaseNo
-        beq  :no_change
+        lda  HasPaletteChange
+        bne  :update_palette
+        rts
 
-        phx
+:update_palette
+        jsr  NES_BuildPalette         ; Create a mapping of the NES palette to the Apple IIgs palette
 
-        sta  LastPhaseNo
-        asl
-;        pha
-;        tay
-;
-;        ldx  PhasePalettes,y
-;        lda  #0
-;        jsr  NES_SetPalette
+        ldy  #current
+        lda  SwizzleTables
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
 
-;        pla
-        asl
-        tay
-        ldx  SwizzleTables,y
-        lda  SwizzleTables+2,y
-        jsr  NES_SetPaletteMap
+        clc
+        ldy  #current+{4*2}
+        lda  SwizzleTables
+        adc  #$200
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
 
-        jsr  ForceMetatileRefresh     ; Repaint the scene
-        jsr  RenderScreen
+        clc
+        ldy  #current+{8*2}
+        lda  SwizzleTables
+        adc  #$400
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
 
-        plx
+        clc
+        ldy  #current+{12*2}
+        lda  SwizzleTables
+        adc  #$600
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
 
-:no_change
+        clc
+        ldy  #current+{16*2}
+        lda  SwizzleTables
+        adc  #$800
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+
+        clc
+        ldy  #current+{20*2}
+        lda  SwizzleTables
+        adc  #$A00
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+
+        clc
+        ldy  #current+{24*2}
+        lda  SwizzleTables
+        adc  #$C00
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+
+        clc
+        ldy  #current+{28*2}
+        lda  SwizzleTables
+        adc  #$E00
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+        
+        stz  HasPaletteChange
+
+;        jsr  ForceMetatileRefresh     ; Repaint the scene
+;        jsr  RenderScreen
+
         rts
 
 ; Palette

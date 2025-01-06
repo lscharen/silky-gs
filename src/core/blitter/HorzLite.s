@@ -325,7 +325,6 @@ _RestoreBG0OpcodesAltLite
                     sbc   MaxY
 
                     ldy   #_RestoreBG0OpcodesCallback
-
                     jmp   _Apply
 
 ; This will get called with A, X set and guaranteed to be within a contiguous range

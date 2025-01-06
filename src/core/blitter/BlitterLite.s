@@ -191,8 +191,20 @@ NES_SetScrollX
                 txa
                 and   MirrorMaskX
                 lsr
-                sta   StartXMod256
-                rts
+
+                cmp   StartXMod256
+                beq   :out                       ; Easy, if nothing changed, then nothing changes
+
+                ldx   StartXMod256               ; Load the old value (but don't save it yet)
+                sta   StartXMod256               ; Save the new position
+
+                lda   #DIRTY_BIT_BG0_X
+                tsb   DirtyBits                  ; Check if the value is already dirty, if so exit
+                bne   :out                       ; without overwriting the original value
+
+;                stx   OldStartXMod256               ; First change, so preserve the prior value
+
+:out            rts
 
 NES_SetScrollY
                 tya
@@ -207,11 +219,142 @@ NES_SetScrollY
                 bcc   *+4
                 sbc   MaxY
 
-                sta   StartYMod240
-                rts
+                cmp   StartYMod240
+                beq   :out                       ; Easy, if nothing changed, then nothing changes
+
+                ldx   StartYMod240               ; Load the old value (but don't save it yet)
+                sta   StartYMod240               ; Save the new position
+
+                lda   #DIRTY_BIT_BG0_Y
+                tsb   DirtyBits                  ; Check if the value is already dirty, if so exit
+                bne   :out                       ; without overwriting the original value
+
+;                stx   OldStartYMod240               ; First change, so preserve the prior value
+
+:out            rts
 
 NES_SetScroll   jsr   NES_SetScrollX
                 jmp   NES_SetScrollY
+
+
+; A small variant for dirty rendering that just sets the BRA instruction in the code field assuming
+; that everything else has not changed, e.g. saved value and entry/exit points.
+_BltSetupDirty
+               ldy   StartXMod256
+               lda   #0
+               ldx   ScreenHeight
+
+_BltSetupDirtyAlt
+
+:num_lines     equ tmp3
+:exit_addr     equ tmp4
+:exit_bra      equ tmp5
+:opcode        equ tmp6
+:save_addr     equ tmp7
+:entry_addr    equ tmp8
+:draw_count_x2 equ tmp9
+:virt_start    equ tmp10
+:rtbl_idx_x2   equ tmp11
+:odd_addr      equ tmp12
+:odd_opcode    equ tmp13
+:last_addr     equ tmp15
+
+               clc
+               adc   StartYMod240        ; Load the starting virtual line within the PEA renderer
+               cmp   MaxY
+               bcc   *+4
+               sbc   MaxY
+
+               sta   :virt_start
+               stx   :num_lines
+               tya
+
+               bit   #$0001              ; Check if the starting byte value is even or odd
+               beq   :blt_even
+               brl   :blt_odd
+
+:blt_even
+                and   #$00FE              ; LSB is already zero, this just converts to words
+                tax                       ; look up the page offset for the left-edge word
+
+                clc
+                lda   Col2CodeOffset,x    ; this is the offset that control will exit from
+                adc   #_PEA_OFFSET
+                sta   :exit_addr          ; This will be a 16-bit value later, but put the low byte in for now
+
+                lda   CodeFieldEvenBRA,x  ; This is the instruction that will be patched into
+                sta   :exit_bra           ; each line
+
+                lda   :virt_start
+                ldx   :num_lines
+                ldy   #_SetupPEAFieldLinesDirty
+                jmp   _Apply              ; Handle the interations through the code fields (the accumulator from here is returned)
+
+:blt_odd
+                and   #$00FE              ; LSB is one, this zeros out the LSB and MSB and converts to words
+                tax
+
+                clc
+                lda   Col2CodeOffset,x    ; Exit at the same word as the even case
+                adc   #_PEA_OFFSET
+                sta   :exit_addr
+
+                lda   CodeFieldOddBRA,x   ; This is the instruction that will be patched into
+                sta   :exit_bra           ; each line
+
+                lda   :virt_start
+                ldx   :num_lines
+                ldy   #_SetupPEAFieldLinesDirty
+                jmp   _Apply              ; Handle the interations through the code fields (the accumulator from here is returned)
+
+; This is simple enough that the odd and even cases can be combined into a single routine
+_SetupPEAFieldLinesDirty
+:exit_addr     equ tmp4
+:exit_bra      equ tmp5
+:opcode        equ tmp6
+:save_addr     equ tmp7
+:entry_addr    equ tmp8
+:draw_count_x2 equ tmp9
+:btable_low    equ tmp10
+
+                phb
+
+                asl                              ; 2 x :virt_line
+                tay                              ; use to load the base address
+
+                txa
+                asl
+                sta   :draw_count_x2              ; this is the number of lines we will do right now
+                asl
+                adc   :draw_count_x2              ; multiple by 6 to calculate the jump offset
+
+                lsr
+                eor   #$FFFF
+                sec
+                adc   #lsc_bottom
+                sta   :set_bra+1                  ; patch for inserting the BRA instruction and entry jmp opcode
+
+; Setup all of the copy routines
+
+                sep   #$20
+                lda   BTableHigh,y                ; Get the bank for this range of PEA field lines
+                pha
+                rep   #$21
+
+                lda   BTableLow,y
+                and   #$FF00                      ; Only need the page
+                sta   :btable_low
+                adc   :exit_addr
+                tay
+
+                plb                       ; Set the data bank to the target PEA field range
+                lda   :exit_bra           ; The same constant value is set for all lines
+:set_bra        jsr   $0000
+
+                plb                       ; Restore the data bank
+                lda   :exit_addr          ; Return the calculated exit address to be used for restore
+                rts
+
 
 
 ; This is a rewrite of a routing that uses the NES scroll position + mirroring information to calculate
@@ -263,8 +406,6 @@ _BltSetupAlt
                 sta   :virt_start
                 stx   :num_lines
                 tya                       ; Put the offset in the accumulator
-
-;                and   #$FFFE ; force even only...
 
 ; Calculate where the horizontal entry and exit points are. The IIgs graphic screen has 2 pixels per byte,
 ; so the effective horizontal resolution is half the NES value.
@@ -527,6 +668,7 @@ _SetupPEAFieldLinesOdd
 :odd_addr      equ tmp12
 :odd_opcode    equ tmp13
 :btable_low    equ tmp14
+:last_addr     equ tmp15
 
                 phb
 

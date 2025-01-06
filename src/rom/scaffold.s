@@ -405,25 +405,26 @@ _GetPPUScrollX
             tax
             rts
 
-; Default render screen implementation.  The user-code can override this and provide their
-; own to improve performance.
-RenderScreen
-            jsr   _GetPPUScrollX          ; Return in X register
-;            jsr   _SetBG0XPos
-
+_GetPPUScrollY
             sep   #$20
-            lda   _ppuctrl
-            and   #$02
-            cmp   #$02
-            lda   _ppuscroll              ; update the y-scroll position
+            lda   _ppuctrl                ; Bit 1 is the high bit of the Y scroll position
+            lsr
+            lsr                           ; put in the carry bit
+            lda   _ppuscroll              ; load the scroll value
             ror
             rep   #$20
             rol
             and   #$01FF
             tay
+            rts
 
-;            jsr   _SetBG0YPos
-            jsr   NES_SetScroll
+; Default render screen implementation.  The user-code can override this and provide their
+; own to improve performance.
+RenderScreen
+            jsr   _GetPPUScrollX          ; Return in X register
+            jsr   _GetPPUScrollY          ; Return in Y register
+
+            jsr   NES_SetScroll           ; Set the engine to this scroll position
 
             lda   ppumask                 ; honor the PPU enable flags for sprites and background
             and   ppumask_override
@@ -448,21 +449,35 @@ RenderScreen
             bne   :full_update
 
 ; This is code path for performing dirty rendering. PEA patching is deferred until needed
-
-            lda   peaFieldIsPatched
-            bne   :no_patch
-            jsr   _SetupPEAField
-:no_patch   jsr   drawDirtyScreen
-            bra   :complete
+            jsr   _BltSetupDirty
+            sta   exitOffset
+            jsr   drawDirtyScreen
+            ldy   exitOffset
+            jsr   _RestoreBG0OpcodesLite
+            bra   :dirty_done
 
 :full_update
-            lda   peaFieldIsPatched
-            beq   :no_restore
-            jsr   _ResetPEAField
-:no_restore
-            jsr   _SetupPEAField
+            jsr   _BltSetup
+            sta   exitOffset
             jsr   drawScreen
-:complete
+            ldy   exitOffset
+            jsr   _RestoreBG0OpcodesLite
+:dirty_done
+
+;            lda   peaFieldIsPatched
+;            bne   :no_patch
+;            jsr   _SetupPEAField
+;:no_patch   jsr   drawDirtyScreen
+;            bra   :complete
+;
+;:full_update
+;            lda   peaFieldIsPatched
+;            beq   :no_restore
+;            jsr   _ResetPEAField
+;:no_restore
+;            jsr   _SetupPEAField
+;            jsr   drawScreen
+;:complete
             ELSE
 
             jsr   _BltSetup

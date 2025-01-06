@@ -204,7 +204,9 @@ EngineReset
                   stz       OldStartY
                   stz       StartYMod240
 
-                  stz       DirtyBits
+                  lda       #$FFFF                 ; Mark as needing a full update
+                  sta       DirtyBits
+
                   stz       LastRender             ; Initialize as if a full render was performed
 ;                  stz       LastPatchOffset
 ;                  stz       RenderCount

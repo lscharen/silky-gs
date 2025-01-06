@@ -617,6 +617,18 @@ NES_ColorToIIgs
             lda   nesPalette,y
             rts
 
+; Convert a single NES palette entry to IIgs RGB
+; A = NES color index
+; X is overwritten
+;
+; Returns RGB value in A
+NES_ColorToIIgs_X
+            and   #$003F
+            asl
+            tax
+            lda   nesPalette,x
+            rts
+
 ; Convert NES palette entries to IIgs
 ; X = NES palette (16 color indices)
 ; A = 32 byte array to write results
@@ -672,4 +684,428 @@ NES_SetPaletteMap
             clc
             adc   #$0800            ; Pre-advance to the sprite table
             sta   SwizzlePtr2
+            rts
+
+; Routines to facilitate automatic palette mapping for games
+
+; Example mapper for donkey kong
+mapping     equ   PPU_PALETTE_MAP
+
+; The current IIgs palette index for each NES palette entry. Will match the mapping value for non-negative entries
+current     dw    0, -1, -1, -1
+            dw    0, -1, -1, -1
+            dw    0,  1, -1, -1
+            dw    0, -1, -1, -1
+
+            dw    0, -1, -1, -1
+            dw    0,  1, -1, -1
+            dw    0, -1, -1, -1
+            dw    0, -1, -1, -1
+
+iigs_nes_colors ds   32   ; list of NES colors assigned to each IIgs index location
+
+; Given two NES colors, return a value for how close they are.  This should use a table lookup to have
+; a custom mapping later, but for now calculate a mahalanobis distance between the two colors.
+ABS_VAL     mac
+            bpl   done
+            eor   #$FFFF
+            inc
+done
+            <<<
+
+color_dist
+            pha
+            and  #$000F
+            pha
+            lda  3,s
+            and  #$00F0
+            sta  3,s
+
+            txa
+            and  #$000F
+            sec
+            sbc  1,s        ; Subtract low nibble
+            ABS_VAL
+            sta  1,s
+
+            txa
+            and  #$00F0
+            sec
+            sbc  3,s
+            ABS_VAL
+            lsr
+            lsr
+            lsr
+            lsr
+            clc
+            adc  1,s
+            sta  3,s
+            pla
+            pla
+            rts
+
+; Scan the current palette to see if there is an match to the NES color and return the index
+; A = nes color
+find_exact_match
+            pha
+            ldx  #0
+:loop
+            lda  iigs_nes_colors,x
+            cmp  1,s
+            beq  :match
+            inx
+            inx
+            cpx  #32
+            bcc  :loop
+
+            pla
+            lda  #$FFFF
+            rts
+
+:match
+            pla
+            txa
+            rts
+
+; Scan the current palette to find the closes color and return the index
+; A = nes color
+; X/Y are used
+find_closest_match
+            pea  $ffff                ; best match found so far
+            pea  $ffff                ; distance to best match so far
+
+            pha
+            ldy  #0
+:loop
+            lda  iigs_nes_colors,y
+            bmi  :skip                ; don't calculate distance to non-colors
+            cmp  1,s
+            beq  :match               ; cool -- an exact match is great because we can stop early
+
+            tax                       ; compare these two colors
+            lda  1,s
+            jsr  color_dist
+            cmp  3,s
+            bcs  :skip
+
+            sta  3,s
+            tya
+            sta  5,s
+
+:skip       iny
+            iny
+            cpy  #32
+            bcc  :loop
+
+            pla
+            pla
+            pla             ; best match
+            rts
+
+:match
+            pla
+            pla
+            pla             ; ignore because we found an exact match
+            tya
+            rts
+
+; Build a IIgs palette from a NES palette
+;
+; Some notes:
+;
+;  1. We can always ignore entries 0, 4, ..., 24, 28 because they are fixed / ignored as the background or transparent color
+;  2. Handle any fixed entries first and look for duplicates in the other palette entries
+;  3. Finally, handle the dynamic colors.
+BitMask     dw   $0001,$0002,$0004,$0008,$0010,$0020,$0040,$0080
+            dw   $0100,$0200,$0400,$0800,$1000,$2000,$4000,$8000
+
+; These are the NES palette locations that need to be scanned
+NESPalIndices dw  2,  4,  6, 10, 12, 14, 18, 20, 22, 26, 28, 30
+              dw 34, 36, 38, 42, 44, 46, 50, 52, 54, 58, 60, 62
+
+ReverseMap  ds   64*2
+
+; A = bitmask
+; return index of the first zero bit: 0 = LSB, 15 = MSB
+find_free_slot
+            bit  #$8000
+            bne  *+6
+            lda  #15
+            rts
+
+            bit  #$4000
+            bne  *+6
+            lda  #14
+            rts
+
+            bit  #$2000
+            bne  *+6
+            lda  #13
+            rts
+
+            bit  #$1000
+            bne  *+6
+            lda  #12
+            rts
+
+            bit  #$0800
+            bne  *+6
+            lda  #11
+            rts
+
+            bit  #$0400
+            bne  *+6
+            lda  #10
+            rts
+
+            bit  #$0200
+            bne  *+6
+            lda  #9
+            rts
+
+            bit  #$0100
+            bne  *+6
+            lda  #8
+            rts
+
+            bit  #$0080
+            bne  *+6
+            lda  #7
+            rts
+
+            bit  #$0040
+            bne  *+6
+            lda  #6
+
+            bit  #$0020
+            bne  *+6
+            lda  #5
+
+            bit  #$0010
+            bne  *+6
+            lda  #4
+
+            bit  #$0008
+            bne  *+6
+            lda  #3
+            rts
+
+            bit  #$0004
+            bne  *+6
+            lda  #2
+
+            bit  #$0002
+            bne  *+6
+            lda  #1
+
+            bit  #$0001
+            bne  *+6         ; Value is $FFFF, so returning -1 means no free slots
+            lda  #0
+
+            rts
+
+
+NES_BuildPalette
+:bitmask    equ  tmp0
+
+; Initialize the bitmask to indicate that all (except index 0) are free
+
+            lda  #$0001
+            sta  :bitmask
+
+; Zero out the reverse map (identified which IIgs palette index contains a NES color)
+
+            ldx  #126
+            lda  #$FFFF
+:loop0      sta  ReverseMap,x
+            dex
+            dex
+            bpl  :loop0
+
+; Scan the mapping to find the fixed indices and copy their colors
+
+            ldx  #0
+:loop1      ldy  NESPalIndices,x
+            lda  mapping,y
+            bmi  :not_fixed
+            sta  current,y          ; Save a copy into the current palette mapping table
+
+            phx                     ; Save the index
+
+            asl
+            tax                     ; This is an index into the IIgs palette (0 - 15  (x2))
+
+            jsr  assign_color
+            plx                     ; Restore the index
+
+:not_fixed  inx
+            inx
+            cpx  #{24*2}
+            bcc  :loop1
+
+; Scan the mapping to handle the dynamic palette entries
+
+            ldx  #0
+:loop2      ldy  NESPalIndices,x
+            lda  mapping,y
+            bpl  :not_dyn
+
+            phx                     ; Save the index
+
+; First, check if this color is already in the IIgs palette
+
+            lda  nes_palette,y
+            asl
+            tax
+            lda  ReverseMap,x
+            bmi  :not_mapped
+
+            lsr
+            sta  current,y          ; It is already mapped, so just mark it in the current table
+            bra  :next
+
+; This color is not already mapped.  If there is an open slot, then we can assign to that index
+:not_mapped
+            lda  :bitmask
+            cmp  #$FFFF
+            beq  :no_free_slot
+            jsr  find_free_slot     ; Return index of first zero bit in the bitmask
+            sta  current,y
+
+            asl
+            tax                     ; This is the index that we will use
+            jsr  assign_color
+            bra  :next
+
+; At this point, all we can do is find the closest color and use that index
+:no_free_slot
+            lda  nes_palette,y
+            phy
+            jsr  find_closest_match
+            ply
+            sta  current,y
+
+:next       plx
+:not_dyn    inx
+            inx
+            cpx  #{24*2}
+            bcc  :loop2
+
+            rts
+
+; X = IIgs palette index (x2)
+; Y = NES palette index (x2)
+assign_color
+            lda  BitMask,x          ; Mark this IIgs palette index as unavailable
+            tsb  :bitmask
+
+            lda  nes_palette,y      ; Load the NES color in this palette location
+            sta  iigs_nes_colors,x  ; Update the color
+            jsr  NES_ColorToIIgs    ; Convert the NES color to IIgs RGB
+            stal $E19E00,x          ; Put the RGB color into the hardware palette
+
+            lda  iigs_nes_colors,x
+            asl
+            tay
+            txa
+            sta  ReverseMap,y
+            rts
+
+; Build a swizzle table
+; A/X = pointer to table
+; Y = address of palette indices
+;
+; Create a table of a[y].a[z].a[w].a[x] where w,x,y,z in [0, 1, 2, 3]
+; and a[] is the look value from the pal array
+NES_BuildSwizzleTable
+:ptr equ 11
+:pal equ 9
+:w   equ 7
+:x   equ 5
+:y   equ 3
+:z   equ 1
+
+            phx
+            pha
+            phy
+            
+            pha    ; local variable space
+            pha
+            pha
+            pha
+
+            tsc
+            phd
+            tcd
+
+;            sta  :ptr
+;            stx  :ptr+2
+;            sty  :pal
+
+            ldx  #0
+
+            stz  :w
+:wloop      stz  :x
+:xloop      stz  :y
+:yloop      stz  :z
+:zloop
+            ldy  :y
+            lda  (:pal),y
+            ldy  :z
+            asl
+            asl
+            asl
+            asl
+            ora  (:pal),y
+            ldy  :w
+            asl
+            asl
+            asl
+            asl
+            ora  (:pal),y
+            ldy  :x
+            asl
+            asl
+            asl
+            asl
+            ora  (:pal),y
+
+            txy
+            sta  [:ptr],y
+            inx
+            inx
+
+            lda  :z
+            inc
+            inc
+            sta  :z
+            cmp  #4*2
+            bcc  :zloop
+
+            lda  :y
+            inc
+            inc
+            sta  :y
+            cmp  #4*2
+            bcc  :yloop
+
+            lda  :x
+            inc
+            inc
+            sta  :x
+            cmp  #4*2
+            bcc  :xloop
+
+            lda  :w
+            inc
+            inc
+            sta  :w
+            cmp  #4*2
+            bcc  :wloop
+
+            pld
+            tsc
+            clc
+            adc  #14
+            tcs
             rts
