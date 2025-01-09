@@ -48,7 +48,7 @@
 ;  endif
 
 ROMBase ENT
-        ds   $BD00
+        ds   $BC00
         put  ../../rom/rom_inject.s
 
 STA_PhaseNo_Y STA_ABS_Y PhaseNo
@@ -66,6 +66,113 @@ LDA_ScoreDisplay_Top_2_Y LDA_ABS_Y {ScoreDisplay_Top+2}
 LDA_ScoreDisplay_Top_1_Y LDA_ABS_Y {ScoreDisplay_Top+1}
 LDA_ScoreDisplay_Top_Y LDA_ABS_Y ScoreDisplay_Top
 LDA_Score_InvertOperandFlag_Y LDA_ABS_Y Score_InvertOperandFlag
+
+; A rewrite of this specific subroutine to deal with the lda ($02),y instructions
+; that can point to the direct page
+VRAMUpdateToBuffer
+  lda $03
+  bne :bank_mem1
+  ldx $02
+
+  LDY #$00					;
+  LDA $00,X					;get first byte's low nibble - rows  (!! IIgs: This can be in zero-page!!)
+  AND #$0F					;
+  STA $05						;
+
+  LDA $00,X					;amount of bytes per-line
+  LSR A						;
+  LSR A						;
+  LSR A						;
+  LSR A						;
+  STA $04						;
+  bra :out1
+
+:bank_mem1
+  LDY #$00					;
+  LDA ($02),Y					;get first byte's low nibble - rows  (!! IIgs: This can be in zero-page!!)
+  AND #$0F					;
+  STA $05						;
+  
+  LDA ($02),Y					;amount of bytes per-line
+  LSR A						;
+  LSR A						;
+  LSR A						;
+  LSR A						;
+  STA $04						;
+:out1
+
+  LDX BufferOffset				;load buffer offset
+  
+:LOOP_F2EA
+  LDA $01						;VRAM locations are pre-set
+  STA BufferAddr,X				;high byte
+  JSR :NextVRAMUpdateIndex_F32D			;
+  
+  LDA $00						;
+  STA BufferAddr,X				;low byte
+  JSR :NextVRAMUpdateIndex_F32D			;
+  
+  LDA $04						;
+  STA $06						;
+  ORA #VRAMWriteCommand_DrawVert			;vertical drawing
+  STA BufferAddr,X				;
+  
+:LOOP_F303
+  JSR :NextVRAMUpdateIndex_F32D			;
+  INY
+  lda $03
+  bne :bank_mem2
+  tya
+  clc
+  adc $02
+  phx
+  tax
+  lda $00,x
+  plx
+  bra :out2
+:bank_mem2
+  LDA ($02),Y					;
+:out2
+  STA BufferAddr,X				;
+  DEC $06						;if transferred all bytes for current line, proceed...
+  BNE :LOOP_F303					;
+  
+  JSR :NextVRAMUpdateIndex_F32D			;
+  CLC						;next strip in VRAM.
+  LDA #$01					;very next tile (or wrap-around)
+  ADC $00						;
+  STA $00						;
+  
+  LDA #$00					;
+  ADC $01						;take high byte into account also
+  STA $01						;
+  STX BufferOffset				;next row index
+  
+  DEC $05						;
+  BNE :LOOP_F2EA					;if all rows were stored, exit
+  
+  LDA #VRAMWriteCommand_Stop			;
+  STA BufferAddr,X				;
+  RTS						;
+  
+:NextVRAMUpdateIndex_F32D
+  INX						;next index...
+  TXA						;into A
+  
+:CheckOverflow_F32F
+  CMP #$3F					;check if we're updating too much (not to overflow into bit 6, which is a repeat bit)
+  BCC :RETURN_F33D					;if not, return
+  
+  LDX BufferOffset				;prevent further updates to glitches
+  
+  LDA #VRAMWriteCommand_Stop			;put an end
+  STA BufferAddr,X				;
+  PLA						;\
+  PLA						;/terminate return from routine that called this one
+  
+:RETURN_F33D
+  RTS
+
         ds   \,$00
 
 ;  org $C000
@@ -10035,15 +10142,16 @@ RETURN_F2D6
   ;$02-$03 - Table pointer from which the data for buffer is gathered
   
 VRAMUpdateToBuffer_F2D7
+  jmp VRAMUpdateToBuffer
   LDY #$00					;
-  LDA ($02),Y					;get first byte's low nibble - rows
+  LDA ($02),Y					;get first byte's low nibble - rows  (!! IIgs: This can be in zero-page!!)
   AND #$0F					;
   STA $05						;
   
   LDA ($02),Y					;amount of bytes per-line
-  LSR A						;
-  LSR A						;
-  LSR A						;
+;  LSR A						;
+;  LSR A						;
+;  LSR A						;
   LSR A						;
   STA $04						;
   
