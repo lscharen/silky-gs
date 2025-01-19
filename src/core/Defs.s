@@ -66,6 +66,12 @@ pputmp                 equ   56          ; 16 bytes of temporary storage for the
 ;shadowBitmap           equ   52          ; Provide enough space for the full ppu range (240 lines) + 16 since the y coordinate can be off-screen
 ;_next                  equ   shadowBitmap+32
 
+; Dirty State transition
+;                                                                                                +---------------------------------------------+
+;                                                                                                +----------+---------------+    +-----------+ |
+;                                                                                                V          |               |    V           | |
+DirtyState             equ   100          ; Track the transition from normal to dirty rendering [0] normal -+-> [1] dirty1 -+-> [2] dirty2 --+-+
+DebugSCB               equ   102          ; SCB byte to use for tracing actions
 ;RenderCount            equ   102         ; 8-bit value tracking the number of times the PPU queues have been rendered to the PEA field
 LastRead               equ   104
 
@@ -161,6 +167,9 @@ CTRL_EVEN_RENDER       equ   $8000                  ; Only render half the scanl
 
 ; The size of each tile instruction is 3 bytes
 PER_TILE_SIZE equ 3
+
+; Turn ON/OFF dirty rendering debugging
+DIRTY_RENDERING_VISUALS equ 0
 
 ; Offsets for the Lite blitter
 ;

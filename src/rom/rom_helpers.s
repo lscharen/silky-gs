@@ -687,6 +687,7 @@ NES_SetPaletteMap
             rts
 
 ; Routines to facilitate automatic palette mapping for games
+            DO    AUTOMATIC_PALETTE_MAPPING
 
 ; Example mapper for donkey kong
 mapping     equ   PPU_PALETTE_MAP
@@ -694,11 +695,11 @@ mapping     equ   PPU_PALETTE_MAP
 ; The current IIgs palette index for each NES palette entry. Will match the mapping value for non-negative entries
 current     dw    0, -1, -1, -1
             dw    0, -1, -1, -1
-            dw    0,  1, -1, -1
+            dw    0, -1, -1, -1
             dw    0, -1, -1, -1
 
             dw    0, -1, -1, -1
-            dw    0,  1, -1, -1
+            dw    0, -1, -1, -1
             dw    0, -1, -1, -1
             dw    0, -1, -1, -1
 
@@ -922,20 +923,40 @@ NES_BuildPalette
             dex
             bpl  :loop0
 
+; Put color 0 into the map
+
+            lda  nes_palette
+            asl
+            tax
+            stz  ReverseMap,x
+
 ; Scan the mapping to find the fixed indices and copy their colors
 
             ldx  #0
 :loop1      ldy  NESPalIndices,x
             lda  mapping,y
             bmi  :not_fixed
-            sta  current,y          ; Save a copy into the current palette mapping table
 
             phx                     ; Save the index
 
+            bit  #$4000             ; Is the "NO_MAP" flag set?
+            bne  :no_map
+
+            sta  current,y          ; Save a copy into the current palette mapping table
             asl
             tax                     ; This is an index into the IIgs palette (0 - 15  (x2))
-
             jsr  assign_color
+            jsr  add_to_reverse_map
+            bra  :next1
+
+:no_map
+            and  #$003F
+            sta  current,y          ; Save a copy into the current palette mapping table
+            asl
+            tax                     ; This is an index into the IIgs palette (0 - 15  (x2))
+            jsr  assign_color
+
+:next1
             plx                     ; Restore the index
 
 :not_fixed  inx
@@ -975,6 +996,7 @@ NES_BuildPalette
             asl
             tax                     ; This is the index that we will use
             jsr  assign_color
+            jsr  add_to_reverse_map
             bra  :next
 
 ; At this point, all we can do is find the closest color and use that index
@@ -1003,7 +1025,10 @@ assign_color
             sta  iigs_nes_colors,x  ; Update the color
             jsr  NES_ColorToIIgs    ; Convert the NES color to IIgs RGB
             stal $E19E00,x          ; Put the RGB color into the hardware palette
+            rts
 
+; X = IIgs palette index
+add_to_reverse_map
             lda  iigs_nes_colors,x
             asl
             tay
@@ -1109,3 +1134,5 @@ NES_BuildSwizzleTable
             adc  #14
             tcs
             rts
+
+            FIN

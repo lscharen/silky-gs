@@ -154,7 +154,7 @@ NES_EvtLoop
             ELSE
 
 ; Wait for a frame to become available.  This almost never waits, unless
-; dirty rendering mode is on and there are no updated to the screen,
+; dirty rendering mode is on and there are no updates to the screen,
 ; or the user is running under emulation
 
 :spin       lda  frameReady
@@ -448,7 +448,8 @@ RenderScreen
             lda   disableDirtyRendering
             bne   :full_update
 
-; This is code path for performing dirty rendering. PEA patching is deferred until needed
+; This is code path for performing dirty rendering.
+
             jsr   _BltSetupDirty
             sta   exitOffset
             jsr   drawDirtyScreen

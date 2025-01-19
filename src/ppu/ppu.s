@@ -340,6 +340,45 @@ ForceMetatileRefresh
         cpy  #64*2                  ; end of the metatile array?
         bcc  :loop
 
+; Refresh the second page
+:loop2
+
+        lda  MirrorMaskX
+        bit  #$0100
+        beq  :horz
+        lda  #$2800
+        bra  :next
+:horz   lda  #$2400
+:next
+        ora  metatile_corner,y      ; calculate the tile address of the metatile corner
+        tax                         ; use for indexing
+        sta  1,s                    ; save for later
+
+        phy
+
+        jsr  :do_metatile
+        lda  3,s
+        clc
+        adc  #$0002
+        tax
+        jsr  :do_metatile
+        lda  3,s
+        clc
+        adc  #$0040
+        tax
+        jsr  :do_metatile
+        lda  3,s
+        clc
+        adc  #$0042
+        tax
+        jsr  :do_metatile
+
+        ply
+        iny
+        iny
+        cpy  #64*2                  ; end of the metatile array?
+        bcc  :loop2
+
         pla                         ; pop the work space
         rts
 
@@ -1538,11 +1577,11 @@ PPUDMA_WRITE ENT
 ; to improve scanning speed
 
         mx   %00
-scanOAMSprites2
+;scanOAMSprites2
 
-        ldx    #0
-        ldy    #0                   ; clear all 16-bits
-        sep    #$30                 ; 8-bit registers
+;        ldx    #0
+;        ldy    #0                   ; clear all 16-bits
+;        sep    #$30                 ; 8-bit registers
 
 ; Since it's rare that all 64 sprites are active, the code is
 ; slightly biased for fast skipping.  Most NES games place sprites
@@ -1559,43 +1598,43 @@ scanOAMSprites2
 
 ; Put the exclusion tables in NES RAM space
 
-        sep    #$10                 ; 8-bit index registers
+;        sep    #$10                 ; 8-bit index registers
 
 ; Loop invariant is that A = X
-:loop
-        ldy    ROMBase+DIRECT_OAM_READ+1,x
-        ldx    tile_exclude,y
-        bne    :next
+;:loop
+;        ldy    ROMBase+DIRECT_OAM_READ+1,x
+;        ldx    tile_exclude,y
+;        bne    :next
 
-        tax                         ; This saves a TXA after :next, so a net gain
-        ldy    ROMBase+DIRECT_OAM_READ,x
-        ldx    y_exclude,y
-        bne    :next
+;        tax                         ; This saves a TXA after :next, so a net gain
+;        ldy    ROMBase+DIRECT_OAM_READ,x
+;        ldx    y_exclude,y
+;        bne    :next
 
-        tya
-        inc
-        asl
+;        tya
+;        inc
+;       asl
 
 
-        pha                         ; 16-bit value
+;        pha                         ; 16-bit value
 
-:next
-        adc    #4
-        tax
-        bne    :loop
+;:next
+;        adc    #4
+;        tax
+;        bne    :loop
 
 ; Now we have the index values on the stack.  Switch to 16 mode and start
 ; pre-computing essential data
 
-        rep    #$30
+;        rep    #$30
 
-        plx
+;        plx
 
-        asl               ; y * 2
-        tax
+;        asl               ; y * 2
+;        tax
 
-        lda  ScreenAddr,x ; Get the left-edge screen address forthe sprite
-        sta  sprTmp0
+;        lda  ScreenAddr,x ; Get the left-edge screen address forthe sprite
+;        sta  sprTmp0
 
 
 ; This is not used if VOC mode is on
@@ -1623,35 +1662,35 @@ scanOAMSprites2
 ; OAM[3] = X coordinate
 ;   Combined with PPU Scroll to set position. No pre-calc
 
-        lda    ROMBase+DIRECT_OAM_READ+2,x
-        pha
-        lda    ROMBase+DIRECT_OAM_READ,x
-        inc
-        pha
+;        lda    ROMBase+DIRECT_OAM_READ+2,x
+;        pha
+;        lda    ROMBase+DIRECT_OAM_READ,x
+;        inc
+;        pha
 
 
 
-        ldy    PPU_OAM              ; check for y exclusions = 10 cycles
-        lda    tile_exclude,y
-        bne    next
+;        ldy    PPU_OAM              ; check for y exclusions = 10 cycles
+;        lda    tile_exclude,y
+;        bne    next
 
-        rep    #$20                 ; = 18 cycles
-        lda    PPU_OAM+2            ; push the OAM info in reverse order
-        pha
-        phx
-        phy
+;        rep    #$20                 ; = 18 cycles
+;        lda    PPU_OAM+2            ; push the OAM info in reverse order
+;        pha
+;        phx
+;        phy
 
-        ldx    y2idx,y              ; load the byte index (0 - 30) for this coordinate = 32
-        tya                         ; Use as a lookup
-        asl
-        tay                         ; this polluted the high byte of Y, but has no effect
-        lda    y2bits,y             ; repeats every 8 words, so don't need a 16-bit index reg
-        ora    shadowBitmap0,x      ; set the eight bits in the bitfield value across two bytes
-        sta    shadowBitmap0,x
+;        ldx    y2idx,y              ; load the byte index (0 - 30) for this coordinate = 32
+;        tya                         ; Use as a lookup
+;        asl
+;        tay                         ; this polluted the high byte of Y, but has no effect
+;        lda    y2bits,y             ; repeats every 8 words, so don't need a 16-bit index reg
+;        ora    shadowBitmap0,x      ; set the eight bits in the bitfield value across two bytes
+;        sta    shadowBitmap0,x
 
-        sep    #$20                 ; about 70 cycles per sprite
-next
-        rts
+;        sep    #$20                 ; about 70 cycles per sprite
+;next
+;        rts
 
 y_exclude     ds $100
 tile_exclude  ds $100
@@ -1711,7 +1750,6 @@ scanOAMSprites
          stx   :pb2+1
 
          ldx   #OAM_START_INDEX*4
-;         ldx   #{1-ALLOW_SPRITE_0}*4  ; Select 0 or 1 as the starting point
          ldy   #0                     ; This is the destination index
 
          phd
@@ -1773,7 +1811,6 @@ scanOAMSprites
          inx
          inx
          inx
-;         cpx  #$0100
          cpx  #OAM_END_INDEX*4
          bcc  :loop
 
@@ -1796,7 +1833,6 @@ scan8x16
 ; Same code as above with extra handling for 8x16 mode
 
          ldx   #OAM_START_INDEX*4
-;         ldx   #{1-ALLOW_SPRITE_0}*4  ; Select 0 or 1 as the starting point
          ldy   #0                     ; This is the destination index
 
          phd
@@ -1866,7 +1902,6 @@ scan8x16
          inx
          inx
          cpx  #OAM_END_INDEX*4
-;         cpx  #$0100
          bcc  :loop
 
          pld
@@ -2382,8 +2417,37 @@ drawOtherLines
 ;
 ; shadowBitmap0 and shadowBitmap1 track the lines that hold sprites from the previous
 ; and current frame. tileBitmap marks lines that had a tiles updated since the last frame.
+;
+; There are actually two phases to the dirty rendering.  The first is when the prior
+; frame was rendered normally and the second in when the prior frame used the dirty
+; renderer.
+;
+; When performing dirty rendering for the first time, the sprites from the last frame have
+; to be erased by drawing the background on the lines previously occupied, then the new sprites
+; drawn and the updated lines exposed
+;
+; When rendering a dirty frame, the expectation is that the next frame will use the dirty
+; renderer as well, so the pipeline changes to improve efficieny.  The screen data beneath
+; a sprite is saved before drawing and, on the next frame used to restore the graphic
+; screen rather than re-rendering the full background.
+;
+; New sprites and drawn and 8x8 patches of the previour sprites are used to update only
+; the active portions of the screen.  Sprites are drawn in a top-down order, if possible
+; to avoid bubbling. Exposing the erased sprites *after* drawing the current sprites will
+; avoid flicker.
+;
+; When the drawing transitions back to a normal rendering frame, nothing special needs to
+; be done as the normal blit will erase all of the previous sprites.
+
         mx   %00
 drawDirtyScreen
+
+        lda   DirtyState              ; Move the Dirty State from 0 -> 1, 1 -> 2, or 2 -> 2
+        cmp   #2
+        bcs   :no_change
+        inc
+        sta   DirtyState
+:no_change
 
 ; Put pointers to the "current" and "previous".  This could be optimized by maintaining
 ; these pointers in the app direct page and toggling them every time the frame counter is
@@ -2408,10 +2472,23 @@ drawDirtyScreen
 ;         this frame.  This is shadowBitmap0 AND shadowBitmap1.  This is drawn with
 ;         shadowing off just to prep the screen.
 
+        DO    DIRTY_RENDERING_VISUALS
+        lda   #0
+        jsr   _SetSCBs
+
+        lda   #1
+        sta   DebugSCB
+        FIN
+
         jsr   _ShadowOff
         jsr   clearPreviousSprites
 
 ; Step 2: Draw the sprites
+
+        DO    DIRTY_RENDERING_VISUALS
+        lda   #2
+        sta   DebugSCB
+        FIN
 
         jsr   drawSprites
         jsr   _ShadowOn
@@ -2423,6 +2500,11 @@ drawDirtyScreen
 ;
 ;         The bitmap is (prev | background) & ~current
 
+        DO    DIRTY_RENDERING_VISUALS
+        lda   #4
+        sta   DebugSCB
+        FIN
+
         jsr   drawOtherLines
 
 ; Step 4: This is the PEI Slam of the current sprites.
@@ -2432,6 +2514,10 @@ drawDirtyScreen
 
 ; Render the prepared frame date
 drawScreen
+
+; Reset the dirty state to 0 (normal)
+
+        stz   DirtyState
 
 ; Step 0: Convert the bitmap into a list since it can be reused in Steps 1 and 3
 
@@ -2757,7 +2843,7 @@ spr_comp_tbl ds 512,$00
 
 ; Draw a tile directly to the screen
 ;
-; A = tile ID
+; A = tile id
 ; Y = screen address
 ; X = palette select 0,2,4,6
 blitTile
@@ -2768,13 +2854,60 @@ blitTile
         cmp   #$0100                  ; fancy multiply by 128
         xba
         ror
+
+        jsr   _blitTile
+
+        plb
+        plb
+        rts
+
+_blitTileNoMask
+; A = tile address
+; Y = screen address
+; X = palette select 0,2,4,6
+
         sta   sprTmp0
         sty   sprTmp1
 
         txa
         sep  #$20
         clc
-        adc  SwizzlePtr+1             ; Carry is clear from the asl
+        adc  SwizzlePtr+1
+        sta  ActivePtr+1
+        rep  #$20
+
+]line   equ   0
+        lup   8
+
+        ldx   sprTmp0
+        ldy:  {]line*4},x                            ; Load the tile data lookup value
+        db    LDA_IND_LONG_IDX,ActivePtr             ; Merge in the remapped tile data
+        ldx   sprTmp1
+        stal  $010000+{]line*SHR_LINE_WIDTH},x
+
+        ldx   sprTmp0
+        ldy:  {]line*4}+2,x
+        db    LDA_IND_LONG_IDX,ActivePtr
+        ldx   sprTmp1
+        stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+
+]line     equ   ]line+1
+          --^
+
+        rts
+
+_blitTile
+; A = tile address
+; Y = screen address
+; X = palette select 0,2,4,6
+
+        sta   sprTmp0
+        sty   sprTmp1
+
+        txa
+        sep  #$20
+        clc
+        adc  SwizzlePtr+1
         sta  ActivePtr+1
         rep  #$20
 
@@ -2800,8 +2933,6 @@ blitTile
 ]line     equ   ]line+1
           --^
 
-        plb
-        plb
         rts
 
 ; Define the opcodes directly so we can use then in a macro.  The bracket from long-indirect addressing, e.g. [],

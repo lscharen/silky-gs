@@ -28,6 +28,26 @@ _PEISlam
             bcs   *+3
             rts
 
+            DO    DIRTY_RENDERING_VISUALS
+; Set SCB values for debugging
+            php
+            phx
+            phy
+:dbg_loop
+            sep  #$20
+            lda  DebugSCB
+            oral $E19D00,x
+            stal $E19D00,x
+            rep  #$30
+            inx
+            txa
+            cmp  1,s
+            bcc  :dbg_loop
+            ply
+            plx
+            plp
+            FIN
+
             lda   GTEControlBits
             bit   #CTRL_EVEN_RENDER
             beq   :normal

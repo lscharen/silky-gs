@@ -207,6 +207,8 @@ EngineReset
                   lda       #$FFFF                 ; Mark as needing a full update
                   sta       DirtyBits
 
+                  stz       DirtyState
+                  stz       DebugSCB
                   stz       LastRender             ; Initialize as if a full render was performed
 ;                  stz       LastPatchOffset
 ;                  stz       RenderCount
