@@ -690,6 +690,25 @@ _AckKeypress
                   sta       LastKey
                   rts
 
+_ReadRawKeypress
+                  pea       $0000               ; temporary space
+                  sep       #$20
+
+                  ldal      KBD_REG             ; read the keyboard
+                  bit       #$80                ; was the strobe bit set? If yes, then this is a new key
+                  beq       :done
+
+                  stal      KBD_STROBE_REG      ; reset the strobe
+                  and       #$7F                ; isolate the key code
+                  sta       LastKey
+                  ora       #PAD_KEY_DOWN       ; set the keydown flag
+                  sta       1,s
+
+:done
+                  rep       #$20
+                  pla
+                  rts
+
 ; Poll the keyboard and return the current keypress in the lower 7 bits and the KEY_DOWN
 ; status in the high bit. This routine does apply debounce logic.
 _ReadKeypress

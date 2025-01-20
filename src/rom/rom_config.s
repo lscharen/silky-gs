@@ -171,7 +171,6 @@ ShowConfig
 ; Wait for a key to be released before committing it
 :keyloop
             jsr  _WaitForKeyUp
-            and  #$007F
 
             cmp  #UP_ARROW
             beq  :decrement
@@ -621,10 +620,10 @@ _ToggleNumber
 ; Wait for a new key press
 _WaitForKeyUp
 :waitloop1
-            jsr  _ReadKeypress                       ; Read keyboard directly, and only for raw keystrokes
+            jsr  _ReadRawKeypress                       ; Read keyboard directly, and only for raw keystrokes
             bit  #PAD_KEY_DOWN
             beq  :waitloop1
-            jsr  _AckKeypress
+;            jsr  _AckKeypress
 ;            sta  config_keypress
 ;            lda  config_keypress
             and  #$7F
@@ -645,8 +644,6 @@ _ToggleKeymap
             sta  :addr   ; address of the value
 
             jsr  _WaitForKeyUp
-
-            and  #$007F
             sta  (:addr)
 
             rts
