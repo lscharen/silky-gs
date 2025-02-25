@@ -1269,6 +1269,11 @@ ConfigDrawString
             rts
 
 ; Built-in font w/widgets to avoid depending on CHR-ROMs (32 bytes/tile)
+;
+; The binary format of these tiles are the same and the internal format that NES CHR
+; data is converted to.  The LSB is zero and bits 1 - 9 designate which BGND palette
+; entry to use when drawing.
+
             ds    \,$00
 rom_cfg_chr 
 rom_cfg_chr_a
@@ -1567,7 +1572,7 @@ rom_cfg_chr_0
             dw    %111111110,%111100000
             dw    %111100000,%001111000
             dw    %111100000,%001111000
-            dw    %001111110,%11110000
+            dw    %001111110,%111100000
             dw    %000000000,%000000000
 
             dw    %111111110,%111111000
