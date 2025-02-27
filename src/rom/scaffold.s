@@ -213,7 +213,7 @@ NES_EvtLoop
             ELSE
             cmp   #'?'
             bne   :not_config
-            jsr   stop_playing                            ; Turn off the APU (restarted in Apply Config)
+            jsr   APUStop                                ; Turn off the APU (restarted in Apply Config)
             jsr   NES_StopExecution                       ; Pause emulation nicely
             jsr   ShowConfig                              ; Let the user reconfigure
             jsr   ApplyConfig                             ; Apply to the running configuration

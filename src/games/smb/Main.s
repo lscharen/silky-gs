@@ -177,7 +177,6 @@ x_offset    equ   16                      ; number of bytes from the left edge
 
             jsr   NES_ColdBoot
 
-;            jsr   ShowConfig
 ; Apply hacks
 ;WorldNumber           = $075f
 ;LevelNumber           = $075c
