@@ -115,6 +115,7 @@ NO_CONFIG         equ 0
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
 ; set the background color.
 PPU_PALETTE_DISPATCH equ BF_PALETTE_DISPATCH
+AUTOMATIC_PALETTE_MAPPING equ 0
 
 ; Turn on code that visualizes the CPU time used by the ROM code
 SHOW_ROM_EXECUTION_TIME equ 0
@@ -631,7 +632,6 @@ SetDefaultPalette
 SwizzleTables adrl L1_T0
 
 ; Palettes of NES color indexes
-ConfScrnPal  dw    $0F, $30, $27, $2A, $15, $02, $21, $00, $10, $16, $12, $37, $21, $17, $11, $2B
 TitleScreen  dw    $0F, $30, $27, $2A, $15, $02, $21, $00, $10, $16, $12, $37, $21, $17, $11, $2B
 LevelHeader1 dw    $0F, $2A, $09, $07, $30, $27, $16, $11, $21, $00, $10, $12, $37, $17, $35, $2B
 
@@ -688,20 +688,20 @@ config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
 
-CONFIG_PALETTE       equ 0
-TILE_TOP_LEFT        equ $1E0
-TILE_TOP_RIGHT       equ $1E2
-TILE_BOTTOM_LEFT     equ $1FE
-TILE_BOTTOM_RIGHT    equ $1FE
-TILE_HORIZONTAL      equ $1FE
-TILE_HORIZONTAL_TOP  equ $1FE
-TILE_HORIZONTAL_BOTTOM  equ $1FE
-TILE_VERTICAL_LEFT   equ $1FE
-TILE_VERTICAL_RIGHT  equ $1FE
-TILE_ZERO            equ $100
-TILE_A               equ $10A
-TILE_SPACE           equ $124
-TILE_CURSOR          equ $0A0  ; $10A
+;CONFIG_PALETTE       equ 0
+;TILE_TOP_LEFT        equ $1E0
+;TILE_TOP_RIGHT       equ $1E2
+;TILE_BOTTOM_LEFT     equ $1FE
+;TILE_BOTTOM_RIGHT    equ $1FE
+;TILE_HORIZONTAL      equ $1FE
+;TILE_HORIZONTAL_TOP  equ $1FE
+;TILE_HORIZONTAL_BOTTOM  equ $1FE
+;TILE_VERTICAL_LEFT   equ $1FE
+;TILE_VERTICAL_RIGHT  equ $1FE
+;TILE_ZERO            equ $100
+;TILE_A               equ $10A
+;TILE_SPACE           equ $124
+;TILE_CURSOR          equ $0A0  ; $10A
 
 AUDIO_TITLE_STR     str 'AUDIO'
 AUDIO_QUALITY_STR   str 'QUALITY'
@@ -731,7 +731,8 @@ GAME_NO_ANIM_STR    str 'STAR ANIM'
 CONFIG_BLK   db   CONFIG_PALETTE        ; Which background palette to use
              db   TILE_TOP_LEFT         ; Define the tiles to use for the UI
              db   TILE_TOP_RIGHT
-             db   TILE_HORIZONTAL
+             db   TILE_HORIZONTAL_TOP
+             db   TILE_HORIZONTAL_BOTTOM
              db   TILE_VERTICAL_LEFT
              db   TILE_VERTICAL_RIGHT
              db   TILE_ZERO             ; First tile for the 0 - 9 characters

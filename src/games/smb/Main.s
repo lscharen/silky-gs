@@ -101,6 +101,7 @@ NO_CONFIG         equ 0
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
 ; set the background color.
 PPU_PALETTE_DISPATCH equ SMB_PALETTE_DISPATCH
+AUTOMATIC_PALETTE_MAPPING equ 0
 
 ; Turn on code that visualizes the CPU time used by the ROM code
 SHOW_ROM_EXECUTION_TIME equ 0
@@ -653,19 +654,19 @@ config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
 
-CONFIG_PALETTE      equ 1
-TILE_TOP_LEFT       equ $144
-TILE_TOP_RIGHT      equ $149
-TILE_BOTTOM_LEFT    equ $15F
-TILE_BOTTOM_RIGHT   equ $17A
-TILE_HORIZONTAL_TOP equ $148
-TILE_HORIZONTAL_BOTTOM equ $178
-TILE_VERTICAL_LEFT  equ $146
-TILE_VERTICAL_RIGHT equ $14A
-TILE_ZERO           equ $100
-TILE_A              equ $10A
-TILE_SPACE          equ $124
-TILE_CURSOR         equ $1CE
+;CONFIG_PALETTE      equ 1
+;TILE_TOP_LEFT       equ $144
+;TILE_TOP_RIGHT      equ $149
+;TILE_BOTTOM_LEFT    equ $15F
+;TILE_BOTTOM_RIGHT   equ $17A
+;TILE_HORIZONTAL_TOP equ $148
+;TILE_HORIZONTAL_BOTTOM equ $178
+;TILE_VERTICAL_LEFT  equ $146
+;TILE_VERTICAL_RIGHT equ $14A
+;TILE_ZERO           equ $100
+;TILE_A              equ $10A
+;TILE_SPACE          equ $124
+;TILE_CURSOR         equ $1CE
 
 AUDIO_TITLE_STR     str 'AUDIO'
 AUDIO_QUALITY_STR   str 'QUALITY'
@@ -861,9 +862,6 @@ INPUT_ITEM_5 dw   KEYMAP
 *             --^
 *             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
 *             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-
-; Palette for the configuration screen
-ConfScrnPal  dw     $0F, $00, $29, $1A, $0F, $36, $17, $30, $21, $27, $1A, $16, $00, $00, $16, $18
 
 ; If AreaStyle is 1 then load an alternate palette 'b'
 ;

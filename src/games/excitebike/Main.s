@@ -106,6 +106,7 @@ NO_CONFIG         equ 0
 ; set the background color.
 PPU_PALETTE_DISPATCH equ PALETTE_DISPATCH
 PPU_PALETTE_MAP equ eb_palette_map
+AUTOMATIC_PALETTE_MAPPING equ 1
 
 ; Turn on code that visualizes the CPU time used by the ROM code
 SHOW_ROM_EXECUTION_TIME equ 0
@@ -199,7 +200,6 @@ InitPlayfield
             jsr   NES_SetPalette
             rts
 
-ConfScrnPal
 TitleScreen  dw    $02,$0F,$30,$21
              dw    $15,$02,$2A,$3C
              dw    $27,$20,$16,$13
@@ -523,20 +523,20 @@ config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
 
-CONFIG_PALETTE       equ 0
-TILE_TOP_LEFT        equ $105
-TILE_TOP_RIGHT       equ $106
-TILE_BOTTOM_LEFT     equ $107
-TILE_BOTTOM_RIGHT    equ $108
-TILE_HORIZONTAL      equ $10A
-TILE_HORIZONTAL_TOP  equ $10A
-TILE_HORIZONTAL_BOTTOM  equ $10A
-TILE_VERTICAL_LEFT   equ $10E
-TILE_VERTICAL_RIGHT  equ $10D
-TILE_ZERO            equ $100
-TILE_A               equ $12E
-TILE_SPACE           equ $100
-TILE_CURSOR          equ $149  ; $10A
+;CONFIG_PALETTE       equ 0
+;TILE_TOP_LEFT        equ $105
+;TILE_TOP_RIGHT       equ $106
+;TILE_BOTTOM_LEFT     equ $107
+;TILE_BOTTOM_RIGHT    equ $108
+;TILE_HORIZONTAL      equ $10A
+;TILE_HORIZONTAL_TOP  equ $10A
+;TILE_HORIZONTAL_BOTTOM  equ $10A
+;TILE_VERTICAL_LEFT   equ $10E
+;TILE_VERTICAL_RIGHT  equ $10D
+;TILE_ZERO            equ $100
+;TILE_A               equ $12E
+;TILE_SPACE           equ $100
+;TILE_CURSOR          equ $149  ; $10A
 
 AUDIO_TITLE_STR     str 'AUDIO'
 AUDIO_QUALITY_STR   str 'QUALITY'

@@ -1271,7 +1271,7 @@ PPUDATA_READ ENT
 
 
 ; This is the Nametable queue.  It records the data written to the PPU via the PPUDATA register.
-NT_QUEUE_LEN      equ 4096                 ; Enough space for _every_ tile over multiple frames
+NT_QUEUE_LEN      equ 2048                 ; Enough space for _every_ tile over multiple frames
 NT_ELEM_SIZE      equ 4                    ; Each entry is 4 bytes
 NT_QUEUE_SIZE     equ {NT_ELEM_SIZE*NT_QUEUE_LEN}
 NT_QUEUE_MASK     equ {NT_QUEUE_SIZE-1}    ; Must be power of 2
@@ -2865,34 +2865,93 @@ _blitTileNoMask
 ; A = tile address
 ; Y = screen address
 ; X = palette select 0,2,4,6
+;
+; Raw data draw -- expands the tile data from w_wxxy_yzz0 to 00ww_00xx_00yy_00zz and then adds an offset based on the
+; palette select
 
         sta   sprTmp0
         sty   sprTmp1
 
         txa
-        sep  #$20
-        clc
-        adc  SwizzlePtr+1
-        sta  ActivePtr+1
-        rep  #$20
+        and   #$0006
+        asl
+        sta   sprTmp3
+        asl
+        asl
+        asl
+        asl
+        ora   sprTmp3
+        sta   sprTmp3
+        xba
+        ora   sprTmp3
+        sta   sprTmp3
+
+;        sep  #$20
+;        clc
+;        adc  SwizzlePtr+1
+;        sta  ActivePtr+1
+;        rep  #$20
+
+        ldy   sprTmp0
+        ldx   sprTmp1
 
 ]line   equ   0
         lup   8
 
-        ldx   sprTmp0
-        ldy:  {]line*4},x                            ; Load the tile data lookup value
-        db    LDA_IND_LONG_IDX,ActivePtr             ; Merge in the remapped tile data
-        ldx   sprTmp1
+        lda:  {]line*4},y                            ; Load the tile data lookup value
+        lsr
+        and   #$0003
+        sta   sprTmp2
+        lda:  {]line*4},y
+        asl
+        and   #$0030
+        tsb   sprTmp2
+        lda:  {]line*4},y
+        asl
+        asl
+        asl
+        and   #$0300
+        tsb   sprTmp2
+        lda:  {]line*4},y
+        asl
+        asl
+        asl
+        asl
+        asl
+        and   #$3000
+        ora   sprTmp2
+        xba
+        ora   sprTmp3
         stal  $010000+{]line*SHR_LINE_WIDTH},x
 
-        ldx   sprTmp0
-        ldy:  {]line*4}+2,x
-        db    LDA_IND_LONG_IDX,ActivePtr
-        ldx   sprTmp1
+        lda:  {]line*4}+2,y
+        lsr
+        and   #$0003
+        sta   sprTmp2
+        lda:  {]line*4}+2,y
+        asl
+        and   #$0030
+        tsb   sprTmp2
+        lda:  {]line*4}+2,y
+        asl
+        asl
+        asl
+        and   #$0300
+        tsb   sprTmp2
+        lda:  {]line*4}+2,y
+        asl
+        asl
+        asl
+        asl
+        asl
+        and   #$3000
+        ora   sprTmp2
+        xba
+        ora   sprTmp3
         stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
 
-]line     equ   ]line+1
-          --^
+]line   equ   ]line+1
+        --^
 
         rts
 
