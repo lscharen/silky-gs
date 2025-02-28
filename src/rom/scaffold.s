@@ -225,40 +225,40 @@ NES_EvtLoop
             FIN
 
 ; '0': force all of the APU channels to be turned off
-            cmp   #'0'
-            bne   :not_0
-            stz   APU_FORCE_OFF
-            brl   NES_EvtLoop
-:not_0
-
+;            cmp   #'0'
+;            bne   :not_0
+;            stz   APU_FORCE_OFF
+;            brl   NES_EvtLoop
+;:not_0
+;
 ; '1' - '4': toggle individual APU channels
-            cmp   #'1'
-            bne   :not_1
-            lda   #$01
-            jsr   ToggleAPUChannel
-            brl   NES_EvtLoop
-:not_1
-
-            cmp   #'2'
-            bne   :not_2
-            lda   #$02
-            jsr   ToggleAPUChannel
-            brl   NES_EvtLoop
-:not_2
-
-            cmp   #'3'
-            bne   :not_3
-            lda   #$04
-            jsr   ToggleAPUChannel
-            brl   NES_EvtLoop
-:not_3
-
-            cmp   #'4'
-            bne   :not_4
-            lda   #$08
-            jsr   ToggleAPUChannel
-            brl   NES_EvtLoop
-:not_4
+;            cmp   #'1'
+;            bne   :not_1
+;            lda   #$01
+;            jsr   ToggleAPUChannel
+;            brl   NES_EvtLoop
+;:not_1
+;
+;            cmp   #'2'
+;            bne   :not_2
+;            lda   #$02
+;            jsr   ToggleAPUChannel
+;            brl   NES_EvtLoop
+;:not_2
+;
+;            cmp   #'3'
+;            bne   :not_3
+;            lda   #$04
+;            jsr   ToggleAPUChannel
+;            brl   NES_EvtLoop
+;:not_3
+;
+;            cmp   #'4'
+;            bne   :not_4
+;            lda   #$08
+;            jsr   ToggleAPUChannel
+;            brl   NES_EvtLoop
+;:not_4
 
             cmp   #'r'
             beq   :exit
