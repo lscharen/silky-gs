@@ -1379,6 +1379,7 @@ EsqNoiseFreqTable dw 1088, 544, 272, 136, 68, 45,34,27,22,17,12,9,6,4,2,1
 APU_FORCE_OFF dw 0
 
 APU_STATUS_FORCE
+    php
     phb
     phk
     plb
