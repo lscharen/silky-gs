@@ -16,6 +16,18 @@ REM Cadius does not overwrite files, so clear the files first
 %CADIUS% DELETEFILE %IMAGE% %FOLDER%IceClimberGS
 %CADIUS% DELETEFILE %IMAGE% %FOLDER%ExciteBikeGS
 %CADIUS% DELETEFILE %IMAGE% %FOLDER%DonkeyKongGS
+%CADIUS% DELETEFILE %IMAGE% %FOLDER%DonkeyKongGS
+%CADIUS% DELETEFILE %IMAGE% %FOLDER%Finder.Data
+%CADIUS% DELETEFOLDER %IMAGE% %FOLDER%Icons
+
+REM Collect the files in a single spot
+COPY .\src\games\smb\SuperMarioGS .\src\games\SuperMarioGS
+COPY .\src\games\bf\BalloonFgtGS .\src\games\BalloonFighGS
+COPY .\src\games\lightsout\LightsOutGS .\src\games\LightsOutGS
+COPY .\src\games\wumpus\WumpusGS .\src\games\WumpusGS
+COPY .\src\games\iceclimber\IceClimberGS .\src\games\IceClimberGS
+COPY .\src\games\excitebike\ExciteBikeGS .\src\games\ExciteBikeGS
+COPY .\src\games\dk\DonkeyKongGS .\src\games\DonkeyKongGS
 
 REM Now copy files and folders as needed
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\smb\SuperMarioGS
@@ -28,5 +40,6 @@ REM Now copy files and folders as needed
 
 %CADIUS% CREATEFOLDER %IMAGE% %FOLDER%Icons
 %CADIUS% ADDFILE %IMAGE% %FOLDER%Icons .\emu\Classics
+%CADIUS% ADDFILE %IMAGE% %FOLDER% .\emu\Finder.Data
 
 REM Copy in the image assets
