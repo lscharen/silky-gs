@@ -4,97 +4,56 @@
 ;.org $C000  ; for listing file
 ; 0x000010-0x00400F
 
-        use  bank_ram.inc
-        use  bank_val.inc
-ROMBase ENT
-        ds   $BD00
-        put  ../../rom/rom_inject.s
 
-LDA_ram_0000_Y      LDA_ABS_Y ram_0000
-STA_ram_0004_Y      STA_ABS_Y ram_0004
-
-STA_ram_0059_plr_Y  STA_ABS_Y {ram_0060_plr - $01}
-LDA_ram_btn_press_Y LDA_ABS_Y ram_btn_press
-LDA_ram_btn_hold_Y  LDA_ABS_Y ram_btn_hold
-LDA_ram_0090_obj_Y  LDA_ABS_Y {ram_0091_obj - $01}
-STA_ram_0090_obj_Y  STA_ABS_Y {ram_0091_obj - $01}
-LDA_ram_0091_obj_Y  LDA_ABS_Y ram_0091_obj
-STA_ram_0091_obj_Y  STA_ABS_Y ram_0091_obj
-LDA_ram_0094_obj_Y  LDA_ABS_Y {ram_0091_obj + $03}
-STA_ram_0094_obj_Y  STA_ABS_Y {ram_0091_obj + $03}
-LDA_ram_008E_obj_Y  LDA_ABS_Y {ram_0091_obj - $03}
-STA_ram_008E_obj_Y  STA_ABS_Y {ram_0091_obj - $03}
-LDA_ram_009C_obj_pos_X_Y LDA_ABS_Y ram_009C_obj_pos_X
-ADC_ram_009C_obj_pos_X_Y ADC_ABS_Y ram_009C_obj_pos_X
-LDA_ram_00A7_obj_pos_Y_Y LDA_ABS_Y ram_00A7_obj_pos_Y
-LDA_ram_plr_handler_Y LDA_ABS_Y ram_plr_handler
-LDA_ram_002D_plr_Y LDA_ABS_Y ram_002D_plr
-ADC_ram_plr_pos_X_Y ADC_ABS_Y ram_plr_pos_X
-STA_ram_plr_pos_X_Y STA_ABS_Y ram_plr_pos_X
-JMP_IND_02          JMP_ABS_IND $02
-
-IIGS_CLEAR
-        rep  #$30
-        ldx  #$00fe   ; avoid clearing top of stack since we entered via the harness
-        lda  #0
-:loop
-        sta  00,x
-        dex
-        dex
-        bpl  :loop
-        sep  #$30
-        rts
-  
-        ds   \,$00
 
 tbl_C000_lo
-  db  ram_ppu_buffer ;   00 ; logo screen, mountain counter
-  db  {ram_0500_data + $4C} ;   01 ; logo screen palette
-  db  _off000_C6B8_02 ; 
-  db  _off000_C6E3_03 ; 
-  db  _off000_C694_04 ; 
-  db  ram_0400_data ;   05 ; logo screen bg data
-  db  _off000_C6ED_06 ; 
-  db  {ram_0400_data + $DF} ;   07 ; score counting screen palette, see 0x005295
-  db  {ram_0400_data + $81} ;   08 ; score counting screen bg data (additional data for 2nd player)
-  db  ram_0600_data ;   09 ; 
+  db < ram_ppu_buffer ;   00 ; logo screen, mountain counter
+  db < (ram_0500_data + $4C) ;   01 ; logo screen palette
+  db < _off000_C6B8_02 ; 
+  db < _off000_C6E3_03 ; 
+  db < _off000_C694_04 ; 
+  db < ram_0400_data ;   05 ; logo screen bg data
+  db < _off000_C6ED_06 ; 
+  db < (ram_0400_data + $DF) ;   07 ; score counting screen palette, see 0x005295
+  db < (ram_0400_data + $81) ;   08 ; score counting screen bg data (additional data for 2nd player)
+  db < ram_0600_data ;   09 ; 
 
 
 
 tbl_C00A_hi
   db > ram_ppu_buffer ;   00 ; 
-  db > {ram_0500_data + $4C} ;   01 ; 
+  db > (ram_0500_data + $4C) ;   01 ; 
   db > _off000_C6B8_02 ; 
   db > _off000_C6E3_03 ; 
   db > _off000_C694_04 ; 
   db > ram_0400_data ;   04 ; 
   db > _off000_C6ED_06 ; 
-  db > {ram_0400_data + $DF} ;   06 ; 
-  db > {ram_0400_data + $81} ;   07 ; 
+  db > (ram_0400_data + $DF) ;   06 ; 
+  db > (ram_0400_data + $81) ;   07 ; 
   db > ram_0600_data ;   08 ; 
 
 
 
 vec_C014_RESET
-;  SEI
+  SEI
   CLD
   LDA #$10
-  JSR STA_2000
+  STA $2000
   LDX #$FF
-;  TXS
+  TXS
 ; bzk optimize, BIT + BPL
-;bra_C01E_infinite_loop
-;  JSR LDA_2002
-;  ASL
-;  BCC bra_C01E_infinite_loop
-;bra_C024_infinite_loop
-;  JSR LDA_2002
-;  ASL
-;  BCC bra_C024_infinite_loop
+bra_C01E_infinite_loop
+  LDA $2002
+  ASL
+  BCC bra_C01E_infinite_loop
+bra_C024_infinite_loop
+  LDA $2002
+  ASL
+  BCC bra_C024_infinite_loop
   LDY #$07
-  STY <ram_0001
+  STY ram_0001
   LDY #$00
-  STY <ram_0000
+  STY ram_0000
   TYA ; 00
   LDX #$5A
   CPX ram_reset_check
@@ -110,16 +69,14 @@ bra_C041_loop
   STA (ram_0000),Y
   DEY
   BNE bra_C041_loop
-  DEC <ram_0001
+  DEC ram_0001
   BPL bra_C041_loop
-  JSR IIGS_CLEAR
   LDA #$5A
   STA ram_reset_check
   STA ram_reset_check + $01
   JSR sub_C05E
   JSR sub_C141_enable_nmi
 loc_C058_infinite_loop
-  jsl yield
   JSR sub_CACE_generate_random
   JMP loc_C058_infinite_loop
 
@@ -127,11 +84,11 @@ loc_C058_infinite_loop
 
 sub_C05E
   LDA #$00
-  JSR STA_4011
+  STA $4011
   LDA #$0F
-  JSR STA_4015
+  STA $4015
   LDA #$06
-  JSR STA_2001
+  STA $2001
 sub_C06D
   JSR sub_C883
 sub_C070
@@ -157,29 +114,29 @@ bra_C083
   BNE bra_C095
   LDA ram_for_2001
   ORA #$1E
-  JSR STA_2001
+  STA $2001
   STA ram_for_2001
 bra_C095
   LDA #< ram_oam
-  JSR STA_2003
+  STA $2003
   LDA #> ram_oam
-  JSR STA_4014
+  STA $4014
   LDX ram_buffer_offset
   JSR sub_C150
 ; A = 00
   STA ram_buffer_offset
   STA ram_00DE_flag
   LDA #> $3F00
-  JSR STA_2006
+  STA $2006
   LDA #< $3F00
-  JSR STA_2006
+  STA $2006
 ; A = 00
-  JSR STA_2006
-  JSR STA_2006
-  JSR LDA_2002
+  STA $2006
+  STA $2006
+  LDA $2002
   JSR sub_CB81_set_scroll
   LDA ram_for_2000
-  JSR STA_2000
+  STA $2000
   JSR sub_CAED_read_joy_regs
   JSR sub_F91E_update_sound_engine
   LDA ram_0053_flag
@@ -198,7 +155,7 @@ bra_C0D3
 ; 02
   LDA ram_for_2001
   AND #$EF
-  JSR STA_2001
+  STA $2001
   STA ram_for_2001
   LDA ram_btn_press
   AND #con_btn_Start
@@ -223,7 +180,7 @@ bra_C103_01
 bra_C10A_04
   LDA ram_for_2001
   ORA #$10
-  JSR STA_2001
+  STA $2001
   STA ram_for_2001
   LDA #$00
   STA ram_034C
@@ -253,18 +210,17 @@ loc_C138_exit_nmi
   PLA
   TAX
   PLA
-;  RTI
-  rts
+  RTI
 
 
 
 sub_C141_enable_nmi
-  JSR LDA_2002
+  LDA $2002
   LDA ram_for_2000
   ORA #$80
 sub_C148_set_2000
   STA ram_for_2000
-  JSR STA_2000
+  STA $2000
   RTS
 
 
@@ -412,8 +368,7 @@ bra_C23B
   LDY #$90
 bra_C23F_loop
 ; 0060-00EF
-;  STA ram_0060_plr - $01,Y
-  jsr STA_ram_0059_plr_Y
+  STA ram_0060_plr - $01,Y
   DEY
   BNE bra_C23F_loop
   LDA #$04
@@ -757,7 +712,7 @@ ofs_001_C460_00
   LDA ram_spawn_timer_lo_bird
   BNE bra_C484_not_demo_yet
 ; A = 00
-  JSR STA_4015
+  STA $4015
   STA ram_game_mode
   LDA ram_mountain_current
   STA ram_03FE
@@ -1059,7 +1014,7 @@ bra_C626
   LDA ram_03FE
   STA ram_mountain_current
   LDA #$0F
-  JSR STA_4015
+  STA $4015
   LDA #$00
   STA ram_0053_flag
   INC ram_03FD
@@ -1225,26 +1180,26 @@ _off000_C6ED_06
   db $00   ; end token
 
 
-; A0 04 10 12
+
 tbl_C6F7_ppu_lo
-;  db < _off000_0x0050B0_05_00   ; 00 
-;  db < _off000_0x005214_05_01   ; 01 
-  db $A0,$04
+  db < _off000_0x0050B0_05_00   ; 00 
+  db < _off000_0x005214_05_01   ; 01 
+
 
 
 tbl_C6F9_ppu_hi
-;  db > _off000_0x0050B0_05_00   ; 00 
-;  db > _off000_0x005214_05_01   ; 01 
-  db $10,$12
+  db > _off000_0x0050B0_05_00   ; 00 
+  db > _off000_0x005214_05_01   ; 01 
+
 
 
 sub_C6FB_copy_data_from_ppu
   JSR sub_C891_write_00_to_2001
   LDA tbl_C6F9_ppu_hi,X
-  JSR STA_2006
+  STA $2006
   LDA tbl_C6F7_ppu_lo,X
-  JSR STA_2006
-  JSR LDA_2007   ; dummy read
+  STA $2006
+  LDA $2007   ; dummy read
   LDA #< ram_0400_data
   STA ram_0000
   TAY ; 00
@@ -1253,7 +1208,7 @@ sub_C6FB_copy_data_from_ppu
   LDX #$02
 bra_C718_loop
 ; 0400-05FF
-  JSR LDA_2007   ; actual read
+  LDA $2007   ; actual read
   STA (ram_0000),Y
   INY
   BNE bra_C718_loop
@@ -1279,8 +1234,7 @@ sub_C728_jump_to_pointers_after_jsr
   INY
   LDA (ram_0000),Y
   STA ram_0003
-;  JMP (ram_0002)
-  JMP JMP_IND_02
+  JMP (ram_0002)
 
 
 
@@ -1535,7 +1489,7 @@ sub_C883
 
 sub_C891_write_00_to_2001
   LDA #$00
-  JSR STA_2001
+  STA $2001
   RTS
 
 
@@ -1551,19 +1505,19 @@ sub_C89A
   LDA #$28
 sub_C8A4
   STA ram_0000
-  JSR LDA_2002
+  LDA $2002
   LDA ram_for_2000
   AND #$FB
-  JSR STA_2000
+  STA $2000
   LDA ram_0000
-  JSR STA_2006
+  STA $2006
   LDA #$00
-  JSR STA_2006
+  STA $2006
   TAY ; 00
   LDX #$04
   LDA #$38
 bra_C8BF_loop
-  JSR STA_2007
+  STA $2007
   DEY
   BNE bra_C8BF_loop
   DEX
@@ -1571,13 +1525,13 @@ bra_C8BF_loop
   LDA ram_0000
   CLC
   ADC #$03
-  JSR STA_2006
+  STA $2006
   LDA #$C0
-  JSR STA_2006
+  STA $2006
   LDY #$40
   LDA #$00
 bra_C8D9_loop
-  JSR STA_2007
+  STA $2007
   DEY
   BNE bra_C8D9_loop
   RTS
@@ -1929,23 +1883,21 @@ bra_CAE6_loop
   RTS
 
 
-native_joy    EXT
+
 sub_CAED_read_joy_regs
   JSR sub_CB35
   LDA #$01
-  JSR STA_4016
+  STA $4016
   LDX #$00
   LDA #$00
-  JSR STA_4016
+  STA $4016
   JSR sub_CB00
   INX
 sub_CB00
-  ldal  native_joy,x
-  bra   :native_done  ; 6 bytes
   LDY #$08
-; bra_CB02_loop
-;  PHA
-;  JSR LDA_4016_X
+bra_CB02_loop
+  PHA
+  LDA $4016,X
   STA ram_0000
   LSR
   ORA ram_0000
@@ -1953,8 +1905,7 @@ sub_CB00
   PLA
   ROL
   DEY
-;  BNE bra_CB02_loop
-:native_done
+  BNE bra_CB02_loop
   STX ram_0000
   ASL ram_0000
   LDX ram_0000
@@ -1986,10 +1937,10 @@ sub_CB35
 
 
 bra_CB3E_loop
-  JSR STA_2006
+  STA $2006
   INY
   LDA (ram_0000),Y
-  JSR STA_2006
+  STA $2006
   INY
   LDA (ram_0000),Y
   ASL
@@ -2014,7 +1965,7 @@ bra_CB61_loop
   INY
 bra_CB64
   LDA (ram_0000),Y
-  JSR STA_2007
+  STA $2007
   DEX
   BNE bra_CB61_loop
   SEC
@@ -2025,7 +1976,7 @@ bra_CB64
   ADC ram_0001
   STA ram_0001
 sub_CB78
-  JSR LDX_2002
+  LDX $2002
   LDY #$00
   LDA (ram_0000),Y
   BNE bra_CB3E_loop
@@ -2033,9 +1984,9 @@ sub_CB78
 sub_CB81_set_scroll
 loc_CB81_set_scroll
   LDA ram_scroll_X
-  JSR STA_2005
+  STA $2005
   LDA ram_scroll_Y
-  JSR STA_2005
+  STA $2005
   RTS
 
 
@@ -2093,8 +2044,8 @@ tbl_CBB3
 
 
 tbl_CBBF_oam_lo
-  db < {ram_spr_Y + $00}   ; 00 
-  db < {ram_spr_Y + $24}   ; 01 
+  db < (ram_spr_Y + $00)   ; 00 
+  db < (ram_spr_Y + $24)   ; 01 
 
 
 
@@ -2311,8 +2262,7 @@ sub_CCF6
   TXA
   ASL
   TAY
-;  LDA ram_btn_press,Y
-  JSR LDA_ram_btn_press_Y
+  LDA ram_btn_press,Y
   STA ram_0070_plr,X
   JSR sub_D552
   LDA ram_0352_plr,X
@@ -2455,8 +2405,7 @@ loc_CDB0
   TXA
   ASL
   TAY
-;  LDA ram_btn_hold,Y
-  JSR LDA_ram_btn_hold_Y
+  LDA ram_btn_hold,Y
   AND #con_btn_B
   BEQ bra_CDC4
   LDA #$05
@@ -2704,15 +2653,14 @@ sub_CF1A
   BCC bra_CF55
 bra_CF46
   LDY ram_0007
-  STY <ram_0088_plr,X
-  
+  STY ram_0088_plr,X
   JSR sub_CD62
   BCC bra_CF55
   SEC
   RTS
 bra_CF51
   LDA #$00
-  STA <ram_0088_plr,X
+  STA ram_0088_plr,X
 bra_CF55
   CLC
   RTS
@@ -3025,14 +2973,11 @@ sub_D111
   BNE bra_D126_RTS
   LDY #$0B
 bra_D117_loop
-;  LDA ram_0091_obj - $01,Y
-  JSR LDA_ram_0090_obj_Y
+  LDA ram_0091_obj - $01,Y
   CMP #$20
   BNE bra_D123
   LDA #$FF
-;  STA ram_0091_obj - $01,Y
-  JSR LDA_ram_0090_obj_Y
-
+  STA ram_0091_obj - $01,Y
 bra_D123
   DEY
   BNE bra_D117_loop
@@ -3413,8 +3358,7 @@ bra_D33C
   JSR sub_D446
 ; triggers when an enemy touches you
   LDA #$20
-;  STA ram_0091_obj,Y ; 0091 0093 
-  JSR STA_ram_0091_obj_Y
+  STA ram_0091_obj,Y ; 0091 0093 
   CPY #$02
   BCC bra_D371_RTS
 ; 02+
@@ -3424,20 +3368,16 @@ bra_D33C
   CPY #$05
   BCS bra_D367_05_07
 ; 02-04
-;  LDA ram_0091_obj + $03,Y ; 0096 
-  JSR LDA_ram_0094_obj_Y
+  LDA ram_0091_obj + $03,Y ; 0096 
   BPL bra_D371_RTS
   LDA #$20
-;  STA ram_0091_obj + $03,Y
-  JSR LDA_ram_0094_obj_Y
+  STA ram_0091_obj + $03,Y
   RTS
 bra_D367_05_07
-;  LDA ram_0091_obj - $03,Y
-  JSR LDA_ram_008E_obj_Y
+  LDA ram_0091_obj - $03,Y
   BPL bra_D371_RTS
   LDA #$20
-;  STA ram_0091_obj - $03,Y
-  JSR STA_ram_008E_obj_Y
+  STA ram_0091_obj - $03,Y
 bra_D371_RTS
   RTS
 bra_D372
@@ -3455,10 +3395,10 @@ bra_D383
   LDA ram_plr_handler,X
   AND #$01
   BEQ bra_D390_RTS
-  STY <ram_0068_plr,X
+  STY ram_0068_plr,X
   TYA
   AND #$01
-  STA <ram_0062_plr,X
+  STA ram_0062_plr,X
 bra_D390_RTS
   RTS
 
@@ -3476,8 +3416,7 @@ bra_D393
   CPY #$09
   BCS bra_D3AB_RTS
   LDA #$01
-;  STA ram_0091_obj,Y
-  JSR STA_ram_0091_obj_Y
+  STA ram_0091_obj,Y
   LDA tbl_D391_plr_counters_start_address,X
   TAX
   INC ram_plr_counter_fruits,X
@@ -3543,8 +3482,7 @@ bra_D3F6
   BNE bra_D400
   LDA #$05
 bra_D400
-;  STA ram_0091_obj,Y
-  JSR STA_ram_0091_obj_Y
+  STA ram_0091_obj,Y
   LDA #$00
   STA ram_03B1_obj,Y
   LDA #$FF
@@ -4115,17 +4053,17 @@ tbl_D75E
 
 
 tbl_D762
-  db < {ram_0500_data + $02}   ; 00 
-  db < {ram_0500_data + $00}   ; 01 
-  db < {ram_0500_data + $18}   ; 02 
-  db < {ram_0500_data + $30}   ; 03 
-  db < {ram_0500_data + $48}   ; 04 
-  db < {ram_0500_data + $60}   ; 05 
-  db < {ram_0500_data + $78}   ; 06 
-  db < {ram_0500_data + $90}   ; 07 
-  db < {ram_0500_data + $A8}   ; 08 
-  db < {ram_0500_data + $C0}   ; 09 
-  db < {ram_0500_data + $D8}   ; 0A 
+  db < (ram_0500_data + $02)   ; 00 
+  db < (ram_0500_data + $00)   ; 01 
+  db < (ram_0500_data + $18)   ; 02 
+  db < (ram_0500_data + $30)   ; 03 
+  db < (ram_0500_data + $48)   ; 04 
+  db < (ram_0500_data + $60)   ; 05 
+  db < (ram_0500_data + $78)   ; 06 
+  db < (ram_0500_data + $90)   ; 07 
+  db < (ram_0500_data + $A8)   ; 08 
+  db < (ram_0500_data + $C0)   ; 09 
+  db < (ram_0500_data + $D8)   ; 0A 
 
 
 
@@ -4752,7 +4690,7 @@ bra_DA87
   LDY #$01
 bra_DA8F
   STA ram_plr_pos_X,X
-  STY <ram_0062_plr,X
+  STY ram_0062_plr,X
 bra_DA93
   DEX
   BPL bra_DA4D_loop
@@ -4787,7 +4725,7 @@ bra_DAB7
   RTS
 bra_DABC
   JSR sub_DBB4
-  STY <ram_005C_plr,X
+  STY ram_005C_plr,X
   LDA ram_0003
   STA ram_007D_plr,X
   JSR sub_DAF2
@@ -4859,13 +4797,11 @@ sub_DB1D
   BNE bra_DB2C
   CPY #$08
   BCC bra_DB2C
-;  LDA ram_0091_obj,Y ; 0099 009A 009B 
-  JSR LDA_ram_0091_obj_Y
+  LDA ram_0091_obj,Y ; 0099 009A 009B 
   CMP #$02
   BEQ bra_DB31
 bra_DB2C
-;  LDA ram_0091_obj,Y ; 0091 0092 0093 0094 0095 0096 0097 0098 0099 009A 009B 
-  JSR LDA_ram_0091_obj_Y
+  LDA ram_0091_obj,Y ; 0091 0092 0093 0094 0095 0096 0097 0098 0099 009A 009B 
   BPL bra_DBA4
 bra_DB31
   LDA ram_0055
@@ -4877,20 +4813,17 @@ bra_DB31
   LDX ram_00B2_obj,Y
   LDA ram_0008
   BNE bra_DB54
-;  LDA ram_009C_obj_pos_X,Y
-  jsr LDA_ram_009C_obj_pos_X_Y
+  LDA ram_009C_obj_pos_X,Y
   BMI bra_DB4B
   LDA #$10
   db $2C   ; BIT opcode
 bra_DB4B
   LDA #$F8
   CLC
-;  ADC ram_009C_obj_pos_X,Y
-  JSR ADC_ram_009C_obj_pos_X_Y
+  ADC ram_009C_obj_pos_X,Y
   JMP loc_DB57
 bra_DB54
-;  LDA ram_009C_obj_pos_X,Y
-  JSR LDA_ram_009C_obj_pos_X_Y
+  LDA ram_009C_obj_pos_X,Y
 loc_DB57
   CLC
   ADC tbl_D7BD_pos_X,Y
@@ -4901,8 +4834,7 @@ loc_DB57
   CMP tbl_D7AD_pos_X,X
   BCS bra_DBA4
 bra_DB65
-;  LDA ram_009C_obj_pos_X,Y
-  JSR LDA_ram_009C_obj_pos_X_Y
+  LDA ram_009C_obj_pos_X,Y
   CLC
   ADC tbl_D7BD_pos_X,Y
   SEC
@@ -4921,8 +4853,7 @@ bra_DB81
   CMP #$0C
   BCS bra_DBA4
 bra_DB86
-;  LDA ram_00A7_obj_pos_Y,Y
-  JSR LDA_ram_00A7_obj_pos_Y_Y
+  LDA ram_00A7_obj_pos_Y,Y
   CLC
   ADC tbl_D7B7_pos_Y,Y
   SEC
@@ -4976,7 +4907,7 @@ bra_DBB6
   INY
 bra_DBCB
 ; ram_giant_bird_Y_pos
-  STY <ram_00D7,X ; 00D7 00D8 
+  STY ram_00D7,X ; 00D7 00D8 
   CPY #$0A
   BCS bra_DBAD
   LDA ram_0000
@@ -5354,7 +5285,7 @@ bra_DDEC
   SBC ram_00D7,X ; 00D7 00D8 
   CMP #$03
   BCS bra_DE10
-  STY <ram_005C_plr,X
+  STY ram_005C_plr,X
   LDA ram_0003
   STA ram_007D_plr,X ; 007D 007E 
   JSR sub_DAF2
@@ -5414,7 +5345,7 @@ loc_DE44
   STA (ram_0003),Y
   LDX #$02
 ; bzk optimize, X = 2
-  STY <ram_005E - $02,X
+  STY ram_005E - $02,X
   LDA ram_0003
 ; bzk optimize, X = 2
   STA ram_007F - $02,X
@@ -6248,8 +6179,7 @@ bra_E2BE
   BPL bra_E2A3_loop
   LDY #$01
 bra_E2C5_loop
-;  LDA ram_plr_handler,Y
-  JSR LDA_ram_plr_handler_Y
+  LDA ram_plr_handler,Y
   CMP #$01
   BEQ bra_E2D0
   CMP #$03
@@ -6261,8 +6191,7 @@ bra_E2D0
   BMI bra_E2F4
   CPX #$09
   BEQ bra_E2F4
-;  LDA ram_002D_plr,Y
-  JSR LDA_ram_002D_plr_Y
+  LDA ram_002D_plr,Y
   BNE bra_E2E6
   LDA ram_0343_plr,Y
   BNE bra_E2EC
@@ -6284,10 +6213,8 @@ sub_E2F8
   LDA ram_07B0_obj + $07,X
 sub_E2FB
   CLC
-;  ADC ram_plr_pos_X,Y
-;  STA ram_plr_pos_X,Y
-  JSR ADC_ram_plr_pos_X_Y
-  JSR STA_ram_plr_pos_X_Y
+  ADC ram_plr_pos_X,Y
+  STA ram_plr_pos_X,Y
   RTS
 
 
@@ -6361,8 +6288,7 @@ bra_E362
   BPL bra_E343_loop
   LDY #$01
 bra_E367_loop
-;  LDA ram_plr_handler,Y
-  JSR LDA_ram_plr_handler_Y
+  LDA ram_plr_handler,Y
   CMP #$01
   BEQ bra_E372
   CMP #$03
@@ -6855,8 +6781,7 @@ bra_E6AD
   STA ram_07A0_obj + $07,X ; 07A7 07A8 
   LDY #$00
 bra_E6BE_loop
-;  LDA ram_0000,Y ; 0000 0001 0002 0003 0004 
-  JSR LDA_ram_0000_Y
+  LDA ram_0000,Y ; 0000 0001 0002 0003 0004 
   STA ram_0786,X ; 0786 0787 0788 0789 078A 078B 078C 078D 078E 078F 
   INX
   INX
@@ -6964,8 +6889,7 @@ bra_E74B_loop
   BCC bra_E75E
   LDA #$00
 bra_E75E
-;  STA ram_0004,Y
-  JSR STA_ram_0004_Y
+  STA ram_0004,Y
   LDA ram_000C
   TAX
   AND #$E0
@@ -7571,36 +7495,36 @@ bra_EAA1_RTS
 
 
 tbl_EAA2_oam_lo
-  db < {ram_spr_Y + $00}   ; 01 
-  db < {ram_spr_Y + $24}   ; 02 
-  db < {ram_spr_Y + $60}   ; 03 
-  db < {ram_spr_Y + $40}   ; 04 
-  db < {ram_spr_Y + $70}   ; 05 
-  db < {ram_spr_Y + $88}   ; 06 
-  db < {ram_spr_Y + $A0}   ; 07 
-  db < {ram_spr_Y + $80}   ; 08 
-  db < {ram_spr_Y + $98}   ; 09 
-  db < {ram_spr_Y + $B0}   ; 0A 
-  db < {ram_spr_Y + $1C}   ; 0B 
-  db < {ram_spr_Y + $20}   ; 0C 
-  db < {ram_spr_Y + $E0}   ; 0D 
-  db < {ram_spr_Y + $40}   ; 0E 
-  db < {ram_spr_Y + $60}   ; 0F 
-  db < {ram_spr_Y + $70}   ; 10 
-  db < {ram_spr_Y + $80}   ; 11 
-  db < {ram_spr_Y + $90}   ; 12 
-  db < {ram_spr_Y + $A0}   ; 13 
-  db < {ram_spr_Y + $B0}   ; 14 
-  db < {ram_spr_Y + $5C}   ; 15 
-  db < {ram_spr_Y + $6C}   ; 16 
-  db < {ram_spr_Y + $7C}   ; 17 
-  db < {ram_spr_Y + $40}   ; 18 
-  db < {ram_spr_Y + $48}   ; 19 
-  db < {ram_spr_Y + $50}   ; 1A 
-  db < {ram_spr_Y + $1C}   ; 1B 
-  db < {ram_spr_Y + $20}   ; 1C 
-  db < {ram_spr_Y + $00}   ; 1D 
-  db < {ram_spr_Y + $20}   ; 1E 
+  db < (ram_spr_Y + $00)   ; 01 
+  db < (ram_spr_Y + $24)   ; 02 
+  db < (ram_spr_Y + $60)   ; 03 
+  db < (ram_spr_Y + $40)   ; 04 
+  db < (ram_spr_Y + $70)   ; 05 
+  db < (ram_spr_Y + $88)   ; 06 
+  db < (ram_spr_Y + $A0)   ; 07 
+  db < (ram_spr_Y + $80)   ; 08 
+  db < (ram_spr_Y + $98)   ; 09 
+  db < (ram_spr_Y + $B0)   ; 0A 
+  db < (ram_spr_Y + $1C)   ; 0B 
+  db < (ram_spr_Y + $20)   ; 0C 
+  db < (ram_spr_Y + $E0)   ; 0D 
+  db < (ram_spr_Y + $40)   ; 0E 
+  db < (ram_spr_Y + $60)   ; 0F 
+  db < (ram_spr_Y + $70)   ; 10 
+  db < (ram_spr_Y + $80)   ; 11 
+  db < (ram_spr_Y + $90)   ; 12 
+  db < (ram_spr_Y + $A0)   ; 13 
+  db < (ram_spr_Y + $B0)   ; 14 
+  db < (ram_spr_Y + $5C)   ; 15 
+  db < (ram_spr_Y + $6C)   ; 16 
+  db < (ram_spr_Y + $7C)   ; 17 
+  db < (ram_spr_Y + $40)   ; 18 
+  db < (ram_spr_Y + $48)   ; 19 
+  db < (ram_spr_Y + $50)   ; 1A 
+  db < (ram_spr_Y + $1C)   ; 1B 
+  db < (ram_spr_Y + $20)   ; 1C 
+  db < (ram_spr_Y + $00)   ; 1D 
+  db < (ram_spr_Y + $20)   ; 1E 
 
 
 
@@ -7882,11 +7806,9 @@ sub_EC2A
   TXA
   ASL
   TAY
-;  LDA ram_btn_hold,Y
-  JSR LDA_ram_btn_hold_Y
+  LDA ram_btn_hold,Y
   ORA ram_0070_plr,X
-;  AND #con_btns_SS ^ $FF
-  AND #con_btns_SS ! $FF
+  AND #con_btns_SS ^ $FF
   BEQ bra_EC42
   LDA #$00
   STA ram_002D_plr,X
@@ -8107,8 +8029,8 @@ sub_ED63_TXA_ASL_ASL_TAY
 
 
 tbl_ED68_oam_lo
-  db < {ram_spr_Y + $E8}   ; 00 
-  db < {ram_spr_Y + $F4}   ; 01 
+  db < (ram_spr_Y + $E8)   ; 00 
+  db < (ram_spr_Y + $F4)   ; 01 
 
 
 
@@ -9473,11 +9395,11 @@ sub_F471
   BNE bra_F499_loop
 bra_F477_loop
   LDY #$00
-  STY <ram_006C_plr,X
+  STY ram_006C_plr,X
   INY ; 01
-  STY <ram_00E4_plr,X
+  STY ram_00E4_plr,X
   INY ; 02
-  STY <ram_plr_handler,X
+  STY ram_plr_handler,X
   LDA #$F0
   STA ram_00E2_plr,X
   LDA #$3F
@@ -10379,7 +10301,7 @@ bra_F919
 
 sub_F91E_update_sound_engine
   LDA #$FF
-  JSR STA_4017
+  STA $4017
   JSR sub_F9EB_play_sfx_3
   JSR sub_FAC4_play_sfx_2
   JSR sub_FBA1_play_sfx_1
@@ -10401,21 +10323,21 @@ bra_F949
   BEQ bra_F94F
   DEC ram_0711_se
 bra_F94F
-  JSR STY_4011
+  STY $4011
   RTS
 
 
 
 sub_F953_set_4000_4001
-  JSR STX_4000
-  JSR STY_4001
+  STX $4000
+  STY $4001
   RTS
 
 
 
 sub_F95A_set_4004_4005
-  JSR STX_4004
-  JSR STY_4005
+  STX $4004
+  STY $4005
   RTS
 
 
@@ -10429,11 +10351,11 @@ bra_F966
   LDA tbl_FF01,Y
   BEQ bra_F977_RTS
 ; 4002 4006 400A
-  JSR STA_4002_X
+  STA $4002,X
   LDA tbl_FF00,Y
   ORA #$08
 ; 4003 4007 400B
-  JSR STA_4003_X
+  STA $4003,X
 bra_F977_RTS
   RTS
 
@@ -10511,9 +10433,9 @@ bra_F9B1_F0_01
   LSR
   TAY
   LDA tbl_F99F,Y
-  JSR STA_4002
+  STA $4002
   LDA #$08
-  JSR STA_4003
+  STA $4003
   LDX tbl_F993,Y
   LDY #$81
   BNE bra_FA2F    ; jmp
@@ -10534,7 +10456,7 @@ bra_F9D6
   LDA #$20
   JSR sub_F97F_set_400A_400B
   LDA #$1C
-  JSR STA_4008
+  STA $4008
   BNE bra_FA32    ; jmp
 
 
@@ -10589,7 +10511,7 @@ sub_FA36
   STA ram_copy_sfx_3
 sub_FA3A
   LDA #$90
-  JSR STA_4000
+  STA $4000
 bra_FA3F_RTS
   RTS
 bra_FA40_FF_08
@@ -10604,9 +10526,9 @@ bra_FA4A_F0_08
   BNE bra_FA32
   LDA #$02
 bra_FA52
-  JSR STA_4002
+  STA $4002
   LDA #$3B
-  JSR STA_4003
+  STA $4003
   LDX #$BD
   LDY #$8A
   BNE bra_FA2F    ; jmp
@@ -10651,7 +10573,7 @@ bra_FA83_FE_02
   JSR sub_F97B_set_4006_4007
 bra_FA94_F1_02
   LDA ram_0709_se
-  JSR STA_4004
+  STA $4004
   CMP #$95
   BEQ bra_FAA1
   INC ram_0709_se
@@ -10666,7 +10588,7 @@ bra_FAAC
   BNE bra_FAB5
   LDA #$A3
 bra_FAB2
-  JSR STA_4005
+  STA $4005
 bra_FAB5
 bra_FAB5_F1_04
 bra_FAB5_F1_10
@@ -10676,7 +10598,7 @@ loc_FAB5
   LDA #$00
   STA ram_copy_sfx_2
   LDA #$90
-  JSR STA_4004
+  STA $4004
 bra_FAC3_RTS
   RTS
 
@@ -10726,7 +10648,7 @@ bra_FB09_F1_08
   CMP #$04
   BNE bra_FAB5
   LDA #$A9
-  JSR STA_4006
+  STA $4006
   BNE bra_FAB5    ; jmp
 bra_FB17_FE_10
   STY ram_copy_sfx_2
@@ -10737,12 +10659,12 @@ bra_FB17_FE_10
   LDA #$3E
   JSR sub_F978_set_4004_4005_4006_4007
   LDA #$08
-  JSR STA_4007
+  STA $4007
   LDA ram_0712_se
   CMP #$10
   BNE bra_FB38
   LDA #$32
-  JSR STA_4006
+  STA $4006
 bra_FB38
   JMP loc_FAB5
 
@@ -10844,10 +10766,10 @@ bra_FB78_F2_01
   LDA tbl_FB3B,Y
 bra_FB8C
 loc_FB8C
-  JSR STA_400C
-  JSR STX_400E
+  STA $400C
+  STX $400E
   LDA #$08
-  JSR STA_400F
+  STA $400F
   DEC ram_070E_se
   BNE bra_FBA0_RTS
   LDA #$00
@@ -10978,7 +10900,7 @@ bra_FC79
   LDA #con_music_00
   STA ram_music_2
   JSR sub_FA3A
-  JSR STA_4004
+  STA $4004
   RTS
 bra_FC84
   JSR sub_F983
@@ -11012,7 +10934,7 @@ bra_FCAC
   DEC ram_0702_se
 bra_FCBE
   LDA tbl_FFD9,Y
-  JSR STA_4004
+  STA $4004
 bra_FCC4
   LDY ram_00F9_se
   BEQ bra_FCFA
@@ -11059,7 +10981,7 @@ bra_FCFA
 bra_FD16_not_overflow
   ASL
   ASL
-  JSR STA_4008
+  STA $4008
   TXA
   AND #$3E
   JSR sub_F97F_set_400A_400B
@@ -11847,7 +11769,7 @@ off_FFD2_20_40_2
 _off002_FFD8_80
 off_FFD8_80_1
 off_FFD8_80_2
-   db $00   ; 
+  db $00   ; 
 
 
 
@@ -11894,7 +11816,7 @@ vec_FFF0_IRQ
 
 ;.out .sprintf("Free bytes in bank FF 0x%04X [%d]", ($FFFA - *), ($FFFA - *))
 
-  ds 7
+
 
 ;.segment "VECTORS"
   dw vec_C076_NMI

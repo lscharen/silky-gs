@@ -48,7 +48,7 @@ NES_StartUp
             lda   #0
             jsr   _SetBorderColor
 
-; Used for VOC rendering mode to togglee target of the PEA field render between
+; Used for VOC rendering mode to toggle target of the PEA field render between
 ; bank $01 and $00
 
             lda   #1
@@ -154,7 +154,7 @@ NES_EvtLoop
             ELSE
 
 ; Wait for a frame to become available.  This almost never waits, unless
-; dirty rendering mode is on and there are no updated to the screen,
+; dirty rendering mode is on and there are no updates to the screen,
 ; or the user is running under emulation
 
 :spin       lda  frameReady
@@ -179,6 +179,13 @@ NES_EvtLoop
 ; handlers.
 
             and   #$007F
+
+; 'f': force a full repaint of the screen
+            cmp   #'f'
+            bne   :not_f
+            jsr   ForceMetatileRefresh
+            brl   NES_EvtLoop
+:not_f
 
 ; 'b': force the NES Background bit to be toggled
 
@@ -206,7 +213,7 @@ NES_EvtLoop
             ELSE
             cmp   #'?'
             bne   :not_config
-            jsr   stop_playing                            ; Turn off the APU (restarted in Apply Config)
+            jsr   APUStop                                ; Turn off the APU (restarted in Apply Config)
             jsr   NES_StopExecution                       ; Pause emulation nicely
             jsr   ShowConfig                              ; Let the user reconfigure
             jsr   ApplyConfig                             ; Apply to the running configuration
@@ -218,40 +225,40 @@ NES_EvtLoop
             FIN
 
 ; '0': force all of the APU channels to be turned off
-            cmp   #'0'
-            bne   :not_0
-            stz   APU_FORCE_OFF
-            brl   NES_EvtLoop
-:not_0
-
+;            cmp   #'0'
+;            bne   :not_0
+;            stz   APU_FORCE_OFF
+;            brl   NES_EvtLoop
+;:not_0
+;
 ; '1' - '4': toggle individual APU channels
-            cmp   #'1'
-            bne   :not_1
-            lda   #$01
-            jsr   ToggleAPUChannel
-            brl   NES_EvtLoop
-:not_1
-
-            cmp   #'2'
-            bne   :not_2
-            lda   #$02
-            jsr   ToggleAPUChannel
-            brl   NES_EvtLoop
-:not_2
-
-            cmp   #'3'
-            bne   :not_3
-            lda   #$04
-            jsr   ToggleAPUChannel
-            brl   NES_EvtLoop
-:not_3
-
-            cmp   #'4'
-            bne   :not_4
-            lda   #$08
-            jsr   ToggleAPUChannel
-            brl   NES_EvtLoop
-:not_4
+;            cmp   #'1'
+;            bne   :not_1
+;            lda   #$01
+;            jsr   ToggleAPUChannel
+;            brl   NES_EvtLoop
+;:not_1
+;
+;            cmp   #'2'
+;            bne   :not_2
+;            lda   #$02
+;            jsr   ToggleAPUChannel
+;            brl   NES_EvtLoop
+;:not_2
+;
+;            cmp   #'3'
+;            bne   :not_3
+;            lda   #$04
+;            jsr   ToggleAPUChannel
+;            brl   NES_EvtLoop
+;:not_3
+;
+;            cmp   #'4'
+;            bne   :not_4
+;            lda   #$08
+;            jsr   ToggleAPUChannel
+;            brl   NES_EvtLoop
+;:not_4
 
             cmp   #'r'
             beq   :exit
@@ -373,9 +380,7 @@ NES_RenderFrame
 ; be overridden for games that want to preserve the ability to switch between
 ; dirty an full rendering, but still have a custom screen layout
 _SetupPEAField
-            jsr   _ApplyBG0YPosPreLite
-            jsr   _ApplyBG0YPosLite
-            jsr   _ApplyBG0XPosLite
+            jsr   _BltSetup
             sta   exitOffset              ; cache the :exit_offset value returned from this function
 
             lda   #1
@@ -388,9 +393,7 @@ _ResetPEAField
             ldy   exitOffset              ; offset to patch
             jmp   _RestoreBG0OpcodesLite
 
-; Default render screen implementation.  The user-code can override this and provide their
-; own to improve performance.
-RenderScreen
+_GetPPUScrollX
             sep   #$20
             lda   _ppuctrl                ; Bit 0 is the high bit of the X scroll position
             lsr                           ; put in the carry bit
@@ -398,13 +401,30 @@ RenderScreen
             ror                           ; put the high bit and divide by 2 for the engine
             rep   #$20
             and   #$00FF                  ; make sure nothing is in the high byte
-            jsr   _SetBG0XPos
+            asl                           ; Put back into the NES Pixel range
+            tax
+            rts
 
-            lda   _ppuscroll              ; update the y-scroll position
-            clc
-            adc   #y_offset               ; Shift down by the offset
-            and   #$00FF
-            jsr   _SetBG0YPos
+_GetPPUScrollY
+            sep   #$20
+            lda   _ppuctrl                ; Bit 1 is the high bit of the Y scroll position
+            lsr
+            lsr                           ; put in the carry bit
+            lda   _ppuscroll              ; load the scroll value
+            ror
+            rep   #$20
+            rol
+            and   #$01FF
+            tay
+            rts
+
+; Default render screen implementation.  The user-code can override this and provide their
+; own to improve performance.
+RenderScreen
+            jsr   _GetPPUScrollX          ; Return in X register
+            jsr   _GetPPUScrollY          ; Return in Y register
+
+            jsr   NES_SetScroll           ; Set the engine to this scroll position
 
             lda   ppumask                 ; honor the PPU enable flags for sprites and background
             and   ppumask_override
@@ -428,32 +448,40 @@ RenderScreen
             lda   disableDirtyRendering
             bne   :full_update
 
-; This is code path for performing dirty rendering. PEA patching is deferred until needed
+; This is code path for performing dirty rendering.
 
-            lda   peaFieldIsPatched
-            bne   :no_patch
-            jsr   _SetupPEAField
-:no_patch   jsr   drawDirtyScreen
-            bra   :complete
+            jsr   _BltSetupDirty
+            sta   exitOffset
+            jsr   drawDirtyScreen
+            ldy   exitOffset
+            jsr   _RestoreBG0OpcodesLite
+            bra   :dirty_done
 
 :full_update
-            lda   peaFieldIsPatched
-            beq   :no_restore
-            jsr   _ResetPEAField
-:no_restore
-            jsr   _SetupPEAField
+            jsr   _BltSetup
+            sta   exitOffset
             jsr   drawScreen
-:complete
+            ldy   exitOffset
+            jsr   _RestoreBG0OpcodesLite
+:dirty_done
+
+;            lda   peaFieldIsPatched
+;            bne   :no_patch
+;            jsr   _SetupPEAField
+;:no_patch   jsr   drawDirtyScreen
+;            bra   :complete
+;
+;:full_update
+;            lda   peaFieldIsPatched
+;            beq   :no_restore
+;            jsr   _ResetPEAField
+;:no_restore
+;            jsr   _SetupPEAField
+;            jsr   drawScreen
+;:complete
             ELSE
 
-; Set the verical position for this frame
-
-            jsr   _ApplyBG0YPosPreLite
-            jsr   _ApplyBG0YPosLite
-
-; Set the horizontal position for this frame
-
-            jsr   _ApplyBG0XPosLite
+            jsr   _BltSetup
             sta   exitOffset              ; cache the :exit_offset value returned from this function
 
 ; Copy the sprites and buffer to the graphics screen

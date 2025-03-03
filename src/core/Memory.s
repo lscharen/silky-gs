@@ -31,7 +31,7 @@ InitMemory
                _NewHandle                            ; returns LONG Handle on stack
                plx                                   ; base address of the new handle
                ply                                   ; high address 00XX of the new handle (bank)
-               bcs       :mem_err
+               bcs       mem_err
 
 ; Allocate a couple of banks of memory
 
@@ -44,6 +44,57 @@ InitMemory
                stz       SpriteBank0
 
 ; Initialize some memory tables that point to addresses in the blitter code
+;               jsr       InitLiteBlitter
+               jsr       InitLiteBlitterHorz
+               clc
+mem_err
+               rts
+
+
+; Set up the data tables for horizontal mirroring
+InitLiteBlitterHorz
+               ldx       #0
+               ldy       #lite_base_1
+:loop1a
+               tya
+               sta       BTableLow,x
+               clc
+               adc       #_LINE_SIZE_H                ; The screen wraps vertically
+               sta       BTableLow+{240*2},x
+               adc       #_LINE_SIZE_H
+               tay
+
+               lda       #^lite_base_1
+               sta       BTableHigh,x
+               sta       BTableHigh+{240*2},x
+
+               inx
+               inx
+               cpx       #_LINES_PER_BANK*2
+               bcc       :loop1a
+
+               ldy       #lite_base_2
+:loop1b
+               tya
+               sta       BTableLow,x
+               clc
+               adc       #_LINE_SIZE_H
+               sta       BTableLow+{240*2},x
+               adc       #_LINE_SIZE_H
+               tay
+
+               lda       #^lite_base_2
+               sta       BTableHigh,x
+               sta       BTableHigh+{240*2},x
+
+               inx
+               inx
+               cpx       #_LINES_PER_BANK*2*2
+               bcc       :loop1b
+
+               rts
+
+; Set up the data tables for vertical mirroring
 InitLiteBlitter
 
 ; Fill in the BTable and BRowTable values.  There are 120 lines in each bank and each line covers two of
@@ -51,17 +102,17 @@ InitLiteBlitter
 ; nametable row
 
                ldx       #0
-               ldy       #lite_base
+               ldy       #lite_base_1
 
 :loop1a
                tya
                sta       BTableLow,x
                sta       BTableLow+{240*2},x
                clc
-               adc       #_LINE_SIZE
+               adc       #_LINE_SIZE_V
                tay
 
-               lda       #^lite_base
+               lda       #^lite_base_1
                sta       BTableHigh,x
                sta       BTableHigh+{240*2},x
 
@@ -76,7 +127,7 @@ InitLiteBlitter
                sta       BTableLow,x
                sta       BTableLow+{240*2},x
                clc
-               adc       #_LINE_SIZE
+               adc       #_LINE_SIZE_V
                tay
 
                lda       #^lite_base_2
@@ -88,8 +139,6 @@ InitLiteBlitter
                cpx       #_LINES_PER_BANK*2*2
                bcc       :loop1b
 
-               clc
-:mem_err
                rts
 
 ; Bank allocator (for one full, fixed bank of memory. Can be immediately deferenced)

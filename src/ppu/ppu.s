@@ -65,7 +65,11 @@ PPUStartUp
         lda   SpriteBank0+1             ; Patch some dispatch addresses with the sprite compilation bank
         sta   csd+2
 
-        jsr   _InitPPUTileMapping       ; Set up the lookup tables in the PPU shadow RAM
+        DO    NAMETABLE_MIRRORING&HORIZONTAL_MIRRORING
+        jsr   _InitPPUTileMappingHorz       ; Set up the lookup tables in the PPU shadow RAM
+        ELSE
+        jsr   _InitPPUTileMappingVert       ; Set up the lookup tables in the PPU shadow RAM
+        FIN
 
         lda   #$FFFF                    ; Set initial palette values to out-of-range values
         ldx   #0
@@ -81,8 +85,35 @@ PPUStartUp
 
 ; Set up the lookup table to map the PPU Nametable tiles to the PEA field.
 ;
-; The mapping vary depending on whether horizontal or vertical mirroring is set up.
-_InitPPUTileMapping
+; The mapping varies depending on whether horizontal or vertical mirroring is set up.  Since this
+; is core to the PPU emulation, some extra explanation.
+;
+; The PPU only has 2kb of RAM, which has to cover 4kb of address space ($2000 - $2FFF). The solution
+; in the NES is to mirror hald of the address space either "vertically" or "horizontally".  This
+; terminology comes from the fact that the 4kb address space is accessed by the PPU as a 2x2 grid
+;
+; +-----+-----+
+; |  A  |  B  |
+; +-----+-----+
+; |  C  |  D  |
+; +-----+-----+
+;
+; When horizontal mirroring is enabled, the left column (A+C) references the same RAM as the right columns (B+D),
+; so [$2000,$23FF] === [$2400,$27FF] and [$2800,$2BFF] === [$2C00,$2FFF]
+;
+; Vertical mirroring is similar, except that it is the rows that are paired, so (A+B) references the same RAM
+; as (C+D)
+;
+; This impacts the emulation layer in two ways.  First, we do not have a 2kb shadow RAM for the PPU.  Instead,
+; the PEA field that draws the graphics has two nametable's worth of memory and is reconfigured based on the
+; mirroring, so when a PPU address is written, it need to be mapped into the appropriate PEA table location.
+; Second, the runtime maintains several shadow RAM areas that cover the full 4kb of memory to make it fast to
+; look up data
+;
+; HMIRROR_ADDR = PPU_ADDR & $FBFF
+; VMIRROR_ADDR = PPU_ADDR & $FDFF
+
+_InitPPUTileMappingVert
 :row     equ  tmp3
 :col     equ  tmp4
 :ppuaddr equ  tmp5
@@ -94,7 +125,7 @@ _InitPPUTileMapping
         stz  :col
 
 :loop
-        jsr  :setHorizontalMirror
+        jsr  :setVerticalMirror
 
         lda  :col
         inc
@@ -111,7 +142,7 @@ _InitPPUTileMapping
         rts
 
 ; Load the information about the PEA tile at (:col, :row) and store it in the appropriate PPU address location
-:setHorizontalMirror
+:setVerticalMirror
 
 ; First, do some pre-calculations that are the same regardless which nametable we're in
 
@@ -148,7 +179,12 @@ _InitPPUTileMapping
         tax                          ; Use this for a lookup
         clc
         lda  BTableLow,y             ; Load the base address of the PEA row
-        adc  Col2CodeOffset+2,x      ; Combine with the current column (get the left half of the tile)
+
+        and  #$FF00                  ; Just keep the page
+;        ora  Col2PageOffset+2,x
+;        adc  Col2CodeOffset+2,x      ; Combine with the current column (get the left half of the tile)
+        adc  Col2CodeOffset+2,x
+        adc  #_PEA_OFFSET
         ldx  :ppuaddr
 
         sep  #$20                         ; Switch to 8-bit mode to store the values
@@ -167,6 +203,190 @@ _InitPPUTileMapping
         stal PPU_MEM+TILE_ROW+$800,x
 
         rep  #$21
+        rts
+
+_InitPPUTileMappingHorz
+:row     equ  tmp3
+:col     equ  tmp4
+:ppuaddr equ  tmp5
+:row_idx equ  tmp6
+; Run through the PEA field block addresses and then map the information to 
+; the appropriate PPU Nametable locations
+
+        stz  :row
+        stz  :col
+
+:loop
+        jsr  :setHorizontalMirror
+
+        lda  :col
+        inc
+        sta  :col
+        cmp  #32
+        bcc  :loop
+
+        stz  :col
+        lda  :row
+        inc
+        sta  :row
+
+        cmp  #60                    ; There are 60 rows of tiles with the stacked nametables
+        bcc  :loop
+        rts
+
+; Load the information about the PEA tile at (:col, :row) and store it in the appropriate PPU address location
+:setHorizontalMirror
+
+; First, do some pre-calculations that are the same regardless which nametable we're in
+
+        lda  #$2000
+        sta  :ppuaddr                ; Assume first nametable
+        stz  :row_idx
+
+        lda  :row                    ; Multiple the row by 32
+        cmp  #30
+        bcc  :top
+        sbc  #30
+        ldy  #$2800                  ; In the bottom nametable
+        sty  :ppuaddr
+        ldy  #30*16                  ; Index into the next table
+        sty  :row_idx
+:top
+        asl
+        asl
+        asl
+        asl
+        tay                          ; Will use the for lookup later (line = row * 8) where row = 0 to 59
+        asl
+        ora  :ppuaddr                ; Save
+        sta  :ppuaddr
+
+        tya
+        adc  :row_idx
+        tay
+
+; Next, add the column (0 - 31)
+
+        lda  :col
+        ora  :ppuaddr                ; We already know the value is less than 32, merge with the base address
+        sta  :ppuaddr
+
+        lda  :col
+        asl
+        asl
+        tax                          ; Use this for a lookup
+;        clc
+        lda  BTableLow,y             ; Load the base address of the PEA row (rows 0 - 59)
+
+        and  #$FF00                  ; Just keep the page
+;        ora  Col2PageOffset+2,x
+;        adc  Col2CodeOffset+2,x      ; Combine with the current column (get the left half of the tile)
+        adc  Col2CodeOffset+2,x
+        adc  #_PEA_OFFSET
+        ldx  :ppuaddr
+
+        sep  #$20                         ; Switch to 8-bit mode to store the values
+        stal PPU_MEM+TILE_ADDR_LO+$000,x  ; Store the low byte of the PEA tile address
+        stal PPU_MEM+TILE_ADDR_LO+$400,x
+        xba
+        stal PPU_MEM+TILE_ADDR_HI+$000,x  ; Store the high byte of the PEA tile address
+        stal PPU_MEM+TILE_ADDR_HI+$400,x
+
+        lda  BTableHigh,y              ; Load the bank byte
+        stal PPU_MEM+TILE_BANK+$000,x  ; Store it in the PPU bank (Nametable 1)
+        stal PPU_MEM+TILE_BANK+$400,x  ; Store it in the PPU bank (Nametable 3)
+
+        lda  :row
+        stal PPU_MEM+TILE_ROW,x
+        stal PPU_MEM+TILE_ROW+$400,x
+
+        rep  #$21
+        rts
+
+; Wrapper to run through and re-sync the metatiles with the graphics screen.  Mostly used
+; as a debugging aid.
+        mx %00
+ForceMetatileRefresh
+        ldy  #0
+        pha                         ; work space on stack
+:loop
+        lda  #$2000
+        ora  metatile_corner,y      ; calculate the tile address of the metatile corner
+        tax                         ; use for indexing
+        sta  1,s                    ; save for later
+
+        phy
+
+        jsr  :do_metatile
+        lda  3,s
+        clc
+        adc  #$0002
+        tax
+        jsr  :do_metatile
+        lda  3,s
+        clc
+        adc  #$0040
+        tax
+        jsr  :do_metatile
+        lda  3,s
+        clc
+        adc  #$0042
+        tax
+        jsr  :do_metatile
+
+        ply
+        iny
+        iny
+        cpy  #64*2                  ; end of the metatile array?
+        bcc  :loop
+
+; Refresh the second page
+:loop2
+
+        lda  MirrorMaskX
+        bit  #$0100
+        beq  :horz
+        lda  #$2800
+        bra  :next
+:horz   lda  #$2400
+:next
+        ora  metatile_corner,y      ; calculate the tile address of the metatile corner
+        tax                         ; use for indexing
+        sta  1,s                    ; save for later
+
+        phy
+
+        jsr  :do_metatile
+        lda  3,s
+        clc
+        adc  #$0002
+        tax
+        jsr  :do_metatile
+        lda  3,s
+        clc
+        adc  #$0040
+        tax
+        jsr  :do_metatile
+        lda  3,s
+        clc
+        adc  #$0042
+        tax
+        jsr  :do_metatile
+
+        ply
+        iny
+        iny
+        cpy  #64*2                  ; end of the metatile array?
+        bcc  :loop2
+
+        pla                         ; pop the work space
+        rts
+
+:do_metatile
+        sep  #$20
+        ldal PPU_MEM+ATTR_SHADOW,x
+        jsr  RefreshMetatile
+        rep  #$20
         rts
 
 ; Sync a metatile value to the PPU data bank and to the code field
@@ -190,6 +410,7 @@ SyncPPUMetatile
         stal PPU_MEM+ATTR_SHADOW+$20,x
         stal PPU_MEM+ATTR_SHADOW+$21,x
 
+RefreshMetatile                            ; Alternate entry point is not setting a new value
         clc
         adc   SwizzlePtr+1                 ; Set the palette selection (used for all 4 tiles)
         sta   ActivePtr+1
@@ -298,7 +519,7 @@ DrawPPUAttribute
 
         txa
         and  #$2C00                 ; Keep the nametable bits
-        ora  :corner,y              ; Insert the relative offset within the nametable
+        ora  metatile_corner,y      ; Insert the relative offset within the nametable
         tax                         ; This is constant for the ATTR_SHADOW updates
         adc  #$0002                 ; adc #2 faster than two increments
         sta  :mt_base2              ; Calculate the other offsets while it's fast to do so
@@ -368,6 +589,9 @@ _DrawPPUTile
         tya
         sep   #$20
         stal  PPU_MEM+TILE_SHADOW,x
+        jsr   DrawPPUTile
+        rep   #$20
+        rts
 
 ; Draw a tile from the PPU into the code field
 ;
@@ -430,10 +654,13 @@ _UpdateShadowTiles
         lda  #1
         stal PPU_MEM+TILE_VERSION,x  ; Set a flag to track the render status of all potential tiles
 
+; Have not generalize the dirty tile tracking to handle horizontal mirroring yet
+        DO   0&NAMETABLE_MIRRORING&VERTICAL_MIRRORING
         ldal PPU_MEM+TILE_ROW,x
         tax                          ; The high byte of A must be zero.  Even though A is 8-bit, the full 16-bit value is copied to X
         lda  #$FF
         sta  tileBitmap,x
+        FIN
 
         iny                          ; Go to the next queue entry (wish this could be faster...)
         iny
@@ -558,7 +785,7 @@ PPUFlushQueues
 
         txa
         and  #$2C00                 ; Keep the nametable bits
-        ora  :corner,y              ; Insert the relative offset within the nametable
+        ora  metatile_corner,y      ; Insert the relative offset within the nametable
         sta  :mt_base               ; This is constant for the ATTR_SHADOW updates
         adc  #$0002
         sta  :mt_base2              ; Calculate the tile address offsets for the four
@@ -727,7 +954,8 @@ PPUFlushQueues
         rep  #$30                      ; Restore 16-bit mode
         rts
 
-:corner 
+; offset from a nametable ($2000, $2400, $2800, $2C00) to the top-left tile of each metatile
+metatile_corner 
 ]row    =    0
         lup  8
         dw   {128*{]row}}+0
@@ -836,7 +1064,7 @@ PPUSTATUS_READ_X ENT
         stal w_bit             ; Reset the address latch used by PPUSCROLL and PPUADDR
 
         ldal ppustatus
-        ora  #$40              ; always set sprite 0 hit
+;        ora  #$40              ; always set sprite 0 hit
         tax
         and  #$7F              ; Clear the VBL flag
         stal ppustatus
@@ -855,7 +1083,7 @@ PPUSTATUS_READ ENT
         stal w_bit           ; Reset the address latch used by PPUSCROLL and PPUADDR
 
         ldal ppustatus
-        ora  #$40              ; always set sprite 0 hit
+;        ora  #$40              ; always set sprite 0 hit
         pha
         and  #$7F              ; Clear the VBL flag
         stal ppustatus
@@ -903,7 +1131,7 @@ PPUADDR_WRITE ENT
 
         ldx  w_bit
         sta  ppuaddr,x
-;        assert_lt #$40;$D0
+
         txa
         eor  #$01
         sta  w_bit
@@ -923,7 +1151,7 @@ PPUADDR_WRITE ENT
 ;
 ; If reading from the $0000 - $3EFF range, the value from vram_buff is returned and the actual data is loaded
 ; post-fetch.
-PPUDATA_READ ENT
+PPUDATA_READ0 ENT
         php
         phb
         phk
@@ -933,7 +1161,6 @@ PPUDATA_READ ENT
         rep  #$30       ; do a 16-bit update of the address
         ldx  ppuaddr
         txa
-;        assert_lt #$4000;$d1
 
         clc
         adc  ppuincr
@@ -964,9 +1191,87 @@ PPUDATA_READ ENT
         pla
         rtl
 
+PPUDATA_READ ENT
+        php
+        phb
+        phk
+        plb
+        phx
+
+        rep  #$31
+        lda  ppuaddr    ; Load and update the ppu address (guaranteed to be in the range $0000 - $3FFF)
+        tax
+        adc  ppuincr
+        sta  ppuaddr
+
+        cpx  #$3F00     ; If we're reading palette RAM, return the value immediately
+        bcc  :buff_read
+
+        ldal PPU_MEM,x  ; do a 16-bit read, but we'll ignore the top byte
+
+        sep  #$30
+        plx
+        plb
+        plp
+        pha
+        pla
+        rtl
+
+;        ldx  ppuaddr
+;        txa
+;        clc
+;        adc  ppuincr    ; 1 or 32 depending on PPUCTRL, bit 1
+;        and  #$3FFF
+;        sta  ppuaddr
+;        sep  #$20       ; back to 8-bit acc for the read itself
+
+;        cpx  #$3F00     ; check which range of memory we are accessing?
+;        bcc  :buff_read
+
+;        ldal PPU_MEM,x
+;        bra  :out
+
+        mx   %00
+:buff_read
+         cpx  #$2000
+         bcc  :not_in_nt   ; If we are not in the nametable space, just read the PPU memory and return
+
+; apply mirroring
+;
+; HMIRROR_ADDR = PPU_ADDR & $FBFF
+; VMIRROR_ADDR = PPU_ADDR & $FDFF
+
+        DO   NAMETABLE_MIRRORING&HORIZONTAL_MIRRORING
+        txa             ; horizontal mirroring
+        and  #$3BFF     ; 0011_1011_1111_1111 -> $2400 -> $2000
+        tax
+        ELSE
+        txa             ; vertical mirroring
+        and  #$37FF     ; 0011_0111_1111_111 -> $2800 -> $2000
+        tax
+        FIN
+
+:not_in_nt
+        sep  #$20       ; keep index as 16-bit
+        lda  vram_buff  ; read from the buffer
+        pha
+
+        ldal PPU_MEM,x  ; put the data in the buffer for the next read
+        sta  vram_buff
+        pla             ; pop the return value
+
+        sep #$30
+        plx
+        plb
+        plp
+
+        pha
+        pla
+        rtl
+
 
 ; This is the Nametable queue.  It records the data written to the PPU via the PPUDATA register.
-NT_QUEUE_LEN      equ 4096                 ; Enough space for _every_ tile over multiple frames
+NT_QUEUE_LEN      equ 2048                 ; Enough space for _every_ tile over multiple frames
 NT_ELEM_SIZE      equ 4                    ; Each entry is 4 bytes
 NT_QUEUE_SIZE     equ {NT_ELEM_SIZE*NT_QUEUE_LEN}
 NT_QUEUE_MASK     equ {NT_QUEUE_SIZE-1}    ; Must be power of 2
@@ -1092,43 +1397,26 @@ PPUDATA_WRITE ENT
         phx
         phy
 
-        rep  #$10
-        ldx  ppuaddr
-
-        cpx  #$2000                   ; Restrict to the valid memory range.  May be able to remove
-        bcc  :hop                     ; these checks if we put PPU memory into its own bank
-        cpx  #$4000
-        bcs  :hop
-
-        ldal PPU_MEM,x                ; Load the old data byte
-        eor  3,s                      ; Compare it to the new data byte
-        beq  :hop                     ; Skip updating the underlying graphics if there is no change (A xor A = 0)
-
-        xba                           ; Stash the XOR in the high byte of the accumulator (for attribute updates)
-        lda  3,s                      ; Reload the original accumulator value
-        stal PPU_MEM,x                ; Update PPU memory (8-bit write)
-
-        cpx  #$3000                   ; Is it within the PPU nametables memory range?
-        bcc  :in_nt
-
-        rep  #$31                     ; Clear the carry, too
-        txa
+        rep  #$31
+        lda  ppuaddr                  ; Load and update the ppu address (guaranteed to be in the range $0000 - $3FFF)
+        tax
         adc  ppuincr
-        and  #$3FFF
-        sta  ppuaddr                  ; Advance to the new ppu address
+        sta  ppuaddr
 
-; Since we've updated some PPU memory, we need to determine what area of memory it is in and
-; take an appropriate action
-;
 ; 1. In the range $2{x}00 to $2{x+3}BF -- this is tile data, so it should be queued for an update
 ; 2. In the range $2{x+3}C0 to $2{x+3}FF -- this is tile attribute data and should be put on a separate queue
 ; 3. In the range $3F00-$3FFF -- this is the palette range and executes a callback function to take a game-specific action
 
+        cpx  #$2000                   ; Assume the tile memory is read-only
+        bcc  :hop
+
+        cpx  #$3000                   ; Is it within the PPU nametables memory range?
+        bcc  :in_nt
+
         cpx  #$3F00                   ; Is it within the PPU palette area?
-        bcc  :hop2                    ; Nope, it's in no-man's land. Nothing to do.
+        bcc  :hop                     ; Nope, it's in no-man's land. Nothing to do.
         brl  :extra                   ; Yep, do the palette updates in a game-specific manner
-:hop    brl  :nochange
-:hop2   brl  :done
+:hop    brl  :done
 
 ; The PPU wrote to some location in the Nametable RAM ($2000 - $2FFF).  Now we need to determine if it
 ; wrote to the nametable tile data area or the tile attribute area.  There are separate queues for each
@@ -1136,13 +1424,24 @@ PPUDATA_WRITE ENT
 ; attribute changes first to avoid having to redraw tiles since the IIgs does not have enough colors
 ; to directly support the palette indexes and has to redraw tiles when their palette assignment changes.
 :in_nt
-        tay                           ; Keep a copy of the value in the Y-register (moves all 16-bits, even in 8-bit acc mode)
-
-        rep  #$31                     ; Clear the carry, too
+; apply mirroring
         txa
-        adc  ppuincr
-        and  #$3FFF
-        sta  ppuaddr                  ; Advance to the new ppu address
+        DO   NAMETABLE_MIRRORING&HORIZONTAL_MIRRORING
+        and  #$3BFF     ; 0011_1011_1111_1111 -> $2400 -> $2000
+        ELSE
+        and  #$37FF     ; 0011_0111_1111_111 -> $2800 -> $2000
+        FIN
+        tax
+
+        sep  #$20
+        ldal PPU_MEM,x                ; Load the old data byte
+        eor  3,s                      ; Compare it to the new data byte
+        beq  :hop                     ; Skip updating the underlying graphics if there is no change (A xor A = 0)
+        xba                           ; Stash the XOR in the high byte of the accumulator (for attribute updates)
+        lda  3,s                      ; Reload the original accumulator value
+        stal PPU_MEM,x                ; Update PPU memory (8-bit write)
+        tay                           ; Keep a copy of the value in the Y-register (moves all 16-bits, even in 8-bit acc mode)
+        rep  #$20
 
         txa
         and  #$03C0                   ; Is this in the tile attribute space?
@@ -1154,14 +1453,7 @@ PPUDATA_WRITE ENT
 
 :not_attr
         NTQueuePush
-        bra   :done
-
-:nochange
-        rep  #$31
-        txa
-        adc  ppuincr
-        and  #$3FFF
-        sta  ppuaddr
+;        bra   :done
 
 :done
         sep  #$30
@@ -1172,8 +1464,6 @@ PPUDATA_WRITE ENT
         plp
         rtl
 
-        mx   %00
-
 ; Do some extra work to keep palette data in sync. Because the IIgs palette is not
 ; large enough to accomodate all of the possible on-screen colors (16 colors vs 25 colors),
 ; palette handling is always a per-game issue.
@@ -1183,6 +1473,11 @@ PPUDATA_WRITE ENT
 
         mx   %00
 :extra
+        sep  #$20
+        lda  3,s
+        stal PPU_MEM,x
+        rep  #$20
+
         txa
         and  #$001F
         asl
@@ -1282,11 +1577,11 @@ PPUDMA_WRITE ENT
 ; to improve scanning speed
 
         mx   %00
-scanOAMSprites2
+;scanOAMSprites2
 
-        ldx    #0
-        ldy    #0                   ; clear all 16-bits
-        sep    #$30                 ; 8-bit registers
+;        ldx    #0
+;        ldy    #0                   ; clear all 16-bits
+;        sep    #$30                 ; 8-bit registers
 
 ; Since it's rare that all 64 sprites are active, the code is
 ; slightly biased for fast skipping.  Most NES games place sprites
@@ -1303,43 +1598,43 @@ scanOAMSprites2
 
 ; Put the exclusion tables in NES RAM space
 
-        sep    #$10                 ; 8-bit index registers
+;        sep    #$10                 ; 8-bit index registers
 
 ; Loop invariant is that A = X
-:loop
-        ldy    ROMBase+DIRECT_OAM_READ+1,x
-        ldx    tile_exclude,y
-        bne    :next
+;:loop
+;        ldy    ROMBase+DIRECT_OAM_READ+1,x
+;        ldx    tile_exclude,y
+;        bne    :next
 
-        tax                         ; This saves a TXA after :next, so a net gain
-        ldy    ROMBase+DIRECT_OAM_READ,x
-        ldx    y_exclude,y
-        bne    :next
+;        tax                         ; This saves a TXA after :next, so a net gain
+;        ldy    ROMBase+DIRECT_OAM_READ,x
+;        ldx    y_exclude,y
+;        bne    :next
 
-        tya
-        inc
-        asl
+;        tya
+;        inc
+;       asl
 
 
-        pha                         ; 16-bit value
+;        pha                         ; 16-bit value
 
-:next
-        adc    #4
-        tax
-        bne    :loop
+;:next
+;        adc    #4
+;        tax
+;        bne    :loop
 
 ; Now we have the index values on the stack.  Switch to 16 mode and start
 ; pre-computing essential data
 
-        rep    #$30
+;        rep    #$30
 
-        plx
+;        plx
 
-        asl               ; y * 2
-        tax
+;        asl               ; y * 2
+;        tax
 
-        lda  ScreenAddr,x ; Get the left-edge screen address forthe sprite
-        sta  sprTmp0
+;        lda  ScreenAddr,x ; Get the left-edge screen address forthe sprite
+;        sta  sprTmp0
 
 
 ; This is not used if VOC mode is on
@@ -1348,9 +1643,6 @@ scanOAMSprites2
 ;        lda  y2bits,x
 ;        ora  (shadowBitmap),y
 ;        sta  (shadowBitmap),y
-
-
-
 
 ; What can we precompute here
 ;
@@ -1370,35 +1662,35 @@ scanOAMSprites2
 ; OAM[3] = X coordinate
 ;   Combined with PPU Scroll to set position. No pre-calc
 
-        lda    ROMBase+DIRECT_OAM_READ+2,x
-        pha
-        lda    ROMBase+DIRECT_OAM_READ,x
-        inc
-        pha
+;        lda    ROMBase+DIRECT_OAM_READ+2,x
+;        pha
+;        lda    ROMBase+DIRECT_OAM_READ,x
+;        inc
+;        pha
 
 
 
-        ldy    PPU_OAM              ; check for y exclusions = 10 cycles
-        lda    tile_exclude,y
-        bne    next
+;        ldy    PPU_OAM              ; check for y exclusions = 10 cycles
+;        lda    tile_exclude,y
+;        bne    next
 
-        rep    #$20                 ; = 18 cycles
-        lda    PPU_OAM+2            ; push the OAM info in reverse order
-        pha
-        phx
-        phy
+;        rep    #$20                 ; = 18 cycles
+;        lda    PPU_OAM+2            ; push the OAM info in reverse order
+;        pha
+;        phx
+;        phy
 
-        ldx    y2idx,y              ; load the byte index (0 - 30) for this coordinate = 32
-        tya                         ; Use as a lookup
-        asl
-        tay                         ; this polluted the high byte of Y, but has no effect
-        lda    y2bits,y             ; repeats every 8 words, so don't need a 16-bit index reg
-        ora    shadowBitmap0,x      ; set the eight bits in the bitfield value across two bytes
-        sta    shadowBitmap0,x
+;        ldx    y2idx,y              ; load the byte index (0 - 30) for this coordinate = 32
+;        tya                         ; Use as a lookup
+;        asl
+;        tay                         ; this polluted the high byte of Y, but has no effect
+;        lda    y2bits,y             ; repeats every 8 words, so don't need a 16-bit index reg
+;        ora    shadowBitmap0,x      ; set the eight bits in the bitfield value across two bytes
+;        sta    shadowBitmap0,x
 
-        sep    #$20                 ; about 70 cycles per sprite
-next
-        rts
+;        sep    #$20                 ; about 70 cycles per sprite
+;next
+;        rts
 
 y_exclude     ds $100
 tile_exclude  ds $100
@@ -1458,7 +1750,6 @@ scanOAMSprites
          stx   :pb2+1
 
          ldx   #OAM_START_INDEX*4
-;         ldx   #{1-ALLOW_SPRITE_0}*4  ; Select 0 or 1 as the starting point
          ldy   #0                     ; This is the destination index
 
          phd
@@ -1520,7 +1811,6 @@ scanOAMSprites
          inx
          inx
          inx
-;         cpx  #$0100
          cpx  #OAM_END_INDEX*4
          bcc  :loop
 
@@ -1543,7 +1833,6 @@ scan8x16
 ; Same code as above with extra handling for 8x16 mode
 
          ldx   #OAM_START_INDEX*4
-;         ldx   #{1-ALLOW_SPRITE_0}*4  ; Select 0 or 1 as the starting point
          ldy   #0                     ; This is the destination index
 
          phd
@@ -1613,7 +1902,6 @@ scan8x16
          inx
          inx
          cpx  #OAM_END_INDEX*4
-;         cpx  #$0100
          bcc  :loop
 
          pld
@@ -1963,7 +2251,7 @@ LOAD_INTERSECTION  mac
         and  shadowBitmap1,y
         <<<
 
-; Scan the bitmap list and execute a callback funtion on each 1->0 transition with the [start, finish) coordinates
+; Scan the bitmap list and execute a callback function on each 1->0 transition with the [start, finish) coordinates
 ; saved
 WALK_BITMAP mac
         stz  walk_top
@@ -2129,8 +2417,37 @@ drawOtherLines
 ;
 ; shadowBitmap0 and shadowBitmap1 track the lines that hold sprites from the previous
 ; and current frame. tileBitmap marks lines that had a tiles updated since the last frame.
+;
+; There are actually two phases to the dirty rendering.  The first is when the prior
+; frame was rendered normally and the second in when the prior frame used the dirty
+; renderer.
+;
+; When performing dirty rendering for the first time, the sprites from the last frame have
+; to be erased by drawing the background on the lines previously occupied, then the new sprites
+; drawn and the updated lines exposed
+;
+; When rendering a dirty frame, the expectation is that the next frame will use the dirty
+; renderer as well, so the pipeline changes to improve efficieny.  The screen data beneath
+; a sprite is saved before drawing and, on the next frame used to restore the graphic
+; screen rather than re-rendering the full background.
+;
+; New sprites and drawn and 8x8 patches of the previour sprites are used to update only
+; the active portions of the screen.  Sprites are drawn in a top-down order, if possible
+; to avoid bubbling. Exposing the erased sprites *after* drawing the current sprites will
+; avoid flicker.
+;
+; When the drawing transitions back to a normal rendering frame, nothing special needs to
+; be done as the normal blit will erase all of the previous sprites.
+
         mx   %00
 drawDirtyScreen
+
+        lda   DirtyState              ; Move the Dirty State from 0 -> 1, 1 -> 2, or 2 -> 2
+        cmp   #2
+        bcs   :no_change
+        inc
+        sta   DirtyState
+:no_change
 
 ; Put pointers to the "current" and "previous".  This could be optimized by maintaining
 ; these pointers in the app direct page and toggling them every time the frame counter is
@@ -2155,10 +2472,23 @@ drawDirtyScreen
 ;         this frame.  This is shadowBitmap0 AND shadowBitmap1.  This is drawn with
 ;         shadowing off just to prep the screen.
 
+        DO    DIRTY_RENDERING_VISUALS
+        lda   #0
+        jsr   _SetSCBs
+
+        lda   #1
+        sta   DebugSCB
+        FIN
+
         jsr   _ShadowOff
         jsr   clearPreviousSprites
 
 ; Step 2: Draw the sprites
+
+        DO    DIRTY_RENDERING_VISUALS
+        lda   #2
+        sta   DebugSCB
+        FIN
 
         jsr   drawSprites
         jsr   _ShadowOn
@@ -2170,6 +2500,11 @@ drawDirtyScreen
 ;
 ;         The bitmap is (prev | background) & ~current
 
+        DO    DIRTY_RENDERING_VISUALS
+        lda   #4
+        sta   DebugSCB
+        FIN
+
         jsr   drawOtherLines
 
 ; Step 4: This is the PEI Slam of the current sprites.
@@ -2179,6 +2514,10 @@ drawDirtyScreen
 
 ; Render the prepared frame date
 drawScreen
+
+; Reset the dirty state to 0 (normal)
+
+        stz   DirtyState
 
 ; Step 0: Convert the bitmap into a list since it can be reused in Steps 1 and 3
 
@@ -2504,7 +2843,7 @@ spr_comp_tbl ds 512,$00
 
 ; Draw a tile directly to the screen
 ;
-; A = tile ID
+; A = tile id
 ; Y = screen address
 ; X = palette select 0,2,4,6
 blitTile
@@ -2515,13 +2854,119 @@ blitTile
         cmp   #$0100                  ; fancy multiply by 128
         xba
         ror
+
+        jsr   _blitTile
+
+        plb
+        plb
+        rts
+
+_blitTileNoMask
+; A = tile address
+; Y = screen address
+; X = palette select 0,2,4,6
+;
+; Raw data draw -- expands the tile data from w_wxxy_yzz0 to 00ww_00xx_00yy_00zz and then adds an offset based on the
+; palette select
+
+        sta   sprTmp0
+        sty   sprTmp1
+
+        txa
+        and   #$0006
+        asl
+        sta   sprTmp3
+        asl
+        asl
+        asl
+        asl
+        ora   sprTmp3
+        sta   sprTmp3
+        xba
+        ora   sprTmp3
+        sta   sprTmp3
+
+;        sep  #$20
+;        clc
+;        adc  SwizzlePtr+1
+;        sta  ActivePtr+1
+;        rep  #$20
+
+        ldy   sprTmp0
+        ldx   sprTmp1
+
+]line   equ   0
+        lup   8
+
+        lda:  {]line*4},y                            ; Load the tile data lookup value
+        lsr
+        and   #$0003
+        sta   sprTmp2
+        lda:  {]line*4},y
+        asl
+        and   #$0030
+        tsb   sprTmp2
+        lda:  {]line*4},y
+        asl
+        asl
+        asl
+        and   #$0300
+        tsb   sprTmp2
+        lda:  {]line*4},y
+        asl
+        asl
+        asl
+        asl
+        asl
+        and   #$3000
+        ora   sprTmp2
+        xba
+        ora   sprTmp3
+        stal  $010000+{]line*SHR_LINE_WIDTH},x
+
+        lda:  {]line*4}+2,y
+        lsr
+        and   #$0003
+        sta   sprTmp2
+        lda:  {]line*4}+2,y
+        asl
+        and   #$0030
+        tsb   sprTmp2
+        lda:  {]line*4}+2,y
+        asl
+        asl
+        asl
+        and   #$0300
+        tsb   sprTmp2
+        lda:  {]line*4}+2,y
+        asl
+        asl
+        asl
+        asl
+        asl
+        and   #$3000
+        ora   sprTmp2
+        xba
+        ora   sprTmp3
+        stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+
+]line   equ   ]line+1
+        --^
+
+        rts
+
+_blitTile
+; A = tile address
+; Y = screen address
+; X = palette select 0,2,4,6
+
         sta   sprTmp0
         sty   sprTmp1
 
         txa
         sep  #$20
         clc
-        adc  SwizzlePtr+1             ; Carry is clear from the asl
+        adc  SwizzlePtr+1
         sta  ActivePtr+1
         rep  #$20
 
@@ -2547,8 +2992,6 @@ blitTile
 ]line     equ   ]line+1
           --^
 
-        plb
-        plb
         rts
 
 ; Define the opcodes directly so we can use then in a macro.  The bracket from long-indirect addressing, e.g. [],

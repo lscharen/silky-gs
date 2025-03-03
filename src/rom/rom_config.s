@@ -65,6 +65,21 @@ TEXT_HIGHLIGHTED equ 4
 TEXT_YES equ 2
 TEXT_NO equ 0
 
+CONFIG_PALETTE       equ 0
+TILE_TOP_LEFT        equ rom_cfg_chr_top_left
+TILE_TOP_RIGHT       equ rom_cfg_chr_top_right
+TILE_BOTTOM_LEFT     equ rom_cfg_chr_bot_left
+TILE_BOTTOM_RIGHT    equ rom_cfg_chr_bot_right
+TILE_HORIZONTAL      equ rom_cfg_chr_horz
+TILE_HORIZONTAL_TOP  equ rom_cfg_chr_horz_top
+TILE_HORIZONTAL_BOTTOM  equ rom_cfg_chr_horz_bot
+TILE_VERTICAL_LEFT   equ rom_cfg_chr_vert_left
+TILE_VERTICAL_RIGHT  equ rom_cfg_chr_vert_right
+TILE_ZERO            equ rom_cfg_chr_0     ; must be followed by digits 1 - 9
+TILE_A               equ rom_cfg_chr_a     ; must be followed by B - Z
+TILE_SPACE           equ rom_cfg_chr_space
+TILE_CURSOR          equ rom_cfg_chr_cursor
+
 _ConfigSaveBuffer ds 256+32
 
 SAFE_JSR    mac
@@ -73,6 +88,26 @@ SAFE_JSR    mac
             jsr ]1
             ply
             plx
+            <<<
+
+TO_DIGIT_ADDR mac
+            asl
+            asl
+            asl
+            asl
+            asl
+            clc
+            adc  #rom_cfg_chr_0
+            <<<
+
+TO_ALPHA_ADDR mac
+            asl
+            asl
+            asl
+            asl
+            asl
+            clc
+            adc  #rom_cfg_chr_a
             <<<
 
 ; Preserve the SCBs and the first palette.
@@ -97,6 +132,9 @@ _ConfigExit
 
             jsr  _ClearKeypress
             rts
+
+; Palette for the configuration screen (4 palettes of 4 colors, defined by NES colors)
+ConfScrnPal dw   $0F, $00, $00, $10, $0F, $00, $00, $20, $00, $00, $00, $20, $0F, $00, $00, $00
 
 ; Creates a UI for the runtime configuration
 ShowConfig
@@ -136,7 +174,6 @@ ShowConfig
 ; Wait for a key to be released before committing it
 :keyloop
             jsr  _WaitForKeyUp
-            and  #$007F
 
             cmp  #UP_ARROW
             beq  :decrement
@@ -512,12 +549,10 @@ _DrawNumber
 
             ldy: CTRL_VALUE_ADDR,x      ; load the variable address
             lda: 0,y                    ; load the variable value
-
-            clc
-            adc  #TILE_ZERO
+            TO_DIGIT_ADDR
             ldx  #TEXT_NORMAL
             ldy  :addr
-            jsr  blitTile
+            jsr  _blitTileNoMask
 
             rts
 
@@ -588,10 +623,10 @@ _ToggleNumber
 ; Wait for a new key press
 _WaitForKeyUp
 :waitloop1
-            jsr  _ReadKeypress                       ; Read keyboard directly, and only for raw keystrokes
+            jsr  _ReadRawKeypress                       ; Read keyboard directly, and only for raw keystrokes
             bit  #PAD_KEY_DOWN
             beq  :waitloop1
-            jsr  _AckKeypress
+;            jsr  _AckKeypress
 ;            sta  config_keypress
 ;            lda  config_keypress
             and  #$7F
@@ -612,8 +647,6 @@ _ToggleKeymap
             sta  :addr   ; address of the value
 
             jsr  _WaitForKeyUp
-
-            and  #$007F
             sta  (:addr)
 
             rts
@@ -952,7 +985,7 @@ _DrawControlCursor
 
             lda   :tile
             ldx   #CONFIG_PALETTE*2
-            jsr   blitTile
+            jsr   _blitTileNoMask
 
             plx                           ; restore the control address
 
@@ -1035,7 +1068,7 @@ _DrawMenuCursor
 
             lda   :tile
             ldx   #CONFIG_PALETTE*2
-            jsr   blitTile
+            jsr   _blitTileNoMask
 
             rts
 
@@ -1050,7 +1083,7 @@ ConfigDrawSideBorder
             phy
             lda  #TILE_VERTICAL_LEFT
             ldx  #CONFIG_PALETTE*2
-            jsr  blitTile
+            jsr  _blitTileNoMask
             pla
             clc
             adc  tmp10
@@ -1058,7 +1091,7 @@ ConfigDrawSideBorder
             phy
             lda  #TILE_VERTICAL_RIGHT
             ldx  #CONFIG_PALETTE*2
-            jsr  blitTile
+            jsr  _blitTileNoMask
             pla
             clc
             adc  #{8*160}
@@ -1078,7 +1111,7 @@ ConfigDrawTopBorder
             phy
             lda  #TILE_TOP_LEFT
             ldx  #CONFIG_PALETTE*2
-            jsr  blitTile
+            jsr  _blitTileNoMask
             ply
             plx
 
@@ -1092,7 +1125,7 @@ ConfigDrawTopBorder
             phx
             lda  #TILE_HORIZONTAL_TOP
             ldx  #CONFIG_PALETTE*2
-            jsr  blitTile
+            jsr  _blitTileNoMask
             plx
             ply
             dex
@@ -1104,7 +1137,7 @@ ConfigDrawTopBorder
             tay
             lda  #TILE_TOP_RIGHT
             ldx  #CONFIG_PALETTE*2
-            jsr  blitTile
+            jsr  _blitTileNoMask
             rts
 
 ; Y = address
@@ -1114,7 +1147,7 @@ ConfigDrawBottomBorder
             phy
             lda  #TILE_BOTTOM_LEFT
             ldx  #CONFIG_PALETTE*2
-            jsr  blitTile
+            jsr  _blitTileNoMask
             ply
             plx
 
@@ -1128,7 +1161,7 @@ ConfigDrawBottomBorder
             phx
             lda  #TILE_HORIZONTAL_BOTTOM
             ldx  #CONFIG_PALETTE*2
-            jsr  blitTile
+            jsr  _blitTileNoMask
             plx
             ply
             dex
@@ -1140,7 +1173,7 @@ ConfigDrawBottomBorder
             tay
             lda  #TILE_BOTTOM_RIGHT
             ldx  #CONFIG_PALETTE*2
-            jsr  blitTile
+            jsr  _blitTileNoMask
             rts
 
 ; X = hex value (only lower byte) 
@@ -1161,17 +1194,15 @@ ConfigDrawByte
             cmp   #$000A
             bcc   :drawDigitHigh
             sbc   #$000A
-            clc
-            adc   #TILE_A
+            TO_ALPHA_ADDR
             bra   :drawHigh
 :drawDigitHigh
-            clc
-            adc   #TILE_ZERO
+            TO_DIGIT_ADDR
 
 :drawHigh
             ldy  tmp1
             ldx  tmp2
-            jsr  blitTile
+            jsr  _blitTileNoMask
 
             lda   tmp1
             clc
@@ -1184,17 +1215,15 @@ ConfigDrawByte
             cmp   #$000A
             bcc   :drawDigitLow
             sbc   #$000A
-            clc
-            adc   #TILE_A
+            TO_ALPHA_ADDR
             bra   :drawLow
 :drawDigitLow
-            clc
-            adc   #TILE_ZERO
+            TO_DIGIT_ADDR
 
 :drawLow
             ldy  tmp1
             ldx  tmp2
-            jmp  blitTile
+            jmp  _blitTileNoMask
 
 ; X = string pointer
 ; Y = address
@@ -1216,19 +1245,17 @@ ConfigDrawString
             cmp   #'A'
             bcc   :not_letter
             sbc   #'A'
-            clc
-            adc   #TILE_A
+            TO_ALPHA_ADDR
             bra   :draw
 :not_letter
             cmp   #'0'
             bcc   :skip
             sbc   #'0'
-            clc
-            adc   #TILE_ZERO
+            TO_DIGIT_ADDR
 :draw
             ldy  tmp1
             ldx  tmp2
-            jsr  blitTile
+            jsr  _blitTileNoMask
 
 :skip
             lda   tmp1
@@ -1243,3 +1270,437 @@ ConfigDrawString
             dex
             bne   :loop
             rts
+
+; Built-in font w/widgets to avoid depending on CHR-ROMs (32 bytes/tile)
+;
+; The binary format of these tiles are the same and the internal format that NES CHR
+; data is converted to.  The LSB is zero and bits 1 - 9 designate which BGND palette
+; entry to use when drawing.
+
+            ds    \,$00
+rom_cfg_chr 
+rom_cfg_chr_a
+            dw    %000011110,%110000000
+            dw    %001111000,%111100000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111111110,%111111000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %000000000,%000000000
+
+            dw    %111111110,%111100000     ; B
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111111110,%111100000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111111110,%111100000
+            dw    %000000000,%000000000
+
+            dw    %000011110,%111100000     ; C
+            dw    %001111000,%001111000
+            dw    %111100000,%000000000
+            dw    %111100000,%000000000
+            dw    %111100000,%000000000
+            dw    %001111000,%001111000
+            dw    %000011110,%11110000
+            dw    %000000000,%000000000
+
+            dw    %111111110,%110000000     ; D
+            dw    %111100000,%111100000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111100000,%111100000
+            dw    %111111110,%110000000
+            dw    %000000000,%000000000
+
+            dw    %111111110,%111111000     ; E
+            dw    %111100000,%000000000
+            dw    %111100000,%000000000
+            dw    %111111110,%111100000
+            dw    %111100000,%000000000
+            dw    %111100000,%000000000
+            dw    %111111110,%111111000
+            dw    %000000000,%000000000
+
+            dw    %111111110,%111111000     ; F
+            dw    %111100000,%000000000
+            dw    %111100000,%000000000
+            dw    %111111110,%111100000
+            dw    %111100000,%000000000
+            dw    %111100000,%000000000
+            dw    %111100000,%000000000
+            dw    %000000000,%000000000
+
+            dw    %000011110,%111111000     ; G
+            dw    %001111000,%000000000
+            dw    %111100000,%000000000
+            dw    %111100110,%111111000
+            dw    %111100000,%001111000
+            dw    %001111000,%001111000
+            dw    %001111110,%111111000
+            dw    %000000000,%000000000
+
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111111110,%111111000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %000000000,%000000000
+
+            dw    %001111110,%111111000
+            dw    %000000110,%110000000
+            dw    %000000110,%110000000
+            dw    %000000110,%110000000
+            dw    %000000110,%110000000
+            dw    %000000110,%110000000
+            dw    %001111110,%111111000
+            dw    %000000000,%000000000
+
+            dw    %000000110,%111111000
+            dw    %000000000,%001111000
+            dw    %000000000,%001111000
+            dw    %000000000,%001111000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %001111110,%111100000
+            dw    %000000000,%000000000
+
+            dw    %111100000,%001111000
+            dw    %111100000,%111100000
+            dw    %111100110,%110000000
+            dw    %111111110,%000000000
+            dw    %111111110,%110000000
+            dw    %111100110,%111100000
+            dw    %111100000,%111111000
+            dw    %000000000,%000000000
+
+            dw    %001111000,%000000000
+            dw    %001111000,%000000000
+            dw    %001111000,%000000000
+            dw    %001111000,%000000000
+            dw    %001111000,%000000000
+            dw    %001111000,%000000000
+            dw    %001111110,%111111000
+            dw    %000000000,%000000000
+
+            dw    %111100000,%001111000
+            dw    %111111000,%111111000
+            dw    %111111110,%111111000
+            dw    %111111110,%111111000
+            dw    %111100110,%001111000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %000000000,%000000000
+
+            dw    %111100000,%001111000
+            dw    %111111000,%001111000
+            dw    %111111110,%001111000
+            dw    %111111110,%111111000
+            dw    %111100110,%111111000
+            dw    %111100000,%111111000
+            dw    %111100000,%001111000
+            dw    %000000000,%000000000
+
+            dw    %001111110,%111100000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %001111110,%111100000
+            dw    %000000000,%000000000
+
+            dw    %001111110,%111100000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111111110,%111100000
+            dw    %111100000,%000000000
+            dw    %111100000,%000000000
+            dw    %000000000,%000000000
+
+            dw    %001111110,%111100000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111100110,%111111000
+            dw    %111100000,%111100000
+            dw    %001111110,%110011000
+            dw    %000000000,%000000000
+
+            dw    %111111110,%111100000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111100000,%111111000
+            dw    %111111110,%110000000
+            dw    %111100110,%111100000
+            dw    %111100000,%111111000
+            dw    %000000000,%000000000
+
+            dw    %001111110,%110000000
+            dw    %111100000,%111100000
+            dw    %111100000,%000000000
+            dw    %001111110,%111100000
+            dw    %000000000,%001111000
+            dw    %111100000,%001111000
+            dw    %001111110,%111100000
+            dw    %000000000,%000000000
+
+            dw    %001111110,%111111000
+            dw    %000000110,%110000000
+            dw    %000000110,%110000000
+            dw    %000000110,%110000000
+            dw    %000000110,%110000000
+            dw    %000000110,%110000000
+            dw    %000000110,%110000000
+            dw    %000000000,%000000000
+
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %001111110,%111100000
+            dw    %000000000,%000000000
+
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111111000,%111111000
+            dw    %001111110,%111100000
+            dw    %000011110,%110000000
+            dw    %000000110,%000000000
+            dw    %000000000,%000000000
+
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111100110,%001111000
+            dw    %111111110,%111111000
+            dw    %111111110,%111111000
+            dw    %111111000,%111111000
+            dw    %111100000,%001111000
+            dw    %000000000,%000000000
+
+            dw    %111100000,%001111000
+            dw    %111111000,%111111000
+            dw    %001111110,%111100000
+            dw    %000011110,%110000000
+            dw    %001111110,%111100000
+            dw    %111111000,%111111000
+            dw    %111100000,%001111000
+            dw    %000000000,%000000000
+
+            dw    %001111000,%001111000
+            dw    %001111000,%001111000
+            dw    %001111000,%001111000
+            dw    %000011110,%111100000
+            dw    %000000110,%110000000
+            dw    %000000110,%110000000
+            dw    %000000110,%110000000
+            dw    %000000000,%000000000
+
+            dw    %111111110,%111111000
+            dw    %000000000,%111111000
+            dw    %000000110,%111100000
+            dw    %000011110,%110000000
+            dw    %001111110,%000000000
+            dw    %111111000,%000000000
+            dw    %111111110,%111111000
+            dw    %000000000,%000000000
+
+rom_cfg_chr_0
+            dw    %000011110,%110000000
+            dw    %001100000,%111100000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %001111000,%001100000
+            dw    %000011110,%110000000
+            dw    %000000000,%000000000
+
+            dw    %000000110,%110000000
+            dw    %000011110,%110000000
+            dw    %000000110,%110000000
+            dw    %000000110,%110000000
+            dw    %000000110,%110000000
+            dw    %000000110,%110000000
+            dw    %001111110,%111111000
+            dw    %000000000,%000000000
+
+            dw    %001111110,%111100000
+            dw    %111100000,%001111000
+            dw    %000000000,%111111000
+            dw    %000011110,%111100000
+            dw    %001111110,%110000000
+            dw    %111111000,%000000000
+            dw    %111111110,%111111110
+            dw    %000000000,%000000000
+
+            dw    %001111110,%111111000
+            dw    %000000000,%111100000
+            dw    %000000110,%110000000
+            dw    %000011110,%111100000
+            dw    %000000000,%001111000
+            dw    %111100000,%001111000
+            dw    %001111110,%111100000
+            dw    %000000000,%000000000
+
+            dw    %000000110,%111100000
+            dw    %000011110,%111100000
+            dw    %001111000,%111100000
+            dw    %111100000,%111100000
+            dw    %111111110,%111111000
+            dw    %000000000,%111100000
+            dw    %000000000,%111100000
+            dw    %000000000,%000000000
+
+            dw    %111111110,%111100000
+            dw    %111100000,%000000000
+            dw    %111111110,%111100000
+            dw    %000000000,%001111000
+            dw    %000000000,%001111000
+            dw    %111100000,%001111000
+            dw    %001111110,%111100000
+            dw    %000000000,%000000000
+
+            dw    %000011110,%111100000
+            dw    %001111000,%000000000
+            dw    %111100000,%000000000
+            dw    %111111110,%111100000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %001111110,%111100000
+            dw    %000000000,%000000000
+
+            dw    %111111110,%111111000
+            dw    %111100000,%001111000
+            dw    %000000000,%111100000
+            dw    %000000110,%110000000
+            dw    %000011110,%000000000
+            dw    %000011110,%000000000
+            dw    %000011110,%000000000
+            dw    %000000000,%000000000
+
+            dw    %001111110,%110000000
+            dw    %111100000,%001100000
+            dw    %111111000,%001100000
+            dw    %001111110,%110000000
+            dw    %110000000,%001111000
+            dw    %110000000,%001111000
+            dw    %001111110,%111100000
+            dw    %000000000,%000000000
+
+            dw    %001111110,%111100000
+            dw    %111100000,%001111000
+            dw    %111100000,%001111000
+            dw    %001111110,%111111000
+            dw    %000000000,%001111000
+            dw    %000000000,%111100000
+            dw    %001111110,%110000000
+            dw    %000000000,%000000000
+
+rom_cfg_chr_space
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+
+rom_cfg_chr_cursor
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000011110,%111100000
+            dw    %000011110,%111100000
+            dw    %000011110,%111100000
+            dw    %000011110,%111100000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+
+rom_cfg_chr_vert_left
+            dw    %001100000,%000000000
+            dw    %001100000,%000000000
+            dw    %001100000,%000000000
+            dw    %001100000,%000000000
+            dw    %001100000,%000000000
+            dw    %001100000,%000000000
+            dw    %001100000,%000000000
+            dw    %001100000,%000000000
+
+rom_cfg_chr_vert_right
+            dw    %000000000,%000011000
+            dw    %000000000,%000011000
+            dw    %000000000,%000011000
+            dw    %000000000,%000011000
+            dw    %000000000,%000011000
+            dw    %000000000,%000011000
+            dw    %000000000,%000011000
+            dw    %000000000,%000011000
+
+rom_cfg_chr_top_left
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000011110,%111111110
+            dw    %001100000,%000000000
+            dw    %001100000,%000000000
+
+rom_cfg_chr_top_right
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %111111110,%111100000
+            dw    %000000000,%000011000
+            dw    %000000000,%000011000
+
+rom_cfg_chr_bot_left
+            dw    %001100000,%000000000
+            dw    %001100000,%000000000
+            dw    %000011110,%111111110
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+
+rom_cfg_chr_bot_right
+            dw    %000000000,%000011000
+            dw    %000000000,%000011000
+            dw    %111111110,%111100000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+
+rom_cfg_chr_horz_top
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %111111110,%111111110
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+
+rom_cfg_chr_horz_bot
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %111111110,%111111110
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000
+            dw    %000000000,%000000000

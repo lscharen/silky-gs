@@ -30,7 +30,7 @@
 
             ASM   _rom.s
             KND   #$1100
-            SNA   ICROM
+            SNA   DKROM
 
 ; Segment #6 -- PPU memory and PPU shadow storage
 

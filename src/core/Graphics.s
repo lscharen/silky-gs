@@ -16,6 +16,22 @@ InitGraphics
                  ldx   #2                    ; NES screen size
                  jsr   _SetScreenMode        ; Calls SetScreenRect
 
+; Put some different colors into palette index 0 for the 16 palettes in case scanline debugging is turned on
+
+                  ldx       #0
+                  txy
+:scb_loop
+                  lda       SystemPalette,y
+                  stal      $E19E00,x
+                  iny
+                  iny
+                  txa
+                  clc
+                  adc       #32
+                  tax
+                  cpx       #512
+                  bcc       :scb_loop
+
                  clc
                  rts
 
@@ -331,6 +347,12 @@ FillScreen         cmp   #0
 ;
 ; We assume that there is a clean code field in this routine
 _SetBG0XPos
+                    DO    NAMETABLE_MIRRORING&HORIZONTAL_MIRRORING
+                    and   #$007F                     ; X position capped for horizontal mirroring
+                    ELSE
+                    and   #$00FF
+                    FIN
+
                     cmp   StartX
                     beq   :out                       ; Easy, if nothing changed, then nothing changes
 

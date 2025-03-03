@@ -38,7 +38,7 @@ EVT_LOOP_END mac
 ; Pre-render check to see if there are any background tiles queued for updates.  If so, we will do
 ; a regular rendering.  If not, use dirty rendering.
 PRE_RENDER   mac
-;
+             jsr  CheckForPaletteChange   ; Update the swizzle tables before drawing any tiles
              <<<
 
 POST_RENDER  mac
@@ -58,6 +58,9 @@ SCAN_OAM_XTRA_FILTER mac
 PPU_BG_TILE_ADDR  equ #$1000
 PPU_SPR_TILE_ADDR equ #$0000
 
+; What kind of Nametable mirroring for this game
+NAMETABLE_MIRRORING equ VERTICAL_MIRRORING
+
 ; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
 ; in addition to the compiled representation (usually yes, since this is used for the config
 ; screen)
@@ -74,7 +77,7 @@ ROM_DRIVER_MODE   equ 1
 ;
 ; 0  = use OAM DMA
 ; >0 = read $100 bytes directly from NES RAM at this address (typically $200)
-DIRECT_OAM_READ   equ 1
+DIRECT_OAM_READ   equ 0
 
 ; Define a range of OAM entries to scan.  Many games do not use all 64
 ; sprite slots, so we can avoid doing unecessary work by only scanning
@@ -93,7 +96,7 @@ NO_VERTICAL_CLIP  equ 0
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 1
+NO_INTERRUPTS     equ 0
 
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 0
@@ -102,6 +105,8 @@ NO_CONFIG         equ 0
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
 ; set the background color.
 PPU_PALETTE_DISPATCH equ PALETTE_DISPATCH
+PPU_PALETTE_MAP equ eb_palette_map
+AUTOMATIC_PALETTE_MAPPING equ 1
 
 ; Turn on code that visualizes the CPU time used by the ROM code
 SHOW_ROM_EXECUTION_TIME equ 0
@@ -125,7 +130,7 @@ CUSTOM_PPU_CTRL_LOCK_CODE mac
                           <<<
 CUSTOM_PPU_SCROLL_LOCK_CODE mac
                           ldal $010050
-                          sta  _topscroll
+                          sta  _topscroll    ; order Y, X
                           ldal $010012
                           xba
                           <<<
@@ -195,23 +200,141 @@ InitPlayfield
             jsr   NES_SetPalette
             rts
 
-ConfScrnPal
 TitleScreen  dw    $02,$0F,$30,$21
              dw    $15,$02,$2A,$3C
              dw    $27,$20,$16,$13
              dw    $2C,$08,$0F,$0F
 
-; When the NES ROM code tried to write to the PPU palette space, intercept here.
-PALETTE_DISPATCH
-        dw   ppu_3F00,ppu_3F01,ppu_3F02,ppu_3F03
-        dw   ppu_3F04,ppu_3F05,ppu_3F06,ppu_3F07
-        dw   ppu_3F08,ppu_3F09,ppu_3F0A,ppu_3F0B
-        dw   ppu_3F0C,ppu_3F0D,ppu_3F0E,ppu_3F0F
+RacePal1     dw    $29,$27,$22,$30
+             dw    $18,$36,$0F,$16
+             dw    $13,$31,$1C,$19
+             dw    $0F,$0F,$0F,$0F
 
-        dw   ppu_3F10,ppu_3F11,ppu_3F12,ppu_3F13
-        dw   ppu_3F14,ppu_3F15,ppu_3F16,ppu_3F17
-        dw   ppu_3F18,ppu_3F19,ppu_3F1A,ppu_3F1B
-        dw   ppu_3F1C,ppu_3F1D,ppu_3F1E,ppu_3F1F
+; When the NES ROM code tried to write to the PPU palette space, intercept here.
+;PALETTE_DISPATCH
+;        dw   ppu_3F00,ppu_3F01,ppu_3F02,ppu_3F03
+;        dw   ppu_3F04,ppu_3F05,ppu_3F06,ppu_3F07
+;        dw   ppu_3F08,ppu_3F09,ppu_3F0A,ppu_3F0B
+;        dw   ppu_3F0C,ppu_3F0D,ppu_3F0E,ppu_3F0F
+
+;        dw   ppu_3F10,ppu_3F11,ppu_3F12,ppu_3F13
+;        dw   ppu_3F14,ppu_3F15,ppu_3F16,ppu_3F17
+;        dw   ppu_3F18,ppu_3F19,ppu_3F1A,ppu_3F1B
+;        dw   ppu_3F1C,ppu_3F1D,ppu_3F1E,ppu_3F1F
+
+PALETTE_DISPATCH
+        dw   ppu_3F00,dk_3Fxx,dk_3Fxx,dk_3Fxx
+        dw   ppu_3F04,dk_3Fxx,dk_3Fxx,dk_3Fxx
+        dw   ppu_3F08,dk_3Fxx,dk_3Fxx,dk_3Fxx
+        dw   ppu_3F0C,dk_3Fxx,dk_3Fxx,dk_3Fxx
+
+        dw   ppu_3F10,dk_3Fxx,dk_3Fxx,dk_3Fxx
+        dw   ppu_3F14,dk_3Fxx,dk_3Fxx,dk_3Fxx
+        dw   ppu_3F18,dk_3Fxx,dk_3Fxx,dk_3Fxx
+        dw   ppu_3F1C,dk_3Fxx,dk_3Fxx,dk_3Fxx
+
+eb_palette_map
+            dw    0,  1, -1,  2    ; These two color are used for end-of-race color cycling
+            dw    0, -1, -1, -1 
+            dw    0, -1, -1, -1 
+            dw    0, -1, -1, -1
+
+            dw    0,  4,  5,  6    ; reserve player colors
+            dw    0, -1, -1, -1
+            dw    0, -1, -1, -1
+            dw    0, -1, -1, -1
+
+
+; The the phase changes, set a flag, but way for the transition time to drop below $70
+; before applying the change.
+HasPaletteChange dw 0
+nes_palette      ds 64
+
+; X = 2*nes_palette_index
+dk_3Fxx
+        txy
+        txa
+        lsr
+        tax
+
+        ldal PPU_MEM+$3F00,x
+        and  #$003F
+        sta  nes_palette,y
+
+        inc
+        sta  HasPaletteChange
+
+        rts
+
+CheckForPaletteChange
+
+        lda  HasPaletteChange
+        bne  :update_palette
+        rts
+
+:update_palette
+        jsr  NES_BuildPalette         ; Create a mapping of the NES palette to the Apple IIgs palette
+
+        ldy  #current
+        lda  SwizzleTables
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+
+        clc
+        ldy  #current+{4*2}
+        lda  SwizzleTables
+        adc  #$200
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+
+        clc
+        ldy  #current+{8*2}
+        lda  SwizzleTables
+        adc  #$400
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+
+        clc
+        ldy  #current+{12*2}
+        lda  SwizzleTables
+        adc  #$600
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+
+        clc
+        ldy  #current+{16*2}
+        lda  SwizzleTables
+        adc  #$800
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+
+        clc
+        ldy  #current+{20*2}
+        lda  SwizzleTables
+        adc  #$A00
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+
+        clc
+        ldy  #current+{24*2}
+        lda  SwizzleTables
+        adc  #$C00
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+
+        clc
+        ldy  #current+{28*2}
+        lda  SwizzleTables
+        adc  #$E00
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+        
+        stz  HasPaletteChange
+
+;        jsr  ForceMetatileRefresh     ; Repaint the scene
+;        jsr  RenderScreen
+
+        rts
 
 ; Make the screen appear
 _topscroll      ds 2
@@ -223,39 +346,41 @@ _RenderScreen
 
 ; If we are not in-game, defer to the standard renderer
 
-;            ldal  $010047
-;            and   #$00FF
-;            bne   :racing
-;            jmp   RenderScreen
+            ldal  $010047
+            and   #$00FF
+            bne   :racing
+            jmp   RenderScreen
 
 :racing
+
 ; Do the basic setup
 ;
 ; ram_004E_base_nametable is for the crowd offset
 ; ram_004D_base_nametable is for the track offset
+;
+; These set the horizontal scroll position.  The vertical scroll position is never changed.
+;
+            ldy   #0
+            jsr   NES_SetScrollY
 
             sep   #$20
-;            lda   _ppuctrl                ; Bit 0 is the high bit of the X scroll position
             ldal  $01004D
-            lsr                           ; put in the carry bit
+            and   #$01                    ; Isolate the nametable select bit
+            xba                           ; put in the high byte
             lda   _ppuscroll+1            ; load the scroll value
-            ror                           ; put the high bit and divide by 2 for the engine
             rep   #$20
-            and   #$00FF                  ; make sure nothing is in the high byte
-            jsr   _SetBG0XPos
+            tax
+            jsr   NES_SetScrollX          ; This takes a NES pixel position (0 - 511)
 
             sep   #$20
-            ldal  $01004E                ; Bit 0 is the high bit of the X scroll position
+            ldal  $01004E                 ; Bit 0 is the high bit of the X scroll position
             lsr                           ; put in the carry bit
             lda   _topscroll              ; load the scroll value
             ror                           ; put the high bit and divide by 2 for the engine
             rep   #$20
             and   #$00FF                  ; make sure nothing is in the high byte
-            sta   _top_bg_x
-
-            lda   #y_offset
-            jsr   _SetBG0YPos
-
+            sta   _top_bg_x               ; This is used directly so needs a byte offset (0 - 255)
+ 
             lda   ppumask
             and   ppumask_override
             and   #NES_PPUMASK_BG
@@ -266,39 +391,28 @@ _RenderScreen
             and   #NES_PPUMASK_SPR
             jsr   EnableSprites
 
-; Lock in the verical position
-
-            jsr   _ApplyBG0YPosPreLite
-            jsr   _ApplyBG0YPosLite       ; Set up the code field
-
 ; First, render the crowd (40 scanlines)
 
-            lda   #{y_offset*2}
-            sta   tmp1                ; virt_line_x2
-            lda   #40*2
-            sta   tmp2                ; lines_left_x2
-            lda   _top_bg_x           ; Xmod256
-            jsr   _ApplyBG0XPosAltLite
+            lda   #0
+            ldx   #40
+            ldy   _top_bg_x           ; Xmod256
+            jsr   _BltSetupAlt
             sta   nesCrowdOffset
 
 ; Next render top part of the screen to move with the player
 
-            lda   #{y_offset+40}*2
-            sta   tmp1                ; virt_line_x2
-            lda   #{200-32-40}*2
-            sta   tmp2                ; lines_left_x2
-            lda   StartX              ; Xmod256
-            jsr   _ApplyBG0XPosAltLite
+            lda   #40
+            ldx   #{200-32-40}
+            ldy   StartXMod256              ; Xmod256
+            jsr   _BltSetupAlt
             sta   nesTopOffset
 
 ; Now render the bottom 32 lines to show the status bar area
 
-            lda   #{y_offset+200-32}*2
-            sta   tmp1                    ; virt_line_x2
-            lda   #{32*2}
-            sta   tmp2                    ; lines_left_x2
-            lda   #0                      ; Xmod256
-            jsr   _ApplyBG0XPosAltLite
+            lda   #200-32
+            ldx   #32
+            ldy   #0                         ; Xmod256
+            jsr   _BltSetupAlt
             sta   nesBottomOffset            ; cache the :exit_offset value returned from this function
 
 ; Copy the sprites and buffer to the graphics screen
@@ -307,18 +421,18 @@ _RenderScreen
 
 ; Restore the buffer
 
-            lda   #y_offset               ; virt_line
-            ldx   #40                     ; lines_left
+            lda   #0
+            ldx   #40
             ldy   nesCrowdOffset          ; offset to patch
             jsr   _RestoreBG0OpcodesAltLite
 
-            lda   #y_offset+40            ; virt_line
-            ldx   #{200-32-40}            ; lines_left
+            lda   #40
+            ldx   #{200-32-40}
             ldy   nesTopOffset            ; offset to patch
             jsr   _RestoreBG0OpcodesAltLite
 
-            lda   #{y_offset+200-32}      ; virt_line
-            ldx   #32                     ; lines_left
+            lda   #200-32
+            ldx   #32
             ldy   nesBottomOffset         ; offset to patch
             jsr   _RestoreBG0OpcodesAltLite
 
@@ -363,6 +477,7 @@ SetDefaultPalette
             rts
 
 SwizzleTables adrl L1_T0
+;              adrl L2_T0
 
 ; ApplyConfig
 ;
@@ -408,20 +523,20 @@ config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
 
-CONFIG_PALETTE       equ 0
-TILE_TOP_LEFT        equ $105
-TILE_TOP_RIGHT       equ $106
-TILE_BOTTOM_LEFT     equ $107
-TILE_BOTTOM_RIGHT    equ $108
-TILE_HORIZONTAL      equ $10A
-TILE_HORIZONTAL_TOP  equ $10A
-TILE_HORIZONTAL_BOTTOM  equ $10A
-TILE_VERTICAL_LEFT   equ $10E
-TILE_VERTICAL_RIGHT  equ $10D
-TILE_ZERO            equ $100
-TILE_A               equ $12E
-TILE_SPACE           equ $100
-TILE_CURSOR          equ $149  ; $10A
+;CONFIG_PALETTE       equ 0
+;TILE_TOP_LEFT        equ $105
+;TILE_TOP_RIGHT       equ $106
+;TILE_BOTTOM_LEFT     equ $107
+;TILE_BOTTOM_RIGHT    equ $108
+;TILE_HORIZONTAL      equ $10A
+;TILE_HORIZONTAL_TOP  equ $10A
+;TILE_HORIZONTAL_BOTTOM  equ $10A
+;TILE_VERTICAL_LEFT   equ $10E
+;TILE_VERTICAL_RIGHT  equ $10D
+;TILE_ZERO            equ $100
+;TILE_A               equ $12E
+;TILE_SPACE           equ $100
+;TILE_CURSOR          equ $149  ; $10A
 
 AUDIO_TITLE_STR     str 'AUDIO'
 AUDIO_QUALITY_STR   str 'QUALITY'

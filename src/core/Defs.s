@@ -40,13 +40,15 @@ StartY                 equ   18          ; Which code buffer line is the top of 
 CompileBank0           equ   20          ; Always zero to allow [CompileBank0],y addressing
 CompileBank            equ   22          ; Data bank that holds compiled sprite code
 
-; LastPatchOffset        equ   24          ; Offset into code field that was patched with BRA instructions
+MirrorMaskX            equ   24
+
 StartXMod256           equ   26
 StartYMod240           equ   28
 
 GTEControlBits         equ   30          ; Enable / disable things
 
-;SpriteBanks            equ   32          ; Bank bytes for the sprite data and sprite mask
+MirrorMaskY            equ   32
+
 LastRender             equ   34          ; Record which render function was last executed
 CompileBankTop         equ   36          ; First free byte in the compile bank.  Grows upward in memeory.
 
@@ -64,16 +66,18 @@ pputmp                 equ   56          ; 16 bytes of temporary storage for the
 ;shadowBitmap           equ   52          ; Provide enough space for the full ppu range (240 lines) + 16 since the y coordinate can be off-screen
 ;_next                  equ   shadowBitmap+32
 
+; Dirty State transition
+;                                                                                                +---------------------------------------------+
+;                                                                                                +----------+---------------+    +-----------+ |
+;                                                                                                V          |               |    V           | |
+DirtyState             equ   100          ; Track the transition from normal to dirty rendering [0] normal -+-> [1] dirty1 -+-> [2] dirty2 --+-+
+DebugSCB               equ   102          ; SCB byte to use for tracing actions
 ;RenderCount            equ   102         ; 8-bit value tracking the number of times the PPU queues have been rendered to the PEA field
 LastRead               equ   104
 
 SpriteBank0            equ   106          ; Always zero to allow [CompileBank0],y addressing
 SpriteBank             equ   108          ; Data bank that holds compiled sprite code
 SpriteBankPos          equ   110          ; Current free location in the sprite compile bank
-
-;TileStoreBankAndBank01 equ   106
-;TileStoreBankAndTileDataBank equ 108
-;TileStoreBankDoubled   equ   110
 
 UserId                 equ   112          ; Memory manager user Id to use
 LastKey                equ   116
@@ -82,6 +86,8 @@ InputPlayer2           equ   120
 
 ShowFPS                equ   126
 YOrigin                equ   128
+
+MaxY                   equ   130          ; Horizontal Mirroring = 480, Vertical Virroring = 240
 ; VideoMode              equ   130
 ; AudioMode              equ   132
 ; BGToggle               equ   134
@@ -100,10 +106,12 @@ ScreenBase             equ   158
 
 ; Free space from 160 to 192
 STATE_REG_R0W0         equ   160         ; R0W0
-STATE_REG_BLIT         equ   161         ; Value used for blit (could be R0W0 or R0W1)
-STK_SAVE               equ   162         ; Only used by the lite renderer
-STATE_REG_R0W1         equ   164         ; R0W1
-STATE_REG_R1W1         equ   165
+STATE_REG_BLIT         equ   162         ; Value used for blit (could be R0W0 or R0W1)
+STK_SAVE               equ   164         ; Only used by the lite renderer
+STATE_REG_R0W1         equ   166         ; R0W1
+STATE_REG_R1W1         equ   168         ; These values all need to be 16-bit because they may be read
+STK_SAVE_BANK          equ   170         ; Bank 0 locations where the data bank values for the PEA fields are stored
+BANK_VALUES            equ   172         ; Room for two right here
 
 blttmp                 equ   192         ; 32 bytes of local cache/scratch space for blitter
 
@@ -132,13 +140,11 @@ UP_ARROW        equ   $0B
 DOWN_ARROW      equ   $0A
 
 ; DirtyBits definitions
-DIRTY_BIT_BG0_X        equ   $0001
-DIRTY_BIT_BG0_Y        equ   $0002
-; DIRTY_BIT_BG1_X        equ   $0004
-; DIRTY_BIT_BG1_Y        equ   $0008
-DIRTY_BIT_BG0_REFRESH  equ   $0010
-; DIRTY_BIT_BG1_REFRESH  equ   $0020
-DIRTY_BIT_SPRITE_ARRAY equ   $0040
+DIRTY_BIT_BG0_X        equ   $0001     ; The horizontal scroll position has changed
+DIRTY_BIT_BG0_Y        equ   $0002     ; The veritcal scroll position has changed
+DIRTY_BIT_PAL_CHANGE   equ   $0004     ; There has been a palette change, force a repaint
+DIRTY_BIT_BG0_REFRESH  equ   $0010     ; Force a refresh of the full background
+DIRTY_BIT_SPRITE_ARRAY equ   $0040     
 
 ; ReadControl return value bits
 PAD_KEY_DOWN           equ   $0080
@@ -162,15 +168,48 @@ CTRL_EVEN_RENDER       equ   $8000                  ; Only render half the scanl
 ; The size of each tile instruction is 3 bytes
 PER_TILE_SIZE equ 3
 
+; Turn ON/OFF dirty rendering debugging
+DIRTY_RENDERING_VISUALS equ 0
+
 ; Offsets for the Lite blitter
-_ENTRY_JMP  equ  4                       ; the jump (brl, actually) is 4 bytes after the entry point
-_ENTRY_ODD  equ  12                      ; the brl for the odd entry is a bit further in
+;
+; The first line of blitter code is at bank address $0100, but some of the line's code preceeds this address to
+; ensure that the ciritical code path is page-aligned.  So, for example, the code for line 1 is anchored to 
+; address $0200 and starts at $01F1.
+;
+; In vertical mirroring mode, two adjacent lines combines to make each logical line cover 512 bytes.  In horizontal
+; mirroring mode, the line are independent and span 256 bytes.
+
+_BANK_ENTRY_NT1 equ $0004
+_BANK_ENTRY_NT2 equ $000C
+
+_INT_OFFSET    equ  $00                   ; page offset for the code to enable interrupt before the line
+_ENTRY_OFFSET  equ  $11                   ; page offset for each line of code
+_ENTRY_PATCH   equ  $15                   ; page offset for the jmp/ldx at the top of the line
+_ODD_PATCH     equ  $1C                   ; page offset for the jmp following the odd-aligned code
+_E_OUT_OFFSET  equ  $1F                   ; page offset for the top jump that leads to the last word code at $E5
+_O_OUT_OFFSET  equ  $22
+_PEA_OFFSET    equ  $25                   ; page offset to the first PEA instruction
+_LOOP_OFFSET   equ  $E5                   ; page offset for the jump after the PEA opcodes that continues drawing
+;_WORD_OFFSET  equ  $E5                   ; page offset for the code that pushes the final byte/word onto the stack
+_E_WORD_OFFSET equ  $E8
+_O_WORD_OFFSET equ  $EF
+_E_EXIT_OFFSET equ  $EB                   ; page offset of the jump that goes to the next line
+_O_EXIT_OFFSET equ  $F3                   ; page offset of the jump that goes to the next line
+_SAVE_OFFSET   equ  $E9                   ; page offset to the location where the PEA operand is saved
+_O_LOAD_HI_OFFSET equ $EF
+_O_LOAD_LO_OFFSET equ $18
+
+_O_SAVE_EDGE   equ  $F7                  ; Empty byte to stash data in the second page for odd rendering
+
+_ENTRY_JMP  equ  4                       ; $nF5: the jump (brl, actually) is 4 bytes after the entry byte
+_ENTRY_ODD  equ  12                      ; $nFD: the brl for the odd entry is a bit further in
 _EXIT_ODD   equ  475                     ; the odd enty point is just 3 bytes of code to load and push the edge byte
 _EXIT_EVEN  equ  478                     ; in the second page of the blitter line
 _LOW_SAVE   equ  {_EXIT_EVEN+4}          ; space to save the code field opcodes is right after the return jmp/jml
-_ENTRY_INT  equ  $E1                     ; pre-code area of the next line -- just change the bottom byte of the JMP
-_LINE_SIZE  equ  512                     ; number of bytes for each blitter line
-
+_LINE_SIZE_V equ  512                    ; number of bytes for each blitter line (vertical mirroring)
+_LINE_SIZE_H equ  256                    ; number of bytes for each blitter line (horizontal mirroring)
+_LINE_SPAN  equ  512                     ; always 512 bytes between adjacent vertical lines
 _CODE_TOP   equ  21                      ; number of bytes from the base address of each blitter line to the first PEA instruction
 _LINES_PER_BANK equ 120
 
@@ -200,3 +239,7 @@ NES_PPUMASK_BG  equ $08
 NES_PPUMASK_SPR equ $10
 
 NES_PPUCTRL_SPRSIZE equ $20
+
+; NES Nametable Mirroring
+HORIZONTAL_MIRRORING equ $01
+VERTICAL_MIRRORING   equ $02

@@ -204,7 +204,11 @@ EngineReset
                   stz       OldStartY
                   stz       StartYMod240
 
-                  stz       DirtyBits
+                  lda       #$FFFF                 ; Mark as needing a full update
+                  sta       DirtyBits
+
+                  stz       DirtyState
+                  stz       DebugSCB
                   stz       LastRender             ; Initialize as if a full render was performed
 ;                  stz       LastPatchOffset
 ;                  stz       RenderCount
@@ -232,11 +236,22 @@ EngineReset
                   sta       STATE_REG_R0W1
                   ora       #$20                       ; R1W1
                   sta       STATE_REG_R1W1
+
+; Cache the bank values of the blitter banks
+
+                  lda       #^lite_base_1
+                  sta       BANK_VALUES
+                  lda       #^lite_base_2
+                  sta       BANK_VALUES+1
                   rep       #$20
+
+                  tdc
+                  ora       #BANK_VALUES-1
+                  sta       STK_SAVE_BANK              ; Save the address of the direct page variables
 
 ; Insert jumps to the interrupt enable code every 16 lines
 
-                  jsr       _InitPEAFieldInt
+;                  jsr       _InitPEAFieldInt
 
 ; If the even mode is turned on, adjust all of the even lines in the PEA field to skip their next line
 
@@ -252,77 +267,329 @@ _InitRenderMode
                   bit       #CTRL_EVEN_RENDER
                   beq       :no_even
                   jmp       _InitPEAFieldEven
-:no_even          jmp       _InitPEAFieldAll
+:no_even
+;          jmp       _InitPEAFieldAll
+                  DO    NAMETABLE_MIRRORING&HORIZONTAL_MIRRORING
+                  jsr   _InitHorizontalMirroring
+                  ELSE
+                  jsr   _InitVerticalMirroring
+                  FIN
 
+                  rts
 
 ; Insert jumps to the interrupt enable code every 16 lines. There are 120 lines in each bank, so
-; only 7 loops needed.  Interrups are set at the mid-point lines -- 4, 20, 36, 52, 68, 84, 100, 116
+; only 7 loops needed.  Interrupts are set at the mid-point lines -- 4, 20, 36, 52, 68, 84, 100, 116
 ;
 ; Notice that this routine sets the low byte of the EXIT_EVEN address, while _InitPEAFieldAll and
 ; _InitPEAFieldEven set the high byte of EXIT_EVEN.
-_InitPEAFieldInt
-                  lda       #7
-                  sta       tmp15
+;_InitPEAFieldInt
+;                  lda       #7
+;                  sta       tmp15
+;
+;                  ldx       #_EXIT_EVEN+{_LINE_SIZE_V*4}+1      ; Patch the JMP operand here
+;:loop
+;                  sep       #$20
+;                  lda       #_ENTRY_INT
+;                  stal      lite_base_1,x
+;                  stal      lite_base_2,x
+;                  rep       #$20
+;
+;                  txa
+;                  clc
+;                  adc       #{_LINE_SIZE_V*16}
+;                  tax
+;
+;                  dec       tmp15
+;                  bne       :loop
+;                  rts
 
-                  ldx       #_EXIT_EVEN+{_LINE_SIZE*4}+1      ; Patch the JMP operand here
-:loop
-                  sep       #$20
-                  lda       #_ENTRY_INT
-                  stal      lite_base,x
-                  stal      lite_base_2,x
-                  rep       #$20
+; Patch a PEA field address relative to a page offset that's in the X register
+; PATCH_FIELD offset,dest.
+;
+; Offset by the number of bytes from the lite_base entry address and the start of the
+; page-aligned line code.
+FIRST_PAGE        equ       $100       ; PEA code starts at $0100 in each respective bank
+PATCH_JMP         mac
+                  txa
+                  clc
+                  IF        #=]2
+                  adc       ]2+FIRST_PAGE
+                  ELSE
+                  adc       ]2
+                  adc       #FIRST_PAGE
+                  FIN
+                  stal      lite_start_page_1+1+{]1},x
+                  stal      lite_start_page_2+1+{]1},x
+                  <<<
+
+PATCH_ADDR        mac
+                  txa
+                  clc
+                  IF        #=]2
+                  adc       ]2+FIRST_PAGE
+                  ELSE
+                  adc       ]2
+                  adc       #FIRST_PAGE
+                  FIN
+                  stal      lite_start_page_1+{]1},x
+                  stal      lite_start_page_2+{]1},x
+                  <<<
+
+PATCH_VAL         mac
+                  lda       ]2
+                  stal      lite_start_page_1+{]1},x
+                  stal      lite_start_page_2+{]1},x
+                  <<<
+
+; Mirroring
+;
+; The array of PEA spans need to be reconfigured depending on whether the engine is in vertical or
+; horizontal mirroring mode.
+;
+; The configuration involved setting the prelude and epilogue instructions that bookend the core
+; PEA instructions.
+;
+; n00: jmp even_out     ; H = jmp ${n}CF,     V = jmp ${n+1}CF
+; n03: jmp odd_out      ; H = jmp ${n}CC,     V = jmp ${n+1}CC
+; ...
+; nC6: jmp next         ; H = jmp ${n}06,     V = jmp ${n+1}06
+; nC9: jmp even_out     ; H = jmp ${n}CF,     V = jmp ${n+1}CF
+; nCC: jmp odd_out      ; H = LDA #imm / PHA, V = jmp ${n+1}CC
+; nCF: jmp {n+2}F1      ; H = jmp ${n+2}F1,   V = -- -- --
+;
+; The last lines in each bank need to be adjusted to have proper JML instructions embedded within
+;
+; F0CF: jml ${b^1}01F1  ; H = jml ${b^1}01F1  V = -- -- -- --
+; F1CF: jml ${b^1}....  ; H = jml ${b^1}02F1  V = jml ${b^1}01F1
+
+
+; Set up the PEA field for horizontal mirroring.  This creates a virtual 256x480 rendering surface. In
+; this mode, each page-aligned line is updated
+_InitHorizontalMirroring
+                  lda       #$00FF
+                  sta       MirrorMaskX
+                  lda       #$01FF
+                  sta       MirrorMaskY
+                  lda       #480
+                  sta       MaxY
+
+; Adjust lookup tables
+
+                  ldx       #126
+:loop0
+                  lda       Col2CodeOffset,x
+                  sta       Col2CodeOffset+128,x                  ; For horizontal mirroring, offsets 64 - 127 are the same as 0 - 63
+                  dex
+                  dex
+                  bpl       :loop0
+
+; Update the flow control in the PEA fields
+
+                  ldx       #0
+:loop1
+                  PATCH_JMP _LOOP_OFFSET;#_PEA_OFFSET             ; Jump around to the beginning of the line
+                  PATCH_JMP _E_OUT_OFFSET;#_E_WORD_OFFSET         ; Jump to the code to push the last word for an even blit
+                  PATCH_JMP _O_OUT_OFFSET;#_O_WORD_OFFSET         ; Jump to the code to push the last byte for an odd blit
+                  PATCH_JMP _E_EXIT_OFFSET;#{$0200+_ENTRY_OFFSET} ; Jump to the next line
+                  PATCH_JMP _O_EXIT_OFFSET;#{$0200+_ENTRY_OFFSET} ; Jump to the next line
+
+                  PATCH_VAL {_E_WORD_OFFSET};#$00F4               ; PEA opcode (value is filled in by blitter)
+                  PATCH_VAL {_O_WORD_OFFSET};#$00AD               ; LDA abs opcode (addess filled in by _O_LOAD_HI_OFFSET)
+                  PATCH_ADDR {_O_LOAD_LO_OFFSET+1};#{_SAVE_OFFSET+0}
+                  PATCH_ADDR {_O_LOAD_HI_OFFSET+1};#{_SAVE_OFFSET+1}
 
                   txa
                   clc
-                  adc       #{_LINE_SIZE*16}
+                  adc       #_LINE_SIZE_H
+                  tax
+
+                  cpx       #{240*256}             ; Do 240 lines per bank
+                  bcc       :loop1
+
+; The last line needs to jump to beginning of the next bank
+;
+;          NT1 NT2
+;  Bank 1: A   C
+;  Bank 2: B   D
+;
+; Execution order is A -> B -> C -> D -> A
+
+                  ldx       #{238*256}
+                  PATCH_VAL _E_EXIT_OFFSET;#$005C                           ; JML opcode (in both nametables)
+                  PATCH_VAL _E_EXIT_OFFSET+$100;#$005C                           ; JML opcode (in both nametables)
+                  PATCH_VAL _O_EXIT_OFFSET;#$005C                           ; JML opcode (in both nametables)
+                  PATCH_VAL _O_EXIT_OFFSET+$100;#$005C                           ; JML opcode (in both nametables)
+                  
+                  lda       #_BANK_ENTRY_NT1
+                  stal      lite_start_page_1+_E_EXIT_OFFSET+1,x       ; A -> B
+                  stal      lite_start_page_1+_O_EXIT_OFFSET+1,x       ; A -> B
+                  lda       #_BANK_ENTRY_NT2
+                  stal      lite_start_page_1+_E_EXIT_OFFSET+$0100+1,x ; C -> D
+                  stal      lite_start_page_1+_O_EXIT_OFFSET+$0100+1,x ; C -> D
+
+                  lda       #_BANK_ENTRY_NT2
+                  stal      lite_start_page_2+_E_EXIT_OFFSET+1,x       ; B -> C
+                  stal      lite_start_page_2+_O_EXIT_OFFSET+1,x       ; B -> C
+                  lda       #_BANK_ENTRY_NT1
+                  stal      lite_start_page_2+_E_EXIT_OFFSET+$0100+1,x ; D -> A
+                  stal      lite_start_page_2+_O_EXIT_OFFSET+$0100+1,x ; D -> A
+
+; Enable the interrupt code on every 16th line
+
+                  ldx       #{4*_LINE_SPAN}
+                  lda       #7
+                  sta       tmp15
+
+:loop2
+                  PATCH_JMP {$000+_E_EXIT_OFFSET};#{$0200+_INT_OFFSET}      ; Jump to the interrupt enable code (left nametable)
+                  PATCH_JMP {$000+_O_EXIT_OFFSET};#{$0200+_INT_OFFSET}      ; Jump to the interrupt enable code (left nametable)
+                  PATCH_JMP {$100+_E_EXIT_OFFSET};#{$0300+_INT_OFFSET}      ; Jump to the interrupt enable code (right nametable)
+                  PATCH_JMP {$100+_O_EXIT_OFFSET};#{$0300+_INT_OFFSET}      ; Jump to the interrupt enable code (right nametable)
+
+                  txa
+                  clc
+                  adc       #{16*_LINE_SPAN}
                   tax
 
                   dec       tmp15
-                  bne       :loop
+                  bne       :loop2
+
+                  rts
+
+; Setting up for vertical mirroring is slightly different than horizontal mirroring to guarantee that the entry point
+; of each line corresponds to the first nametable. This creates a virtual 512x240 rendering surface.
+_InitVerticalMirroring
+                  lda       #$01FF
+                  sta       MirrorMaskX
+                  lda       #$00FF
+                  sta       MirrorMaskY
+                  lda       #240
+                  sta       MaxY
+
+; Adjust lookup tables
+
+                  ldx       #126
+:loop0
+                  lda       Col2CodeOffset,x
+                  ora       #$0100
+                  sta       Col2CodeOffset+128,x                  ; For horizontal mirroring, offsets 64 - 127 are +$100 as 0 - 63
+                  dex
+                  dex
+                  bpl       :loop0
+
+; Update the flow control in the PEA fields
+
+                  ldx       #0
+:loop1
+                  PATCH_JMP _LOOP_OFFSET;#{_PEA_OFFSET+$100}              ; Loop around a double-width line
+                  PATCH_JMP {_LOOP_OFFSET+$100};#_PEA_OFFSET
+
+                  PATCH_JMP _E_OUT_OFFSET;#_E_WORD_OFFSET                 ; All exit points jump to code in the first page
+                  PATCH_JMP _O_OUT_OFFSET;#_O_WORD_OFFSET
+                  PATCH_JMP {_E_OUT_OFFSET+$100};#_E_WORD_OFFSET
+                  PATCH_JMP {_O_OUT_OFFSET+$100};#_O_WORD_OFFSET
+
+                  PATCH_VAL {_E_WORD_OFFSET+$100};#$004C                  ; JMP opcode (in second page to unify exit code)
+                  PATCH_VAL {_O_WORD_OFFSET+$100};#$004C
+                  PATCH_JMP {_E_WORD_OFFSET+$100};#_E_WORD_OFFSET
+                  PATCH_JMP {_O_WORD_OFFSET+$100};#_O_WORD_OFFSET
+
+                  PATCH_JMP _E_EXIT_OFFSET;#{$0200+_ENTRY_OFFSET}         ; Jump to the next line
+                  PATCH_JMP _O_EXIT_OFFSET;#{$0200+_ENTRY_OFFSET}
+;                  PATCH_JMP {_E_EXIT_OFFSET+$100};#{$0200+_ENTRY_OFFSET}  ; Jump to the next line
+;                  PATCH_JMP {_O_EXIT_OFFSET+$100};#{$0200+_ENTRY_OFFSET}  ; Jump to the next line
+
+                  PATCH_ADDR {_O_LOAD_LO_OFFSET+1};#{$100+_O_SAVE_EDGE}      ; All saved data is in the first page
+                  PATCH_ADDR {_O_LOAD_HI_OFFSET+1};#{_SAVE_OFFSET+1}
+;                  PATCH_ADDR {_O_LOAD_LO_OFFSET+$101};#{_SAVE_OFFSET+0}
+;                  PATCH_ADDR {_O_LOAD_HI_OFFSET+$101};#{_SAVE_OFFSET+1}
+
+                  txa
+                  clc
+                  adc       #_LINE_SIZE_V
+                  tax
+
+                  cpx       #{240*256}             ; Do 120 lines per bank
+                  bcs       :out
+                  brl       :loop1
+:out
+
+; The last line needs to jump to beginning of the next bank
+;
+;          NT1 NT2
+;  Bank 1: A   C
+;  Bank 2: B   D
+;
+; Execution order is A -> B -> A, C -> D -> C
+
+                  ldx       #{238*256}
+                  PATCH_VAL _E_EXIT_OFFSET;#$005C                           ; JML opcode (in both nametables)
+                  PATCH_VAL _E_EXIT_OFFSET+$100;#$005C                           ; JML opcode (in both nametables)
+                  PATCH_VAL _O_EXIT_OFFSET;#$005C                           ; JML opcode (in both nametables)
+                  PATCH_VAL _O_EXIT_OFFSET+$100;#$005C                           ; JML opcode (in both nametables)
+                  
+                  lda       #_BANK_ENTRY_NT1
+                  stal      lite_start_page_1+_E_EXIT_OFFSET+1,x       ; A -> B
+                  stal      lite_start_page_1+_O_EXIT_OFFSET+1,x       ; A -> B
+                  stal      lite_start_page_1+_E_EXIT_OFFSET+$0100+1,x ; C -> D
+                  stal      lite_start_page_1+_O_EXIT_OFFSET+$0100+1,x ; C -> D
+
+                  stal      lite_start_page_2+_E_EXIT_OFFSET+1,x       ; A -> B
+                  stal      lite_start_page_2+_O_EXIT_OFFSET+1,x       ; A -> B
+                  stal      lite_start_page_2+_E_EXIT_OFFSET+$0100+1,x ; C -> D
+                  stal      lite_start_page_2+_O_EXIT_OFFSET+$0100+1,x ; C -> D
+
+; Enable the interrupt code on every 16th line
+
+                  ldx       #{4*_LINE_SPAN}
+                  lda       #7
+                  sta       tmp15
+
+:loop2
+                  PATCH_JMP {$000+_E_EXIT_OFFSET};#{$0200+_INT_OFFSET}      ; Jump to the interrupt enable code (left nametable)
+                  PATCH_JMP {$000+_O_EXIT_OFFSET};#{$0200+_INT_OFFSET}
+                  PATCH_JMP {$100+_E_EXIT_OFFSET};#{$0200+_INT_OFFSET}
+                  PATCH_JMP {$100+_O_EXIT_OFFSET};#{$0200+_INT_OFFSET}
+
+                  txa
+                  clc
+                  adc       #{16*_LINE_SPAN}
+                  tax
+
+                  dec       tmp15
+                  bne       :loop2
+
                   rts
 
 
 ; Initialize the PEA fields for "normal" mode that draws all of the lines
-_InitPEAFieldAll
-                  lda       #119                   ; There are 120 lines in each bank
-                  sta       tmp15
-
-                  ldx       #_EXIT_EVEN+2
-                  ldy       #3                    ; The first even line jumps to $3F1
-:loop
-                  sep       #$20
-                  tya
-;                  cmpl      lite_base,x
-;                  beq  :ok1
-;                  ldal      lite_base,x
-;                  brk  $04
-
-:ok1
-                  stal      lite_base,x
-
-;                  cmpl      lite_base_2,x
-;                  beq  :ok2
-;                  ldal      lite_base_2,x
-;                  brk  $05
-
-:ok2
-                  stal      lite_base_2,x
-                  rep       #$20
-
-                  tya
-                  clc
-                  adc       #2                   ; Move this many pages up
-                  tay
-
-                  txa
-                  clc
-                  adc       #_LINE_SIZE          ; Step to the next line
-                  tax
-
-                  dec       tmp15
-                  bne       :loop
-
-                  rts
+;_InitPEAFieldAll
+;                  lda       #119                   ; There are 120 lines in each bank
+;                  sta       tmp15
+;
+;                  ldx       #_EXIT_EVEN+2
+;                  ldy       #3                    ; The first even line jumps to $3F1
+;:loop
+;                  sep       #$20
+;                  tya
+;                  stal      lite_base_1,x
+;                  stal      lite_base_2,x
+;                  rep       #$20
+;
+;                  tya
+;                  clc
+;                  adc       #2                   ; Move this many pages up
+;                  tay
+;
+;                  txa
+;                  clc
+;                  adc       #_LINE_SIZE_V          ; Step to the next line
+;                  tax
+;
+;                  dec       tmp15
+;                  bne       :loop
+;
+;                  rts
 
 ; Initialize the PEA fields for "even" mode where all of the odd lines are skipped
 _InitPEAFieldEven
@@ -334,7 +601,7 @@ _InitPEAFieldEven
 :loop
                   sep       #$20
                   tya
-                  stal      lite_base,x
+                  stal      lite_base_1,x
                   stal      lite_base_2,x
                   rep       #$20
 
@@ -345,7 +612,7 @@ _InitPEAFieldEven
 
                   txa
                   clc
-                  adc       #{_LINE_SIZE*2}      ; Step to the next even line
+                  adc       #{_LINE_SIZE_V*2}      ; Step to the next even line
                   tax
 
                   dec       tmp15
@@ -421,6 +688,25 @@ _AckKeypress
                   lda       LastKey
                   and       #$FF7F
                   sta       LastKey
+                  rts
+
+_ReadRawKeypress
+                  pea       $0000               ; temporary space
+                  sep       #$20
+
+                  ldal      KBD_REG             ; read the keyboard
+                  bit       #$80                ; was the strobe bit set? If yes, then this is a new key
+                  beq       :done
+
+                  stal      KBD_STROBE_REG      ; reset the strobe
+                  and       #$7F                ; isolate the key code
+                  sta       LastKey
+                  ora       #PAD_KEY_DOWN       ; set the keydown flag
+                  sta       1,s
+
+:done
+                  rep       #$20
+                  pla
                   rts
 
 ; Poll the keyboard and return the current keypress in the lower 7 bits and the KEY_DOWN

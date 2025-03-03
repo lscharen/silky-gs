@@ -51,16 +51,16 @@ APUReload
                         phd
 
                         pha                    ; Save the new configuration mode
-                        pea $c000
+                        pea  $c000
                         pld
 
-                        jsr stop_playing
-                        jsr stop_interrupts
+                        jsr  stop_playing
+                        jsr  stop_interrupts
 
                         pla
                         stal apu_mode
-                        jsr setup_doc_registers
-                        jsr setup_interrupt
+                        jsr  setup_doc_registers
+                        jsr  setup_interrupt
 
                         pld
                         plp
@@ -76,6 +76,21 @@ APUShutDown             = *
 
                         jsr   stop_playing
                         jsr   stop_interrupts
+
+                        pld
+                        plp
+                        clc
+                        rts
+
+APUStop                 = *
+                        php
+                        sei
+                        phd
+
+                        lda   #$c000
+                        tcd
+
+                        jsr   stop_playing
 
                         pld
                         plp
@@ -1364,6 +1379,7 @@ EsqNoiseFreqTable dw 1088, 544, 272, 136, 68, 45,34,27,22,17,12,9,6,4,2,1
 APU_FORCE_OFF dw 0
 
 APU_STATUS_FORCE
+    php
     phb
     phk
     plb

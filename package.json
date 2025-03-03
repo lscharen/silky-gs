@@ -4,7 +4,7 @@
   "description": "A hardware abstraction layer runtime for porting NES games to the Apple IIgs",
   "main": "index.js",
   "config": {
-    "merlin32": "C:\\Programs\\IIgsXDev\\bin\\Merlin32-1.1.10.exe",
+    "merlin32": "C:\\Programs\\IIgsXDev\\bin\\Merlin32-BD-1.1.0.exe",
     "cadius": "C:\\Programs\\IIgsXDev\\bin\\Cadius.exe",
     "gsport": "C:\\Programs\\gsport\\gsport_0.31\\GSPort.exe",
     "macros": "./macros",
@@ -14,7 +14,7 @@
     "gsport": "%npm_package_config_gsport%",
     "cr": "%npm_package_config_crossrunner%",
     "test": "npm run build-image && %npm_package_config_gsport%",
-    "build": "npm run build:smb && npm run build:bf",
+    "build:all": "npm run build:smb && npm run build:bf && npm run build:wump && npm run build:lo && npm run build:ic && npm run build:eb && npm run build:dk",
     "build:smb": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/games/smb/SMB.s",
     "build:bf": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/games/bf/BF.s",
     "build:wump": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/games/wumpus/Wump.s",
@@ -27,6 +27,8 @@
     "debug:lo": "cd src/games/lightsout && %npm_package_config_crossrunner% LightsOutGS -source LightsOutGS_S02__Output.txt LightsOutGS_S03__Output.txt LightsOutGS_S04__Output.txt LightsOutGS_S05__Output.txt LightsOutGS_S06__Output.txt -map Master.s -Debug -CompatibilityLayer",
     "debug:wump": "cd src/games/wumpus && %npm_package_config_crossrunner% WumpusGS -source WumpusGS_S02__Output.txt WumpusGS_S03__Output.txt WumpusGS_S04__Output.txt WumpusGS_S05__Output.txt -map Wump.s -Debug -CompatibilityLayer",
     "debug:eb": "cd src/games/excitebike && %npm_package_config_crossrunner% ExciteBikeGS -source ExciteBikeGS_S02__Output.txt ExciteBikeGS_S03__Output.txt ExciteBikeGS_S04__Output.txt ExciteBikeGS_S05__Output.txt -map Master.s -Debug -CompatibilityLayer",
+    "debug:dk": "cd src/games/dk && %npm_package_config_crossrunner% DonkeyKongGS -source DonkeyKongGS_S02__Output.txt DonkeyKongGS_S03__Output.txt DonkeyKongGS_S04__Output.txt DonkeyKongGS_S05__Output.txt -map Master.s -Debug -CompatibilityLayer",
+    "debug:ic": "cd src/games/iceclimber && %npm_package_config_crossrunner% IceClimberGS -source IceClimberGS_S02__Output.txt IceClimberGS_S03__Output.txt IceClimberGS_S04__Output.txt IceClimberGS_S05__Output.txt -map Master.s -Debug -CompatibilityLayer",
     "build-image": "build-image.bat %npm_package_config_cadius% .\\emu\\Target.2mg /ClassicsGS/"
   },
   "repository": {
@@ -40,6 +42,7 @@
   },
   "homepage": "https://github.com/lscharen/iigs-game-engine#readme",
   "devDependencies": {
+    "csv-parse": "^5.5.6",
     "pngjs": "^6.0.0",
     "string-builder": "^0.1.8",
     "watch": "latest",

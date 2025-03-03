@@ -57,6 +57,9 @@ SCAN_OAM_XTRA_FILTER mac
 PPU_BG_TILE_ADDR  equ #$1000
 PPU_SPR_TILE_ADDR equ #$0000
 
+; What kind of Nametable mirroring for this game
+NAMETABLE_MIRRORING equ HORIZONTAL_MIRRORING
+
 ; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
 ; in addition to the compiled representation (usually yes, since this is used for the config
 ; screen)
@@ -83,7 +86,7 @@ OAM_END_INDEX     equ 64
 
 ; Allow the engine to use dirty rendering (drawing only lines where sprites
 ; have changed) if the background did not scroll compared to the previous frame
-ENABLE_DIRTY_RENDERING equ 1
+ENABLE_DIRTY_RENDERING equ 0
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
@@ -95,12 +98,13 @@ NO_VERTICAL_CLIP  equ 0
 NO_INTERRUPTS     equ 0
 
 ; Flag to turn off the configuration support
-NO_CONFIG         equ 0
+NO_CONFIG         equ 1
 
 ; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
 ; set the background color.
 PPU_PALETTE_DISPATCH equ PALETTE_DISPATCH
+AUTOMATIC_PALETTE_MAPPING equ 0
 
 ; Turn on code that visualizes the CPU time used by the ROM code
 SHOW_ROM_EXECUTION_TIME equ 0
@@ -182,7 +186,6 @@ InitPlayfield
             jsr   NES_SetPalette
             rts
 
-ConfScrnPal
 TitleScreen  dw    $0F,$31,$12,$30
              dw    $25,$29,$0A,$21
              dw    $01,$27,$17,$07
@@ -257,20 +260,20 @@ config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
 
-CONFIG_PALETTE       equ 0
-TILE_TOP_LEFT        equ $105
-TILE_TOP_RIGHT       equ $106
-TILE_BOTTOM_LEFT     equ $107
-TILE_BOTTOM_RIGHT    equ $108
-TILE_HORIZONTAL      equ $10A
-TILE_HORIZONTAL_TOP  equ $10A
-TILE_HORIZONTAL_BOTTOM  equ $10A
-TILE_VERTICAL_LEFT   equ $10E
-TILE_VERTICAL_RIGHT  equ $10D
-TILE_ZERO            equ $100
-TILE_A               equ $12E
-TILE_SPACE           equ $100
-TILE_CURSOR          equ $149  ; $10A
+;CONFIG_PALETTE       equ 0
+;TILE_TOP_LEFT        equ $105
+;TILE_TOP_RIGHT       equ $106
+;TILE_BOTTOM_LEFT     equ $107
+;TILE_BOTTOM_RIGHT    equ $108
+;TILE_HORIZONTAL      equ $10A
+;TILE_HORIZONTAL_TOP  equ $10A
+;TILE_HORIZONTAL_BOTTOM  equ $10A
+;TILE_VERTICAL_LEFT   equ $10E
+;TILE_VERTICAL_RIGHT  equ $10D
+;TILE_ZERO            equ $100
+;TILE_A               equ $12E
+;TILE_SPACE           equ $100
+;TILE_CURSOR          equ $149  ; $10A
 
 AUDIO_TITLE_STR     str 'AUDIO'
 AUDIO_QUALITY_STR   str 'QUALITY'

@@ -54,6 +54,9 @@ SCAN_OAM_XTRA_FILTER mac
 PPU_BG_TILE_ADDR  equ #$1000
 PPU_SPR_TILE_ADDR equ #$0000
 
+; What kind of Nametable mirroring for this game
+NAMETABLE_MIRRORING equ VERTICAL_MIRRORING
+
 ; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
 ; in addition to the compiled representation (usually yes, since this is used for the config
 ; screen)
@@ -98,6 +101,7 @@ NO_CONFIG         equ 0
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
 ; set the background color.
 PPU_PALETTE_DISPATCH equ SMB_PALETTE_DISPATCH
+AUTOMATIC_PALETTE_MAPPING equ 0
 
 ; Turn on code that visualizes the CPU time used by the ROM code
 SHOW_ROM_EXECUTION_TIME equ 0
@@ -141,7 +145,7 @@ y_ending_row  equ {y_offset_rows+y_height_rows}
 
 y_offset    equ {y_offset_rows*8}
 y_height    equ {y_height_rows*8}
-min_nes_y   equ 16
+min_nes_y   equ y_offset
 max_nes_y   equ min_nes_y+y_height
 
 x_offset    equ   16                      ; number of bytes from the left edge
@@ -173,7 +177,6 @@ x_offset    equ   16                      ; number of bytes from the left edge
 
             jsr   NES_ColdBoot
 
-;            jsr   ShowConfig
 ; Apply hacks
 ;WorldNumber           = $075f
 ;LevelNumber           = $075c
@@ -187,10 +190,12 @@ ContinueArea           = $7E00   ; patches operand
 ; We _never_ scroll vertically, so just set it once.  This is to make sure these kinds of optimizations
 ; can be set up in the generic structure
 
-            lda   #16
-            jsr   _SetBG0YPos
-            jsr   _ApplyBG0YPosPreLite
-            jsr   _ApplyBG0YPosLite       ; Set up the code field
+            jsr   NES_SetScrollY
+
+;            lda   #16
+;            jsr   _SetBG0YPos
+;            jsr   _ApplyBG0YPosPreLite
+;            jsr   _ApplyBG0YPosLite       ; Set up the code field
 
 ; Start up the NES
 :start
@@ -426,14 +431,8 @@ _RenderScreen
 
 ; Do the basic setup
 
-            sep   #$20
-            lda   _ppuctrl                ; Bit 0 is the high bit of the X scroll position
-            lsr                           ; put in the carry bit
-            lda   _ppuscroll+1            ; load the scroll value
-            ror                           ; put the high bit and divide by 2 for the engine
-            rep   #$20
-            and   #$00FF                  ; make sure nothing is in the high byte
-            jsr   _SetBG0XPos
+            jsr   _GetPPUScrollX
+            jsr   NES_SetScrollX
 
             lda   ppumask
             and   ppumask_override
@@ -447,26 +446,21 @@ _RenderScreen
 
 ; Now render the top 16 lines to show the status bar area
 
-            clc
-            lda   #16*2
-            sta   tmp1                    ; virt_line_x2
-            lda   #16*2
-            sta   tmp2                    ; lines_left_x2
-            lda   #0                      ; Xmod256
-            jsr   _ApplyBG0XPosAltLite
+            lda   #0
+            ldx   #16
+            ldy   #0                      ; Xmod256 = 0
+            jsr   _BltSetupAlt
             sta   nesTopOffset            ; cache the :exit_offset value returned from this function
 
 ; Next render the remaining lines
 
-            lda   #32*2
-            sta   tmp1                ; virt_line_x2
             lda   ScreenHeight
             sec
             sbc   #16
-            asl
-            sta   tmp2                ; lines_left_x2
-            lda   StartX              ; Xmod256
-            jsr   _ApplyBG0XPosAltLite
+            tax                       ; The rest of the screen is height - 16
+            lda   #16                 ; Start at line 16
+            ldy   StartXMod256
+            jsr   _BltSetupAlt
             sta   nesBottomOffset
 
 ; Copy the sprites and buffer to the graphics screen
@@ -475,7 +469,7 @@ _RenderScreen
 
 ; Restore the buffer
 
-            lda   #16                     ; virt_line
+            lda   #0                      ; virt_line
             ldx   #16                     ; lines_left
             ldy   nesTopOffset            ; offset to patch
             jsr   _RestoreBG0OpcodesAltLite
@@ -484,7 +478,7 @@ _RenderScreen
             sec
             sbc   #16
             tax                           ; lines_left
-            lda   #32                     ; virt_line
+            lda   #16                     ; virt_line
             ldy   nesBottomOffset         ; offset to patch
             jsr   _RestoreBG0OpcodesAltLite
 
@@ -659,19 +653,19 @@ config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
 
-CONFIG_PALETTE      equ 1
-TILE_TOP_LEFT       equ $144
-TILE_TOP_RIGHT      equ $149
-TILE_BOTTOM_LEFT    equ $15F
-TILE_BOTTOM_RIGHT   equ $17A
-TILE_HORIZONTAL_TOP equ $148
-TILE_HORIZONTAL_BOTTOM equ $178
-TILE_VERTICAL_LEFT  equ $146
-TILE_VERTICAL_RIGHT equ $14A
-TILE_ZERO           equ $100
-TILE_A              equ $10A
-TILE_SPACE          equ $124
-TILE_CURSOR         equ $1CE
+;CONFIG_PALETTE      equ 1
+;TILE_TOP_LEFT       equ $144
+;TILE_TOP_RIGHT      equ $149
+;TILE_BOTTOM_LEFT    equ $15F
+;TILE_BOTTOM_RIGHT   equ $17A
+;TILE_HORIZONTAL_TOP equ $148
+;TILE_HORIZONTAL_BOTTOM equ $178
+;TILE_VERTICAL_LEFT  equ $146
+;TILE_VERTICAL_RIGHT equ $14A
+;TILE_ZERO           equ $100
+;TILE_A              equ $10A
+;TILE_SPACE          equ $124
+;TILE_CURSOR         equ $1CE
 
 AUDIO_TITLE_STR     str 'AUDIO'
 AUDIO_QUALITY_STR   str 'QUALITY'
@@ -867,9 +861,6 @@ INPUT_ITEM_5 dw   KEYMAP
 *             --^
 *             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
 *             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-
-; Palette for the configuration screen
-ConfScrnPal  dw     $0F, $00, $29, $1A, $0F, $36, $17, $30, $21, $27, $1A, $16, $00, $00, $16, $18
 
 ; If AreaStyle is 1 then load an alternate palette 'b'
 ;

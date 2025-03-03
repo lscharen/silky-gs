@@ -38,11 +38,11 @@ EVT_LOOP_END mac
 ; Pre-render check to see if there are any background tiles queued for updates.  If so, we will do
 ; a regular rendering.  If not, use dirty rendering.
 PRE_RENDER   mac
-;
+             jsr  CheckForPaletteChange   ; Update the swizzle tables before drawing any tiles (cannot use tmp3 or tmp4)
              <<<
 
 POST_RENDER  mac
-             jsr  CheckForPaletteChange
+;
              <<<
 
 ; Put in additional conditions to skip sprites when scanning the OAM table to decide what to
@@ -56,6 +56,9 @@ SCAN_OAM_XTRA_FILTER mac
 ; Define which PPU address has the background and sprite tiles
 PPU_BG_TILE_ADDR  equ #$1000
 PPU_SPR_TILE_ADDR equ #$0000
+
+; What kind of Nametable mirroring for this game
+NAMETABLE_MIRRORING equ HORIZONTAL_MIRRORING
 
 ; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
 ; in addition to the compiled representation (usually yes, since this is used for the config
@@ -83,7 +86,7 @@ OAM_END_INDEX     equ 64
 
 ; Allow the engine to use dirty rendering (drawing only lines where sprites
 ; have changed) if the background did not scroll compared to the previous frame
-ENABLE_DIRTY_RENDERING equ 1
+ENABLE_DIRTY_RENDERING equ 0
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
@@ -101,6 +104,8 @@ NO_CONFIG         equ 0
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
 ; set the background color.
 PPU_PALETTE_DISPATCH equ PALETTE_DISPATCH
+PPU_PALETTE_MAP equ dk_palette_map
+AUTOMATIC_PALETTE_MAPPING equ 1
 
 ; Turn on code that visualizes the CPU time used by the ROM code
 SHOW_ROM_EXECUTION_TIME equ 0
@@ -149,6 +154,62 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
             jsr   SetDefaultPalette
 
+; Horizontal mirroring, so fill 2000 with a tile and 2800 with a different tile
+
+*             ldx   #$2000
+* :nt1_loop
+*             ldy   #0
+*             phx
+*             jsr   _DrawPPUTile
+*             plx
+*             inx
+*             cpx   #$23C0
+*             bcc  :nt1_loop
+
+*             ldx   #$2800
+* :nt2_loop
+*             ldy   #1
+*             phx
+*             jsr   _DrawPPUTile
+*             plx
+*             inx
+*             cpx   #$2BC0
+*             bcc  :nt2_loop
+
+* ; Test the blit
+
+*             ldy   #0
+*             ldx   #0
+* :scroll_loop
+*             phy
+*             phx
+*             jsr   NES_SetScroll    ; Setup the scroll origin
+
+*             jsr   _BltSetup        ; Setup the rendering based on the current origin
+*             pha                    ; Save the patch location
+
+*             ldx   #0               ; Render the full screen
+*             ldy   #200
+*             jsr   _BltRangeLite
+
+*             ply                    ; offset returned in A, but is passed in Y
+*             jsr   _RestoreBG0OpcodesLite
+
+
+* ;            jsr   WaitForKey
+*             pla
+*             inc
+*             and   #$1FF
+*             tax
+
+*             ply
+*             iny
+*             cpy   #512
+*             bcc   :scroll_loop
+
+
+*             jmp   quit
+
 ; Call the boot code in the ROM
 
             jsr   NES_ColdBoot
@@ -180,93 +241,160 @@ PendingPhase dw   0
 LastPhaseNo dw    0
 
 InitPlayfield
-            ldx   #TitleScreen
+            ldx   #AllColors
             lda   #0
             jsr   NES_SetPalette
             rts
 
 SwizzleTables
-        adrl L0_T0
-        adrl L1_T0
-        adrl L2_T0
-        adrl L3_T0
+            adrl L0_T0
 
-PhasePalettes
-            dw    TitleScreen
-            dw    Phase1
-            dw    Phase2
-            dw    Phase3
+; Are there less than 15 total color combos? Yes!
+;                      1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
+AllColors   dw     $00,$02,$06,$12
+            dw     $15,$16,$17,$24
+            dw     $25,$27,$28,$2C
+            dw     $30,$36,$37,$38
 
-; Are there less than 15 total color combos?
-AllColors   dw     $02,$06,$12,$15,$16,$17,$24,$25,$27,$28,$2C,$30,$36,$37
-ConfScrnPal
-TitleScreen
-             dw    $0F,$2C,$38,$12
-             dw    $27,$30,$24,$25
-             dw    $36,$16,$37,$06
-             dw    $02,$0F,$0F,$0F
-
-Phase1       dw    $0F,$15,$2C,$12
-             dw    $27,$02,$17,$30
-             dw    $36,$06,$24,$16
-             dw    $37,$0F,$0F,$0F
-
-Phase2       dw    $0F,$15,$2C,$06
-             dw    $30,$27,$16,$36
-             dw    $24,$02,$37,$12
-             dw    $0F,$0F,$0F,$0F
-
-Phase3       dw    $0F,$2C,$27,$02
-             dw    $30,$12,$24,$36
-             dw    $06,$16,$37,$0F
-             dw    $0F,$0F,$0F,$0F
+;TitleScreen
+;             dw    $0F,$2C,$38,$12
+;             dw    $27,$30,$24,$25
+;             dw    $36,$16,$37,$06
+;             dw    $02,$0F,$0F,$0F
+;
+;Phase1       dw    $0F,$15,$2C,$12
+;             dw    $27,$02,$17,$30
+;             dw    $36,$06,$24,$16
+;             dw    $37,$0F,$0F,$0F
+;
+;Phase2       dw    $0F,$15,$2C,$06
+;             dw    $30,$27,$16,$36
+;             dw    $24,$02,$37,$12
+;             dw    $0F,$0F,$0F,$0F
+;
+;Phase3       dw    $0F,$2C,$27,$02
+;             dw    $30,$12,$24,$36
+;             dw    $06,$16,$37,$0F
+;             dw    $0F,$0F,$0F,$0F
 
 ; When the NES ROM code tried to write to the PPU palette space, intercept here.
 PALETTE_DISPATCH
-        dw   ppu_3F00,ppu_3F01,ppu_3F02,ppu_3F03
-        dw   ppu_3F04,ppu_3F05,ppu_3F06,ppu_3F07
-        dw   ppu_3F08,ppu_3F09,ppu_3F0A,ppu_3F0B
-        dw   ppu_3F0C,ppu_3F0D,ppu_3F0E,ppu_3F0F
+        dw   ppu_3F00,dk_3Fxx,dk_3Fxx,dk_3Fxx
+        dw   ppu_3F04,dk_3Fxx,dk_3Fxx,dk_3Fxx
+        dw   ppu_3F08,dk_3Fxx,dk_3Fxx,dk_3Fxx
+        dw   ppu_3F0C,dk_3Fxx,dk_3Fxx,dk_3Fxx
 
-        dw   ppu_3F10,ppu_3F11,ppu_3F12,ppu_3F13
-        dw   ppu_3F14,ppu_3F15,ppu_3F16,ppu_3F17
-        dw   ppu_3F18,ppu_3F19,ppu_3F1A,ppu_3F1B
-        dw   ppu_3F1C,ppu_3F1D,ppu_3F1E,ppu_3F1F
+        dw   ppu_3F10,dk_3Fxx,dk_3Fxx,dk_3Fxx
+        dw   ppu_3F14,dk_3Fxx,dk_3Fxx,dk_3Fxx
+        dw   ppu_3F18,dk_3Fxx,dk_3Fxx,dk_3Fxx
+        dw   ppu_3F1C,dk_3Fxx,dk_3Fxx,dk_3Fxx
+
+dk_palette_map
+            dw    0, -1, -1, -1
+            dw    0, -1, -1, -1
+            dw    0,  1,  2,  3    ; donkey kong background tiles are mapped to fixed colors
+            dw    0, -1, -1, -1
+
+            dw    0,  4,  5,  6    ; mario is always set to his own colors
+            dw    0, -1, -1, -1    ; everything else is dynamically assigned
+            dw    0, -1, -1, -1
+            dw    0, -1, -1, -1
 
 ; The the phase changes, set a flag, but way for the transition time to drop below $70
 ; before applying the change.
-CheckForPaletteChange
-        ldal $010043   ; Are we in a transition timer?
-        and  #$0070
-        bcs  :no_change
+HasPaletteChange dw 0
+nes_palette      ds 64
 
-        ldal $010053   ; PhaseNo 0, 1, 2, 3
-        and  #$0003
-        cmp  LastPhaseNo
-        beq  :no_change
+; X = 2*nes_palette_index
+dk_3Fxx
+        txy
+        txa
+        lsr
+        tax
 
-        phx
+        ldal PPU_MEM+$3F00,x
+        and  #$003F
+        sta  nes_palette,y
 
-        sta  LastPhaseNo
-        asl
-        pha
-        tay
+        inc
+        sta  HasPaletteChange
 
-        ldx  PhasePalettes,y
-        lda  #0
-        jsr  NES_SetPalette
-
-        pla
-        asl
-        tay
-        ldx  SwizzleTables,y
-        lda  SwizzleTables+2,y
-        jsr  NES_SetPaletteMap
-
-        plx
-
-:no_change
         rts
+
+CheckForPaletteChange
+
+        lda  HasPaletteChange
+        bne  :update_palette
+        rts
+
+:update_palette
+        jsr  NES_BuildPalette         ; Create a mapping of the NES palette to the Apple IIgs palette
+
+        ldy  #current
+        lda  SwizzleTables
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+
+        clc
+        ldy  #current+{4*2}
+        lda  SwizzleTables
+        adc  #$200
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+
+        clc
+        ldy  #current+{8*2}
+        lda  SwizzleTables
+        adc  #$400
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+
+        clc
+        ldy  #current+{12*2}
+        lda  SwizzleTables
+        adc  #$600
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+
+        clc
+        ldy  #current+{16*2}
+        lda  SwizzleTables
+        adc  #$800
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+
+        clc
+        ldy  #current+{20*2}
+        lda  SwizzleTables
+        adc  #$A00
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+
+        clc
+        ldy  #current+{24*2}
+        lda  SwizzleTables
+        adc  #$C00
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+
+        clc
+        ldy  #current+{28*2}
+        lda  SwizzleTables
+        adc  #$E00
+        ldx  SwizzleTables+2
+        jsr  NES_BuildSwizzleTable
+        
+        stz  HasPaletteChange
+
+;        jsr  ForceMetatileRefresh     ; Repaint the scene
+;        jsr  RenderScreen
+
+        rts
+
+; Palette
+;
+; 0 = background
+; 
 
 ; For this game, we utilize a single, static palette
 SetDefaultPalette
@@ -322,20 +450,20 @@ config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
 
-CONFIG_PALETTE       equ 0
-TILE_TOP_LEFT        equ $105
-TILE_TOP_RIGHT       equ $106
-TILE_BOTTOM_LEFT     equ $107
-TILE_BOTTOM_RIGHT    equ $108
-TILE_HORIZONTAL      equ $10A
-TILE_HORIZONTAL_TOP  equ $10A
-TILE_HORIZONTAL_BOTTOM  equ $10A
-TILE_VERTICAL_LEFT   equ $10E
-TILE_VERTICAL_RIGHT  equ $10D
-TILE_ZERO            equ $100
-TILE_A               equ $12E
-TILE_SPACE           equ $100
-TILE_CURSOR          equ $149  ; $10A
+;CONFIG_PALETTE       equ 0
+;TILE_TOP_LEFT        equ $105
+;TILE_TOP_RIGHT       equ $106
+;TILE_BOTTOM_LEFT     equ $107
+;TILE_BOTTOM_RIGHT    equ $108
+;TILE_HORIZONTAL      equ $10A
+;TILE_HORIZONTAL_TOP  equ $10A
+;TILE_HORIZONTAL_BOTTOM  equ $10A
+;TILE_VERTICAL_LEFT   equ $10E
+;TILE_VERTICAL_RIGHT  equ $10D
+;TILE_ZERO            equ $100
+;TILE_A               equ $12E
+;TILE_SPACE           equ $100
+;TILE_CURSOR          equ $149  ; $10A
 
 AUDIO_TITLE_STR     str 'AUDIO'
 AUDIO_QUALITY_STR   str 'QUALITY'

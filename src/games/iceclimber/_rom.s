@@ -7,7 +7,7 @@
         use  bank_ram.inc
         use  bank_val.inc
 ROMBase ENT
-        ds   $BD00
+        ds   $B700
         put  ../../rom/rom_inject.s
 
 LDA_ram_0000_Y      LDA_ABS_Y ram_0000
@@ -33,31 +33,19 @@ ADC_ram_plr_pos_X_Y ADC_ABS_Y ram_plr_pos_X
 STA_ram_plr_pos_X_Y STA_ABS_Y ram_plr_pos_X
 JMP_IND_02          JMP_ABS_IND $02
 
-IIGS_CLEAR
-        rep  #$30
-        ldx  #$00fe   ; avoid clearing top of stack since we entered via the harness
-        lda  #0
-:loop
-        sta  00,x
-        dex
-        dex
-        bpl  :loop
-        sep  #$30
-        rts
-  
         ds   \,$00
 
 tbl_C000_lo
-  db  ram_ppu_buffer ;   00 ; logo screen, mountain counter
-  db  {ram_0500_data + $4C} ;   01 ; logo screen palette
-  db  _off000_C6B8_02 ; 
-  db  _off000_C6E3_03 ; 
-  db  _off000_C694_04 ; 
-  db  ram_0400_data ;   05 ; logo screen bg data
-  db  _off000_C6ED_06 ; 
-  db  {ram_0400_data + $DF} ;   07 ; score counting screen palette, see 0x005295
-  db  {ram_0400_data + $81} ;   08 ; score counting screen bg data (additional data for 2nd player)
-  db  ram_0600_data ;   09 ; 
+  db < ram_ppu_buffer ;   00 ; logo screen, mountain counter
+  db < {ram_0500_data + $4C} ;   01 ; logo screen palette
+  db < _off000_C6B8_02 ; 
+  db < _off000_C6E3_03 ; 
+  db < _off000_C694_04 ; 
+  db < ram_0400_data ;   05 ; logo screen bg data
+  db < _off000_C6ED_06 ; 
+  db < {ram_0400_data + $DF} ;   07 ; score counting screen palette, see 0x005295
+  db < {ram_0400_data + $81} ;   08 ; score counting screen bg data (additional data for 2nd player)
+  db < ram_0600_data ;   09 ; 
 
 
 
@@ -76,25 +64,25 @@ tbl_C00A_hi
 
 
 vec_C014_RESET
-;  SEI
+  SEI
   CLD
   LDA #$10
   JSR STA_2000
   LDX #$FF
-;  TXS
+  TXS
 ; bzk optimize, BIT + BPL
-;bra_C01E_infinite_loop
-;  JSR LDA_2002
-;  ASL
-;  BCC bra_C01E_infinite_loop
-;bra_C024_infinite_loop
-;  JSR LDA_2002
-;  ASL
-;  BCC bra_C024_infinite_loop
+bra_C01E_infinite_loop
+  JSR LDA_2002
+  ASL
+  BCC bra_C01E_infinite_loop
+bra_C024_infinite_loop
+  JSR LDA_2002
+  ASL
+  BCC bra_C024_infinite_loop
   LDY #$07
-  STY <ram_0001
+  STY ram_0001
   LDY #$00
-  STY <ram_0000
+  STY ram_0000
   TYA ; 00
   LDX #$5A
   CPX ram_reset_check
@@ -110,16 +98,14 @@ bra_C041_loop
   STA (ram_0000),Y
   DEY
   BNE bra_C041_loop
-  DEC <ram_0001
+  DEC ram_0001
   BPL bra_C041_loop
-  JSR IIGS_CLEAR
   LDA #$5A
   STA ram_reset_check
   STA ram_reset_check + $01
   JSR sub_C05E
   JSR sub_C141_enable_nmi
 loc_C058_infinite_loop
-  jsl yield
   JSR sub_CACE_generate_random
   JMP loc_C058_infinite_loop
 
@@ -253,8 +239,7 @@ loc_C138_exit_nmi
   PLA
   TAX
   PLA
-;  RTI
-  rts
+  RTI
 
 
 
@@ -1929,7 +1914,7 @@ bra_CAE6_loop
   RTS
 
 
-native_joy    EXT
+
 sub_CAED_read_joy_regs
   JSR sub_CB35
   LDA #$01
@@ -1940,12 +1925,10 @@ sub_CAED_read_joy_regs
   JSR sub_CB00
   INX
 sub_CB00
-  ldal  native_joy,x
-  bra   :native_done  ; 6 bytes
   LDY #$08
-; bra_CB02_loop
-;  PHA
-;  JSR LDA_4016_X
+bra_CB02_loop
+  PHA
+  JSR LDA_4016_X
   STA ram_0000
   LSR
   ORA ram_0000
@@ -1953,8 +1936,7 @@ sub_CB00
   PLA
   ROL
   DEY
-;  BNE bra_CB02_loop
-:native_done
+  BNE bra_CB02_loop
   STX ram_0000
   ASL ram_0000
   LDX ram_0000
@@ -11809,38 +11791,38 @@ off_FFB1_10_1
   db $C5   ; 
   db $4A   ; 
   db $02   ; 
-  db $84   ; 
-  db $2E   ; 
-  db $A9   ; 
-  db $E7   ; 
-  db $E5   ; 
-  db $A9   ; 
-  db $E9   ; 
-  db $E9   ; 
-  db $6C   ; 
-  db $02   ; 
-  db $AA   ; 
-  db $B0   ; 
-  db $02   ; 
-  db $58   ; 
-  db $02   ; 
-  db $18   ; 
-  db $54   ; 
-  db $02   ; 
-  db $CC   ; 
-  db $02   ; 
+;  db $84   ; 
+*   db $2E   ; 
+*   db $A9   ; 
+*   db $E7   ; 
+*   db $E5   ; 
+*   db $A9   ; 
+*   db $E9   ; 
+*   db $E9   ; 
+*   db $6C   ; 
+*   db $02   ; 
+*   db $AA   ; 
+*   db $B0   ; 
+*   db $02   ; 
+*   db $58   ; 
+*   db $02   ; 
+*   db $18   ; 
+*   db $54   ; 
+*   db $02   ; 
+*   db $CC   ; 
+*   db $02   ; 
 
 
 
 _off002_FFD2_20_40
 off_FFD2_20_40_1
 off_FFD2_20_40_2
-  db $28   ; 
-  db $26   ; 
-  db $28   ; 
-  db $26   ; 
-  db $E8   ; 
-  db $00   ; 
+*   db $28   ; 
+*   db $26   ; 
+*   db $28   ; 
+*   db $26   ; 
+*   db $E8   ; 
+*   db $00   ; 
 
 
 
@@ -11852,51 +11834,51 @@ off_FFD8_80_2
 
 
 tbl_FFD9
-  db $50   ; 00 
-  db $51   ; 01 
-  db $51   ; 02 
-  db $51   ; 03 
-  db $51   ; 04 
-  db $51   ; 05 
-  db $51   ; 06 
-  db $51   ; 07 
-  db $51   ; 08 
-  db $52   ; 09 
-  db $52   ; 0A 
-  db $52   ; 0B 
-  db $52   ; 0C 
-  db $52   ; 0D 
-  db $52   ; 0E 
-  db $53   ; 0F 
-  db $53   ; 10 
-  db $53   ; 11 
-  db $53   ; 12 
-  db $53   ; 13 
-  db $54   ; 14 
-  db $54   ; 15 
-  db $54   ; 16 
+*   db $50   ; 00 
+*   db $51   ; 01 
+*   db $51   ; 02 
+*   db $51   ; 03 
+*   db $51   ; 04 
+*   db $51   ; 05 
+*   db $51   ; 06 
+*   db $51   ; 07 
+*   db $51   ; 08 
+*   db $52   ; 09 
+*   db $52   ; 0A 
+*   db $52   ; 0B 
+*   db $52   ; 0C 
+*   db $52   ; 0D 
+*   db $52   ; 0E 
+*   db $53   ; 0F 
+*   db $53   ; 10 
+*   db $53   ; 11 
+*   db $53   ; 12 
+*   db $53   ; 13 
+*   db $54   ; 14 
+*   db $54   ; 15 
+*   db $54   ; 16 
 vec_FFF0_IRQ
-  db $54   ; 17 
-  db $55   ; 18 
-  db $55   ; 19 
-  db $55   ; 1A 
-  db $56   ; 1B 
-  db $56   ; 1C 
-  db $56   ; 1D 
-  db $56   ; 1E 
-  db $57   ; 1F 
+*   db $54   ; 17 
+*   db $55   ; 18 
+*   db $55   ; 19 
+*   db $55   ; 1A 
+*   db $56   ; 1B 
+*   db $56   ; 1C 
+*   db $56   ; 1D 
+*   db $56   ; 1E 
+*   db $57   ; 1F 
 
 
-; bzk garbage?
-  db $FF   ; 
+* ; bzk garbage?
+*   db $FF   ; 
 
 
 
-;.out .sprintf("Free bytes in bank FF 0x%04X [%d]", ($FFFA - *), ($FFFA - *))
+* ;.out .sprintf("Free bytes in bank FF 0x%04X [%d]", ($FFFA - *), ($FFFA - *))
 
-  ds 7
+
 
 ;.segment "VECTORS"
-  dw vec_C076_NMI
-  dw vec_C014_RESET
-  dw vec_FFF0_IRQ
+;  dw vec_C076_NMI
+;  dw vec_C014_RESET
+;  dw vec_FFF0_IRQ

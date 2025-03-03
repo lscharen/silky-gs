@@ -62,6 +62,9 @@ SCAN_OAM_XTRA_FILTER mac
 PPU_BG_TILE_ADDR  equ #$1000
 PPU_SPR_TILE_ADDR equ #$0000
 
+; What kind of Nametable mirroring for this game
+NAMETABLE_MIRRORING equ VERTICAL_MIRRORING
+
 ; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
 ; in addition to the compiled representation (usually yes, since this is used for the config
 ; screen)
@@ -106,6 +109,7 @@ NO_CONFIG         equ 0
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
 ; set the background color.
 PPU_PALETTE_DISPATCH equ PALETTE_DISPATCH
+AUTOMATIC_PALETTE_MAPPING equ 0
 
 ; Turn on code that visualizes the CPU time used by the ROM code
 SHOW_ROM_EXECUTION_TIME equ 0
@@ -187,7 +191,6 @@ InitPlayfield
             jsr   NES_SetPalette
             rts
 
-ConfScrnPal
 TitleScreen  dw    $0F, $00, $0F, $10, $16, $30, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
 
 ; When the NES ROM code tried to write to the PPU palette space, intercept here.
@@ -259,20 +262,20 @@ config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
 
-CONFIG_PALETTE       equ 0
-TILE_TOP_LEFT        equ $105
-TILE_TOP_RIGHT       equ $106
-TILE_BOTTOM_LEFT     equ $107
-TILE_BOTTOM_RIGHT    equ $108
-TILE_HORIZONTAL      equ $10A
-TILE_HORIZONTAL_TOP  equ $10A
-TILE_HORIZONTAL_BOTTOM  equ $10A
-TILE_VERTICAL_LEFT   equ $10E
-TILE_VERTICAL_RIGHT  equ $10D
-TILE_ZERO            equ $100
-TILE_A               equ $12E
-TILE_SPACE           equ $100
-TILE_CURSOR          equ $149  ; $10A
+;CONFIG_PALETTE       equ 0
+;TILE_TOP_LEFT        equ $105
+;TILE_TOP_RIGHT       equ $106
+;TILE_BOTTOM_LEFT     equ $107
+;TILE_BOTTOM_RIGHT    equ $108
+;TILE_HORIZONTAL      equ $10A
+;TILE_HORIZONTAL_TOP  equ $10A
+;TILE_HORIZONTAL_BOTTOM  equ $10A
+;TILE_VERTICAL_LEFT   equ $10E
+;TILE_VERTICAL_RIGHT  equ $10D
+;TILE_ZERO            equ $100
+;TILE_A               equ $12E
+;TILE_SPACE           equ $100
+;TILE_CURSOR          equ $149  ; $10A
 
 AUDIO_TITLE_STR     str 'AUDIO'
 AUDIO_QUALITY_STR   str 'QUALITY'

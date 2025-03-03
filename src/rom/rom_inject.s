@@ -156,12 +156,14 @@ STA_4003_X
             plp
             rts
 
-STY_4003    phy
+STY_4003    php
+            phy
             pha
             tya
             jsl  APU_PULSE1_REG4_WRITE
             pla
             ply
+            plp
             rts
 
 APU_PULSE2  EXT
@@ -183,12 +185,14 @@ STX_4004    php
             plp
             rts
 
-STY_4004    phy
+STY_4004    php
+            phy
             pha
             tya
             jsl  APU_PULSE2_REG1_WRITE
             pla
             ply
+            plp
             rts
     
 STA_4005    jsl  APU_PULSE2_REG2_WRITE
@@ -223,12 +227,14 @@ STA_4007    jsl  APU_PULSE2_REG4_WRITE
 STA_4008    jsl  APU_TRIANGLE_REG1_WRITE
             rts
 
-STY_4008    phy
+STY_4008    php
+            phy
             pha
             tya
             jsl  APU_TRIANGLE_REG1_WRITE
             pla
             ply
+            plp
             rts
 
 STA_400A
@@ -240,12 +246,14 @@ STA_400b    jsl  APU_TRIANGLE_REG4_WRITE
             rts
 
 STY_400B
-STY_400b    phy
+STY_400b    php
+            phy
             pha
             tya
             jsl  APU_TRIANGLE_REG4_WRITE
             pla
             ply
+            plp
             rts
 
 STA_400C
@@ -366,11 +374,13 @@ LDA_2002
             jsl  PPUSTATUS_READ
             rts
 LDX_2002
-            pha
-            pha
+            pha                   ; space
+            php
+            pha                   ; save
             jsl  PPUSTATUS_READ
-            sta  2,s
+            sta  3,s
             pla
+            plp
             plx
             rts
 
