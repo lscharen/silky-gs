@@ -353,8 +353,8 @@ CheckForPaletteChange
         rts
 
 :update_palette
-        jsr  NES_BuildPalette         ; Create a mapping of the NES palette to the Apple IIgs palette
-;        jsr  NES_BuildStaticPalette    ; Create a mapping to a statis list of colors
+;       jsr  NES_BuildPalette         ; Create a mapping of the NES palette to the Apple IIgs palette
+        jsr  NES_BuildStaticPalette    ; Create a mapping to a statis list of colors
 
         ldy  #current
         lda  SwizzleTables

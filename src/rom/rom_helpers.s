@@ -914,6 +914,7 @@ NES_BuildStaticPalette
             lda  ReverseMap,y           ; Lookup the IIgs palette index for this color
 
             ldy  NESPalIndices,x
+            lsr
             sta  current,y              ; Store the index in the current table
 
             inx
