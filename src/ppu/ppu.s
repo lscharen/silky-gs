@@ -944,11 +944,6 @@ RenderPPUAttr
         stal PPU_MEM+TILE_VERSION+$20,x
         stal PPU_MEM+TILE_VERSION+$21,x
 
-        ldx  ntaddr
-        lda  PPU_MEM+ATTR_ADDR,x           ; load the low byte
-        tax                                ; address is now $2{n}C0 - $2{n}FF
-
-
         lda  :attr_copy
         and  #$30
         lsr
