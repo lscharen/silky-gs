@@ -1697,7 +1697,11 @@ PPUDATA_WRITE ENT
         and  #$001F
         asl
         tax
-        jsr  (PPU_PALETTE_DISPATCH,x)
+        
+        phy
+        jsr  (PPU_PALETTE_DISPATCH,x)   ; Palette handlers might overwrite any register, so preserve Y
+        ply
+
         sep  #$30
         plx
         pla

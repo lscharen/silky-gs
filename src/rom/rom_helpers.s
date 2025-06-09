@@ -905,6 +905,23 @@ find_free_slot
 
             rts
 
+NES_BuildStaticPalette
+            ldx  #0
+:loop1      ldy  NESPalIndices,x
+            lda  nes_palette,y          ; What color is in the NES palette
+            asl
+            tay
+            lda  ReverseMap,y           ; Lookup the IIgs palette index for this color
+
+            ldy  NESPalIndices,x
+            sta  current,y              ; Store the index in the current table
+
+            inx
+            inx
+            cpx  #{24*2}
+            bcc  :loop1
+
+            rts
 
 NES_BuildPalette
 :bitmask    equ  tmp0

@@ -247,25 +247,36 @@ quit
 
 ; Exit the application
 
-            _QuitGS    qtRec
-qtRec       adrl  $0000
-            da    $00
-
-PendingPhase dw   0
-LastPhaseNo  dw   0
+        _QuitGS    qtRec
+qtRec   adrl  $0000
+        da    $00
 
 InitPlayfield
-            ldx   #AllColors
-            lda   #0
-            jsr   NES_SetPalette
-            rts
+        ldx   #AllColors
+        lda   #0
+        jsr   NES_SetPalette
+
+; Initialize the reverse color map lookup since we will not allow the IIgs palette to change
+
+        ldx  #0
+:rloop
+        lda  AllColors,x   
+        asl
+        tay
+        txa
+        sta  ReverseMap,y
+        inx
+        inx
+        cpx  #32
+        bcc  :rloop
+        rts
 
 SwizzleTables
             adrl L0_T0
 
-; Are there less than 15 total color combos? Yes!
+; Are there less than 15 total color combos? Yes! This game can use a fixed palette
 ;                      1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
-AllColors   dw     $00,$02,$06,$12
+AllColors   dw     $0F,$02,$06,$12
             dw     $15,$16,$17,$24
             dw     $25,$27,$28,$2C
             dw     $30,$36,$37,$38
@@ -343,6 +354,7 @@ CheckForPaletteChange
 
 :update_palette
         jsr  NES_BuildPalette         ; Create a mapping of the NES palette to the Apple IIgs palette
+;        jsr  NES_BuildStaticPalette    ; Create a mapping to a statis list of colors
 
         ldy  #current
         lda  SwizzleTables
