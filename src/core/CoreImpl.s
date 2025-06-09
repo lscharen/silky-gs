@@ -191,17 +191,17 @@ EngineReset
                   stz       ScreenX0
                   stz       ScreenX1
 
-                  lda       #25
-                  sta       ScreenTileHeight
-                  lda       #32
-                  sta       ScreenTileWidth
+;                  lda       #25
+;                  sta       ScreenTileHeight
+;                  lda       #32
+;                  sta       ScreenTileWidth
 
                   stz       StartX
-                  stz       OldStartX
+;                  stz       OldStartX
                   stz       StartXMod256
 
                   stz       StartY
-                  stz       OldStartY
+;                  stz       OldStartY
                   stz       StartYMod240
 
                   lda       #$FFFF                 ; Mark as needing a full update
@@ -213,17 +213,27 @@ EngineReset
 ;                  stz       LastPatchOffset
 ;                  stz       RenderCount
 
+                  lda       #1
+                  sta       PPU_VERSION            ; Current version for tile change tracking. Zero is an illegal value.
+                  stz       PPU_CLEAR_ADDR         ; Address of memory that is incrmentally cleared
+
                   lda       #CTRL_EVEN_RENDER
                   sta       GTEControlBits
                   stz       GTEControlBits
 
-                  stz       CompileBankTop         ; Bank for compiled tiles
+;                  stz       CompileBankTop         ; Bank for compiled tiles
 
                   stz       OneSecondCounter
                   stz       LastKey
 
                   lda       #1                     ; $0000 is a sentinel address, so start at $0001 for
                   sta       SpriteBankPos          ; compiled sprites
+
+                  stz       frameCount             ; Maintain which shadow bitmap to use for a given frame
+                  lda       #shadowBitmap0
+                  sta       CurrShadowBitmap
+                  lda       #shadowBitmap1
+                  sta       PrevShadowBitmap
 
 ; Fill in the state register values
 
@@ -236,6 +246,11 @@ EngineReset
                   sta       STATE_REG_R0W1
                   ora       #$20                       ; R1W1
                   sta       STATE_REG_R1W1
+
+; Cache the bank for the PPU shadow RAM
+
+                  lda       #^PPU_MEM
+                  sta       PPU_BANK
 
 ; Cache the bank values of the blitter banks
 

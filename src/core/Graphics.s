@@ -246,16 +246,16 @@ SetScreenRect      sty   ScreenHeight               ; Save the screen height and
                    adc   ScreenWidth
                    sta   ScreenX1
 
-                   lda   ScreenHeight               ; Divide the height in scanlines by 8 to get the number tiles
-                   lsr
-                   lsr
-                   lsr
-                   sta   ScreenTileHeight
+;                   lda   ScreenHeight               ; Divide the height in scanlines by 8 to get the number tiles
+;                   lsr
+;                   lsr
+;                   lsr
+;                   sta   ScreenTileHeight
 
-                   lda   ScreenWidth                ; Divide width in bytes by 4 to get the number of tiles
-                   lsr
-                   lsr
-                   sta   ScreenTileWidth
+;                   lda   ScreenWidth                ; Divide width in bytes by 4 to get the number of tiles
+;                   lsr
+;                   lsr
+;                   sta   ScreenTileWidth
 
                    lda   ScreenY0                   ; Calculate the address of the first byte
                    asl                              ; of the right side of the playfield
@@ -363,7 +363,7 @@ _SetBG0XPos
                     tsb   DirtyBits                  ; Check if the value is already dirty, if so exit
                     bne   :out                       ; without overwriting the original value
 
-                    stx   OldStartX                  ; First change, so preserve the prior value
+;                    stx   OldStartX                  ; First change, so preserve the prior value
 :out                rts
 
 
@@ -381,7 +381,7 @@ _SetBG0YPos
                      tsb   DirtyBits            ; Check if the value is already dirty, if so exit
                      bne   :out                 ; without overwriting the original value
 
-                     stx   OldStartY            ; First change, so preserve the value
+;                     stx   OldStartY            ; First change, so preserve the value
 :out                 rts
 
 ;  0. Full Screen           : 40 x 25   320 x 200 (32,000 bytes (100.0%)) 

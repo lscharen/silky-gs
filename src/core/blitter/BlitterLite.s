@@ -149,6 +149,11 @@ blt_return_lite ENT
 ;
 ; This is simpler because X and Y are logical values.  Because we're not invoking the PEA
 ; table, there is no need to offset by the StartYMod240 value
+;
+; If the previous frame was drawn with the background disabled then we can skip everything.  This
+; is actually not uncommon -- make games disable sprites andbackground when clearing or initializing the
+; full screen, so tracking this allows us to perform updates to the PEA field quickly without wasting time
+; redrawing a blank background for a few frames.
 :no_background
                 bit   #CTRL_EVEN_RENDER     ; Need to check this again -- X and Y are already set correctly, though
                 bne   :even_only
@@ -178,7 +183,7 @@ blt_return_lite ENT
                 ldx   RTable,y            ; This is the right edge
 
                 sei                       ; disable interrupts
-                lda   STATE_REG_BLIT
+                lda   STATE_REG_R0W1
                 stal  STATE_REG           ; Write to Bank $01
                 txs                       ; set the stack to the right edge
 

@@ -95,7 +95,7 @@ NO_VERTICAL_CLIP  equ 0
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 0
+NO_INTERRUPTS     equ 1
 
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 0
@@ -145,6 +145,18 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
             phk
             plb
+
+; Adjust the stack pointer to be lower and use the upper part of the bank 0 space
+; for dirty sprite save and restore.  Move this into NES_StartUp once debugged.
+
+            tsc
+            sta   SprSaveTop
+            sta   SprSaveAddr
+            stz   SprSaveCount
+
+            sec
+            sbc   #$1100
+            tcs
 
 ; Call startup immediately after entering the application: A = memory manager user ID
 
@@ -227,9 +239,11 @@ x_offset      equ 16                      ; number of bytes from the left edge
             jsr   NES_WarmBoot
             bra   :start
 
-; The user has existed the runtime
+; The user has exited the runtime
 quit
             jsr   NES_ShutDown
+
+; Restore the stack to the entry value? Does not appear to be needed...
 
 ; Exit the application
 
@@ -238,7 +252,7 @@ qtRec       adrl  $0000
             da    $00
 
 PendingPhase dw   0
-LastPhaseNo dw    0
+LastPhaseNo  dw   0
 
 InitPlayfield
             ldx   #AllColors
@@ -295,7 +309,7 @@ dk_palette_map
             dw    0,  1,  2,  3    ; donkey kong background tiles are mapped to fixed colors
             dw    0, -1, -1, -1
 
-            dw    0,  4,  5,  6    ; mario is always set to his own colors
+            dw    0,  4,  5,  6    ; jumpman is always set to his own colors
             dw    0, -1, -1, -1    ; everything else is dynamically assigned
             dw    0, -1, -1, -1
             dw    0, -1, -1, -1

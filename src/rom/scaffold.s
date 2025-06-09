@@ -36,7 +36,7 @@ NES_StartUp
             sta   OldOneSec
 
             stz   ShowFPS
-            stz   YOrigin
+;            stz   YOrigin
 
             lda   #$0008
             sta   LastEnable
@@ -310,8 +310,8 @@ ToggleAPUChannel
 ; Helper to perform the essential functions of rendering a frame
             mx  %00
 NES_RenderFrame
-:nt_head    equ tmp3
-:at_head    equ tmp4
+;:nt_head    equ tmp3
+;:at_head    equ tmp4
 
 ; First, disable interrupts and perform the most essential functions to copy any critical NES data and
 ; registers into local memory so that the rendering is consistent and not affected if a VBL interrupt
@@ -320,12 +320,36 @@ NES_RenderFrame
             php
             sei
 
-            jsr   scanOAMSprites          ; Filter out any sprites that don't need to be drawn and mark occupied lines
+; Internal pre-render logic
 
-            lda  nt_queue_head            ; These are used in PPUFlushQueues, so using tmp locations is OK
-            sta  :nt_head
-            lda  at_queue_head
-            sta  :at_head
+; Swap the AT and NT list pointers so that any new PPU writes do not interfere with the 
+; current screen rendering code
+
+            lda  curr_nt_list_start       ; Copy the current list memory range
+            ldy  curr_nt_list_end
+
+            ldx  prev_nt_list_start       ; Copy the previous list start address
+
+            sta  prev_nt_list_start       ; Make the previous list range point to the memory range
+            sty  prev_nt_list_end         ; of the current list and then reset the current list
+
+            stx  curr_nt_list_start       ; to point at the other memory range and initialize it
+            stx  curr_nt_list_end         ; to be an empty list ready for the next round of PPU writes
+
+
+            lda  curr_at_list_start
+            ldy  curr_at_list_end
+
+            ldx  prev_at_list_start       ; Copy the previous list start address
+
+            sta  prev_at_list_start       ; Make the previous list range point to the memory range
+            sty  prev_at_list_end         ; of the current list and then reset the current list
+
+            stx  curr_at_list_start       ; to point at the other memory range and initialize it
+            stx  curr_at_list_end         ; to be an empty list ready for the next round of PPU writes
+
+            lda  PPU_VERSION
+            sta  _ppuversion
 
             DO   CUSTOM_PPU_CTRL_LOCK
             CUSTOM_PPU_CTRL_LOCK_CODE
@@ -341,6 +365,20 @@ NES_RenderFrame
             FIN
             sta  _ppuscroll
 
+            lda  ppumask
+            and  ppumask_override
+            sta  _ppumask
+
+            and  #NES_PPUMASK_BG         ; honor the PPU enable flags for sprites and background. It's important to 
+            jsr  EnableBackground        ; set the sprite disable flag here because it is used by scanOAMSprites
+
+            lda  _ppumask
+            and  #NES_PPUMASK_SPR
+            jsr  EnableSprites
+
+            jsr  scanOAMSprites
+            jsr  PPUFreezeNametableUpdates ; New
+
             plp
 
 ; Allow the user code to introspect and intervene at this point
@@ -354,7 +392,40 @@ NES_RenderFrame
 ; The queue is set up as a Set, so if the same tile is affected by more than one action, it will only be drawn once.
 ; Practically, most NES games already try to minimize the number of tiles to update per frame.
 
-            jsr   PPUFlushQueues
+;            jsr   PPUFlushQueues
+            jsr   PPUFlushQueuesAlt
+
+; Clear a rolling 16 bytes of data in the TILE_VERSION memory to
+; ensure that the PPUDATA_WRITE code never encounters a false positive
+
+            lda  #0
+            ldx  PPU_CLEAR_ADDR
+
+            stal PPU_MEM+TILE_VERSION+$2000+$000,x    ; always need to offset by $2000 because the PPU tiledata address is the index register value
+            stal PPU_MEM+TILE_VERSION+$2000+$002,x
+            stal PPU_MEM+TILE_VERSION+$2000+$004,x
+            stal PPU_MEM+TILE_VERSION+$2000+$006,x
+
+            stal PPU_MEM+TILE_VERSION+$2000+$400,x
+            stal PPU_MEM+TILE_VERSION+$2000+$402,x
+            stal PPU_MEM+TILE_VERSION+$2000+$404,x
+            stal PPU_MEM+TILE_VERSION+$2000+$406,x
+
+            stal PPU_MEM+TILE_VERSION+$2000+$800,x
+            stal PPU_MEM+TILE_VERSION+$2000+$802,x
+            stal PPU_MEM+TILE_VERSION+$2000+$804,x
+            stal PPU_MEM+TILE_VERSION+$2000+$806,x
+
+            stal PPU_MEM+TILE_VERSION+$2000+$C00,x
+            stal PPU_MEM+TILE_VERSION+$2000+$C02,x
+            stal PPU_MEM+TILE_VERSION+$2000+$C04,x
+            stal PPU_MEM+TILE_VERSION+$2000+$C06,x
+
+            txa
+            clc
+            adc  #8
+            and  #$03FF                           ; Keep rolling around the memory
+            sta  PPU_CLEAR_ADDR
 
 ; Finally, render the PEA field to the Super Hires screen.  The performance of the runtime is limited by this
 ; step and it is important to keep the high-level rendering code generalized so that optimizations, like falling
@@ -374,6 +445,12 @@ NES_RenderFrame
 ; Internal post-render logic
 
             inc   frameCount       ; Tick over to a new frame
+
+            lda   CurrShadowBitmap ; Swap the bitmap pointers
+            ldx   PrevShadowBitmap
+            sta   PrevShadowBitmap
+            stx   CurrShadowBitmap
+
             rts
 
 ; Helper functions for patching and restoring the PEA field.  These could
@@ -426,16 +503,6 @@ RenderScreen
 
             jsr   NES_SetScroll           ; Set the engine to this scroll position
 
-            lda   ppumask                 ; honor the PPU enable flags for sprites and background
-            and   ppumask_override
-            and   #NES_PPUMASK_BG
-            jsr   EnableBackground
-
-            lda   ppumask
-            and   ppumask_override
-            and   #NES_PPUMASK_SPR
-            jsr   EnableSprites
-
 ; Allow dirty rendering or not
 
             DO    ENABLE_DIRTY_RENDERING
@@ -465,20 +532,6 @@ RenderScreen
             jsr   _RestoreBG0OpcodesLite
 :dirty_done
 
-;            lda   peaFieldIsPatched
-;            bne   :no_patch
-;            jsr   _SetupPEAField
-;:no_patch   jsr   drawDirtyScreen
-;            bra   :complete
-;
-;:full_update
-;            lda   peaFieldIsPatched
-;            beq   :no_restore
-;            jsr   _ResetPEAField
-;:no_restore
-;            jsr   _SetupPEAField
-;            jsr   drawScreen
-;:complete
             ELSE
 
             jsr   _BltSetup
