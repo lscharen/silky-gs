@@ -69,8 +69,7 @@ pputmp                 equ   60          ; 16 bytes of temporary storage for the
 
 SprSaveTop             equ   76          ; Top stack address for the sprite save buffer
 SprSaveAddr            equ   78          ; Current address
-SprSaveCount           equ   80
-
+SprAddrCount           equ   80          ; Number of sprites saved in the buffer
 PPU_BANK               equ   98
 
 ; Dirty State transition

@@ -597,14 +597,14 @@ DrawPPUAttribute
         rts
 
 ; Alternate entry point to DrawPPUTile from the NTQueuePush macro
-_DrawPPUTile
-        mx    %00
-        tya
-        sep   #$20
-        stal  PPU_MEM+TILE_SHADOW,x
-        jsr   DrawPPUTile
-        rep   #$20
-        rts
+;_DrawPPUTile
+;        mx    %00
+;        tya
+;        sep   #$20
+;        stal  PPU_MEM+TILE_SHADOW,x
+;        jsr   DrawPPUTile
+;        rep   #$20
+;        rts
 
 ; Draw a tile from the PPU into the code field
 ;
@@ -2682,8 +2682,15 @@ drawDirtyScreen
 
         jsr   _ShadowOff              ; Hide the fact that we're erasing the sprites from the priorframe
         jsr   restoreTilesToScreen    ; Redraw the background for all of the previous sprites.  The background is now fully restored.
+
+        lda   SprSaveTop              ; Reset the stack for the next drawSprites call
+        sta   SprSaveAddr
+
         jsr   _ShadowOn               ; Now we can show the sprites again
-        jsr   drawSprites             ; Draw the new sprites; some partsof the old sprites may still be on-screen
+        jsr   drawSprites             ; Draw the new sprites; some parts of the old sprites may still be on-screen
+
+        jsr   exposeTilesToScreen
+        rts
 
 ; Dirty State 1 -- no saved sprite data, so need to redraw whole scanlines to erase the previous frame's
 ;                  sprites
@@ -2694,9 +2701,6 @@ drawDirtyScreen
 :dirty_state_1
 
         DO    DIRTY_RENDERING_VISUALS
-        lda   #0
-        jsr   _SetSCBs
-
         lda   #1
         sta   DebugSCB
         FIN
@@ -2739,6 +2743,11 @@ drawScreen
 ; Reset the dirty state to 0 (normal)
 
         stz   DirtyState
+
+; Clear any saved sprite background data if the previous frame was dirty
+
+        lda   SprSaveTop
+        sta   SprSaveAddr
 
 ; Step 0: Convert the bitmap into a list since it can be reused in Steps 1 and 3
 
@@ -2894,13 +2903,6 @@ drawSprites
         adc  #$2000-{y_offset*160}+x_offset
         sta  sprTmp1
 
-; If we are in DirtyState 1 or 2, then the sprite data should be copied
-
-;        phx
-;        tax
-;        jsr saveTileFromScreen
-;        plx
-
 ; Do some stuff that is faster in 8-bit mode
 
         sep  #$20
@@ -2924,6 +2926,17 @@ drawSprites
         and  #$00FF
         adc  sprTmp1                   ; Add to the base address calculated fom the Y-coordinate
         sta  sprTmp1                   ; This is the SHR address at which to draw the sprite
+
+; If we are in DirtyState 1 or 2, then the sprite data should be copied
+
+        lda  DirtyState
+        beq  :not_dirty
+        phx
+        ldx  sprTmp1
+        jsr  saveTileFromScreen
+        plx
+:not_dirty
+
         rts
 
 ; Calculate the on-screen address for the sprite
@@ -2982,7 +2995,7 @@ as_bitmap
         lda  sprTmp2-1
         and  #$FF00
         lsr                           ; Each tile is 128 bytes of data
-        sta  sprTmp0                  ; This is loaded in the draw routines
+;        sta  sprTmp0                  ; This is loaded in the draw routines
 
 ; Put the dispatch address back in X
 
@@ -2990,8 +3003,10 @@ as_bitmap
 
 draw_rtn2
         plb                           ; Return from compiled sprite
-draw_rtn
         rts
+
+;draw_rtn
+        rts                           ; Return from drawProcs
 
 drawProcs
         dw drawTileToScreen,drawTileToScreenP,drawTileToScreenH,drawTileToScreenPH
@@ -3229,12 +3244,14 @@ ORA_IND_LONG_IDX equ $17
 
 drawTileToScreenH
 
-          lda   sprTmp0
+;          lda   sprTmp0
 ;          clc              ; There are a series of zero shifts before calling into this routine
           adc   #64
-          sta   sprTmp0
+;          sta   sprTmp0
 
 drawTileToScreen
+
+          sta   sprTmp0
 
 ]line     equ   0
           lup   8
@@ -3258,16 +3275,19 @@ drawTileToScreen
 ]line     equ   ]line+1
           --^
 
-          jmp   draw_rtn
+;          jmp   draw_rtn
+          rts
 
 drawTileToScreenHV
 
-          lda   sprTmp0
+;          lda   sprTmp0
 ;          clc
           adc   #64
-          sta   sprTmp0
+;          sta   sprTmp0
 
 drawTileToScreenV
+
+          sta   sprTmp0
 
 ]line     equ   0
           lup   8
@@ -3291,18 +3311,21 @@ drawTileToScreenV
 ]line     equ   ]line+1
           --^
 
-          jmp   draw_rtn
+;          jmp   draw_rtn
+          rts
 
 drawTileToScreenPHV
 drawTileToScreenPH
 
-          lda   sprTmp0
+;          lda   sprTmp0
 ;          clc
           adc   #64
-          sta   sprTmp0
+;          sta   sprTmp0
 
 drawTileToScreenPV
 drawTileToScreenP
+
+          sta   sprTmp0
 
 ]line     equ   0
           lup   8
@@ -3387,7 +3410,8 @@ drawTileToScreenP
 ]line     equ   ]line+1
           --^
 
-          jmp   draw_rtn
+;          jmp   draw_rtn
+          rts
 
 incborder
         php
@@ -3434,87 +3458,116 @@ saveTileFromScreen
           sta   SprSaveAddr
 
           tya                                          ; Restore the original stack
-          tcs
+          tcs          
+
           rts
 
-; Expose the 8x8 blocks from
-          mx  %00
+sprBlockAddr ds 64*2           ; Maximum of 64 8x8 blocks, each with a 16-bit address
+
+; Expose the 8x8 blocks from the list populated by saveTileFromScreen.
+        mx  %00
 exposeTilesToScreen
 
-          ldx   SprSaveAddr
-          cpx   SprSaveTop
-          bne   :ok                                  ; If there are no tiles to expose, just return
-          rts
+        ldy   SprAddrCount     ; Number of sprite block addresses (x2)
+        bne   :ok
+        rts
 
 :ok
-          phd                                         ; Save the direct page
-          php
-          sei
-
-          sep   #$20
-          ldal  STATE_REG
-          sta   :patch+1
-
-          lda   STATE_REG_R1W1
-          stal  STATE_REG
-          rep   #$20
-
-          ldy   #0                                     ; Cached value of zero
-          clc
+        dey                    ; Can be done in any order
+        dey
 
 :loop
-          ldal  $000000,x                              ; Load the screen address
-          tcd
+        ldx   sprBlockAddr,y   ; Load the screen address
+]line   equ   7
+        lup   8
 
-          tya
-          tsb   0
-          tsb   2
-          tsb   160
-          tsb   162
+        ldal  $010000+{]line*SHR_LINE_WIDTH},x
+;        eor   #$FFFF
+        stal  $010000+{]line*SHR_LINE_WIDTH},x
+        ldal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+;        eor   #$FFFF
+        stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
 
-          tdc
-          adc   #160
-          tcd
+]line   equ   ]line-1
+        --^
+        
+        dey
+        dey
+        bmi   :out
+        brl   :loop            ; Are there more blocks to expose?
+:out
+        stz   SprAddrCount
+        rts
 
-          tya
-          tsb   0
-          tsb   2
-          tsb   160
-          tsb   162
 
-          tdc
-          adc   #160
-          tcd
+*           phd                                         ; Save the direct page
+*           php
+*           sei
 
-          tya
-          tsb   0
-          tsb   2
-          tsb   160
-          tsb   162
+*           sep   #$20
+*           ldal  STATE_REG
+*           sta   :patch+1
 
-          tdc
-          adc   #160
-          tcd
+*           lda   STATE_REG_R1W1
+*           stal  STATE_REG
+*           rep   #$20
 
-          tya
-          tsb   0
-          tsb   2
-          tsb   160
-          tsb   162
+*           ldy   #0                                     ; Cached value of zero
+*           clc
 
-          txa
-          adc   #32+2            ; 32 bytes of data + 2 bytes for the address
-          tax
-          cmp   SprSaveTop
-          bcc   :loop            ; Are there more blocks to expose?
+* :loop
+*           ldal  $000000,x                              ; Load the screen address
+*           tcd
 
-          sep   #$20
-:patch    lda   #$00
-          stal  STATE_REG
+*           tya
+*           tsb   0
+*           tsb   2
+*           tsb   160
+*           tsb   162
 
-          plp                      ; This will take care of returning to 16-bit mode
-          pld
-          rts
+*           tdc
+*           adc   #160
+*           tcd
+
+*           tya
+*           tsb   0
+*           tsb   2
+*           tsb   160
+*           tsb   162
+
+*           tdc
+*           adc   #160
+*           tcd
+
+*           tya
+*           tsb   0
+*           tsb   2
+*           tsb   160
+*           tsb   162
+
+*           tdc
+*           adc   #160
+*           tcd
+
+*           tya
+*           tsb   0
+*           tsb   2
+*           tsb   160
+*           tsb   162
+
+*           txa
+*           adc   #32+2            ; 32 bytes of data + 2 bytes for the address
+*           tax
+*           cmp   SprSaveTop
+*           bcc   :loop            ; Are there more blocks to expose?
+
+*           sep   #$20
+* :patch    lda   #$00
+*           stal  STATE_REG
+
+*           plp                      ; This will take care of returning to 16-bit mode
+*           pld
+*           rts
 
 ; Restores all of the saved tiles to the screen using the data from the stack.  The stack
 ; format is a set of nine 16-bit values.
@@ -3527,13 +3580,14 @@ exposeTilesToScreen
 
 restoreTilesToScreen
 
-          ldy   SprSaveCount
-          beq   :done                                  ; If there are no tiles to restore, just return
-
           tsc
           sta   tmp0
 
           lda   SprSaveAddr                            ; If the stack is empty, do nothing
+          cmp   SprSaveTop
+          beq   :done
+
+          ldy   #0
           tcs
 
 :loop
@@ -3550,9 +3604,16 @@ restoreTilesToScreen
 ]line     equ   ]line-1
           --^
 
-          dey
-          bne   :loop                                  ; Just 5 cycles vs 9 to compare the stack pointer
+          txa
+          sta   sprBlockAddr,y                         ; Save the SHR address of the 8x8 block
+          iny
+          iny
 
+          tsc
+          cmp   SprSaveTop
+          bcc   :loop
+
+          sty   SprAddrCount
           lda   tmp0                                   ; Restore the original stack pointer
           tcs
 

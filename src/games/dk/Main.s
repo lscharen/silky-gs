@@ -84,7 +84,7 @@ DIRECT_OAM_READ   equ $200
 OAM_START_INDEX   equ 0
 OAM_END_INDEX     equ 64
 
-; Allow the engine to use dirty rendering (drawing only lines where sprites
+; Allow the engine to use dirty rendering (drawing only lines/blocks where sprites
 ; have changed) if the background did not scroll compared to the previous frame
 ENABLE_DIRTY_RENDERING equ 0
 
@@ -152,7 +152,7 @@ x_offset      equ 16                      ; number of bytes from the left edge
             tsc
             sta   SprSaveTop
             sta   SprSaveAddr
-            stz   SprSaveCount
+            stz   SprAddrCount
 
             sec
             sbc   #$1100

@@ -520,6 +520,7 @@ RenderScreen
             jsr   _BltSetupDirty
             sta   exitOffset
             jsr   drawDirtyScreen
+;            jsr   drawScreen
             ldy   exitOffset
             jsr   _RestoreBG0OpcodesLite
             bra   :dirty_done
