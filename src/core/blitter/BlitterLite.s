@@ -37,7 +37,7 @@ _BltRangeLite
                 plp
                 FIN
 
-                lda   GTEControlBits
+                lda   ControlBits
                 bit   #CTRL_EVEN_RENDER
                 beq   :normal
 
@@ -60,7 +60,7 @@ _BltRangeLite
                 rts
 
 :normal
-;                lda   GTEControlBits 
+;                lda   ControlBits 
 ;                bit   #CTRL_BKGND_ENABLE
 ;                bne   *+5
 ;                brl   :no_background

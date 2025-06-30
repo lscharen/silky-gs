@@ -246,17 +246,6 @@ SetScreenRect      sty   ScreenHeight               ; Save the screen height and
                    adc   ScreenWidth
                    sta   ScreenX1
 
-;                   lda   ScreenHeight               ; Divide the height in scanlines by 8 to get the number tiles
-;                   lsr
-;                   lsr
-;                   lsr
-;                   sta   ScreenTileHeight
-
-;                   lda   ScreenWidth                ; Divide width in bytes by 4 to get the number of tiles
-;                   lsr
-;                   lsr
-;                   sta   ScreenTileWidth
-
                    lda   ScreenY0                   ; Calculate the address of the first byte
                    asl                              ; of the right side of the playfield
                    tax

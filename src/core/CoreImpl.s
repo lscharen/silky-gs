@@ -210,18 +210,14 @@ EngineReset
                   stz       DirtyState
                   stz       DebugSCB
                   stz       LastRender             ; Initialize as if a full render was performed
-;                  stz       LastPatchOffset
-;                  stz       RenderCount
 
                   lda       #1
                   sta       PPU_VERSION            ; Current version for tile change tracking. Zero is an illegal value.
                   stz       PPU_CLEAR_ADDR         ; Address of memory that is incrmentally cleared
 
                   lda       #CTRL_EVEN_RENDER
-                  sta       GTEControlBits
-                  stz       GTEControlBits
-
-;                  stz       CompileBankTop         ; Bank for compiled tiles
+                  sta       ControlBits
+                  stz       ControlBits
 
                   stz       OneSecondCounter
                   stz       LastKey
@@ -278,7 +274,7 @@ EngineReset
                   rts
 
 _InitRenderMode
-                  lda       GTEControlBits
+                  lda       ControlBits
                   bit       #CTRL_EVEN_RENDER
                   beq       :no_even
                   jmp       _InitPEAFieldEven

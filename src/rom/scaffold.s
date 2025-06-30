@@ -36,7 +36,6 @@ NES_StartUp
             sta   OldOneSec
 
             stz   ShowFPS
-;            stz   YOrigin
 
             lda   #$0008
             sta   LastEnable
@@ -320,8 +319,6 @@ NES_RenderFrame
             php
             sei
 
-; Internal pre-render logic
-
 ; Swap the AT and NT list pointers so that any new PPU writes do not interfere with the 
 ; current screen rendering code
 
@@ -347,6 +344,19 @@ NES_RenderFrame
 
             stx  curr_at_list_start       ; to point at the other memory range and initialize it
             stx  curr_at_list_end         ; to be an empty list ready for the next round of PPU writes
+
+; If there are background updates to make, force a screen refresh
+
+            lda  prev_at_list_start
+            cmp  prev_at_list_end
+            bne  :force_refresh
+            lda  prev_nt_list_start
+            cmp  prev_nt_list_end
+            beq  :no_force
+:force_refresh
+            lda  #DIRTY_BIT_BG0_REFRESH
+            tsb  DirtyBits
+:no_force
 
             lda  PPU_VERSION
             sta  _ppuversion
@@ -401,29 +411,29 @@ NES_RenderFrame
             lda  #0
             ldx  PPU_CLEAR_ADDR
 
-            stal PPU_MEM+TILE_VERSION+$2000+$000,x    ; always need to offset by $2000 because the PPU tiledata address is the index register value
-            stal PPU_MEM+TILE_VERSION+$2000+$002,x
-            stal PPU_MEM+TILE_VERSION+$2000+$004,x
-            stal PPU_MEM+TILE_VERSION+$2000+$006,x
+            stal PPU_MEM+TILE_VERSION0+$2000+$000,x    ; always need to offset by $2000 because the PPU tiledata address is the index register value
+            stal PPU_MEM+TILE_VERSION0+$2000+$002,x
+            stal PPU_MEM+TILE_VERSION1+$2000+$000,x
+            stal PPU_MEM+TILE_VERSION1+$2000+$002,x
 
-            stal PPU_MEM+TILE_VERSION+$2000+$400,x
-            stal PPU_MEM+TILE_VERSION+$2000+$402,x
-            stal PPU_MEM+TILE_VERSION+$2000+$404,x
-            stal PPU_MEM+TILE_VERSION+$2000+$406,x
+            stal PPU_MEM+TILE_VERSION0+$2000+$400,x
+            stal PPU_MEM+TILE_VERSION0+$2000+$402,x
+            stal PPU_MEM+TILE_VERSION1+$2000+$400,x
+            stal PPU_MEM+TILE_VERSION1+$2000+$402,x
 
-            stal PPU_MEM+TILE_VERSION+$2000+$800,x
-            stal PPU_MEM+TILE_VERSION+$2000+$802,x
-            stal PPU_MEM+TILE_VERSION+$2000+$804,x
-            stal PPU_MEM+TILE_VERSION+$2000+$806,x
+            stal PPU_MEM+TILE_VERSION0+$2000+$800,x
+            stal PPU_MEM+TILE_VERSION0+$2000+$802,x
+            stal PPU_MEM+TILE_VERSION1+$2000+$800,x
+            stal PPU_MEM+TILE_VERSION1+$2000+$802,x
 
-            stal PPU_MEM+TILE_VERSION+$2000+$C00,x
-            stal PPU_MEM+TILE_VERSION+$2000+$C02,x
-            stal PPU_MEM+TILE_VERSION+$2000+$C04,x
-            stal PPU_MEM+TILE_VERSION+$2000+$C06,x
+            stal PPU_MEM+TILE_VERSION0+$2000+$C00,x
+            stal PPU_MEM+TILE_VERSION0+$2000+$C02,x
+            stal PPU_MEM+TILE_VERSION1+$2000+$C00,x
+            stal PPU_MEM+TILE_VERSION1+$2000+$C02,x
 
             txa
             clc
-            adc  #8
+            adc  #4
             and  #$03FF                           ; Keep rolling around the memory
             sta  PPU_CLEAR_ADDR
 

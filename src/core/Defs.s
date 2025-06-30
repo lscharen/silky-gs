@@ -31,39 +31,44 @@ ScreenY0               equ   4           ; First vertical line on the physical s
 ScreenY1               equ   6           ; End of playfield on the physical screen. If the height is 20 and Y0 is
 ScreenX0               equ   8           ; 100, then ScreenY1 = 120.
 ScreenX1               equ   10
-;ScreenTileHeight       equ   12          ; Height of the playfield in 8x8 blocks
-;ScreenTileWidth        equ   14          ; Width of the playfield in 8x8 blocks
 
-StartX                 equ   16          ; Which code buffer byte is the left edge of the screen. Range = 0 to 167
-StartY                 equ   18          ; Which code buffer line is the top of the screen. Range = 0 to 207
+StartX                 equ   12          ; Which code buffer byte is the left edge of the screen. Range = 0 to 167
+StartY                 equ   14          ; Which code buffer line is the top of the screen. Range = 0 to 207
 
-CompileBank0           equ   20          ; Always zero to allow [CompileBank0],y addressing
-CompileBank            equ   22          ; Data bank that holds compiled sprite code
+CompileBank0           equ   16          ; Always zero to allow [CompileBank0],y addressing
+CompileBank            equ   18          ; Data bank that holds compiled sprite code
 
-MirrorMaskX            equ   24
+MirrorMaskX            equ   20
 
-StartXMod256           equ   26
-StartYMod240           equ   28
+StartXMod256           equ   22
+StartYMod240           equ   24
 
-GTEControlBits         equ   30          ; Enable / disable things
+ControlBits            equ   26          ; Enable / disable things
 
-MirrorMaskY            equ   32
+MirrorMaskY            equ   28
 
-LastRender             equ   34          ; Record which render function was last executed
-; CompileBankTop         equ   36          ; First free byte in the compile bank.  Grows upward in memeory.
-
-DirtyBits              equ   38
-; OldStartX              equ   40
-; OldStartY              equ   42
+LastRender             equ   30          ; Record which render function was last executed
+DirtyBits              equ   32
 
 ; Application variables
-SwizzlePtr             equ   44          ; Pointer to a table of 8 swizzle tables, one per palette
-SwizzlePtr2            equ   52          ; Work pointer to point at the fourth palette of the active swizzle table
-ActivePtr              equ   48          ; Work pointer to point at the active swizzle table
+SwizzlePtr             equ   34          ; Pointer to a table of 8 swizzle tables, one per palette
+SwizzlePtr2            equ   42          ; Work pointer to point at the fourth palette of the active swizzle table
+ActivePtr              equ   38          ; Work pointer to point at the active swizzle table
 
 ; Keep track of the current sprite bitmap and the one for the previous frame
-CurrShadowBitmap       equ   56
-PrevShadowBitmap       equ   58
+CurrShadowBitmap       equ   46          ; These are 16-bit pointers
+PrevShadowBitmap       equ   48
+
+unused50               equ   50
+unused51               equ   51
+unused52               equ   52
+unused53               equ   53
+unused54               equ   54
+unused55               equ   55
+unused56               equ   56
+unused57               equ   57
+unused58               equ   58
+unused59               equ   59
 
 pputmp                 equ   60          ; 16 bytes of temporary storage for the ppu subsystem
 
@@ -78,7 +83,6 @@ PPU_BANK               equ   98
 ;                                                                                                V          |               |    V           | |
 DirtyState             equ   100          ; Track the transition from normal to dirty rendering [0] normal -+-> [1] dirty1 -+-> [2] dirty2 --+-+
 DebugSCB               equ   102          ; SCB byte to use for tracing actions
-;RenderCount            equ   102         ; 8-bit value tracking the number of times the PPU queues have been rendered to the PEA field
 LastRead               equ   104
 
 SpriteBank0            equ   106          ; Always zero to allow [SpriteBank0],y addressing
@@ -91,12 +95,17 @@ InputPlayer1           equ   118          ; Filled in by _ReadContollers
 InputPlayer2           equ   120
 
 ShowFPS                equ   126
-; YOrigin                equ   128
+
+unused128              equ   128
+unused129              equ   129
 
 MaxY                   equ   130          ; Horizontal Mirroring = 480, Vertical Virroring = 240
-; VideoMode              equ   130
-; AudioMode              equ   132
-; BGToggle               equ   134
+
+unused132              equ   132
+unused133              equ   133
+unused134              equ   134
+unused135              equ   135
+
 LastEnable             equ   136
 LastStatusUdt          equ   138
 ActiveBank             equ   140
@@ -104,11 +113,20 @@ ROMZeroPg              equ   142
 ROMStk                 equ   144
 OldOneSec              equ   146
 NesTop                 equ   148
-MinYScroll             equ   150
+
+unused150              equ   150
+unused151              equ   151
+
 ScreenRows             equ   152
-MaxYScroll             equ   154
+
+unused154              equ   154
+unused155              equ   155
+
 NesBottom              equ   156
-ScreenBase             equ   158
+;ScreenBase             equ   158
+
+unused158              equ   158
+unused159              equ   159
 
 ; Free space from 160 to 192
 STATE_REG_R0W0         equ   160         ; R0W0
@@ -118,8 +136,9 @@ STATE_REG_R0W1         equ   166         ; R0W1
 STATE_REG_R1W1         equ   168         ; These values all need to be 16-bit because they may be read
 STK_SAVE_BANK          equ   170         ; Bank 0 locations where the data bank values for the PEA fields are stored
 BANK_VALUES            equ   172         ; Room for two right here
-; PPU_VERSION            equ   174         ; For tracking PPU WRITES
-PPU_CLEAR_ADDR         equ   176         ; Current address for a rolling clear of PPU shadow memory
+PPU_CLEAR_ADDR         equ   174         ; Current address for a rolling clear of PPU shadow memory
+
+; Free space from 176 to 192
 
 blttmp                 equ   192         ; 32 bytes of local cache/scratch space for blitter
 
@@ -224,15 +243,14 @@ _LINES_PER_BANK equ 120
 ; Set up some symbols to reference the different shadow memory in the PPU static bank. All of these
 ; shadow areas are meant to be accessed using indexed addressed with a Nametable address ($2000 - $2FFF)
 ; e.g. lda TILE_SHADOW,x
-TILE_SHADOW  equ $2000          ; shadowed values of the nametable tiles
-ATTR_SHADOW  equ $3000          ; pre-calculated attribute values derived from the attribute bytes in $2nC0 PPU RAM
-TILE_BANK    equ $4000          ; pre-calculated data bank value for the location of the associated PEA field tile
-TILE_ADDR_LO equ $5000          ; pre-calculated address (low byte) of the location of the PEA field tile
-TILE_ADDR_HI equ $6000          ; pre-calculated address (high byte) of the location of the PEA field tile
-TILE_VERSION equ $7000          ; version count of nametable byte (incremented on each PPUDATA_WRITE)
-; TILE_TARGET  equ $8000          ; value of last rendered byte. If TILE_VERSION == TILE_TARGET, then no update
-ATTR_ADDR    equ $8000          ; pre-calculated low byte of the attribute byte address at $2nC0+ for the PPU address
-TILE_ROW     equ $9000          ; pre-calculated row of the PPU address
+TILE_SHADOW   equ $2000          ; shadowed values of the nametable tiles
+ATTR_SHADOW   equ $3000          ; pre-calculated attribute values derived from the attribute bytes in $2nC0 PPU RAM
+TILE_BANK     equ $4000          ; pre-calculated data bank value for the location of the associated PEA field tile
+TILE_ADDR_LO  equ $5000          ; pre-calculated address (low byte) of the location of the PEA field tile
+TILE_ADDR_HI  equ $6000          ; pre-calculated address (high byte) of the location of the PEA field tile
+TILE_VERSION0 equ $7000          ; version count of nametable byte (incremented on each PPUDATA_WRITE)
+TILE_VERSION1 equ $8000          ; version count of nametable byte (incremented on each PPUDATA_WRITE)
+TILE_ROW      equ $9000          ; pre-calculated row of the PPU address
 
 ; Return codes from the Event Loop harness
 USER_SAYS_QUIT  equ 'q'

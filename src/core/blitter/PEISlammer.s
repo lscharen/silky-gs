@@ -48,7 +48,7 @@ _PEISlam
             plp
             FIN
 
-            lda   GTEControlBits
+            lda   ControlBits
             bit   #CTRL_EVEN_RENDER
             beq   :normal
 
