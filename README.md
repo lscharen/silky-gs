@@ -1,6 +1,6 @@
 ﻿# silky-gs
 
-A NES runtime layer for the Apple IIgs computer. See some examples running [https://www.youtube.com/@iigsgamedev9752](here).
+A NES runtime layer for the Apple IIgs computer. See some examples running [here](https://www.youtube.com/@iigsgamedev9752).
 
 # Pre-requisites
 
