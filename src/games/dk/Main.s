@@ -86,7 +86,7 @@ OAM_END_INDEX     equ 64
 
 ; Allow the engine to use dirty rendering (drawing only lines/blocks where sprites
 ; have changed) if the background did not scroll compared to the previous frame
-ENABLE_DIRTY_RENDERING equ 0
+ENABLE_DIRTY_RENDERING equ 1
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
@@ -95,7 +95,7 @@ NO_VERTICAL_CLIP  equ 0
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 1
+NO_INTERRUPTS     equ 0
 
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 0
@@ -111,7 +111,7 @@ AUTOMATIC_PALETTE_MAPPING equ 1
 SHOW_ROM_EXECUTION_TIME equ 0
 
 ; Turn on some off-screen information
-SHOW_DEBUG_VARS equ 0
+SHOW_DEBUG_VARS equ 1
 
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 0
@@ -123,12 +123,23 @@ CUSTOM_PPU_SCROLL_LOCK_CODE mac
 ;
                           <<<
 
-COMPILED_SPRITE_LIST_COUNT equ 0
+; Mario occupies the first 48 sprite tiles
+COMPILED_SPRITE_LIST_COUNT equ 60
 COMPILED_SPRITE_LIST       mac
-;
+                           dw   246,247,248,249,250,251                 ; Hammer sprites
+                           dw   252,253,254,255                         ; Oil barrel flames
+                           dw   128,129,130,131,132,133,134,135         ; Rolling barrels 128 - 151
+                           dw   136,137,138,139,140,141,142,143
+                           dw   144,145,146,147,148,149,150,151
+                           dw   213,214,215,216,217,218,219,220,221,222 ; Pauline
+                           dw   152,153,154,155,156,157,158,159         ; Flame dude
+                           dw   168,169,170,171,172,173,174,175
                            <<<
 
-; Do we have a custom routine to execite RenderScreen.  If yes, put its address here
+; Do not check for specific Tile IDs to exclude from drawing
+NO_TILE_EXCLUDE equ 1
+
+; Do we have a custom routine to execute RenderScreen.  If yes, put its address here
 CUSTOM_RENDER_SCREEN equ 0
 
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
@@ -328,7 +339,6 @@ dk_palette_map
 ; The the phase changes, set a flag, but way for the transition time to drop below $70
 ; before applying the change.
 HasPaletteChange dw 0
-nes_palette      ds 64
 
 ; X = 2*nes_palette_index
 dk_3Fxx
@@ -434,16 +444,16 @@ SetDefaultPalette
 
 ; ApplyConfig
 ;
-; Read the variabled set up the configuration screen and apply them to the runtime engine.
+; Read the variables set up the configuration screen and apply them to the runtime engine.
 ApplyConfig
             lda   config_video_fastmode
             beq   :normal_video
             lda   #CTRL_EVEN_RENDER
-            tsb   GTEControlBits
+            tsb   ControlBits
             bra   :apply_video
 :normal_video
             lda   #CTRL_EVEN_RENDER
-            trb   GTEControlBits
+            trb   ControlBits
 :apply_video
             lda   #0
             jsr   FillScreen

@@ -670,8 +670,19 @@ GameOverModeValue     = 3
 ;       .org $8000
 
 ROMBase  ENT
-         ds    $7800
-         put  ../../rom/rom_inject.s
+         ds    $7600
+
+y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
+        ds 24,$01
+        ds 200,$00
+        ds 32,$01
+
+tile_exclude ENT                  ; Table of excluded tiles
+        ds 252,$00
+        ds 1,$01                    ; Tile $FC can be skipped
+        ds 3,$00
+
+        put  ../../rom/rom_inject.s
 
 ; Absolute address in zero page helpers
 JMP_IND_06  JMP_ABS_IND $06

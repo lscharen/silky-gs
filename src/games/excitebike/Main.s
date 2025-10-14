@@ -140,6 +140,9 @@ COMPILED_SPRITE_LIST       mac
 ;
                            <<<
 
+; Do not check for specific Tile IDs to exclude from drawing
+NO_TILE_EXCLUDE equ 1
+
 ; Do we have a custom routine to execite RenderScreen.  If yes, put its address here
 CUSTOM_RENDER_SCREEN equ 1
 CUSTOM_RENDER_SCREEN_ADDR equ _RenderScreen
@@ -245,10 +248,9 @@ eb_palette_map
             dw    0, -1, -1, -1
 
 
-; The the phase changes, set a flag, but way for the transition time to drop below $70
+; When the phase changes, set a flag, but wait for the transition time to drop below $70
 ; before applying the change.
 HasPaletteChange dw 0
-nes_palette      ds 64
 
 ; X = 2*nes_palette_index
 dk_3Fxx
@@ -486,11 +488,11 @@ ApplyConfig
             lda   config_video_fastmode
             beq   :normal_video
             lda   #CTRL_EVEN_RENDER
-            tsb   GTEControlBits
+            tsb   ControlBits
             bra   :apply_video
 :normal_video
             lda   #CTRL_EVEN_RENDER
-            trb   GTEControlBits
+            trb   ControlBits
 :apply_video
             lda   #0
             jsr   FillScreen

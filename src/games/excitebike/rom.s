@@ -7,7 +7,13 @@
         use  bank_ram.inc
         use  bank_val.inc
 ROMBase ENT
-        ds   $BD00
+        ds   $BC00
+
+y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
+        ds 24,$01
+        ds 200,$00
+        ds 32,$01
+
         put  ../../rom/rom_inject.s
 
 STA_ram_00A4_obj_s1_Y STA_ABS_Y {ram_00A4_obj-1}

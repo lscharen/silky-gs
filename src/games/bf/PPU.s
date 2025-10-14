@@ -10,7 +10,3 @@ PPU_NT      ENT
 
             ds    $BF00
 
-; Stash the PPU_OAM RAM at the end -- this isn't used very often
-;PPU_OAM     ENT 
-;            ds    256            ; 256 bytes of separate OAM RAM
-

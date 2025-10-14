@@ -32,23 +32,23 @@ EVT_LOOP_BEGIN mac
 ; This hook happens immediately after all key presses have been handled by the scaffold and gives
 ; user-code a change to implement custom key commands
 EVT_LOOP_END mac
-             cmp  #'d'
-             bne  not_d
-             lda  disableDirtyRendering
-             eor  #1
-             sta  disableDirtyRendering
-not_d
+;             cmp  #'d'
+;             bne  not_d
+;             lda  disableDirtyRendering
+;             eor  #1
+;             sta  disableDirtyRendering
+;not_d
              <<<
 
 ; Pre-render check to see if there are any background tiles queued for updates.  If so, we will do
 ; a regular rendering.  If not, use dirty rendering.
 PRE_RENDER   mac
-             stz  disableDirtyRendering
-             lda  at_queue_tail
-             cmp  tmp4                    ; If there are any attribute changes, render the full screen
-             bne  do_full
-             inc  disableDirtyRendering
-do_full
+;             stz  disableDirtyRendering
+;             lda  at_queue_tail
+;             cmp  at_queue_head                    ; If there are any attribute changes, render the full screen
+;             beq  do_dirty
+;             inc  disableDirtyRendering
+;do_dirty
              <<<
 
 POST_RENDER  mac
@@ -121,7 +121,7 @@ AUTOMATIC_PALETTE_MAPPING equ 0
 SHOW_ROM_EXECUTION_TIME equ 0
 
 ; Turn on some off-screen information
-SHOW_DEBUG_VARS equ 0
+SHOW_DEBUG_VARS equ 1
 
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 0
@@ -138,10 +138,13 @@ COMPILED_SPRITE_LIST       mac
                            dw  $FFFF
                            <<<
 
+; Do not check for specific Tile IDs to exclude from drawing
+NO_TILE_EXCLUDE equ 1
+
 ; Do we have a custom routine to execute RenderScreen.  If yes, put its address here
-;CUSTOM_RENDER_SCREEN equ 0
-CUSTOM_RENDER_SCREEN equ 1
-CUSTOM_RENDER_SCREEN_ADDR equ _RenderScreen
+CUSTOM_RENDER_SCREEN equ 0
+;CUSTOM_RENDER_SCREEN equ 1
+;CUSTOM_RENDER_SCREEN_ADDR equ _RenderScreen
 
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 3 
@@ -158,6 +161,15 @@ x_offset      equ 16                      ; number of bytes from the left edge
             phk
             plb
 
+            tsc
+            sta   SprSaveTop
+            sta   SprSaveAddr
+            stz   SprAddrCount
+
+            sec
+            sbc   #$1100
+            tcs
+
 ; Call startup immediately after entering the application: A = memory manager user ID
 
             jsr   NES_StartUp
@@ -172,13 +184,6 @@ x_offset      equ 16                      ; number of bytes from the left edge
 ; Initialize the graphics for the main game mode
 
             jsr   SetDefaultPalette
-
-; Start the FPS counter
-
-            ldal  OneSecondCounter
-            sta   OldOneSec
-            lda   frameCount
-            sta   oldFrameCount
 
 ; Set an internal flag to tell the VBL interrupt handler that it is
 ; ok to start invoking the game logic.  The ROM code has to be run
@@ -222,19 +227,11 @@ Greyscale   dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
 
-; Program variables
-;use_dirty         dw  0        ; can use dirty rendering for this frame
-oldFrameCount     dw  0
-;disableDirtyRendering dw 0
-
 ; Helper to initialize the playfield based on the selected VideoMode
 InitPlayfield
 ;            lda   #16
             lda   #24
             sta   NesTop
-
-            lda   #0
-            sta   MinYScroll
 
             lda   #200
             sta   ScreenHeight
@@ -242,11 +239,6 @@ InitPlayfield
             lsr
             lsr
             sta   ScreenRows
-
-            lda   #200           ; Only display down to this row
-            sec
-            sbc   ScreenHeight
-            sta   MaxYScroll
 
             lda   NesTop
             clc
@@ -262,20 +254,20 @@ InitPlayfield
             ldy   ScreenHeight
             jsr   _SetScreenMode                 ; This is also called in the Init
 
-            lda   ScreenY0
-            asl
-            asl
-            asl
-            asl
-            asl
-            sta   ScreenBase
-            asl
-            asl
-            clc
-            adc   ScreenBase
-            clc
-            adc   #$2000+x_offset
-            sta   ScreenBase
+;            lda   ScreenY0
+;            asl
+;            asl
+;            asl
+;            asl
+;            asl
+;            sta   ScreenBase
+;            asl
+;            asl
+;            clc
+;            adc   ScreenBase
+;            clc
+;            adc   #$2000+x_offset
+;            sta   ScreenBase
 
 ; Set a default palette for the title screen
 
@@ -564,30 +556,6 @@ _RenderScreen
 :no_patch
             jsr   drawDirtyScreen
 :complete
-
-; Optionally show the frames per second
-            DO    SHOW_DEBUG_VARS
-            ldal  OneSecondCounter
-            cmp   OldOneSec
-            beq   :skip_fps
-
-            sta   OldOneSec
-            ldx   frameCount
-            txa
-            sec
-            sbc   oldFrameCount
-            stx   oldFrameCount
-            ldx   #0
-            ldy   #$FFFF
-            jsr   DrawByte
-:skip_fps
-
-            lda   InputPlayer1
-            ldx   #8*160
-            ldy   #$FFFF
-            jsr   DrawWord
-            FIN
-
             stz   DirtyBits
 ;            stz   LastPatchOffset
             rts
@@ -643,11 +611,11 @@ ApplyConfig
             lda   config_video_fastmode
             beq   :normal_video
             lda   #CTRL_EVEN_RENDER
-            tsb   GTEControlBits
+            tsb   ControlBits
             bra   :apply_video
 :normal_video
             lda   #CTRL_EVEN_RENDER
-            trb   GTEControlBits
+            trb   ControlBits
 :apply_video
             lda   #0
             jsr   FillScreen

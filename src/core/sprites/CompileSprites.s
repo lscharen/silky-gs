@@ -12,7 +12,7 @@
 ;   Scan for any duplicate words and mark complete
 ;   Continue until no words are left
 ;
-; This routine differs from the CompileTile routine a few way.  First, duplicate
+; This routine differs from the CompileTile routine in a few ways.  First, duplicate
 ; words that have a mask are cached to save the lookup time, but can't be used
 ; immediately.  Second, the compilation needs to produce vertical and horizontally
 ; flipped versions of the sprite, which take up more space.  So the compiled sprite
@@ -40,7 +40,7 @@ CompileSprite
 :base   equ tmp9                 ; start of the sprite
 
 ; Sprite are called with OAM Byte 2 in the accumulator and X set to the sprite index. The
-; direct page location sprTmp1 holds the SHR address.  The compiled sprite has an preamble
+; direct page location sprTmp1 holds the SHR address.  The compiled sprite has a preamble
 ; that dispatches to the correct compiled tile based on the value in the accumulator
 ;
 ; This is the template code that each compiled sprite starts with

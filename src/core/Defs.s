@@ -137,6 +137,7 @@ STATE_REG_R1W1         equ   168         ; These values all need to be 16-bit be
 STK_SAVE_BANK          equ   170         ; Bank 0 locations where the data bank values for the PEA fields are stored
 BANK_VALUES            equ   172         ; Room for two right here
 PPU_CLEAR_ADDR         equ   174         ; Current address for a rolling clear of PPU shadow memory
+CMPL_BANK              equ   176         ; ^tiledata << 8 | $01 (Bank $01 in low byte)
 
 ; Free space from 176 to 192
 

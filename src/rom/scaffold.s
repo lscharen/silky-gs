@@ -526,6 +526,14 @@ RenderScreen
             bne   :full_update
 
 ; This is code path for performing dirty rendering.
+            DO    SHOW_DEBUG_VARS
+            inc   dirtyCount
+            ldx   frameTick
+            lda   Mul160Tbl,x
+            tax
+            lda   #$EEEE
+            stal  $012000+{40*160},x
+            FIN
 
             jsr   _BltSetupDirty
             sta   exitOffset
@@ -536,6 +544,14 @@ RenderScreen
             bra   :dirty_done
 
 :full_update
+            DO    SHOW_DEBUG_VARS
+            inc   fullCount
+            ldx   frameTick
+            lda   Mul160Tbl,x
+            tax
+            lda   #$8888
+            stal  $012000+{40*160},x
+            FIN
             jsr   _BltSetup
             sta   exitOffset
             jsr   drawScreen
@@ -558,6 +574,38 @@ RenderScreen
             jsr   _RestoreBG0OpcodesLite
             FIN
 
+            DO    SHOW_DEBUG_VARS
+; Show the current frames per second
+            lda   framesPerSecond
+            ldx   #0
+            ldy   #$FFFF
+            jsr   DrawByte
+
+; Show the current player one input byte
+            lda   InputPlayer1
+            ldx   #8*160
+            ldy   #$FFFF
+            jsr   DrawWord
+
+; Show the number of dirty and full frames rendered
+            lda   dirtyCount
+            ldx   #16*160
+            ldy   #$EEEE
+            jsr   DrawWord
+
+            lda   fullCount
+            ldx   #24*160
+            ldy   #$8888
+            jsr   DrawWord
+
+; Move the frameTick to the next position
+            lda   frameTick
+            inc
+            inc
+            and   #$00FE
+            sta   frameTick
+            FIN
+
             stz   DirtyBits
             rts
 
@@ -571,10 +619,14 @@ disableDirtyRendering dw 0
 exitOffset   ds 2
 
 ; Tracks the number of times NES_RenderFrame has been called
-frameCount   dw  0
+frameCount      dw  0
+framesPerSecond dw  0
+fullCount       dw  0
+dirtyCount      dw  0
+frameTick       dw  0
 
 ; Cleared when the NMI handler has run.  Used to limit updates to 60fps
-frameReady   dw  0
+frameReady      dw  0
 
 ; Set to abort from the VBL interrupt handler.  Effectively stops the execution of the ROM game code
 skipInterruptHandling dw 0

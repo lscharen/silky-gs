@@ -11,4 +11,7 @@ lite_base_2          EXT
 tiledata             EXT
 PPU_MEM              EXT
 CHR_ROM              EXT
-;PPU_OAM              EXT
+
+; Array to hold the excluded scanlines and tile IDs for sprites
+y_exclude            EXT
+tile_exclude         EXT

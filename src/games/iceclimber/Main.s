@@ -86,7 +86,7 @@ OAM_END_INDEX     equ 64
 
 ; Allow the engine to use dirty rendering (drawing only lines where sprites
 ; have changed) if the background did not scroll compared to the previous frame
-ENABLE_DIRTY_RENDERING equ 0
+ENABLE_DIRTY_RENDERING equ 1
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
@@ -144,6 +144,18 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
             phk
             plb
+
+; Adjust the stack pointer to be lower and use the upper part of the bank 0 space
+; for dirty sprite save and restore.  Move this into NES_StartUp once debugged.
+
+            tsc
+            sta   SprSaveTop
+            sta   SprSaveAddr
+            stz   SprAddrCount
+
+            sec
+            sbc   #$1100
+            tcs
 
 ; Call startup immediately after entering the application: A = memory manager user ID
 
@@ -223,11 +235,11 @@ ApplyConfig
             lda   config_video_fastmode
             beq   :normal_video
             lda   #CTRL_EVEN_RENDER
-            tsb   GTEControlBits
+            tsb   ControlBits
             bra   :apply_video
 :normal_video
             lda   #CTRL_EVEN_RENDER
-            trb   GTEControlBits
+            trb   ControlBits
 :apply_video
             lda   #0
             jsr   FillScreen

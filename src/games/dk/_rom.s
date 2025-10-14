@@ -48,7 +48,16 @@
 ;  endif
 
 ROMBase ENT
-        ds   $BC00
+        ds   $BA00                ; Filler
+
+y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
+        ds 24,$01
+        ds 200,$00
+        ds 32,$01
+
+tile_exclude ENT                  ; Table of excluded tiles
+        ds 256,$00
+
         put  ../../rom/rom_inject.s
 
 STA_PhaseNo_Y STA_ABS_Y PhaseNo

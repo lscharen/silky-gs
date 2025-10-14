@@ -250,7 +250,16 @@
 ;  IIgs shim code
 ; ----------------------
 ROMBase ENT
-    ds  $bc00
+    ds  $ba00
+
+y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
+    ds 24,$01
+    ds 200,$00
+    ds 32,$01
+
+tile_exclude ENT                  ; Tble of excluded tiles
+    ds 256,$00
+
     put  ../../rom/rom_inject.s
 
 JMP_IND_25  JMP_ABS_IND $25

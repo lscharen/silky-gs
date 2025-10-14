@@ -1355,7 +1355,7 @@ PPUDATA_WRITE ENT
         lda  PPU_VERSION              ; Get the current frame version 
         cmpl PPU_MEM+TILE_VERSION0,x  ; Check if this location is marked for an update
         beq  :done                    ; It's already been marked
-        stal PPU_MEM+TILE_VERSION0,x  ; Mark this memory location as schedules for an update
+        stal PPU_MEM+TILE_VERSION0,x  ; Mark this memory location as scheduled for an update
 
         rep  #$20
 
@@ -1399,6 +1399,8 @@ PPUDATA_WRITE ENT
 :extra
         sep  #$20
         lda  2,s
+        cmpl PPU_MEM,x
+        beq  :done                      ; Palette updates can be *very* expensive, so skip if no change
         stal PPU_MEM,x
         rep  #$20
 
@@ -1406,6 +1408,9 @@ PPUDATA_WRITE ENT
         and  #$001F
         asl
         tax
+
+        lda  2,s
+        and  #$003F                     ; Pass in the NES color in the accumulator
 
         phy
         jsr  (PPU_PALETTE_DISPATCH,x)   ; Palette handlers might overwrite any register, so preserve Y
@@ -1504,11 +1509,7 @@ PPUDMA_WRITE ENT
 ; to improve scanning speed
 
         mx   %00
-;scanOAMSprites2
-
-;        ldx    #0
-;        ldy    #0                   ; clear all 16-bits
-;        sep    #$30                 ; 8-bit registers
+scanOAMSprites2
 
 ; Since it's rare that all 64 sprites are active, the code is
 ; slightly biased for fast skipping.  Most NES games place sprites
@@ -1523,104 +1524,62 @@ PPUDMA_WRITE ENT
 ; setup later.  The extra cycles saved by staying in 8-bit
 ; mode more than make up for the PHX instruction
 
-; TIP: Put the exclusion tables in NES RAM space
+; TIP: Put the exclusion tables in NES RAM space around $1000
 
-;        sep    #$10                 ; 8-bit index registers
+        sep    #$30                 ; 8-bit index registers
 
-; Loop invariant is that A = X
-;:loop
-;        ldy    ROMBase+DIRECT_OAM_READ+1,x
-;        ldx    tile_exclude,y
-;        bne    :next
+        phb
+        lda    #^ROMBase
+        pha
+        plb
 
-;        tax                         ; This saves a TXA after :next, so a net gain
-;        ldy    ROMBase+DIRECT_OAM_READ,x
-;        ldx    y_exclude,y
-;        bne    :next
+        clc
+        ldx    #OAM_START_INDEX*4   ; This is in the range [0, 252]
+        txa                         ; Keep X = A
+:loop
+        ldy    ROMBase+DIRECT_OAM_READ,x
+        ldx    y_exclude,y
+        bne    :next
 
-;        tya
-;        inc
-;       asl
+        DO  NO_TILE_EXCLUDE
+        ELSE
+        tax                         ; Restore the X-register
+        ldy    ROMBase+DIRECT_OAM_READ+1,x
+        ldx    tile_exclude,y
+        bne    :next
+        FIN
 
+        pha                         ; Since A = X, we can just save it directly and fall through
+:next
+        adc    #4
+        tax
+        cmp    #OAM_END_INDEX*4
+        bcc    :loop
 
-;        pha                         ; 16-bit value
-
-;:next
-;        adc    #4
-;        tax
-;        bne    :loop
-
-; Now we have the index values on the stack.  Switch to 16 mode and start
+; Now we have the index values on the stack.  Switch to 16-bit mode and start
 ; pre-computing essential data
 
-;        rep    #$30
+        lda    ROMBase+DIRECT_OAM_READ,x
 
-;        plx
+        rep    #$20
+        ldy    #0
+:loop2
+        plx
+        lda    ROMBase+DIRECT_OAM_READ,x
+        inc
+        sta    OAM_COPY,y
 
-;        asl               ; y * 2
-;        tax
+        lda    ROMBase+DIRECT_OAM_READ+2,x
+        sta    OAM_COPY+2,y
 
-;        lda  ScreenAddr,x ; Get the left-edge screen address forthe sprite
-;        sta  sprTmp0
+        iny
+        iny
+        iny
+        iny
 
+        plb                         ; Restore the bank back to
+        rts
 
-; This is not used if VOC mode is on
-
-;        ldy  y2idx,x      ; Add a bitmask to the scanline bitfield
-;        lda  y2bits,x
-;        ora  (shadowBitmap),y
-;        sta  (shadowBitmap),y
-
-; What can we precompute here
-;
-; OAM[0] = Y coordinate.
-;   Used to calculate on-screen address
-;   Used as a lookup for the scanline bitmap (x2)
-;
-; OAM[1] = Tile Id
-;   Used to lookup compiled sprite entry (x2 for indexing)
-;   Used to calculate address of tile data (x128)
-;
-; OAM[2] = Attribute byte
-;   Added to swizzle ptr [(byte & 0x3) << 1]
-;   Check priority bit to abort compiled sprite [BIT #$20]
-;   Calculate drawProc address for non-compiles sprite (byte & 0xE0) >> 4, JMP (drawPocs,x)
-;
-; OAM[3] = X coordinate
-;   Combined with PPU Scroll to set position. No pre-calc
-
-;        lda    ROMBase+DIRECT_OAM_READ+2,x
-;        pha
-;        lda    ROMBase+DIRECT_OAM_READ,x
-;        inc
-;        pha
-
-
-
-;        ldy    PPU_OAM              ; check for y exclusions = 10 cycles
-;        lda    tile_exclude,y
-;        bne    next
-
-;        rep    #$20                 ; = 18 cycles
-;        lda    PPU_OAM+2            ; push the OAM info in reverse order
-;        pha
-;        phx
-;        phy
-
-;        ldx    y2idx,y              ; load the byte index (0 - 30) for this coordinate = 32
-;        tya                         ; Use as a lookup
-;        asl
-;        tay                         ; this polluted the high byte of Y, but has no effect
-;        lda    y2bits,y             ; repeats every 8 words, so don't need a 16-bit index reg
-;        ora    shadowBitmap0,x      ; set the eight bits in the bitfield value across two bytes
-;        sta    shadowBitmap0,x
-
-;        sep    #$20                 ; about 70 cycles per sprite
-;next
-;        rts
-
-y_exclude     ds $100
-tile_exclude  ds $100
 
 
 ; Scan the OAM copy and start to build up the data structures for rendering the screen.
@@ -2428,7 +2387,11 @@ drawDirtyScreen
 ;
 ; An ideal scenario would have a fast way to test if an 8x8 block was covered by the scanline update so that
 ; sprites in (2) could be skipped if the full scanline would be updated in (3) any way.
-
+;
+; Also, for the sprites themselves, we can bin the sprites into 16x16 blocks so that the prior location of a sprite
+; and the current location have a high probability of being exposed by a single 16x16 blit.  This is also helpful
+; because sprites and extend off the edge of the screen, and by binning, we can be sure that the sprite data
+; located off-screen is ever exposed.
 
         jsr   _ShadowOff              ; Hide the fact that we're erasing the sprites from the priorframe
         jsr   restoreTilesToScreen    ; Redraw the background for all of the previous sprites.  The background is now fully restored.
@@ -2436,10 +2399,10 @@ drawDirtyScreen
         lda   SprSaveTop              ; Reset the stack for the next drawSprites call
         sta   SprSaveAddr
 
-        jsr   _ShadowOn               ; Now we can show the sprites again
         jsr   drawSprites             ; Draw the new sprites; some parts of the old sprites may still be on-screen
-
+        jsr   _ShadowOn               ; Now we can show the sprites again
         jsr   exposeTilesToScreen
+
         rts
 
 ; Dirty State 1 -- no saved sprite data, so need to redraw whole scanlines to erase the previous frame's
@@ -2527,7 +2490,6 @@ drawSprites
 
 :spriteCount equ pputmp+8
 :mul160      equ pputmp+10
-:cmplbank    equ pputmp+14  ; $0100 | ^tiledata
 
 ; Run through the copy of the OAM memory and render each sprite to the graphics screen.  Typically,
 ; shadowing is disabled during this routine.
@@ -2550,11 +2512,6 @@ drawSprites
 
         phb                          ; Save the current data bank
         pea   #^tiledata             ; Put the tile data bank on the stack
-
-        lda   1,s                    ; Construct a word with Bank $01 and tilebank for 
-        xba                          ; compiled sprites to quickly set and restore the
-        ora   #$0001
-        sta   :cmplbank
 
 ; Determine if we are in 8x8 sprite mode, or 8x16 sprite mode.  Have a specialized loop for
 ; each.
@@ -2624,7 +2581,7 @@ drawSprites
 
         lda   sprTmp2          ; Advance to the next tile index
         inc
-        sta   sprTmp2
+        sta   sprTmp2          ; Value needs to be in accumulator and sprTmp2 for drawSprite8x8
 
 ; Draw the bottom tile
 
@@ -2652,6 +2609,18 @@ drawSprites
         lda  [:mul160],y
         adc  #$2000-{y_offset*160}+x_offset
         sta  sprTmp1
+        sta  sprTmp3                   ; Save the unclamped screen address in sprTmp3
+
+; If the Y-coordinate is above the screen, clamp it to zero
+
+        ldal  OAM_COPY,x               ; Y-coordinate
+        and   #$00FF
+        cmp   #y_offset
+        bcs   :no_y_clamp
+        lda   #$2000+x_offset
+        sta   sprTmp3
+:no_y_clamp
+
 
 ; Do some stuff that is faster in 8-bit mode
 
@@ -2674,8 +2643,18 @@ drawSprites
         ror                           ; Rotate to bring the carry into the high bit in case of overflow
         rep  #$20
         and  #$00FF
+        tay
         adc  sprTmp1                   ; Add to the base address calculated fom the Y-coordinate
         sta  sprTmp1                   ; This is the SHR address at which to draw the sprite
+
+        tya
+        cmp  #125
+        bcc  :no_x_clamp
+        lda  #124
+        clc
+:no_x_clamp
+        adc  sprTmp3
+        sta  sprTmp3
 
 ; If we are in DirtyState 1 or 2, then the sprite data should be copied
 
@@ -2683,6 +2662,7 @@ drawSprites
         beq  :not_dirty
         phx
         ldx  sprTmp1
+        ldy  sprTmp3                   ; Save the clamped screen address in sprTmp3
         jsr  saveTileFromScreen
         plx
 :not_dirty
@@ -2709,13 +2689,20 @@ drawSprites
 
 ; This is the point to check if there is a compiled version of this sprite
 
+        DO   SHOW_DEBUG_VARS
+        ldx  #$FFFF         ; color for priority bit
+        FIN
         bit  #$2000         ; Is the priority bit set?
-        bne  as_bitmap      ; If yes, no compiled sprite option
+        bne  as_bitmap
 
         and  #$00FF
         asl
         tax
         ldal spr_comp_tbl,x
+        DO   SHOW_DEBUG_VARS
+        ldx  #$2222         ; color for missing compiled sprite
+        cmp  #0             ; re-establish the equality test
+        FIN
         beq  as_bitmap
 
 ; Vector through the compiled sprite table.  The compiled sprites are in a different bank, so just check
@@ -2724,14 +2711,28 @@ drawSprites
 
         stal csd+1                     ; patch in the long address directly
         lda  sprTmp2+1                 ; load OAM[2] into accumulator
-        pei  :cmplbank
+;        pei  :cmplbank
+        pei  CMPL_BANK
         plb
-csd     jml  $00000
+csd     jml  $000000
+draw_rtn2
+        plb                           ; Return from compiled sprite
+        DO   SHOW_DEBUG_VARS
+        lda  #$7777
+        stal outlineColor
+        ldx  sprTmp1
+        jmp  drawOutline
+        FIN
+        rts
 
 ; Finish calculating the jump address. We dispatch differently based on the horizontal flip, vertical
 ; flip and priority bits. when calling the rendering function, Y = screen address, X = tile data address
 
 as_bitmap
+        DO   SHOW_DEBUG_VARS
+        txa
+        stal outlineColor
+        FIN
         lda  sprTmp2+1
         and  #$00E0
         lsr
@@ -2744,91 +2745,19 @@ as_bitmap
 
         lda  sprTmp2-1
         and  #$FF00
-        lsr                           ; Each tile is 128 bytes of data
-;        sta  sprTmp0                  ; This is loaded in the draw routines
+        lsr                           ; Each tile is 128 bytes of data -- this clears the carry flag
+        DO   SHOW_DEBUG_VARS
+        jsr  (drawProcs,x)            ; Executes an RTS to return directly to caller
+        ldx  sprTmp1
+        jmp  drawOutline
+        ELSE
+        jmp  (drawProcs,x)            ; Executes an RTS to return directly to caller
+        FIN
 
-; Put the dispatch address back in X
-
-        jmp  (drawProcs,x)
-
-draw_rtn2
-        plb                           ; Return from compiled sprite
-        rts
-
-;draw_rtn
-        rts                           ; Return from drawProcs
 
 drawProcs
         dw drawTileToScreen,drawTileToScreenP,drawTileToScreenH,drawTileToScreenPH
         dw drawTileToScreenV,drawTileToScreenPV,drawTileToScreenHV,drawTileToScreenPHV
-
-; Minimal sprite dispatch
-;
-; sprTmp0 = palette select ($00,$02,$04,$06)
-; sprTmp1 = SHR address
-; sprTmp2 = tile index (x2)
-; sprTmp3 = copy of OAM[2]
-; 
-:dispatchSpriteTile
-
-* oam_loop
-*         phx                           ; Save x
-
-* ; Set the palette pointer for this sprite
-
-*         lda  OAM_PAL_ADDR,x           ; Load the palette select address (page byte)
-*         sta  ActivePtr                ; Select the second set of palettes
-
-* ; Convert the x-coordinate.
-
-*         lda  PPU_SCROLL_BIT           ; pre-calculated _ppuscroll+1 & 0x01
-*         adc  OAM_COPY+3,x             ; X-coordinate (In NES pixels, need to convert to IIgs bytes)
-*         and  #$00FE                   ; Mask before the shift so that we know a 0 goes into the carry
-*         ror                           ; Rotate to bring the carry into the high bit in case of overflow
-*         adc  OAM_Y_ADDR,x             ; Add to the base address calculated fom the Y-coordinate
-*         sta  sprTmp1                  ; This is the SHR address at which to draw the sprite
-
-* ; Get the sprite dispatch address
-
-*         lda  OAM_DISPATCH,x
-*         beq  as_bitmap
-
-* ; Vector through the compiled sprite table.  The compiled sprites are in a different bank, so just check
-* ; for a sentinel value and manually jump into the compiled sprite code to avoid a double-jump and having to
-* ; have a second jump table in the compile sprite code bank.
-
-*         stal csd+1                     ; patch in the long address directly
-*         pei  :cmplbank
-*         plb
-* csd     jml  $00000
-
-* ; Finish calculating the jump address. We dispatch differently based on the horizontal flip, vertical
-* ; flip and priority bits. when calling the rendering function, Y = screen address, X = tile data address
-
-* as_bitmap
-
-* ; Get the address of the tile data
-
-*         ldy  OAM_TILE_ADDR,x
-
-* ; Get the tile routine index
-
-*         lda  OAM_COPY+2,x
-*         tax
-
-*         jmp  (drawProcs,x)
-
-* draw_rtn2
-*         plb                           ; Restore the bank
-* draw_rtn
-*         plx                           ; Restore the counter
-*         inx
-*         inx
-*         inx
-*         inx
-*         cpx   :spriteCount
-*         bcc   oam_loop
-
 
 ; Array of dispatch addresses.  There is a special address of $0000 in the table that immediately returns
 ; from the compiled sprite code bank for sprites that do not have a compiled representation.
@@ -3179,14 +3108,16 @@ incborder
 ; that is 4kb + 256b.  The extra space is because the address of the 8x8 block is pushed last and an interrupt
 ; may happen during this process, so we need to keep some extra stack space available.
 ;
-; In the worst case, we may have to save 64 8x16 sprites, which corresponds to 64 * 4 * 16 = 4096 bytes.
+; In the worst case, we may have to save 64 8x16 sprites, which corresponds to 64 * 4 * 16 = 4096 bytes, plus
+; 4 bytes per sprite for the screen and shadow addresses, which adds up to 256 additional bytes
 ;
 ; Input: X register is the SHR address
+; Input: Y register is the Clamped SHR address
           mx  %00
 saveTileFromScreen
 
           tsc
-          tay                                          ; Save the current stack in the y-register
+          sta   sprTmp0                                ; Save the current stack in the y-register
 
           lda   SprSaveAddr
           tcs                                          ; Set the stack to the save buffer area
@@ -3203,16 +3134,17 @@ saveTileFromScreen
 ]line     equ   ]line+1
           --^
 
+          phy                                          ; Save the SHR screen address for shadowing
           phx                                          ; Save the SHR screen address of the 8x8 block
           tsc
           sta   SprSaveAddr
 
-          tya                                          ; Restore the original stack
+          lda   sprTmp0                                ; Restore the original stack
           tcs
 
           rts
 
-sprBlockAddr ds 64*2           ; Maximum of 64 8x8 blocks, each with a 16-bit address
+sprBlockAddr ds 64*2           ; Maximum of 64 8x8 blocks, each with a 16-bit address 
 
 ; Expose the 8x8 blocks from the list populated by saveTileFromScreen.
         mx  %00
@@ -3238,7 +3170,7 @@ exposeTilesToScreen
 
 ]line   equ   ]line-1
         --^
-        
+
         dey
         dey
         bmi   :out
@@ -3270,6 +3202,8 @@ restoreTilesToScreen
 
 :loop
         plx                                          ; Pop the SHR screen address
+        pla                                          ; Pop the SHR shadow address
+        sta   sprBlockAddr,y                         ; Save it for later use
 
 ]line   equ   7
         lup   8
@@ -3282,8 +3216,6 @@ restoreTilesToScreen
 ]line   equ   ]line-1
         --^
 
-        txa
-        sta   sprBlockAddr,y                         ; Save the SHR address of the 8x8 block
         iny
         iny
 
@@ -3297,4 +3229,29 @@ restoreTilesToScreen
 
 :done
         sty   SprAddrCount
+        rts
+
+outlineColor ds 2
+drawOutline
+        ldal  outlineColor
+        stal  $010000+{0*SHR_LINE_WIDTH},x
+        stal  $010000+{0*SHR_LINE_WIDTH}+2,x
+        stal  $010000+{7*SHR_LINE_WIDTH},x
+        stal  $010000+{7*SHR_LINE_WIDTH}+2,x
+
+]line   equ   1
+        lup   6
+        ldal  $010000+{]line*SHR_LINE_WIDTH},x
+        eorl  outlineColor
+        and   #$00F0
+        eorl  $010000+{]line*SHR_LINE_WIDTH},x
+        stal  $010000+{]line*SHR_LINE_WIDTH},x
+
+        ldal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+        eorl  outlineColor
+        and   #$0F00
+        eorl  $010000+{]line*SHR_LINE_WIDTH}+2,x
+        stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+]line   equ   ]line+1
+        --^
         rts

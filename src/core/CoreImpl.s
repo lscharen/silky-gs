@@ -157,11 +157,16 @@ OldOneSecVec      ds   4
 
 ; Interrupt handlers. We install a heartbeat (1/60th second and a 1-second timer)
 OneSecHandler     mx        %11
-                  ldal      OneSecondCounter
+                  ldal      OneSecondCounter    ; Increment the count
                   inc
                   stal      OneSecondCounter
 
-                  lda       #%10111111          ;clear IRQ source
+                  ldal      frameCount          ; Capture and reset the frame counter
+                  stal      framesPerSecond
+                  lda       #0
+                  stal      frameCount
+
+                  lda       #%10111111          ; Clear IRQ source
                   stal      $E0C032
                   clc
                   rtl
@@ -259,6 +264,11 @@ EngineReset
                   tdc
                   ora       #BANK_VALUES-1
                   sta       STK_SAVE_BANK              ; Save the address of the direct page variables
+
+                  lda       #^tiledata
+                  xba
+                  ora       #$0001
+                  sta       CMPL_BANK
 
 ; Insert jumps to the interrupt enable code every 16 lines
 

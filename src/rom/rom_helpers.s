@@ -135,7 +135,7 @@ ROM_LoadSpriteTiles
             rts
 
 ; Find a value in the compiled sprite list
-; A = value
+; A = value (index * 16)
 ; Can use y-reg
 FindInList
             ldy #2*{COMPILED_SPRITE_LIST_COUNT-1}
@@ -145,16 +145,23 @@ FindInList
             bmi :match_first_n
             ldy #2*{COMPILED_SPRITE_LIST_COUNT-1}
 
+            pha
+            lsr
+            lsr
+            lsr
+            lsr
 :loop
             cmp :compiled_sprite_list,y
             beq :match
             dey
             dey
             bpl :loop
+            pla
 :no_match
             clc
             rts
 :match
+            pla
             sec
             rts
 
@@ -539,7 +546,7 @@ MLUT4       db    $FF,$F0,$0F,$00
 TileBuff    ds    128
 
 ; NES Palette (52 entries)
-nesPalette
+NES_ColorPalette
    dw $0777
    dw $000f
    dw $000b
@@ -614,7 +621,7 @@ NES_ColorToIIgs
             and   #$003F
             asl
             tay
-            lda   nesPalette,y
+            lda   NES_ColorPalette,y
             rts
 
 ; Convert a single NES palette entry to IIgs RGB
@@ -626,7 +633,7 @@ NES_ColorToIIgs_X
             and   #$003F
             asl
             tax
-            lda   nesPalette,x
+            lda   NES_ColorPalette,x
             rts
 
 ; Convert NES palette entries to IIgs
@@ -692,6 +699,19 @@ NES_SetPaletteMap
 ; Example mapper for donkey kong
 mapping     equ   PPU_PALETTE_MAP
 
+; A 16-bit version of the NES palette values.  The high byte is always zero, but it makes it easy to write
+; 8-bit values and then read 16-bit values later.  This table must match the layout of the "current" table
+; below.  If one changes, then the other must change, too.
+nes_palette
+bg0_palette ds    8
+bg1_palette ds    8
+bg2_palette ds    8
+bg3_palette ds    8
+sp0_palette ds    8
+sp1_palette ds    8
+sp2_palette ds    8
+sp3_palette ds    8
+
 ; The current IIgs palette index for each NES palette entry. Will match the mapping value for non-negative entries
 current     dw    0, -1, -1, -1
             dw    0, -1, -1, -1
@@ -702,6 +722,15 @@ current     dw    0, -1, -1, -1
             dw    0, -1, -1, -1
             dw    0, -1, -1, -1
             dw    0, -1, -1, -1
+
+bg0_changed db $ff
+bg1_changed db $ff
+bg2_changed db $ff
+bg3_changed db $ff
+sp0_changed db $ff
+sp1_changed db $ff
+sp2_changed db $ff
+sp3_changed db $ff
 
 iigs_nes_colors ds   32   ; list of NES colors assigned to each IIgs index location
 
@@ -821,8 +850,15 @@ BitMask     dw   $0001,$0002,$0004,$0008,$0010,$0020,$0040,$0080
             dw   $0100,$0200,$0400,$0800,$1000,$2000,$4000,$8000
 
 ; These are the NES palette locations that need to be scanned
-NESPalIndices dw  2,  4,  6, 10, 12, 14, 18, 20, 22, 26, 28, 30
-              dw 34, 36, 38, 42, 44, 46, 50, 52, 54, 58, 60, 62
+NESPalIndices 
+BG0_PAL_IDX dw    2,  4,  6
+BG1_PAL_IDX dw   10, 12, 14
+BG2_PAL_IDX dw   18, 20, 22
+BG3_PAL_IDX dw   26, 28, 30
+SP0_PAL_IDX dw   34, 36, 38
+SP1_PAL_IDX dw   42, 44, 46
+SP2_PAL_IDX dw   50, 52, 54
+SP3_PAL_IDX dw   58, 60, 62
 
 ReverseMap  ds   64*2
 
@@ -905,6 +941,7 @@ find_free_slot
 
             rts
 
+; Used when the game uses no more than 16 unique colors
 NES_BuildStaticPalette
             ldx  #0
 :loop1      ldy  NESPalIndices,x
@@ -924,6 +961,24 @@ NES_BuildStaticPalette
 
             rts
 
+; Tries to find the best mapping between the current NES palette and the IIgs color palette and updates
+; the swizzle tables as needed.  The input data structures are
+;
+; nes_palette: A 16-bit version of the PPU palette values (0 - 63)
+;
+; ReverseMap: A mapping from NES Colors (0 - 63) to the IIgs palette index that currently represents that color (-1 is unmapped)
+; NESPalIndices: A array of 24 indices that represet the NES palette location that matter.  The first (color 0) of each palette doesn't matter (is transparent)
+; mapping: A mapping table the identified reserved entries and other constraints. 
+;          $00xx = FIXED (use the value as a literal and add to the reverse map)
+;          $40xx = NO_MAP (use the bottom byte as a literal value in the 'current' array, but do not add to the reverse map, e.g. this color cannot be reused)
+;          $8xxx = DYNAMIC (can allocate a IIgs index for the NES color in this palette entry)
+; current: word[64] - The current IIgs palette index for each NES palette entry.  Negative values are unassigned.
+;
+; The goal is to try and keep the tile palette mappings as stable as possible so that
+; the least amount of tiles need to be redrawn.  The code tracks which palettes have been
+; changed and then scans the Attribute bytes to mark the metatiles that need to be redrawn
+; because their palette indices are different.
+
 NES_BuildPalette
 :bitmask    equ  tmp0
 
@@ -932,7 +987,7 @@ NES_BuildPalette
             lda  #$0001
             sta  :bitmask
 
-; Zero out the reverse map (identified which IIgs palette index contains a NES color)
+; Zero out the reverse map (identifies which IIgs palette index contains a NES color)
 
             ldx  #126
             lda  #$FFFF
