@@ -191,33 +191,6 @@ NES_EvtLoop
 
             and   #$007F
 
-; 'f': force a full repaint of the screen
-            cmp   #'f'
-            bne   :not_f
-            jsr   ForceMetatileRefresh
-            brl   NES_EvtLoop
-:not_f
-
-; 'b': force the NES Background bit to be toggled
-
-            cmp   #'b'
-            bne   :not_b
-            lda   ppumask_override
-            eor   #NES_PPUMASK_BG
-            sta   ppumask_override
-            brl   NES_EvtLoop
-:not_b
-
-; 's': force the NES Sprite bit to be toggled
-
-            cmp   #'s'
-            bne   :not_s
-            lda   ppumask_override
-            eor   #NES_PPUMASK_SPR
-            sta   ppumask_override
-            brl   NES_EvtLoop
-:not_s
-
 ; '?' to bring up the configuration screen and reapply the settings
 
             DO    NO_CONFIG
@@ -270,6 +243,37 @@ NES_EvtLoop
 ;            jsr   ToggleAPUChannel
 ;            brl   NES_EvtLoop
 ;:not_4
+
+; From this point forward, only check alpha characters, so normalize to lower case
+
+            ora   #$0020
+
+; 'f': force a full repaint of the screen
+            cmp   #'f'
+            bne   :not_f
+            jsr   ForceMetatileRefresh
+            brl   NES_EvtLoop
+:not_f
+
+; 'b': force the NES Background bit to be toggled
+
+            cmp   #'b'
+            bne   :not_b
+            lda   ppumask_override
+            eor   #NES_PPUMASK_BG
+            sta   ppumask_override
+            brl   NES_EvtLoop
+:not_b
+
+; 's': force the NES Sprite bit to be toggled
+
+            cmp   #'s'
+            bne   :not_s
+            lda   ppumask_override
+            eor   #NES_PPUMASK_SPR
+            sta   ppumask_override
+            brl   NES_EvtLoop
+:not_s
 
             cmp   #'r'
             beq   :exit
