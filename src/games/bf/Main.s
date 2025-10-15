@@ -32,23 +32,13 @@ EVT_LOOP_BEGIN mac
 ; This hook happens immediately after all key presses have been handled by the scaffold and gives
 ; user-code a change to implement custom key commands
 EVT_LOOP_END mac
-;             cmp  #'d'
-;             bne  not_d
-;             lda  disableDirtyRendering
-;             eor  #1
-;             sta  disableDirtyRendering
-;not_d
+;
              <<<
 
 ; Pre-render check to see if there are any background tiles queued for updates.  If so, we will do
 ; a regular rendering.  If not, use dirty rendering.
 PRE_RENDER   mac
-;             stz  disableDirtyRendering
-;             lda  at_queue_tail
-;             cmp  at_queue_head                    ; If there are any attribute changes, render the full screen
-;             beq  do_dirty
-;             inc  disableDirtyRendering
-;do_dirty
+;
              <<<
 
 POST_RENDER  mac
@@ -142,9 +132,8 @@ COMPILED_SPRITE_LIST       mac
 NO_TILE_EXCLUDE equ 1
 
 ; Do we have a custom routine to execute RenderScreen.  If yes, put its address here
-CUSTOM_RENDER_SCREEN equ 0
-;CUSTOM_RENDER_SCREEN equ 1
-;CUSTOM_RENDER_SCREEN_ADDR equ _RenderScreen
+CUSTOM_RENDER_SCREEN equ 1
+CUSTOM_RENDER_SCREEN_ADDR equ _RenderScreen
 
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 3 
@@ -160,15 +149,6 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
             phk
             plb
-
-            tsc
-            sta   SprSaveTop
-            sta   SprSaveAddr
-            stz   SprAddrCount
-
-            sec
-            sbc   #$1100
-            tcs
 
 ; Call startup immediately after entering the application: A = memory manager user ID
 
@@ -194,11 +174,6 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
             jsr   NES_ColdBoot
 
-; We _never_ scroll vertically, so just set it once.  This is to make sure these kinds of optimizations
-; can be set up in the generic structure
-
-            jsr   NES_SetScrollY
-
 ; Start up the NES
 :start
             jsr   NES_EvtLoop
@@ -222,52 +197,8 @@ quit
 qtRec       adrl  $0000
             da    $00
 
-Greyscale   dw    $0000,$5555,$AAAA,$FFFF
-            dw    $0000,$5555,$AAAA,$FFFF
-            dw    $0000,$5555,$AAAA,$FFFF
-            dw    $0000,$5555,$AAAA,$FFFF
-
 ; Helper to initialize the playfield based on the selected VideoMode
 InitPlayfield
-;            lda   #16
-            lda   #24
-            sta   NesTop
-
-            lda   #200
-            sta   ScreenHeight
-            lsr
-            lsr
-            lsr
-            sta   ScreenRows
-
-            lda   NesTop
-            clc
-            adc   ScreenHeight
-            sec
-            sbc   #8
-            inc
-            sta   NesBottom
-
-; Initialize the graphics screen playfield
-
-            ldx   #128
-            ldy   ScreenHeight
-            jsr   _SetScreenMode                 ; This is also called in the Init
-
-;            lda   ScreenY0
-;            asl
-;            asl
-;            asl
-;            asl
-;            asl
-;            sta   ScreenBase
-;            asl
-;            asl
-;            clc
-;            adc   ScreenBase
-;            clc
-;            adc   #$2000+x_offset
-;            sta   ScreenBase
 
 ; Set a default palette for the title screen
 
@@ -465,18 +396,30 @@ BF_3F1F ldal PPU_MEM+$3F1F
         stal $E19E5E
         rts
 
-
 ; Make the screen appear
 nesTopOffset    ds 2
 nesBottomOffset ds 2
+_RenderScreen
 
-; Patch the PEA field based on the current PPU parameters
-_BFSetupPEAField
+; If we're not on Balloon Trip, jut use the default render function
+
+            ldx   DP_NES
+            ldal  $000016,x
+            and   #$00FF           ; Balloon Trip mode; $16 = !0
+            bne   :trip_renderer
+            jmp   RenderScreen
+
+; Otherwise turn off dirty rendering and do the split-screen rendering
+; like Super Mario
+:trip_renderer
+            jsr   _GetPPUScrollX
+            jsr   NES_SetScrollX
+
 ; Now render the top 16 lines to show the status bar area
 
             lda   #0
             ldx   #16
-            ldy   #0                      ; Xmod256
+            ldy   #0                      ; Xmod256 = 0
             jsr   _BltSetupAlt
             sta   nesTopOffset            ; cache the :exit_offset value returned from this function
 
@@ -485,19 +428,17 @@ _BFSetupPEAField
             lda   ScreenHeight
             sec
             sbc   #16
-            tax
-            lda   #16
+            tax                       ; The rest of the screen is height - 16
+            lda   #16                 ; Start at line 16
             ldy   StartXMod256
             jsr   _BltSetupAlt
             sta   nesBottomOffset
 
-            lda   #1
-            sta   peaFieldIsPatched
-            rts
+; Copy the sprites and buffer to the graphics screen
 
-; Restore the patched PEA field to put it back into a clean state
-_BFResetPEAField
-            stz   peaFieldIsPatched
+            jsr   drawScreen
+
+; Restore the buffer
 
             lda   #0                      ; virt_line
             ldx   #16                     ; lines_left
@@ -510,54 +451,9 @@ _BFResetPEAField
             tax                           ; lines_left
             lda   #16                     ; virt_line
             ldy   nesBottomOffset         ; offset to patch
-            jmp   _RestoreBG0OpcodesAltLite
+            jsr   _RestoreBG0OpcodesAltLite
 
-* ; Track if the PEA field is patched or not
-* peaFieldIsPatched dw 0
-
-_RenderScreen
-
-; Do the basic setup
-
-            jsr   _GetPPUScrollX
-            jsr   NES_SetScrollX
-
-            lda   ppumask
-            and   ppumask_override
-            and   #NES_PPUMASK_BG
-            jsr   EnableBackground
-
-            lda   ppumask
-            and   ppumask_override
-            and   #NES_PPUMASK_SPR
-            jsr   EnableSprites
-
-; Determine if this will be a dirty update or not
-
-            lda   DirtyBits
-            bit   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_REFRESH
-            bne   :full_update
-            lda   disableDirtyRendering
-            bne   :full_update
-            lda   disableDirtyRendering
-            beq   :dirty_update
-:full_update
-            lda   peaFieldIsPatched
-            beq   :no_restore
-            jsr   _BFResetPEAField          ; A full update needs to restore the PEA field before changing the XPos
-:no_restore
-            jsr   _BFSetupPEAField
-            jsr   drawScreen
-            bra   :complete
-:dirty_update
-            lda   peaFieldIsPatched
-            bne   :no_patch
-            jsr   _BFSetupPEAField
-:no_patch
-            jsr   drawDirtyScreen
-:complete
             stz   DirtyBits
-;            stz   LastPatchOffset
             rts
 
 ; For this game, we utilize multiple palettes to conserve palette colors and reserve colors for the sprites
