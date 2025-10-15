@@ -43,7 +43,7 @@ ExtRtn      ENT
 ; Miscellaneous data fields
 singleStepMode dw  0                        ; If non-zero, the runtime will waut for a user keypress between frames
 
-; Location to save the 16-bit stack from the natvie IIgs execution context
+; Location to save the 16-bit stack from the native IIgs execution context
 StkSave     dw    0
 
 ; yield - allow the ROM to give up control.  Only one yield may be active at a given time. This

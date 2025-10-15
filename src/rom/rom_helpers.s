@@ -152,7 +152,7 @@ FindInList
             lsr
 :loop
             cmp :compiled_sprite_list,y
-            beq :match
+            beq :match0
             dey
             dey
             bpl :loop
@@ -160,8 +160,9 @@ FindInList
 :no_match
             clc
             rts
-:match
+:match0
             pla
+:match
             sec
             rts
 
