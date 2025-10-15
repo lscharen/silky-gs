@@ -85,20 +85,13 @@ resume
             tsc
             sta   StkSave                  ; Save the current stack location
 
-;            lda   #$0000                   ; set direct page and stack addresses
             lda   DP_NES
             tcd
 
             lda   yield_s
-;            and   #$00FF
-;            ora   #$0100
-;            ora   STK_NES
             tcs
 
             sep   #$30                     ; Enter 8-bit mode
-;            ldal  STATE_REG
-;            ora   #$80                     ; ALTZP on
-;            stal  STATE_REG
 
             ldy   yield_y
             ldx   yield_x
