@@ -111,7 +111,7 @@ AUTOMATIC_PALETTE_MAPPING equ 1
 SHOW_ROM_EXECUTION_TIME equ 0
 
 ; Turn on some off-screen information
-SHOW_DEBUG_VARS equ 1
+SHOW_DEBUG_VARS equ 0
 
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 0
@@ -124,7 +124,7 @@ CUSTOM_PPU_SCROLL_LOCK_CODE mac
                           <<<
 
 ; Mario occupies the first 48 sprite tiles
-COMPILED_SPRITE_LIST_COUNT equ 60
+COMPILED_SPRITE_LIST_COUNT equ 108
 COMPILED_SPRITE_LIST       mac
                            dw   246,247,248,249,250,251                 ; Hammer sprites
                            dw   252,253,254,255                         ; Oil barrel flames
@@ -134,6 +134,12 @@ COMPILED_SPRITE_LIST       mac
                            dw   213,214,215,216,217,218,219,220,221,222 ; Pauline
                            dw   152,153,154,155,156,157,158,159         ; Flame dude
                            dw   168,169,170,171,172,173,174,175
+                           dw   0,1,2,3,4,5,6,7                         ; Mario ex death and ladder animation 0 - 47
+                           dw   8,9,10,11,12,13,14,15
+                           dw   16,17,18,19,20,21,22,23
+                           dw   24,25,26,27,28,29,30,31
+                           dw   32,33,34,35,36,37,38,39
+                           dw   40,41,42,43,44,45,46,47
                            <<<
 
 ; Do not check for specific Tile IDs to exclude from drawing
@@ -156,18 +162,6 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
             phk
             plb
-
-; Adjust the stack pointer to be lower and use the upper part of the bank 0 space
-; for dirty sprite save and restore.  Move this into NES_StartUp once debugged.
-
-            tsc
-            sta   SprSaveTop
-            sta   SprSaveAddr
-            stz   SprAddrCount
-
-            sec
-            sbc   #$1100
-            tcs
 
 ; Call startup immediately after entering the application: A = memory manager user ID
 

@@ -77,10 +77,10 @@ spritemask        EXT
 ; Assumes the direct page is set and EngineMode and UserId has been initialized
 _CoreStartUp
                   jsr       IntStartUp          ; Enable certain interrupts
-                  bcs       :core_err
+                  bcs       :core_err1
 
                   jsr       InitMemory          ; Allocate and initialize memory for the engine
-                  bcs       :core_err
+                  bcs       :core_err2
 
                   jsr       EngineReset         ; All of the resources are allocated, put the engine in a known state
                   jsr       InitGraphics        ; Initialize all of the graphics-related data
@@ -90,13 +90,13 @@ _CoreStartUp
 ; it would see that the x and p positions did not change from zero and some critical dispatch information
 ; would not get filled in.
 
-;                  jsr       _ApplyBG0YPosLite
-;                  jsr       _ApplyBG0XPosLite
-;                  jsr       _RestoreBG0OpcodesLite
                   clc
                   rts
-:core_err
-                  brk $ee
+:core_err1
+                  brk $e1
+                  rts
+:core_err2
+                  brk $e2
                   rts
 
 _CoreShutDown

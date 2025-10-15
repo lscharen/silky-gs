@@ -12,25 +12,17 @@
 romxfer     tsc
             sta   StkSave                   ; Save the current stack in the main program
 
-            lda   yield_s                   ; Set the stacak to watever the ROM is currently at
-            and   #$00FF
-            ora   #$0100
-            sta   :patch+1
+            lda   DP_NES
+            tcd
 
             sep   #$20
             lda   #^ExtIn                   ; Set the bank to the ROM
             pha
             plb
-
-            ldal  STATE_REG
-            ora   #$80                      ; ALTZP on
-            stal  STATE_REG
             rep   #$20
 
-:patch      lda   #$0000                    ; Set the ROM stack address
+            ldal   yield_s
             tcs
-            lda   #$0000                    ; Set the ROM zero page
-            tcd
 
             jml   ExtIn
 ExtRtn      ENT
@@ -44,12 +36,7 @@ ExtRtn      ENT
 
             lda   DPSave
             tcd
-            sep   #$30
             stx   yield_s                   ; Keep an updated copy of the stack address
-            ldal  STATE_REG                 ; Get back to Bank 0 R/W
-            and   #$7F
-            stal  STATE_REG
-            rep   #$30
 
             rts
 
@@ -66,7 +53,7 @@ yield_a     ds    1
 yield_x     ds    1
 yield_y     ds    1
 yield_p     ds    1
-yield_s     ds    1
+yield_s     ds    2                         ; 2 bytes so we can load/save the full 16-bit stack pointer
 
             mx    %11
 yield       ENT
@@ -85,10 +72,6 @@ yield       ENT
             tsx
             stx   yield_s
 
-            ldal  STATE_REG                 ; Get back to Bank 0 R/W
-            and   #$7F
-            stal  STATE_REG
-
             rep   #$30
             lda   DPSave
             tcd
@@ -102,18 +85,20 @@ resume
             tsc
             sta   StkSave                  ; Save the current stack location
 
-            lda   #$0000                   ; set direct page and stack addresses
+;            lda   #$0000                   ; set direct page and stack addresses
+            lda   DP_NES
             tcd
 
             lda   yield_s
-            and   #$00FF
-            ora   #$0100
+;            and   #$00FF
+;            ora   #$0100
+;            ora   STK_NES
             tcs
 
             sep   #$30                     ; Enter 8-bit mode
-            ldal  STATE_REG
-            ora   #$80                     ; ALTZP on
-            stal  STATE_REG
+;            ldal  STATE_REG
+;            ora   #$80                     ; ALTZP on
+;            stal  STATE_REG
 
             ldy   yield_y
             ldx   yield_x

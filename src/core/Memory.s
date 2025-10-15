@@ -44,8 +44,11 @@ InitMemory
                stz       SpriteBank0
 
 ; Initialize some memory tables that point to addresses in the blitter code
-;               jsr       InitLiteBlitter
+               DO    NAMETABLE_MIRRORING&HORIZONTAL_MIRRORING
                jsr       InitLiteBlitterHorz
+               ELSE
+               jsr       InitLiteBlitter
+               FIN
                clc
 mem_err
                rts

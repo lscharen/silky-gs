@@ -8,11 +8,21 @@
 ;
 ; Should be called immediately afte the application gets control from GS/OS
 NES_StartUp
-
             sta   UserId                  ; GS/OS passes the memory manager user ID for the application into the program
             _MTStartUp                    ; Require the miscellaneous toolset to be running
             bcc   *+5
             brl   Fail
+
+; Set up the bank 00 buffer used for the sprite save and restore
+
+            tsc
+            ora   #$00FF                  ; Move to top of the page
+            sec
+            sbc   #$0500                  ; Leave this much space to the application
+ 
+            sta   SprSaveTop
+            sta   SprSaveAddr
+            stz   SprAddrCount
 
 ; Keep a copy of the application's direct page to be restored later
 
@@ -23,12 +33,14 @@ NES_StartUp
             adc   #$100
             sta   DP_OAM                  ; Use direct page space for the PPU OAM memory
 
+            clc
+            adc   #$100                   ; This is the NES direct page space
+            sta   DP_NES
+            adc   #$1FF                   ; And the next page is the stack page
+
 ; Set up the initial register values when transferring control to the NES ROM code
 
-            sep   #$20
-            lda   #$FF
-            sta   yield_s
-            rep   #$20
+            sta   yield_s                 ; Set the high byte of the stack address
 
 ; Initialize some application variables
 
@@ -287,6 +299,7 @@ NES_ShutDown
 OneSecondCounter  dw  0
 DPSave            dw  0
 DP_OAM            dw  0
+DP_NES            dw  0
 BorderColor       dw  0            ; save/restore border color
 
 ; Built-in user key actions
