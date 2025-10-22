@@ -2309,7 +2309,7 @@ drawOtherLines
 
 ; Handles horizontal mirroring where the top of the screen could start at any scanline.  The PPU
 ; emulation is based on nametable addresses, the any bitmap that marks dirty scanlines is independent
-; of the YSCROLL values.  Sprites are also independent of YSCROLL values and are place directly in
+; of the YSCROLL values.  Sprites are also independent of YSCROLL values and are placed directly in
 ; screen-space coordinates.
 ;
 ; The trick here is to be able to generate, on the fly, a union of sprite bitmap values and tile row values. The
@@ -2335,7 +2335,7 @@ LOAD_HORZ_MIRROR mac
 ; components are on.
 ;
 ; shadowBitmap0 and shadowBitmap1 track the lines that hold sprites from the previous
-; and current frame. tileBitmap marks lines that had a tiles updated since the last frame.
+; and current frame. tileBitmap marks lines that had a tile updated since the last frame.
 ;
 ; There are actually two phases to the dirty rendering.  The first is when the prior
 ; frame was rendered normally and the second in when the prior frame used the dirty
@@ -2485,11 +2485,14 @@ sprTmp0      equ pputmp
 sprTmp1      equ pputmp+2
 sprTmp2      equ pputmp+4
 sprTmp3      equ pputmp+6
+sprTmp4      equ pputmp+8
+sprAddrMin   equ unused50
+sprAddrMax   equ unused52
 
 drawSprites
 
-:spriteCount equ pputmp+8
-:mul160      equ pputmp+10
+:spriteCount equ pputmp+10
+:mul160      equ pputmp+12
 
 ; Run through the copy of the OAM memory and render each sprite to the graphics screen.  Typically,
 ; shadowing is disabled during this routine.
@@ -2528,7 +2531,7 @@ drawSprites
 ; Regardless of whether the PPUCTRL is in 8x8 or 8x16 mode, the 
 ; starting SHR address and palette selection is the same
 
-        jsr   :setupSprite
+        jsr   :setupSprite8
 
 ; Copy bytes 1 and 2 into temp space
 
@@ -2561,7 +2564,7 @@ drawSprites
 
 ; Setup the sprite
 
-        jsr   :setupSprite
+        jsr   :setupSprite16
 
 ; Copy bytes 1 and 2 into temp space
 ;  (only support the first nametable at the moment)
@@ -2599,9 +2602,46 @@ drawSprites
         plb
         rts
 
+:setupSprite8
+        lda   #$2000+x_offset
+        sta   sprAddrMin
+        lda   #$2000+{{200-8}*160}+x_offset
+        sta   sprAddrMax
+
+        jsr   :setupSprite
+
+        ; If we are in DirtyState 1 or 2, then the sprite data should be copied
+        lda  DirtyState
+        beq  :not_dirty8
+        phx
+        ldx  sprTmp1
+        ldy  sprTmp3                   ; Save the clamped screen address in sprTmp3
+        jsr  saveTileFromScreen8
+        plx
+:not_dirty8
+        rts
+
+:setupSprite16
+        lda   #$2000+x_offset
+        sta   sprAddrMin
+        lda   #$2000+{{200-16}*160}+x_offset
+        sta   sprAddrMax
+
+        jsr   :setupSprite
+
+        ; If we are in DirtyState 1 or 2, then the sprite data should be copied
+        lda  DirtyState
+        beq  :not_dirty16
+        phx
+        ldx  sprTmp1
+        ldy  sprTmp3                   ; Save the clamped screen address in sprTmp3
+        jsr  saveTileFromScreen16
+        plx
+:not_dirty16
+        rts
+
 ; X = OAM index
 :setupSprite
-
         ldal  OAM_COPY,x               ; Y-coordinate
         and   #$00FF
         asl
@@ -2609,18 +2649,16 @@ drawSprites
         lda  [:mul160],y
         adc  #$2000-{y_offset*160}+x_offset
         sta  sprTmp1
-        sta  sprTmp3                   ; Save the unclamped screen address in sprTmp3
 
-; If the Y-coordinate is above the screen, clamp it to zero
-
-        ldal  OAM_COPY,x               ; Y-coordinate
-        and   #$00FF
-        cmp   #y_offset
-        bcs   :no_y_clamp
-        lda   #$2000+x_offset
+        cmp  sprAddrMin
+        bcs  :chk_max
+        lda  sprAddrMin
+:chk_max
+        cmp  sprAddrMax
+        bcc  :chk_done
+        lda  sprAddrMax
+:chk_done
         sta   sprTmp3
-:no_y_clamp
-
 
 ; Do some stuff that is faster in 8-bit mode
 
@@ -2655,18 +2693,6 @@ drawSprites
 :no_x_clamp
         adc  sprTmp3
         sta  sprTmp3
-
-; If we are in DirtyState 1 or 2, then the sprite data should be copied
-
-        lda  DirtyState
-        beq  :not_dirty
-        phx
-        ldx  sprTmp1
-        ldy  sprTmp3                   ; Save the clamped screen address in sprTmp3
-        jsr  saveTileFromScreen
-        plx
-:not_dirty
-
         rts
 
 ; Calculate the on-screen address for the sprite
@@ -2816,10 +2842,11 @@ _blitTileNoMask
 
         ldy   sprTmp0
         ldx   sprTmp1
+        lda   #8
+        sta   sprTmp4
 
 ]line   equ   0
-        lup   8
-
+:loop
         lda:  {]line*4},y                            ; Load the tile data lookup value
         lsr
         and   #$0003
@@ -2872,9 +2899,20 @@ _blitTileNoMask
         ora   sprTmp3
         stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
 
-]line   equ   ]line+1
-        --^
+        iny
+        iny
+        iny
+        iny
 
+        txa
+        clc
+        adc   #160
+        tax
+
+        dec   sprTmp4
+        beq   :done
+        brl   :loop
+:done
         rts
 
 _blitTile
@@ -3114,7 +3152,20 @@ incborder
 ; Input: X register is the SHR address
 ; Input: Y register is the Clamped SHR address
           mx  %00
-saveTileFromScreen
+
+saveTileFromScreen16
+
+          jsr   saveTileFromScreen8
+          txa
+          clc
+          adc   #8*160
+          tax
+          tya
+          clc
+          adc   #8*160
+          tay
+
+saveTileFromScreen8
 
           tsc
           sta   sprTmp0                                ; Save the current stack in the y-register
