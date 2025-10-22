@@ -156,9 +156,14 @@ shadowChannel1 equ 100
 shadowChannel2 equ 104
 
 ROMBase ENT
-    ds   $8000-$280
+    ds   $8000-$380
     put  ../../../rom/rom_inject.s
     ds   \,$00
+
+y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
+        ds 24,$01
+        ds 200,$00
+        ds 32,$01
 
 ; Pad from $8000 to $c000
     ds   $4000

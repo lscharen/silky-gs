@@ -38,12 +38,12 @@ EVT_LOOP_END mac
 ; Pre-render check to see if there are any background tiles queued for updates.  If so, we will do
 ; a regular rendering.  If not, use dirty rendering.
 PRE_RENDER   mac
-             stz  disableDirtyRendering
-             lda  at_queue_tail
-             cmp  tmp4                    ; If there are any attribute changes, render the full screen
-             bne  do_full
-             inc  disableDirtyRendering
-do_full
+;             stz  disableDirtyRendering
+;             lda  at_queue_tail
+;             cmp  tmp4                    ; If there are any attribute changes, render the full screen
+;             bne  do_full
+;             inc  disableDirtyRendering
+;do_full
              <<<
 
 POST_RENDER  mac
@@ -131,6 +131,9 @@ COMPILED_SPRITE_LIST_COUNT equ 0
 COMPILED_SPRITE_LIST       mac
 ;
                            <<<
+
+; Do not check for specific Tile IDs to exclude from drawing
+NO_TILE_EXCLUDE equ 1
 
 ; Do we have a custom routine to execite RenderScreen.  If yes, put its address here
 CUSTOM_RENDER_SCREEN equ 0
@@ -252,6 +255,7 @@ ApplyConfig
 ; by prev/next pointers on the menu and control itmes that direct which control to
 ; select in response to the user's inputs.
 
+config_block_start
 config_audio_quality   ds  APU_120HZ  ; good / better / best audio quality (60Hz, 120Hz, 240Hz audio interrupts)
 config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
@@ -261,6 +265,9 @@ config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
+config_input_button_a  dw  COMMAND_KEY
+config_input_button_b  dw  OPTION_KEY
+config_block_end
 
 ;CONFIG_PALETTE       equ 0
 ;TILE_TOP_LEFT        equ $105
