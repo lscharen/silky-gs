@@ -4,11 +4,15 @@ CHKBOX          equ 2     ; checkbox (boolean)
 KEYMAP          equ 3     ; keymap (reads input character; tab to enter/exit)
 CTRL_LIST       equ 4     ; list of other controls (no UI)
 NUMBER_SELECT   equ 5     ; select from a range of single-digit numbers
+BTNMAP          equ 6     ; button mapping for keyboard
 
 CHKBOX_YES          str 'YES'
 CHKBOX_NO           str ' NO'
 CHKBOX_ON           str ' ON'
 CHKBOX_OFF          str 'OFF'
+
+BTNMAP_COMMAND      str 'CMD'
+BTNMAP_OPTION       str 'OPT'
 
 ; Control offsets from their base address
 MENU_TITLE      equ  0 
@@ -479,6 +483,59 @@ _DrawControlList
 ; + XX <title>  
 ;
 ; Where XX is the character hex code
+_DrawBtnmap
+            lda  #0
+
+_DrawBtnmap0
+:addr       equ  tmp15
+:highlight  equ  tmp14
+
+; Save the palette select
+
+            sta  :highlight
+
+; First two words are the offset coordinates of the control
+
+            jsr  _OffsetToAddr
+            sta  :addr
+
+; Move label to right for yes/no label
+
+            clc
+            adc  #COL_STEP*4
+            tay
+
+; Move to the label string
+
+            phx
+            lda: CTRL_TITLE,x
+            tax
+            lda  #TEXT_NORMAL
+            jsr  ConfigDrawString
+            plx
+
+            ldy: CTRL_VALUE_ADDR,x      ; load the variable address
+            ldx: 0,y                    ; load the variable value; 0 = command, 1 = options
+
+            beq  :draw_cmd
+            ldx  #BTNMAP_OPTION
+            ldy  :addr
+            lda  :highlight
+            jmp  ConfigDrawString
+
+:draw_cmd
+            ldx  #BTNMAP_COMMAND
+            ldy  :addr
+            lda  :highlight
+            jmp  ConfigDrawString
+
+; Y = screen addr
+; X = control addr
+;
+; +----------------
+; + XX <title>  
+;
+; Where XX is the character hex code
 _DrawKeymap
             lda  #0
 
@@ -516,7 +573,6 @@ _DrawKeymap0
             ldy  :addr
             lda  :highlight
             jmp  ConfigDrawByte
-            rts
 
 ; Y = screen addr
 ; X = control addr
@@ -620,16 +676,52 @@ _ToggleNumber
 
             rts
 
+; Wait for one of the valid buttons to be pressed
+_WaitForBtnUp
+            lda       #0                  ; clear high byte
+            sep       #$20
+:waitloop1
+            ldal      OPTION_KEY_REG      ; 'B' button
+            bpl       :OptNotDown
+
+            lda       #OPTION_KEY
+            bra       :done
+
+:OptNotDown
+            ldal      COMMAND_KEY_REG
+            bpl       :waitloop1
+
+            lda       #COMMAND_KEY
+:done
+            rep       #$20
+            rts
+
 ; Wait for a new key press
 _WaitForKeyUp
 :waitloop1
             jsr  _ReadRawKeypress                       ; Read keyboard directly, and only for raw keystrokes
             bit  #PAD_KEY_DOWN
             beq  :waitloop1
-;            jsr  _AckKeypress
-;            sta  config_keypress
-;            lda  config_keypress
             and  #$7F
+            rts
+
+; X = control addr
+;
+; Wait for the user to press a key
+_ToggleBtnmap
+:addr       equ  tmp15
+
+            phx
+            lda  #TEXT_HIGHLIGHTED
+            jsr  _DrawBtnmap0
+            plx
+
+            lda: CTRL_VALUE_ADDR,x
+            sta  :addr   ; address of the value
+
+            jsr  _WaitForBtnUp
+            sta  (:addr)
+
             rts
 
 ; X = control addr
@@ -849,7 +941,11 @@ _DrawControl
             bne  :not_number
             jmp  _DrawNumber
 
-:not_number
+:not_number cmp  #BTNMAP
+            bne  :not_btnmap
+            jmp  _DrawBtnmap
+
+:not_btnmap
             rts
 
 ; Switch the value of the active control
@@ -880,7 +976,11 @@ _ToggleActiveControl
             bne  :not_number
             jmp  _ToggleNumber
 
-:not_number
+:not_number cmp  #BTNMAP
+            bne  :not_btnmap
+            jmp  _ToggleBtnmap
+
+:not_btnmap
             rts
 
 ; Loads the active menu address from config_active_menu
@@ -937,7 +1037,9 @@ _GetMenuItemIndex
             rts
 
 ; If the focus is on the config panel, draw the cursor next to the
-; active control
+; active control. This actuallydraws a cursor next to *all* the controls
+; that have a cursor position, but draws an empty square if the control
+; is not the active one.
 _UpdateControlCursor
             ldx  config_active_menu
             bne  *+3                   ; Check that it is set
@@ -977,6 +1079,11 @@ _DrawControlCursor
             lda  1,s
             tax
 
+; If this is a list control, nothing to draw
+            lda:  CTRL_TYPE,x
+            cmp   #CTRL_LIST
+            beq   :no_draw
+
             jsr  _OffsetToAddr            ; Address of control label
             tya
             sec
@@ -987,9 +1094,10 @@ _DrawControlCursor
             ldx   #CONFIG_PALETTE*2
             jsr   _blitTileNoMask
 
+:no_draw
             plx                           ; restore the control address
 
-; If this is a list control, call for each of its controle
+; If this is a list control, call for each of its controls
 
             lda:  CTRL_TYPE,x
             cmp   #CTRL_LIST

@@ -171,65 +171,19 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
             jsr   SetDefaultPalette
 
-; Horizontal mirroring, so fill 2000 with a tile and 2800 with a different tile
+; Load in the game preferences (if they exist)
 
-*             ldx   #$2000
-* :nt1_loop
-*             ldy   #0
-*             phx
-*             jsr   _DrawPPUTile
-*             plx
-*             inx
-*             cpx   #$23C0
-*             bcc  :nt1_loop
-
-*             ldx   #$2800
-* :nt2_loop
-*             ldy   #1
-*             phx
-*             jsr   _DrawPPUTile
-*             plx
-*             inx
-*             cpx   #$2BC0
-*             bcc  :nt2_loop
-
-* ; Test the blit
-
-*             ldy   #0
-*             ldx   #0
-* :scroll_loop
-*             phy
-*             phx
-*             jsr   NES_SetScroll    ; Setup the scroll origin
-
-*             jsr   _BltSetup        ; Setup the rendering based on the current origin
-*             pha                    ; Save the patch location
-
-*             ldx   #0               ; Render the full screen
-*             ldy   #200
-*             jsr   _BltRangeLite
-
-*             ply                    ; offset returned in A, but is passed in Y
-*             jsr   _RestoreBG0OpcodesLite
-
-
-* ;            jsr   WaitForKey
-*             pla
-*             inc
-*             and   #$1FF
-*             tax
-
-*             ply
-*             iny
-*             cpy   #512
-*             bcc   :scroll_loop
-
-
-*             jmp   quit
+            jsr   LoadPrefData
 
 ; Call the boot code in the ROM
 
             jsr   NES_ColdBoot
+
+; Load in the saved high score from disk
+
+            ldx   #$0507                 ; Area of RAM to load into
+            lda   #3                     ; Only three bytes
+            jsr   LoadROMData
 
 ; Start up the NES
 :start
@@ -248,13 +202,25 @@ x_offset      equ 16                      ; number of bytes from the left edge
 quit
             jsr   NES_ShutDown
 
-; Restore the stack to the entry value? Does not appear to be needed...
+; Save the high score file
+
+            ldx   #$0507                 ; Area of RAM to load into
+            lda   #3                     ; Only three bytes
+            jsr   SaveROMData
+
+; Save the user preferences
+
+            jsr   SavePrefData
 
 ; Exit the application
 
         _QuitGS    qtRec
 qtRec   adrl  $0000
         da    $00
+
+; Name of the save and preference files
+SAVE_FILENAME strl '1/dk.sav'
+PREF_FILENAME strl '1/dk.prefs'
 
 InitPlayfield
         ldx   #AllColors
@@ -285,27 +251,6 @@ AllColors   dw     $0F,$02,$06,$12
             dw     $15,$16,$17,$24
             dw     $25,$27,$28,$2C
             dw     $30,$36,$37,$38
-
-;TitleScreen
-;             dw    $0F,$2C,$38,$12
-;             dw    $27,$30,$24,$25
-;             dw    $36,$16,$37,$06
-;             dw    $02,$0F,$0F,$0F
-;
-;Phase1       dw    $0F,$15,$2C,$12
-;             dw    $27,$02,$17,$30
-;             dw    $36,$06,$24,$16
-;             dw    $37,$0F,$0F,$0F
-;
-;Phase2       dw    $0F,$15,$2C,$06
-;             dw    $30,$27,$16,$36
-;             dw    $24,$02,$37,$12
-;             dw    $0F,$0F,$0F,$0F
-;
-;Phase3       dw    $0F,$2C,$27,$02
-;             dw    $30,$12,$24,$36
-;             dw    $06,$16,$37,$0F
-;             dw    $0F,$0F,$0F,$0F
 
 ; When the NES ROM code tried to write to the PPU palette space, intercept here.
 PALETTE_DISPATCH
@@ -456,7 +401,6 @@ ApplyConfig
             lda   config_audio_quality
             jsr   APUReload
 
-            rep   #$30
             rts
 
 ; Configuration screen and variables
@@ -470,6 +414,7 @@ ApplyConfig
 ; by prev/next pointers on the menu and control itmes that direct which control to
 ; select in response to the user's inputs.
 
+config_block_start
 config_audio_quality   ds  2  ; good / better / best audio quality (60Hz, 120Hz, 240Hz audio interrupts)
 config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
@@ -479,21 +424,9 @@ config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
-
-;CONFIG_PALETTE       equ 0
-;TILE_TOP_LEFT        equ $105
-;TILE_TOP_RIGHT       equ $106
-;TILE_BOTTOM_LEFT     equ $107
-;TILE_BOTTOM_RIGHT    equ $108
-;TILE_HORIZONTAL      equ $10A
-;TILE_HORIZONTAL_TOP  equ $10A
-;TILE_HORIZONTAL_BOTTOM  equ $10A
-;TILE_VERTICAL_LEFT   equ $10E
-;TILE_VERTICAL_RIGHT  equ $10D
-;TILE_ZERO            equ $100
-;TILE_A               equ $12E
-;TILE_SPACE           equ $100
-;TILE_CURSOR          equ $149  ; $10A
+config_input_button_a  dw  COMMAND_KEY
+config_input_button_b  dw  OPTION_KEY
+config_block_end
 
 AUDIO_TITLE_STR     str 'AUDIO'
 AUDIO_QUALITY_STR   str 'QUALITY'
@@ -515,6 +448,8 @@ INPUT_RIGHT_MAP_STR str 'RIGHT'
 INPUT_UP_MAP_STR    str 'UP'
 INPUT_DOWN_MAP_STR  str 'DOWN'
 INPUT_SNESMAX_PORT_STR str 'SLOT'
+INPUT_BUTTON_A_STR str 'A BUTTON'
+INPUT_BUTTON_B_STR str 'B BUTTON'
 
 ; The configuration screen leverages the NES runtime itself
 CONFIG_BLK   db   CONFIG_PALETTE        ; Which background palette to use
@@ -527,14 +462,15 @@ CONFIG_BLK   db   CONFIG_PALETTE        ; Which background palette to use
              db   TILE_ZERO             ; First tile for the 0 - 9 characters
              db   TILE_A                ; First tile for the alphabet A - Z characters
              db   TILE_SPACE
-CONFIG_MENU  dw   3                     ; Four screens "Audio", "Video", "Input", "Game"
+CONFIG_MENU  dw   2                     ; Four screens "Audio", "Video", "Input", "Game"
              dw   AUDIO_CONFIG
-             dw   VIDEO_CONFIG
+;             dw   VIDEO_CONFIG
              dw   INPUT_CONFIG
 
 AUDIO_CONFIG dw   AUDIO_TITLE_STR
              dw   0                     ; previous menu item
-             dw   VIDEO_CONFIG          ; next menu item
+;            dw   VIDEO_CONFIG          ; next menu item
+             dw   INPUT_CONFIG          ; next menu item
 
              dw   1                     ; One configuration element
              dw   AUDIO_ITEM_1
@@ -582,7 +518,8 @@ VIDEO_ITEM_2 dw   CHKBOX
              dw   config_video_fastmode
 
 INPUT_CONFIG dw   INPUT_TITLE_STR
-             dw   VIDEO_CONFIG          ; previous menu item
+;            dw   VIDEO_CONFIG          ; previous menu item
+             dw   AUDIO_CONFIG          ; previous menu item
              dw   0                     ; next menu item
 
              dw   1
@@ -615,11 +552,13 @@ SNESMAX_LIST  dw  NUMBER_SELECT
               dw  7            ; maximum value
 
 KEYBOARD_LIST dw  CTRL_LIST
-              dw  4
+              dw  6
               dw  INPUT_ITEM_2
               dw  INPUT_ITEM_3
               dw  INPUT_ITEM_4
               dw  INPUT_ITEM_5
+              dw  INPUT_ITEM_6
+              dw  INPUT_ITEM_7
 
 INPUT_ITEM_2 dw   KEYMAP
              dw   INPUT_ITEM_1
@@ -644,16 +583,31 @@ INPUT_ITEM_4 dw   KEYMAP
 
 INPUT_ITEM_5 dw   KEYMAP
              dw   INPUT_ITEM_4
-             dw   0
+             dw   INPUT_ITEM_6
              dw   3,11
              dw   INPUT_DOWN_MAP_STR
              dw   config_input_key_down
+
+INPUT_ITEM_6 dw   BTNMAP
+             dw   INPUT_ITEM_5
+             dw   INPUT_ITEM_7
+             dw   3,13
+             dw   INPUT_BUTTON_A_STR
+             dw   config_input_button_a
+
+INPUT_ITEM_7 dw   BTNMAP
+             dw   INPUT_ITEM_6
+             dw   0
+             dw   3,14
+             dw   INPUT_BUTTON_B_STR
+             dw   config_input_button_b
 
             DO    SHOW_DEBUG_VARS
             put   ../../misc/App.Msg.s
             put   ../../misc/font.s
             FIN
-
+            put   ../../misc/io.s
+            
             put   ../../ppu/ppu.s
 
 ; Palette remapping

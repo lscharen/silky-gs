@@ -167,6 +167,9 @@ RIGHT_ARROW     equ   $15
 UP_ARROW        equ   $0B
 DOWN_ARROW      equ   $0A
 
+COMMAND_KEY     equ   0
+OPTION_KEY      equ   1
+
 ; DirtyBits definitions
 DIRTY_BIT_BG0_X        equ   $0001     ; The horizontal scroll position has changed
 DIRTY_BIT_BG0_Y        equ   $0002     ; The veritcal scroll position has changed

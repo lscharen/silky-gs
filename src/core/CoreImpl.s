@@ -115,23 +115,29 @@ IntStartUp
                   pea       $0015               ; Get the existing 1-second interrupt handler and save
                   _GetVector
                   PullLong  OldOneSecVec
-                  bcs       :error
+                  bcs       :error1
 
                   pea       $0015               ; Set the new handler and enable interrupts
                   PushLong  #OneSecHandler
                   _SetVector
-                  bcs       :error
+                  bcs       :error2
 
                   pea       $0006
                   _IntSource
-                  bcs       :error
+                  bcs       :error3
+
+                  PushLong  #VBLTASK            ; Also register a Heart Beat Task
+                  _DelHeartBeat
 
                   PushLong  #VBLTASK            ; Also register a Heart Beat Task
                   _SetHeartBeat
-                  bcs       :error
+                  bcs       :error4
                   bra       :done
-:error
-                  brk        $e0
+:error1           brk       $c1
+:error2           brk       $c2
+:error3           brk       $c3
+:error4           brk       $c4
+:error5           brk       $c5
 :done
                   FIN
                   rts
@@ -780,26 +786,62 @@ _ReadKeyboard2    lda       InputPlayer2
                   rts
 
 _ReadKeyboard     pha                           ; low byte = key code, high byte = %ABsSUDLR  S = Start, s = select
-
                   sep       #$20
-                  ldal      OPTION_KEY_REG      ; 'B' button
-                  and       #$80
-                  beq       :BNotDown
 
-                  lda       #>PAD_BUTTON_B
-                  ora       2,s
+                  ldal      OPTION_KEY_REG      ; 'B' button
+                  bpl       :opt_not_down
+
+                  lda       config_input_button_a
+                  cmp       #OPTION_KEY
+                  bne       :a_is_not_option
+                  lda       config_input_button_b
+                  cmp       #OPTION_KEY
+                  bne       :b_is_not_option
+                  lda       #>{PAD_BUTTON_B+PAD_BUTTON_A}
+                  bra       :apply_opt
+:b_is_not_option
+                  lda       #>{PAD_BUTTON_A}
+                  bra       :apply_opt
+:a_is_not_option
+                  lda       config_input_button_b
+                  cmp       #OPTION_KEY
+                  bne       :opt_not_mapped
+                  lda       #>{PAD_BUTTON_B}
+
+:apply_opt        ora       2,s
                   sta       2,s
 
-:BNotDown
+:opt_not_mapped
+:opt_not_down
                   ldal      COMMAND_KEY_REG
-                  and       #$80
-                  beq       :ANotDown
+                  bpl       :cmd_not_down
 
                   lda       #>PAD_BUTTON_A
                   ora       2,s
                   sta       2,s
 
-:ANotDown
+                  lda       config_input_button_a
+                  cmp       #COMMAND_KEY
+                  bne       :a_is_not_command
+                  lda       config_input_button_b
+                  cmp       #COMMAND_KEY
+                  bne       :b_is_not_command
+                  lda       #>{PAD_BUTTON_B+PAD_BUTTON_A}
+                  bra       :apply_cmd
+:b_is_not_command
+                  lda       #>{PAD_BUTTON_A}
+                  bra       :apply_cmd
+:a_is_not_command
+                  lda       config_input_button_b
+                  cmp       #COMMAND_KEY
+                  bne       :cmd_not_mapped
+                  lda       #>{PAD_BUTTON_B}
+
+:apply_cmd        ora       2,s
+                  sta       2,s
+
+:cmd_not_mapped
+:cmd_not_down
                   lda       1,s                 ; read the current keypress
                   and       #$7F
                   cmp       config_input_key_down
