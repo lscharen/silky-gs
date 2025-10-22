@@ -23,8 +23,13 @@ ROMBase ENT
         ds   $0300
 vidbuf  ds   128
 
-        ds   $8000-$380
+        ds   $8000-$480
         put  ../../../rom/rom_inject.s
+
+y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
+        ds 24,$01
+        ds 200,$00
+        ds 32,$01
 
 ;        .exportzp scratch, vstat, frames, j0stat
 ;        .export vidbuf
