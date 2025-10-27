@@ -332,7 +332,9 @@ STX_4015    php
             rts
 
 ; Joystick port (unsupported)
-STA_4016
+STX_4016
+STA_4016    rts
+
 LDA_4016
 LDA_4016_X
             lda #0          ; no input
@@ -520,13 +522,17 @@ jai_patch   jmp  $0000
             <<<
 
 
-; Enter via a JML. X = target address, Stack and Direct page set up properly. B = ROM bank. Called in 16-bit native mode
+; Enter via a JML. A = target address, X = Stack and Direct page set up properly ahead of time. B = ROM bank. Called in 16-bit native mode
             mx    %00
 
 ExtRtn      EXT
 ExtIn       ENT
-            txa
-            stal :patch+1
+            phk             ; set the bank (will change for MMC1 support)
+            plb
+
+;            txa
+            txs
+            sta  :patch+1
             sep  #$30
 :patch      jsr  $0000
             rep  #$30

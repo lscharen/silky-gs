@@ -15,14 +15,16 @@ romxfer     tsc
             lda   DP_NES
             tcd
 
-            sep   #$20
-            lda   #^ExtIn                   ; Set the bank to the ROM
-            pha
-            plb
-            rep   #$20
+;            sep   #$20
+;            lda   #^ExtIn                   ; Set the bank to the ROM
+;            pha
+;            plb
+;            rep   #$20
 
-            ldal   yield_s
-            tcs
+;            ldal   yield_s
+;            tcs
+            txa                             ; Put address in A
+            ldx   yield_s                   ; Put 16-bit stack addr in X to protect against NES code using TXS
 
             jml   ExtIn
 ExtRtn      ENT
