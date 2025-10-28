@@ -2700,7 +2700,8 @@ CODE_CCA0
    STA $15					;
 
    LDY #$00					;
-   LDA ($14),Y					;
+   LDA ($14),Y					; IIgs -- this indirect address can point to zero page
+   
    CMP #$AA					;hit command?
    BEQ CODE_CCC2 				;don't update pointer, full stop
    STY $13					;
@@ -6850,7 +6851,8 @@ CODE_E077
 MarioGameOverString_E078
   db :StringEnd-:StringStart.$10		;really wish I could use a macro, but alas, the macro labels are global
 :StringStart
-  asc 'MARIO GAME OVER'			;but hey, you can now directly edit the text without referencing games character mapping. pretty cool, huh?
+;  asc 'MARIO GAME OVER'			;but hey, you can now directly edit the text without referencing games character mapping. pretty cool, huh?
+  db $16,$0A,$1B,$12,$18,$24,$10,$0A,$16,$0E,$24,$18,$1F,$0E,$1B
 :StringEnd
 
 ;if both players are dead in 2P mode or 1 player in 1P
@@ -6858,21 +6860,24 @@ MarioGameOverString_E078
 GameOverString_E088
   db :StringEnd-:StringStart.$10
 :StringStart
-	asc '   GAME OVER   '
+;	asc '   GAME OVER   '
+  db $24,$24,$24,$10,$0A,$16,$0E,$24,$18,$1F,$0E,$1B,$24,$24,$24
 :StringEnd
 
 ;LUIGI GAME OVER
 LuigiGameOverString_E098
   db :StringEnd-:StringStart.$10
 :StringStart
-	asc 'LUIGI GAME OVER'
+;	asc 'LUIGI GAME OVER'
+  db $15,$1E,$12,$10,$12,$24,$10,$0A,$16,$0E,$24,$18,$1F,$0E,$1B
 :StringEnd
 
 ;Empty string
 EmptyString_E0A8
   db :StringEnd-:StringStart.$10
 :StringStart
-	asc '               '
+;	asc '               '
+   db $24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24,$24
 :StringEnd
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -7758,13 +7763,15 @@ CODE_E554
 MarioString_E568
   db :StringEnd-:StringStart.$10
 :StringStart
-	asc 'MARIO'
+;	asc 'MARIO'
+  db $16,$0A,$1B,$12,$18
 :StringEnd
 
 LuigiString_E56E
   db :StringEnd-:StringStart.$10
 :StringStart
-	asc 'LUIGI'
+;	asc 'LUIGI'
+  db $15,$1E,$12,$10,$12
 :StringEnd
 
 ;init mario and luigi sprite tiles, for after TEST YOUR SKILL! screen
@@ -7789,7 +7796,8 @@ DATA_E574
 PerfectString_E5A4
   db :StringEnd-:StringStart.$10
 :StringStart
-	asc 'PERFECT'
+;	asc 'PERFECT'
+   db $19,$0E,$1B,$0F,$0E,$0C,$1D
    db TwoExclamationMarks
 :StringEnd
 
@@ -7797,21 +7805,24 @@ PerfectString_E5A4
 DATA_E5AD
   db :StringEnd-:StringStart.$10
 :StringStart
-	asc '5000PTS',$27
+;	asc '5000PTS',$27
+   db  $05,$00,$00,$00,$19,$1D,$1C,$27
 :StringEnd
 
 ;3000PTS'
 DATA_E5B6
   db :StringEnd-:StringStart.$10
 :StringStart
-	asc '3000PTS',$27
+;	asc '3000PTS',$27
+  db  $03,$00,$00,$00,$19,$1D,$1C,$27
 :StringEnd
 
 ;     NO BONUS.
 DATA_E5BF
   db :StringEnd-:StringStart.$10
 :StringStart
-	asc '     NO BONUS.'
+;	asc '     NO BONUS.'
+   db  $24,$24,$24,$24,$24,$17,$18,$24,$0B,$18,$17,$1E,$1C,$26
 :StringEnd
 
 ;count each coin
@@ -8040,7 +8051,8 @@ FloatingCoinSpawnCoordinatesAndAnim_E6E5
 DATA_E703
   db :StringEnd-:StringStart.$10
 :StringStart
-	asc 'X 800'
+;	asc 'X 800'
+   db  $21,$24,$08,$00,$00
 :StringEnd
 
 ;Combo chain timers and fireball spawn timers handler
@@ -9876,13 +9888,14 @@ DATA_F0A5
   db $68,$6A,$6F,$70,$6F,$70,$73,$24,$88
 
 ;this is where strings are stored (1 PLAYER GAME A, 2 PLAYER GAME B, etc.)
-
+; Numbers are number values, letters start at 10, space is $24
 ;1 PLAYER GAME A
 OnePlayerGameAString
   db $22,$09
   db :StringEnd-:StringStart
 :StringStart
-	asc '1 PLAYER GAME A'
+;	asc '1 PLAYER GAME A'
+   db $01,$24,$19,$15,$0A,$22,$0E,$1B,$24,$10,$0A,$16,$0E,$24,$0A
 :StringEnd
 
 ;1 PLAYER GAME B
@@ -9890,7 +9903,8 @@ OnePlayerGameBString
   db $22,$49
   db :StringEnd-:StringStart
 :StringStart
-	asc '1 PLAYER GAME B'
+;	asc '1 PLAYER GAME B'
+   db $01,$24,$19,$15,$0A,$22,$0E,$1B,$24,$10,$0A,$16,$0E,$24,$0B
 :StringEnd
 
 TwoPlayerGameAString
@@ -9898,7 +9912,8 @@ TwoPlayerGameAString
   db $22,$89
   db :StringEnd-:StringStart
 :StringStart
-	asc '2 PLAYER GAME A'
+;	asc '2 PLAYER GAME A'
+   db $02,$24,$19,$15,$0A,$22,$0E,$1B,$24,$10,$0A,$16,$0E,$24,$0A
 :StringEnd
 
 TwoPlayerGameBString
@@ -9906,7 +9921,8 @@ TwoPlayerGameBString
   db $22,$C9
   db :StringEnd-:StringStart
 :StringStart
-	asc '2 PLAYER GAME B'
+;	asc '2 PLAYER GAME B'
+   db $02,$24,$19,$15,$0A,$22,$0E,$1B,$24,$10,$0A,$16,$0E,$24,$0B
 :StringEnd
 
 NintendoCOString
@@ -9915,9 +9931,12 @@ NintendoCOString
   db :StringEnd-:StringStart
 :StringStart
 	db CopyrightSymbol
-   asc '1983 NINTENDO CO'
+;   asc '1983 NINTENDO CO'
+   db $01,$09,$08,$03,$24,$17,$12,$17,$1D,$0E,$17,$0D,$18,$24,$0C,$18
    db DotAndComma
-   asc 'LTD.'
+;   asc 'LTD.'
+   db $15,$1D,$0D,$26
+
 :StringEnd
 
 ;MADE IN JAPAN
@@ -9925,7 +9944,8 @@ MadeInJapanString
   db $23,$4B
   db :StringEnd-:StringStart
 :StringStart
-	asc 'MADE IN JAPAN'
+;	asc 'MADE IN JAPAN'
+  db $16,$0A,$0D,$0E,$24,$12,$17,$24,$13,$0A,$19,$0A,$17
 :StringEnd
 
 ;db $0D
@@ -10718,51 +10738,51 @@ FireballMovementAnimCycle
 ;TEMP_Def = VRAMLoc_TopPipeLeft+2
 
 DATA_F4F5
-  dw VRAMLoc_TopPipeLeft+2
+  ddb VRAMLoc_TopPipeLeft+2
 ;  db >TEMP_Def,<TEMP_Def
   db $04
   db $52,$51,$3C,$50
 
 ;TEMP_Def = VRAMLoc_TopPipeLeft+$20
 ;  db >TEMP_Def,<TEMP_Def
-  dw VRAMLoc_TopPipeLeft+$20
+  ddb VRAMLoc_TopPipeLeft+$20
   db $06
   db $41,$57,$56,$55,$47,$54
 
 ;TEMP_Def = VRAMLoc_TopPipeLeft+$40
 ;  db >TEMP_Def,<TEMP_Def
-  dw VRAMLoc_TopPipeLeft+$40
+  ddb VRAMLoc_TopPipeLeft+$40
   db $06
   db $46,$5C,$5B,$5A,$4C,$59
 
 ;TEMP_Def = VRAMLoc_TopPipeLeft+$60
 ;  db >TEMP_Def,<TEMP_Def
-  dw VRAMLoc_TopPipeLeft+$60
+  ddb VRAMLoc_TopPipeLeft+$60
   db $04
   db $49,$61,$49,$5F
 
 ;top-right pipe
 ;TEMP_Def = VRAMLoc_TopPipeRight
 ;  db >TEMP_Def,<TEMP_Def
-  dw VRAMLoc_TopPipeRight
+  ddb VRAMLoc_TopPipeRight
   db $04
   db $39,$3C,$3A,$3B
 
 ;TEMP_Def = VRAMLoc_TopPipeRight+$20
 ;  db >TEMP_Def,<TEMP_Def
-  dw VRAMLoc_TopPipeRight+$20
+  ddb VRAMLoc_TopPipeRight+$20
   db $06
   db $3D,$47,$3E,$3F,$40,$41
 
 ;TEMP_Def = VRAMLoc_TopPipeRight+$40
 ;  db >TEMP_Def,<TEMP_Def
-  dw VRAMLoc_TopPipeRight+$40
+  ddb VRAMLoc_TopPipeRight+$40
   db $06
   db $42,$4C,$43,$44,$45,$46
 
 ;TEMP_Def = VRAMLoc_TopPipeRight+$62
 ;  db >TEMP_Def,<TEMP_Def
-  dw VRAMLoc_TopPipeRight+$62
+  ddb VRAMLoc_TopPipeRight+$62
   db $04
   db $48,$49,$4A,$4B
 
@@ -10770,38 +10790,38 @@ DATA_F4F5
 
 ;TEMP_Def = VRAMLoc_BottomPipeLeft
 ;  db >TEMP_Def,<TEMP_Def
-  dw VRAMLoc_BottomPipeLeft
+  ddb VRAMLoc_BottomPipeLeft
   db $04
   db $41,$41,$41,$57
 
 ;TEMP_Def = VRAMLoc_BottomPipeLeft+$20
 ;  db >TEMP_Def,<TEMP_Def
-  dw VRAMLoc_BottomPipeLeft+$20
+  ddb VRAMLoc_BottomPipeLeft+$20
   db $04
   db $46,$46,$46,$5C
 
 ;TEMP_Def = VRAMLoc_BottomPipeLeft+$40
 ;  db >TEMP_Def,<TEMP_Def
-  dw VRAMLoc_BottomPipeLeft+$40
+  ddb VRAMLoc_BottomPipeLeft+$40
   db $04
   db $4B,$4B,$4B,$61
 
 ;TEMP_Def = VRAMLoc_BottomPipeRight
 ;bottom-right pipe
 ;  db >TEMP_Def,<TEMP_Def
-  dw VRAMLoc_BottomPipeRight
+  ddb VRAMLoc_BottomPipeRight
   db $04
   db $40,$41,$41,$41
 
 ;TEMP_Def = VRAMLoc_BottomPipeRight+$20
 ;  db >TEMP_Def,<TEMP_Def
-  dw VRAMLoc_BottomPipeRight+$20
+  ddb VRAMLoc_BottomPipeRight+$20
   db $04
   db $45,$46,$46,$46
 
 ;TEMP_Def = VRAMLoc_BottomPipeRight+$40
 ;  db >TEMP_Def,<TEMP_Def
-  dw VRAMLoc_BottomPipeRight+$40
+  ddb VRAMLoc_BottomPipeRight+$40
   db $04
   db $4A,$4B,$4B,$4B
   db VRAMWriteCommand_Stop
@@ -11189,14 +11209,16 @@ PhaseString
   db $22,$4C
   db :StringEnd-:StringStart
 :StringStart
-	asc 'PHASE   '				;PHASE    (last 2 spaces are replaced with appropriate digits depending on phase number)
+;	asc 'PHASE   '				;PHASE    (last 2 spaces are replaced with appropriate digits depending on phase number)
+  db $19,$11,$0A,$1C,$0E,$24,$24,$24
 :StringEnd
 
 PEqualsString
   db $23,$41
   db :StringEnd-:StringStart
 :StringStart
-	asc 'P=  '					;P=   (same as above, spaces replaced with phase number digits)
+;	asc 'P=  '					;P=   (same as above, spaces replaced with phase number digits)
+  db $19,$2E,$24,$24
 :StringEnd
   db VRAMWriteCommand_Stop
 
@@ -11205,7 +11227,8 @@ DATA_F735
   db $21,$89
   db :StringEnd-:StringStart
 :StringStart
-	asc 'TEST YOUR SKILL'
+;	asc 'TEST YOUR SKILL'
+  db $1D,$0E,$1C,$1D,$24,$22,$18,$1E,$1B,$24,$1C,$14,$12,$15,$15
 :StringEnd
 
 ;maybe make the rest follow the same "first size then tiles" convention
@@ -11217,9 +11240,11 @@ DATA_F735
   db $20,$AD
   db $06						;|20.0| (changes to 15.0 afterwads if in later TEST YOUR SKILL phases)
   db $33
-  asc '20'
+;  asc '20'
+  db $02,$00
   db DecimalSeparator
-  asc '0'
+;  asc '0'
+  db $00
   db $34
 
   db $20,$CD
