@@ -203,7 +203,7 @@ InitPlayfield
         rts
 
 SwizzleTables
-;            adrl L0_T0
+        adrl L0_T0
         adrl  AT2_T0
 
 ; Are there less than 15 total color combos? Yes! This game can use a fixed palette
@@ -220,22 +220,42 @@ PALETTE_DISPATCH
         dw   ppu_3F08,dk_3Fxx,dk_3Fxx,dk_3Fxx
         dw   ppu_3F0C,dk_3Fxx,dk_3Fxx,dk_3Fxx
 
-        dw   ppu_3F10,dk_3Fxx,dk_3Fxx,dk_3Fxx
+        dw   ppu_3F10,dk_3Fxx,dk_3Fxx,mb_3F13
         dw   ppu_3F14,dk_3Fxx,dk_3Fxx,dk_3Fxx
         dw   ppu_3F18,dk_3Fxx,dk_3Fxx,dk_3Fxx
         dw   ppu_3F1C,dk_3Fxx,dk_3Fxx,dk_3Fxx
 
+; Watch this palette entry to determine when to swap swizzle tables
+mb_3F13
+        cmp   #$0035
+        bne  :tbl2
 
-;mb_palette_map
-;            dw    0, -1, -1, -1
-;            dw    0, -1, -1, -1
-;            dw    0,  1,  2,  3    ; donkey kong background tiles are mapped to fixed colors
-;            dw    0, -1, -1, -1
-;
-;            dw    0,  4,  5,  6    ; jumpman is always set to his own colors
-;            dw    0, -1, -1, -1    ; everything else is dynamically assigned
-;            dw    0, -1, -1, -1
-;            dw    0, -1, -1, -1
+        phd
+        ldal  DPSave
+        tcd
+        lda   SwizzleTables+2          ; title screen palette
+        ldx   SwizzleTables
+        jsr   NES_SetPaletteMap
+
+        lda   #DIRTY_BIT_PAL_CHANGE
+        tsb   DirtyBits
+
+        pld
+        rts
+
+:tbl2
+        phd
+        ldal  DPSave
+        tcd
+        lda   SwizzleTables+6          ; gameplay palette
+        ldx   SwizzleTables+4
+        jsr   NES_SetPaletteMap
+
+        lda   #DIRTY_BIT_PAL_CHANGE
+        tsb   DirtyBits
+
+        pld
+        rts
 
 ; The the phase changes, set a flag, but way for the transition time to drop below $70
 ; before applying the change.
@@ -256,8 +276,7 @@ SetDefaultPalette
 
         lda   SwizzleTables+2
         ldx   SwizzleTables
-        jsr   NES_SetPaletteMap
-        rts
+        jmp   NES_SetPaletteMap
 
 ; ApplyConfig
 ;

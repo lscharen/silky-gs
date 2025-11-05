@@ -530,6 +530,17 @@ RenderScreen
 
             jsr   NES_SetScroll           ; Set the engine to this scroll position
 
+; If this frame changed the palettes, then we have to refresh all of the background tiles
+
+            lda   #DIRTY_BIT_PAL_CHANGE
+            bit   DirtyBits
+            beq   :no_refresh
+            ldx   #$2000
+            jsr   RefreshPPUTiles
+            lda   #DIRTY_BIT_BG0_REFRESH
+            tsb   DirtyBits
+:no_refresh
+
 ; Allow dirty rendering or not
 
             DO    ENABLE_DIRTY_RENDERING
