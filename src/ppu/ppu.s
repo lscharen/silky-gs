@@ -596,6 +596,42 @@ DrawPPUAttribute
 :not_bot_right
         rts
 
+; Draw all of the tiles
+;
+; X = nametable base ($2000, $2400, $2800, or $2C00)
+        mx    %00
+RefreshPPUTiles
+        php
+        sep   #$20
+        lda   #$ff
+        sta   pputmp
+:loop
+        ldal  PPU_MEM+TILE_SHADOW,x
+        phx
+        jsr   DrawPPUTile
+        plx
+        inx
+        ldal  PPU_MEM+TILE_SHADOW,x
+        phx
+        jsr   DrawPPUTile
+        plx
+        inx
+        ldal  PPU_MEM+TILE_SHADOW,x
+        phx
+        jsr   DrawPPUTile
+        plx
+        inx
+        ldal  PPU_MEM+TILE_SHADOW,x
+        phx
+        jsr   DrawPPUTile
+        plx
+        inx`
+        dec   pputmp               ; 256 * 4 iterations
+        bne   :loop
+
+        plp
+        rts
+
 ; Draw a tile from the PPU into the code field
 ;
 ; X = PPU address
@@ -664,6 +700,11 @@ bad_tile
 ; have already been swapped, so nothing can be updated while processing.  The PPU state
 ; is a snapshot from the end of the last frame processed.
 PPUFreezeNametableUpdates
+
+
+; TODO: If the saturation flag is set, then just copy all of the nametable and attribute data into the SHADOW
+;       arrays. Not loading from at_list or nt_list saves at least 6 cycles plus a bit more if the loop is
+;       parially unrolled.  The crossover point is ~2/3rds full.
 
         sep  #$20
 
@@ -1363,6 +1404,10 @@ PPUDATA_WRITE ENT
         and  #$03C0                  ; Is this in the tile attribute space?
         cmp  #$03C0
         bcc  :is_nt
+
+; TODO: Add a limit flag here to skip adding more entries if the list is getting too full.  Once a certain number
+; of entries are in the list, it's probably faster to just redraw the entire screen without processing the changes
+; one by one, e.g. on game startup with the whole PPU Nametable RAM is initialized.
 
         txa
         ldx  curr_at_list_end
@@ -2371,7 +2416,7 @@ drawDirtyScreen
         cmp   #1                      ; Are we in a transitional state?
         beq   :dirty_state_1
 
-; Dirty State 2 -- just erase the old sprites by restoring the background data and draw the new
+; Dirty State 2 -- erase the old sprites by restoring the background data and draw the new
 ;                  sprites on top and then blit 8x8 regions to expose the changes.
 ;
 ; An simple sequence of actions are
@@ -2396,11 +2441,9 @@ drawDirtyScreen
         jsr   _ShadowOff              ; Hide the fact that we're erasing the sprites from the priorframe
         jsr   restoreTilesToScreen    ; Redraw the background for all of the previous sprites.  The background is now fully restored.
 
-        lda   SprSaveTop              ; Reset the stack for the next drawSprites call
-        sta   SprSaveAddr
-
-        jsr   drawSprites             ; Draw the new sprites; some parts of the old sprites may still be on-screen
         jsr   _ShadowOn               ; Now we can show the sprites again
+        jsr   drawSprites             ; Draw the new sprites; some parts of the old sprites may still be on-screen
+
         jsr   exposeTilesToScreen
 
         rts
@@ -2650,14 +2693,14 @@ drawSprites
         adc  #$2000-{y_offset*160}+x_offset
         sta  sprTmp1
 
-        cmp  sprAddrMin
-        bcs  :chk_max
-        lda  sprAddrMin
-:chk_max
-        cmp  sprAddrMax
-        bcc  :chk_done
-        lda  sprAddrMax
-:chk_done
+;        cmp  sprAddrMin
+;        bcs  :chk_max
+;        lda  sprAddrMin
+;:chk_max
+;        cmp  sprAddrMax
+;        bcc  :chk_done
+;        lda  sprAddrMax
+;:chk_done
         sta   sprTmp3
 
 ; Do some stuff that is faster in 8-bit mode
@@ -2682,14 +2725,20 @@ drawSprites
         rep  #$20
         and  #$00FF
         tay
-        adc  sprTmp1                   ; Add to the base address calculated fom the Y-coordinate
-        sta  sprTmp1                   ; This is the SHR address at which to draw the sprite
+        adc  sprTmp1                  ; Add to the base address calculated fom the Y-coordinate
+        sta  sprTmp1                  ; This is the SHR address at which to draw the sprite
 
+        stz  sprTmp4                  ; Assume no clipping
         tya
         cmp  #125
         bcc  :no_x_clamp
+
+        sbc  #124                   ; get the difference
+        sta  sprTmp4
+
         lda  #124
         clc
+
 :no_x_clamp
         adc  sprTmp3
         sta  sprTmp3
@@ -2702,6 +2751,8 @@ drawSprites
 ;
 ; Output:
 ;  sprTmp1 = SHR address
+;  sprTmp3 = clamped SHR address
+;  sprTmp4 = clipping amount (0 = no clipping)
 ;
 ; Modified:
 ;  sprTmp0 used for temporary data
@@ -2715,9 +2766,9 @@ drawSprites
 
 ; This is the point to check if there is a compiled version of this sprite
 
-        DO   SHOW_DEBUG_VARS
-        ldx  #$FFFF         ; color for priority bit
-        FIN
+        ldx  sprTmp4        ; Test if this sprite needs clipping (first test)
+        bne  as_bitmap_clip
+
         bit  #$2000         ; Is the priority bit set?
         bne  as_bitmap
 
@@ -2729,7 +2780,7 @@ drawSprites
         ldx  #$2222         ; color for missing compiled sprite
         cmp  #0             ; re-establish the equality test
         FIN
-        beq  as_bitmap
+        beq  as_bitmap      ; zero value means no compiled sprite for this tile IDs
 
 ; Vector through the compiled sprite table.  The compiled sprites are in a different bank, so just check
 ; for a sentinel value and manually jump into the compiled sprite code to avoid a double-jump and having to
@@ -2737,7 +2788,6 @@ drawSprites
 
         stal csd+1                     ; patch in the long address directly
         lda  sprTmp2+1                 ; load OAM[2] into accumulator
-;        pei  :cmplbank
         pei  CMPL_BANK
         plb
 csd     jml  $000000
@@ -2756,7 +2806,7 @@ draw_rtn2
 
 as_bitmap
         DO   SHOW_DEBUG_VARS
-        txa
+        lda  #$FFFF         ; color for priority bit
         stal outlineColor
         FIN
         lda  sprTmp2+1
@@ -2780,10 +2830,26 @@ as_bitmap
         jmp  (drawProcs,x)            ; Executes an RTS to return directly to caller
         FIN
 
+as_bitmap_clip
+        lda  sprTmp2+1
+        and  #$00E0
+        lsr
+        lsr
+        lsr
+        lsr
+        tax
+        lda  sprTmp2-1
+        and  #$FF00
+        lsr                           ; Each tile is 128 bytes of data -- this clears the carry flag
+        jmp  (drawProcsClipped,x)
 
 drawProcs
         dw drawTileToScreen,drawTileToScreenP,drawTileToScreenH,drawTileToScreenPH
         dw drawTileToScreenV,drawTileToScreenPV,drawTileToScreenHV,drawTileToScreenPHV
+
+drawProcsClipped
+        dw drawClippedTileToScreen,drawClippedTileToScreenP,drawClippedTileToScreenH,drawClippedTileToScreenPH
+        dw drawClippedTileToScreenV,drawClippedTileToScreenPV,drawClippedTileToScreenHV,drawClippedTileToScreenPHV
 
 ; Array of dispatch addresses.  There is a special address of $0000 in the table that immediately returns
 ; from the compiled sprite code bank for sprites that do not have a compiled representation.
@@ -2833,12 +2899,6 @@ _blitTileNoMask
         xba
         ora   sprTmp3
         sta   sprTmp3
-
-;        sep  #$20
-;        clc
-;        adc  SwizzlePtr+1
-;        sta  ActivePtr+1
-;        rep  #$20
 
         ldy   sprTmp0
         ldx   sprTmp1
@@ -2958,6 +3018,147 @@ _blitTile
 ; causes the macro processor to get confused since variables can be written as "]x"
 LDA_IND_LONG_IDX equ $B7
 ORA_IND_LONG_IDX equ $17
+AND_IND_LONG_IDX equ $37
+
+drawClippedTileToScreenHV
+        adc   #64
+
+drawClippedTileToScreenV
+        tax
+        jsr   _copyTileToBufferV
+        bra   _clippedCommon
+
+drawClippedTileToScreenH
+        adc   #64
+
+drawClippedTileToScreen
+        tax
+        jsr   _copyTileToBuffer
+
+_clippedCommon
+        jsr   clipBuffer
+:no_clip
+        txy
+        ldx   sprTmp1
+        jmp   _copyBufferToScreen
+
+; Drawing to the screen can happen two ways.
+;
+; If the sprite is being drawn this way, then the compiled version cannot be used for some reason.  To flexibly
+; handle corner cases, the sprite data and mask are copied into temporary direct page space and then copied
+; to the screen.  This helps maximize the use of registers and allows the data or mask to be altered before
+; drawing, if needed.
+copyTileToBufferHV
+        adc   #64
+
+copyTileToBufferV
+        tax                                          ; Put the sprite data address in the register
+
+_copyTileToBufferV
+]line   equ   0
+        lup   8
+
+        ldy:  {7-]line*4},x                          ; Load the tile data lookup value
+        db    LDA_IND_LONG_IDX,ActivePtr             ; Lookup the data from the swizzle table
+        sta   blttmp+{]line*4}                       ; Save on the direct page
+
+        ldy:  {7-]line*4}+2,x
+        db    LDA_IND_LONG_IDX,ActivePtr
+        sta   blttmp+{]line*4}+2
+
+]line   equ   ]line+1
+        --^
+        rts
+
+copyTileToBufferH
+        adc   #64
+
+copyTileToBuffer
+        tax                                          ; Put the sprite data address in the register
+
+_copyTileToBuffer
+]line   equ   0
+        lup   8
+
+        ldy:  {]line*4},x                            ; Load the tile data lookup value
+        db    LDA_IND_LONG_IDX,ActivePtr             ; Lookup the data from the swizzle table
+        sta   blttmp+{]line*4}                       ; Save on the direct page
+
+        ldy:  {]line*4}+2,x
+        db    LDA_IND_LONG_IDX,ActivePtr
+        sta   blttmp+{]line*4}+2
+
+]line   equ   ]line+1
+        --^
+        rts
+
+; Blit from the direct page buffer to the screen using the tile mask in the data bank
+;
+; A = tile address
+; X = screen address
+copyBufferToScreenH
+        adc   #64
+
+copyBufferToScreen
+        tay
+
+_copyBufferToScreen
+]line   equ   0
+        lup   8
+
+        ldal  $010000+{]line*SHR_LINE_WIDTH},x       ; Load the screen data
+        and:  {]line*4}+32,y                         ; mask
+        ora   blttmp+{]line*4}
+        stal  $010000+{]line*SHR_LINE_WIDTH},x
+
+        ldal  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; Load the screen data
+        and:  {]line*4}+32+2,y                       ; mask
+        ora   blttmp+{]line*4}+2
+        stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+
+]line   equ   ]line+1
+        --^
+        rts
+
+; If the tile needs to be clipped, then set the pixels in the direct page buffer to zero.  This is not exact clipping, but
+; creates the illusion of the sprite being clipped.  The only time this actually matters is when dirty rendering is engaged
+; and a sprite is placed with x in [125, 126, 127].
+clipBuffer
+        lda   sprTmp4
+        bne   *+3
+        rts
+        dec
+        beq   clipBuffer125
+        dec
+        beq   clipBuffer126
+        bra   clipBuffer127
+
+clipBuffer127
+        sep   #$20
+]line   equ   0
+        lup   8
+        stz   blttmp+{]line*4}+1
+]line   equ   ]line+1
+        --^
+        rep   #$20
+
+clipBuffer126
+]line   equ   0
+        lup   8
+        stz   blttmp+{]line*4}+2
+]line   equ   ]line+1
+        --^
+        rts
+
+clipBuffer125
+        sep   #$20
+]line   equ   0
+        lup   8
+        stz   blttmp+{]line*4}+3
+]line   equ   ]line+1
+        --^
+        rep   #$20
+        rts
 
 drawTileToScreenH
 
@@ -3028,16 +3229,98 @@ drawTileToScreenV
 ]line     equ   ]line+1
           --^
 
-;          jmp   draw_rtn
           rts
+
+drawClippedTileToScreenPHV
+drawClippedTileToScreenPH
+
+        adc   #64
+
+drawClippedTileToScreenPV
+drawClippedTileToScreenP
+
+        tay
+        ldx   sprTmp1
+
+        jsr   _copyMaskToBufferP      ; Build a screen mask in the direct page
+        jsr   clipBuffer
+;        jmp   _copyBufferToScreenP
+
+_copyBufferToScreenP
+        ldx   sprTmp0
+]line   equ   0
+        lup   8
+        ldy:  {]line*4}+0,x
+
+        lda   blttmp+{]line*4}
+        beq   zl
+
+        ldx   sprTmp1
+        db    AND_IND_LONG_IDX,ActivePtr
+        oral  $010000+{]line*SHR_LINE_WIDTH}+0,x
+        stal  $010000+{]line*SHR_LINE_WIDTH}+0,x
+
+        ldx   sprTmp0
+zl      ldy:  {]line*4}+2,x
+
+        lda   blttmp+{]line*4}+2
+        beq   zr
+        ldx   sprTmp1
+        db    AND_IND_LONG_IDX,ActivePtr
+        oral  $010000+{]line*SHR_LINE_WIDTH}+2,x
+        stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+
+        ldx   sprTmp0
+zr
+]line   equ   ]line+1
+        --^
+        rts
+
+_copyMaskToBufferP
+]line   equ   0
+        lup   8
+        ldal  $010000+{]line*SHR_LINE_WIDTH}+0,x     ; create mask where 0 = !0 and 0 = F.
+        beq   zero_left
+        bit   #$F000
+        beq   *+5
+        ora   #$F000     ; 3+3 / 3+2+3 = 6 / 8 = ~7 cycles per pixel average
+        bit   #$0F00
+        beq   *+5
+        ora   #$0F00
+        bit   #$00F0
+        beq   *+5
+        ora   #$00F0
+        bit   #$000F
+        beq   *+5
+        ora   #$000F
+zero_left
+        sta   blttmp+{]line*4}
+
+        ldal  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; create mask where 0 = !0 and 0 = F.
+        beq   zero_right
+        bit   #$F000
+        beq   *+5
+        ora   #$F000     ; 3+3 / 3+2+3 = 6 / 8 = ~7 cycles per pixel average
+        bit   #$0F00
+        beq   *+5
+        ora   #$0F00
+        bit   #$00F0
+        beq   *+5
+        ora   #$00F0
+        bit   #$000F
+        beq   *+5
+        ora   #$000F
+zero_right
+        sta   blttmp+{]line*4}+2
+
+]line   equ   ]line+1
+        --^
+        rts
 
 drawTileToScreenPHV
 drawTileToScreenPH
 
-;          lda   sprTmp0
-;          clc
-          adc   #64
-;          sta   sprTmp0
+        adc   #64
 
 drawTileToScreenPV
 drawTileToScreenP
@@ -3048,31 +3331,11 @@ drawTileToScreenP
           lup   8
 
           ldx   sprTmp0
-          lda:  {]line*4}+32,x                         ; load the mask and invert it
-          eor   #$FFFF
-          sta   sprTmp2
-
           ldy:  {]line*4}+0,x                          ; load the lookup value
-          db    LDA_IND_LONG_IDX,ActivePtr             ; get the correct pixel data
 
-          ldx   sprTmp1                                   ; Get the screen address
-          eorl  $010000+{]line*SHR_LINE_WIDTH}+0,x     ; save a blended value of the sprite and screen data
-          sta   sprTmp3
-
-; Alternative to use a full branching network to shave a few cycles off
-;          bit   #$F000
-;          beq   :m0xxx
-;          bit   #$0F00
-;          beq   :mF0xx
-;          bit   #$00F0
-;          beq   :mFF0x
-;          bit   #$000F
-;          beq   :mFFF0
-;          lda   #$0000 1.5 * 16 = saves 24 cycles per sprite
-;          bra   :out     ; 6 / 5 = ~ 5.5 cycles per pixel + 3 for branch, but can save EOR instruction, so a wash
-
-
-          ldal  $010000+{]line*SHR_LINE_WIDTH}+0,x     ; create mask where F = !0 and 0 = 0.
+          ldx   sprTmp1                                ; Get the screen address
+          ldal  $010000+{]line*SHR_LINE_WIDTH}+0,x     ; create mask where 0 = !0 and 0 = F.
+          beq   zero_left
           bit   #$F000
           beq   *+5
           ora   #$F000     ; 3+3 / 3+2+3 = 6 / 8 = ~7 cycles per pixel average
@@ -3085,27 +3348,21 @@ drawTileToScreenP
           bit   #$000F
           beq   *+5
           ora   #$000F
+zero_left
           eor   #$FFFF
-          and   sprTmp2                                ; AND against the inverted sprite mask
-          and   sprTmp3                                ; Apply mask to the blended pixel data
+          beq   skip_left                              ; zero means no sprite data will show through
 
-          eorl  $010000+{]line*SHR_LINE_WIDTH}+0,x     ; flip tile pixels back to original value and let sprite pixels show
+          db    AND_IND_LONG_IDX,ActivePtr             ; Apply against the sprite data
+          oral  $010000+{]line*SHR_LINE_WIDTH}+0,x
           stal  $010000+{]line*SHR_LINE_WIDTH}+0,x
-
+skip_left
 
           ldx   sprTmp0
-          lda:  {]line*4}+32+2,x                       ; load the mask and invert it
-          eor   #$FFFF
-          sta   sprTmp2
-
           ldy:  {]line*4}+2,x                          ; load the lookup value
-          db    LDA_IND_LONG_IDX,ActivePtr             ; get the correct pixel data
 
           ldx   sprTmp1                                ; Get the screen address
-          eorl  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; save a blended value of the sprite and screen data
-          sta   sprTmp3
-
           ldal  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; create mask where F = !0 and 0 = 0.
+          beq   zero_right
           bit   #$F000
           beq   *+5
           ora   #$F000
@@ -3118,11 +3375,14 @@ drawTileToScreenP
           bit   #$000F
           beq   *+5
           ora   #$000F
+zero_right
           eor   #$FFFF
-          and   sprTmp2                                ; AND against the inverted sprite mask
-          and   sprTmp3                                ; Apply mask to the blended pixel data
-          eorl  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; flip tile pixels back to original value and let sprite pixels show
+          beq   skip_right
+
+          db    AND_IND_LONG_IDX,ActivePtr
+          oral  $010000+{]line*SHR_LINE_WIDTH}+2,x
           stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+skip_right
 
 ]line     equ   ]line+1
           --^
@@ -3274,6 +3534,8 @@ restoreTilesToScreen
         tsc
         cmp   SprSaveTop
         bcc   :loop
+
+        sta   SprSaveAddr                            ; Update the save stack pointer to indicate an empty buffer
 
         lda   tmp0                                   ; Restore the original stack pointer
         tcs
