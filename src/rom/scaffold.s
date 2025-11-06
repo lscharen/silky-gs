@@ -18,7 +18,7 @@ NES_StartUp
             tsc
             ora   #$00FF                  ; Move to top of the page
             sec
-            sbc   #$0500                  ; Leave this much space to the application
+            sbc   #$0300                  ; Leave this much space to the application
  
             sta   SprSaveTop
             sta   SprSaveAddr
