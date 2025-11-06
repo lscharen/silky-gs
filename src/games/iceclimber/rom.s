@@ -7,8 +7,16 @@
         use  bank_ram.inc
         use  bank_val.inc
 ROMBase ENT
-        ds   $BD00
+        ds   $BB00
         put  ../../rom/rom_inject.s
+
+y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
+    ds 24,$01
+    ds 200,$00
+    ds 32,$01
+
+tile_exclude ENT                  ; Tble of excluded tiles
+    ds 256,$00
 
 LDA_ram_0000_Y      LDA_ABS_Y ram_0000
 STA_ram_0004_Y      STA_ABS_Y ram_0004
@@ -77,11 +85,15 @@ tbl_C00A_hi
 
 vec_C014_RESET
 ;  SEI
+  nop
   CLD
   LDA #$10
   JSR STA_2000
   LDX #$FF
+
 ;  TXS
+  nop
+
 ; bzk optimize, BIT + BPL
 ;bra_C01E_infinite_loop
 ;  JSR LDA_2002
@@ -91,6 +103,10 @@ vec_C014_RESET
 ;  JSR LDA_2002
 ;  ASL
 ;  BCC bra_C024_infinite_loop
+  bra :pad
+  ds  3
+:pad
+
   LDY #$07
   STY <ram_0001
   LDY #$00
@@ -11894,7 +11910,7 @@ vec_FFF0_IRQ
 
 ;.out .sprintf("Free bytes in bank FF 0x%04X [%d]", ($FFFA - *), ($FFFA - *))
 
-  ds 7
+  ds 0
 
 ;.segment "VECTORS"
   dw vec_C076_NMI

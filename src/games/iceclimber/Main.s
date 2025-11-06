@@ -127,6 +127,9 @@ COMPILED_SPRITE_LIST       mac
 ;
                            <<<
 
+; Do not check for specific Tile IDs to exclude from drawing
+NO_TILE_EXCLUDE equ 1
+
 ; Do we have a custom routine to execite RenderScreen.  If yes, put its address here
 CUSTOM_RENDER_SCREEN equ 0
 
@@ -144,18 +147,6 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
             phk
             plb
-
-; Adjust the stack pointer to be lower and use the upper part of the bank 0 space
-; for dirty sprite save and restore.  Move this into NES_StartUp once debugged.
-
-            tsc
-            sta   SprSaveTop
-            sta   SprSaveAddr
-            stz   SprAddrCount
-
-            sec
-            sbc   #$1100
-            tcs
 
 ; Call startup immediately after entering the application: A = memory manager user ID
 
@@ -262,6 +253,7 @@ ApplyConfig
 ; by prev/next pointers on the menu and control itmes that direct which control to
 ; select in response to the user's inputs.
 
+config_block_start
 config_audio_quality   ds  2  ; good / better / best audio quality (60Hz, 120Hz, 240Hz audio interrupts)
 config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
@@ -271,6 +263,9 @@ config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
+config_input_button_a  dw  COMMAND_KEY
+config_input_button_b  dw  OPTION_KEY
+config_block_end
 
 ;CONFIG_PALETTE       equ 0
 ;TILE_TOP_LEFT        equ $105
