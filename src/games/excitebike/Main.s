@@ -128,12 +128,15 @@ CUSTOM_PPU_SCROLL_LOCK equ 1
 CUSTOM_PPU_CTRL_LOCK_CODE mac
 ;
                           <<<
+
+; Read the scroll positions from the NES zero page
 CUSTOM_PPU_SCROLL_LOCK_CODE mac
-                          ldal $010050
-                          sta  _topscroll    ; order Y, X
-                          ldal $010012
-                          xba
-                          <<<
+        ldx   DP_NES
+        ldal  $000050,x
+        sta   _topscroll    ; order Y, X
+        ldal  $000012,x
+        xba
+        <<<
 
 COMPILED_SPRITE_LIST_COUNT equ 0
 COMPILED_SPRITE_LIST       mac
@@ -348,10 +351,11 @@ _RenderScreen
 
 ; If we are not in-game, defer to the standard renderer
 
-            ldal  $010047
-            and   #$00FF
-            bne   :racing
-            jmp   RenderScreen
+        ldx  DP_NES
+        ldal  $000047,x
+        and   #$00FF
+        bne   :racing
+        jmp   RenderScreen
 
 :racing
 
@@ -362,111 +366,111 @@ _RenderScreen
 ;
 ; These set the horizontal scroll position.  The vertical scroll position is never changed.
 ;
-            ldy   #0
-            jsr   NES_SetScrollY
+        ldy   #0
+        jsr   NES_SetScrollY
 
-            sep   #$20
-            ldal  $01004D
-            and   #$01                    ; Isolate the nametable select bit
-            xba                           ; put in the high byte
-            lda   _ppuscroll+1            ; load the scroll value
-            rep   #$20
-            tax
-            jsr   NES_SetScrollX          ; This takes a NES pixel position (0 - 511)
+        sep   #$20
+        ldal  $00004D,x
+        and   #$01                    ; Isolate the nametable select bit
+        xba                           ; put in the high byte
+        lda   _ppuscroll+1            ; load the scroll value
+        rep   #$20
+        tax
+        jsr   NES_SetScrollX          ; This takes a NES pixel position (0 - 511)
 
-            sep   #$20
-            ldal  $01004E                 ; Bit 0 is the high bit of the X scroll position
-            lsr                           ; put in the carry bit
-            lda   _topscroll              ; load the scroll value
-            ror                           ; put the high bit and divide by 2 for the engine
-            rep   #$20
-            and   #$00FF                  ; make sure nothing is in the high byte
-            sta   _top_bg_x               ; This is used directly so needs a byte offset (0 - 255)
- 
-            lda   ppumask
-            and   ppumask_override
-            and   #NES_PPUMASK_BG
-            jsr   EnableBackground
+        sep   #$20
+        ldal  $00004E,x               ; Bit 0 is the high bit of the X scroll position
+        lsr                           ; put in the carry bit
+        lda   _topscroll              ; load the scroll value
+        ror                           ; put the high bit and divide by 2 for the engine
+        rep   #$20
+        and   #$00FF                  ; make sure nothing is in the high byte
+        sta   _top_bg_x               ; This is used directly so needs a byte offset (0 - 255)
 
-            lda   ppumask
-            and   ppumask_override
-            and   #NES_PPUMASK_SPR
-            jsr   EnableSprites
+        lda   ppumask
+        and   ppumask_override
+        and   #NES_PPUMASK_BG
+        jsr   EnableBackground
+
+        lda   ppumask
+        and   ppumask_override
+        and   #NES_PPUMASK_SPR
+        jsr   EnableSprites
 
 ; First, render the crowd (40 scanlines)
 
-            lda   #0
-            ldx   #40
-            ldy   _top_bg_x           ; Xmod256
-            jsr   _BltSetupAlt
-            sta   nesCrowdOffset
+        lda   #0
+        ldx   #40
+        ldy   _top_bg_x           ; Xmod256
+        jsr   _BltSetupAlt
+        sta   nesCrowdOffset
 
 ; Next render top part of the screen to move with the player
 
-            lda   #40
-            ldx   #{200-32-40}
-            ldy   StartXMod256              ; Xmod256
-            jsr   _BltSetupAlt
-            sta   nesTopOffset
+        lda   #40
+        ldx   #{200-32-40}
+        ldy   StartXMod256              ; Xmod256
+        jsr   _BltSetupAlt
+        sta   nesTopOffset
 
 ; Now render the bottom 32 lines to show the status bar area
 
-            lda   #200-32
-            ldx   #32
-            ldy   #0                         ; Xmod256
-            jsr   _BltSetupAlt
-            sta   nesBottomOffset            ; cache the :exit_offset value returned from this function
+        lda   #200-32
+        ldx   #32
+        ldy   #0                         ; Xmod256
+        jsr   _BltSetupAlt
+        sta   nesBottomOffset            ; cache the :exit_offset value returned from this function
 
 ; Copy the sprites and buffer to the graphics screen
 
-            jsr   drawScreen
+        jsr   drawScreen
 
 ; Restore the buffer
 
-            lda   #0
-            ldx   #40
-            ldy   nesCrowdOffset          ; offset to patch
-            jsr   _RestoreBG0OpcodesAltLite
+        lda   #0
+        ldx   #40
+        ldy   nesCrowdOffset          ; offset to patch
+        jsr   _RestoreBG0OpcodesAltLite
 
-            lda   #40
-            ldx   #{200-32-40}
-            ldy   nesTopOffset            ; offset to patch
-            jsr   _RestoreBG0OpcodesAltLite
+        lda   #40
+        ldx   #{200-32-40}
+        ldy   nesTopOffset            ; offset to patch
+        jsr   _RestoreBG0OpcodesAltLite
 
-            lda   #200-32
-            ldx   #32
-            ldy   nesBottomOffset         ; offset to patch
-            jsr   _RestoreBG0OpcodesAltLite
+        lda   #200-32
+        ldx   #32
+        ldy   nesBottomOffset         ; offset to patch
+        jsr   _RestoreBG0OpcodesAltLite
 
-            DO    SHOW_DEBUG_VARS
-            ldal  OneSecondCounter
-            cmp   OldOneSec
-            beq   :skip_fps
+        DO    SHOW_DEBUG_VARS
+        ldal  OneSecondCounter
+        cmp   OldOneSec
+        beq   :skip_fps
 
-            sta   OldOneSec
-            ldx   frameCount
-            txa
-            sec
-            sbc   oldFrameCount
-            stx   oldFrameCount
-            ldx   #0
-            ldy   #$FFFF
-            jsr   DrawByte
+        sta   OldOneSec
+        ldx   frameCount
+        txa
+        sec
+        sbc   oldFrameCount
+        stx   oldFrameCount
+        ldx   #0
+        ldy   #$FFFF
+        jsr   DrawByte
 :skip_fps
 
-            lda   InputPlayer1
-            ldx   #8*160
-            ldy   #$FFFF
-            jsr   DrawWord
+        lda   InputPlayer1
+        ldx   #8*160
+        ldy   #$FFFF
+        jsr   DrawWord
 
-            lda   LastRead
-            ldx   #16*160
-            ldy   #$FFFF
-            jsr   DrawWord
-            FIN
+        lda   LastRead
+        ldx   #16*160
+        ldy   #$FFFF
+        jsr   DrawWord
+        FIN
 
-            stz   DirtyBits
-            rts
+        stz   DirtyBits
+        rts
 
 ; For this game, we utilize a single, static palette
 SetDefaultPalette
@@ -515,6 +519,7 @@ ApplyConfig
 ; by prev/next pointers on the menu and control itmes that direct which control to
 ; select in response to the user's inputs.
 
+config_block_start
 config_audio_quality   dw  APU_60HZ  ; good / better / best audio quality (60Hz, 120Hz, 240Hz audio interrupts)
 config_video_statusbar dw  1         ; exclude the status bar from the animate playfield area or not
 config_video_fastmode  ds  2         ; use the "skip line" rendering mode
@@ -524,21 +529,9 @@ config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
-
-;CONFIG_PALETTE       equ 0
-;TILE_TOP_LEFT        equ $105
-;TILE_TOP_RIGHT       equ $106
-;TILE_BOTTOM_LEFT     equ $107
-;TILE_BOTTOM_RIGHT    equ $108
-;TILE_HORIZONTAL      equ $10A
-;TILE_HORIZONTAL_TOP  equ $10A
-;TILE_HORIZONTAL_BOTTOM  equ $10A
-;TILE_VERTICAL_LEFT   equ $10E
-;TILE_VERTICAL_RIGHT  equ $10D
-;TILE_ZERO            equ $100
-;TILE_A               equ $12E
-;TILE_SPACE           equ $100
-;TILE_CURSOR          equ $149  ; $10A
+config_input_button_a  dw  COMMAND_KEY
+config_input_button_b  dw  OPTION_KEY
+config_block_end
 
 AUDIO_TITLE_STR     str 'AUDIO'
 AUDIO_QUALITY_STR   str 'QUALITY'
