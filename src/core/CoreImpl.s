@@ -523,13 +523,9 @@ _InitVerticalMirroring
 
                   PATCH_JMP _E_EXIT_OFFSET;#{$0200+_ENTRY_OFFSET}         ; Jump to the next line
                   PATCH_JMP _O_EXIT_OFFSET;#{$0200+_ENTRY_OFFSET}
-;                  PATCH_JMP {_E_EXIT_OFFSET+$100};#{$0200+_ENTRY_OFFSET}  ; Jump to the next line
-;                  PATCH_JMP {_O_EXIT_OFFSET+$100};#{$0200+_ENTRY_OFFSET}  ; Jump to the next line
 
                   PATCH_ADDR {_O_LOAD_LO_OFFSET+1};#{$100+_O_SAVE_EDGE}      ; All saved data is in the first page
                   PATCH_ADDR {_O_LOAD_HI_OFFSET+1};#{_SAVE_OFFSET+1}
-;                  PATCH_ADDR {_O_LOAD_LO_OFFSET+$101};#{_SAVE_OFFSET+0}
-;                  PATCH_ADDR {_O_LOAD_HI_OFFSET+$101};#{_SAVE_OFFSET+1}
 
                   txa
                   clc
@@ -551,9 +547,9 @@ _InitVerticalMirroring
 
                   ldx       #{238*256}
                   PATCH_VAL _E_EXIT_OFFSET;#$005C                           ; JML opcode (in both nametables)
-                  PATCH_VAL _E_EXIT_OFFSET+$100;#$005C                           ; JML opcode (in both nametables)
+                  PATCH_VAL _E_EXIT_OFFSET+$100;#$005C                      ; JML opcode (in both nametables)
                   PATCH_VAL _O_EXIT_OFFSET;#$005C                           ; JML opcode (in both nametables)
-                  PATCH_VAL _O_EXIT_OFFSET+$100;#$005C                           ; JML opcode (in both nametables)
+                  PATCH_VAL _O_EXIT_OFFSET+$100;#$005C                      ; JML opcode (in both nametables)
                   
                   lda       #_BANK_ENTRY_NT1
                   stal      lite_start_page_1+_E_EXIT_OFFSET+1,x       ; A -> B
@@ -646,6 +642,7 @@ _InitPEAFieldEven
                   bne       :loop
                   rts
 
+                mx %00
 WaitForKey        sep       #$20
                   stal      KBD_STROBE_REG      ; clear the strobe
 :WFK              ldal      KBD_REG
@@ -654,6 +651,7 @@ WaitForKey        sep       #$20
                   and       #$007F
                   rts
 
+                mx %00
 ClearKbdStrobe    sep       #$20
                   stal      KBD_STROBE_REG
                   rep       #$20
@@ -668,55 +666,46 @@ ClearKbdStrobe    sep       #$20
 
 
 ; Read the keyboard and paddle controls and return in a game-controller-like format
+                mx %00
 _ReadControl
                   jsr       _ReadKeypress        ; Always poll for a keystroke
                   sta       InputPlayer1
-                  sta       InputPlayer2         ; Replicate the raw keyboard info into both player's input values
+                  sta       InputPlayer2         ; Replicate the raw keyboard info into both players' input values
 
 ; Now read the specific input device for each player
 
                   ldx       config_input_p1_type ; Load the input type for player 1
-                  beq       :ok
-                  cpx       #2
-                  beq       :ok
-                  brk       $ab
-:ok
-;                jsr          _ReadKeyboard1
-                  jsr       (:input_proc,x)
-;                  jsr       _ReadKeyboard
-;                  and       #$FF00
-;                  tsb       InputPlayer1
-;                  jsr       _ReadSNESMAX
-;                  and       #$FF00
-;                  tsb       InputPlayer1
+                  jsr       (:input_proc1,x)
                   tsb       InputPlayer1
+
+                  ldx       config_input_p2_type
+                  jsr       (:input_proc2,x)
+                  tsb       InputPlayer2
 
                   lda       InputPlayer1
                   rts
 
-;                  ldx       config_input_p2_type
-;                  jsr       (:input_proc,x)
-;                  tsb       InputPlayer2
-;                  rts
-
-:input_proc       dw        _ReadKeyboard1,_ReadSNESMAX1
-                  dw        _ReadKeyboard2,_ReadSNESMAX2
+:input_proc1      dw        _ReadKeyboard1,_ReadSNESMAX1
+:input_proc2      dw        _ReadKeyboard2,_ReadSNESMAX2
 
 ; Reset the keypress state to clear the current keypress and set up to wait until the next key
 ; is pressed to regiter
-_ClearKeypress    
+                mx %00
+_ClearKeypress
                   stz       LastKey
                   rts
 
 ; Acknowledge that a keypress has been read.  This is similar to physically clearing
 ; the keyboard strobe and will clear the PAD_KEY_DOWN bit, which is held so that a new
 ; keypress can be picked up by the user code on a differnt frame than the initial read
+                mx %00
 _AckKeypress
                   lda       LastKey
                   and       #$FF7F
                   sta       LastKey
                   rts
 
+                mx %00
 _ReadRawKeypress
                   pea       $0000               ; temporary space
                   sep       #$20
@@ -738,6 +727,7 @@ _ReadRawKeypress
 
 ; Poll the keyboard and return the current keypress in the lower 7 bits and the KEY_DOWN
 ; status in the high bit. This routine does apply debounce logic.
+                mx %00
 _ReadKeypress
                   pea       $0000               ; temporary space
                   sep       #$20
@@ -747,9 +737,7 @@ _ReadKeypress
                   beq       :no_new_key
 
                   stal      KBD_STROBE_REG      ; reset the strobe
-;                  and       #$7F                ; isolate the key code
                   sta       LastKey
-;                  ora       #PAD_KEY_DOWN       ; set the keydown flag
                   sta       1,s
                   bra       :done               ; return the key value
 
@@ -776,25 +764,37 @@ _ReadKeypress
                   pla
                   rts
 
+; Player Input Configuration offsets
+PLAYER_INPUT_TYPE      equ 0
+PLAYER_INPUT_KEY_LEFT  equ 2
+PLAYER_INPUT_KEY_RIGHT equ 4
+PLAYER_INPUT_KEY_UP    equ 6
+PLAYER_INPUT_KEY_DOWN  equ 8
+PLAYER_INPUT_SNESMAX_PORT equ 10
+PLAYER_INPUT_BUTTON_A  equ 12
+PLAYER_INPUT_BUTTON_B  equ 14
+
 ; Map the current keypress to directional bits and read the command and option registers for buttons
+                mx %00
 _ReadKeyboard1    lda       InputPlayer1
+                  ldx       #config_block_p1
                   jmp       _ReadKeyboard
 
 _ReadKeyboard2    lda       InputPlayer2
-                  jsr       _ReadKeyboard
-                  sta       InputPlayer2
-                  rts
+                  ldx       #config_block_p2
+                  jmp       _ReadKeyboard
 
+; Called with the X-register set to the configuration block
 _ReadKeyboard     pha                           ; low byte = key code, high byte = %ABsSUDLR  S = Start, s = select
                   sep       #$20
 
                   ldal      OPTION_KEY_REG      ; 'B' button
                   bpl       :opt_not_down
 
-                  lda       config_input_button_a
+                  lda:      PLAYER_INPUT_BUTTON_A,x
                   cmp       #OPTION_KEY
                   bne       :a_is_not_option
-                  lda       config_input_button_b
+                  lda:      PLAYER_INPUT_BUTTON_B,x
                   cmp       #OPTION_KEY
                   bne       :b_is_not_option
                   lda       #>{PAD_BUTTON_B+PAD_BUTTON_A}
@@ -803,7 +803,7 @@ _ReadKeyboard     pha                           ; low byte = key code, high byte
                   lda       #>{PAD_BUTTON_A}
                   bra       :apply_opt
 :a_is_not_option
-                  lda       config_input_button_b
+                  lda:      PLAYER_INPUT_BUTTON_B,x
                   cmp       #OPTION_KEY
                   bne       :opt_not_mapped
                   lda       #>{PAD_BUTTON_B}
@@ -820,10 +820,10 @@ _ReadKeyboard     pha                           ; low byte = key code, high byte
                   ora       2,s
                   sta       2,s
 
-                  lda       config_input_button_a
+                  lda:      PLAYER_INPUT_BUTTON_A,x
                   cmp       #COMMAND_KEY
                   bne       :a_is_not_command
-                  lda       config_input_button_b
+                  lda:      PLAYER_INPUT_BUTTON_B,x
                   cmp       #COMMAND_KEY
                   bne       :b_is_not_command
                   lda       #>{PAD_BUTTON_B+PAD_BUTTON_A}
@@ -832,7 +832,7 @@ _ReadKeyboard     pha                           ; low byte = key code, high byte
                   lda       #>{PAD_BUTTON_A}
                   bra       :apply_cmd
 :a_is_not_command
-                  lda       config_input_button_b
+                  lda:      PLAYER_INPUT_BUTTON_B,x
                   cmp       #COMMAND_KEY
                   bne       :cmd_not_mapped
                   lda       #>{PAD_BUTTON_B}
@@ -844,28 +844,28 @@ _ReadKeyboard     pha                           ; low byte = key code, high byte
 :cmd_not_down
                   lda       1,s                 ; read the current keypress
                   and       #$7F
-                  cmp       config_input_key_down
+                  cmp:      PLAYER_INPUT_KEY_DOWN,x
                   bne       :not_down
                   lda       #>PAD_DOWN
                   ora       2,s
                   bra       :done
 
 :not_down
-                  cmp       config_input_key_up
+                  cmp:      PLAYER_INPUT_KEY_UP,x
                   bne       :not_up
                   lda       #>PAD_UP
                   ora       2,s
                   bra       :done
 
 :not_up
-                  cmp       config_input_key_left
+                  cmp:      PLAYER_INPUT_KEY_LEFT,x
                   bne       :not_left
                   lda       #>PAD_LEFT
                   ora       2,s
                   bra       :done
 
 :not_left
-                  cmp       config_input_key_right
+                  cmp:      PLAYER_INPUT_KEY_RIGHT,x
                   bne       :not_right
                   lda       #>PAD_RIGHT
                   ora       2,s
@@ -920,55 +920,55 @@ _ReadKeyboard     pha                           ; low byte = key code, high byte
 ;  Bit5 Front Left
 ;  Bit6 X
 ;  Bit7 A
+                mx %00
 _ReadSNESMAX1     lda      InputPlayer1
-                  jmp      _ReadSNESMAX
-;                  and      #$FF00
-;                  ora      InputPlayer1
-;                  sta      InputPlayer1
-;                  rts
-
-_ReadSNESMAX2     lda      InputPlayer2
+                  ldx       #config_block_p1
                   jsr      _ReadSNESMAX
-                  sta      InputPlayer2
+                  ora      SNESMAX_P1
                   rts
 
-SNESMAX_P1        ds       1
-SNESMAX_P2        ds       1
+_ReadSNESMAX2     lda      InputPlayer2
+                  ldx       #config_block_p2
+                  jsr      _ReadSNESMAX
+                  ora      SNESMAX_P2
+                  rts
+
+SNESMAX_P1        dw       0
+SNESMAX_P2        dw       0
 
 _ReadSNESMAX
                   php
                   sei
 
                   pha                           ; low byte = key code, high byte = %ABsSUDLR  S = Start, s = select
-                  sep      #$30
+                  sep      #$20
 
-                  lda      config_input_snesmax_port    ; Set to 1 - 7
+                  lda:     PLAYER_INPUT_SNESMAX_PORT,x    ; Set to 1 - 7
                   asl
                   asl
                   asl
                   asl
                   and      #$70
+
+                  sep      #$30
                   tax
 
-                  lda      #$ff
-                  sta      SNESMAX_P1
-                  sta      SNESMAX_P2
+;                  lda      #$ff
+;                  sta      SNESMAX_P1
+;                  sta      SNESMAX_P2
 
                   ldy      #8
                   stal     $E0C080,x           ; clock the latch
 :loop
                   ldal     $E0C080,x           ; first read
+                  eor      #$C0                ; Invert the read bits to mark pressed buttons with a 1 instead of 0
                   rol
-                  rol      SNESMAX_P1
+                  rol      SNESMAX_P1+1
                   rol
-                  rol      SNESMAX_P2
+                  rol      SNESMAX_P2+1
                   stal     $E0C081,x           ; clock the shift register
                   dey
                   bne      :loop
-
-                  lda      SNESMAX_P1
-                  eor      #$FF                ; SNESMAX returns 0 when button is pressed
-                  sta      2,s
 
                   rep      #$30
                   pla

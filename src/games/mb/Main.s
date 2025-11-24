@@ -315,6 +315,9 @@ config_block_start
 config_audio_quality   ds  2  ; good / better / best audio quality (60Hz, 120Hz, 240Hz audio interrupts)
 config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
+
+; player 1 config block
+config_block_p1
 config_input_p1_type   dw  0  ; keyboard / snes max
 config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
@@ -323,7 +326,10 @@ config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
 config_input_button_a  dw  COMMAND_KEY
 config_input_button_b  dw  OPTION_KEY
-config_input_p2_type   dw  0
+
+; player 2 config block
+config_block_p2
+config_input_p2_type      dw  0
 config_input_p2_key_left  dw  LEFT_ARROW
 config_input_p2_key_right dw  RIGHT_ARROW
 config_input_p2_key_up    dw  UP_ARROW

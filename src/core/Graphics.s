@@ -1,5 +1,6 @@
 
 ; Graphic screen initialization
+                 mx %00
 InitGraphics
                  jsr   _ShadowOn
                  jsr   _GrafOn
