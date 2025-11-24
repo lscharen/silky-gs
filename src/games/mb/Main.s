@@ -323,7 +323,18 @@ config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
 config_input_button_a  dw  COMMAND_KEY
 config_input_button_b  dw  OPTION_KEY
+config_input_p2_type   dw  0
+config_input_p2_key_left  dw  LEFT_ARROW
+config_input_p2_key_right dw  RIGHT_ARROW
+config_input_p2_key_up    dw  UP_ARROW
+config_input_p2_key_down  dw  DOWN_ARROW
+config_input_p2_snesmax_port dw 4
+config_input_p2_button_a  dw  COMMAND_KEY
+config_input_p2_button_b  dw  OPTION_KEY
 config_block_end
+
+config_tab_value    dw 0
+
 
 AUDIO_TITLE_STR     str 'AUDIO'
 AUDIO_QUALITY_STR   str 'QUALITY'
@@ -347,6 +358,10 @@ INPUT_DOWN_MAP_STR  str 'DOWN'
 INPUT_SNESMAX_PORT_STR str 'SLOT'
 INPUT_BUTTON_A_STR str 'A BUTTON'
 INPUT_BUTTON_B_STR str 'B BUTTON'
+
+PLAYER_INPUT_STR    str 'PLAYER INPUTS'
+PLAYER_1_STR        str 'P1'
+PLAYER_2_STR        str 'P2'
 
 ; The configuration screen leverages the NES runtime itself
 CONFIG_BLK   db   CONFIG_PALETTE        ; Which background palette to use
@@ -420,12 +435,32 @@ INPUT_CONFIG dw   INPUT_TITLE_STR
              dw   0                     ; next menu item
 
              dw   1
-             dw   INPUT_ITEM_1
+;             dw   INPUT_ITEM_1
+             dw   TAB_ITEM_1
 
-INPUT_ITEM_1 dw   RADIO
+TAB_ITEM_1   dw   TAB
              dw   0
-             dw   0                    ; No NEXT defined, use the selected item
+             dw   0
              dw   3,2
+             dw   PLAYER_INPUT_STR
+             dw   config_tab_value
+
+             dw   2                    ; two tabs
+
+             dw   0                    ; selection, value
+             dw   PLAYER_1_STR
+             dw   4                    ; label width
+             dw   INPUT_ITEM_P1
+
+             dw   1
+             dw   PLAYER_2_STR
+             dw   4
+             dw   INPUT_ITEM_P2
+
+INPUT_ITEM_P1 dw   RADIO
+             dw   TAB_ITEM_1
+             dw   0                    ; No NEXT defined, use the selected item
+             dw   3,5
              dw   INPUT_TYPE_STR
              dw   config_input_p1_type
              dw   2
@@ -439,9 +474,9 @@ INPUT_ITEM_1 dw   RADIO
              dw   SNESMAX_LIST
 
 SNESMAX_LIST  dw  NUMBER_SELECT
-              dw  INPUT_ITEM_1
+              dw  INPUT_ITEM_P1
               dw  0
-              dw  3,8
+              dw  3,10
               dw  INPUT_SNESMAX_PORT_STR
               dw  config_input_snesmax_port
 
@@ -458,46 +493,124 @@ KEYBOARD_LIST dw  CTRL_LIST
               dw  INPUT_ITEM_7
 
 INPUT_ITEM_2 dw   KEYMAP
-             dw   INPUT_ITEM_1
+             dw   INPUT_ITEM_P1
              dw   INPUT_ITEM_3
-             dw   3,8
+             dw   3,10
              dw   INPUT_LEFT_MAP_STR
              dw   config_input_key_left
 
 INPUT_ITEM_3 dw   KEYMAP
              dw   INPUT_ITEM_2
              dw   INPUT_ITEM_4
-             dw   3,9
+             dw   3,11
              dw   INPUT_RIGHT_MAP_STR
              dw   config_input_key_right
 
 INPUT_ITEM_4 dw   KEYMAP
              dw   INPUT_ITEM_3
              dw   INPUT_ITEM_5
-             dw   3,10
+             dw   3,12
              dw   INPUT_UP_MAP_STR
              dw   config_input_key_up
 
 INPUT_ITEM_5 dw   KEYMAP
              dw   INPUT_ITEM_4
              dw   INPUT_ITEM_6
-             dw   3,11
+             dw   3,13
              dw   INPUT_DOWN_MAP_STR
              dw   config_input_key_down
 
 INPUT_ITEM_6 dw   BTNMAP
              dw   INPUT_ITEM_5
              dw   INPUT_ITEM_7
-             dw   3,13
+             dw   3,15
              dw   INPUT_BUTTON_A_STR
              dw   config_input_button_a
 
 INPUT_ITEM_7 dw   BTNMAP
              dw   INPUT_ITEM_6
              dw   0
-             dw   3,14
+             dw   3,16
              dw   INPUT_BUTTON_B_STR
              dw   config_input_button_b
+
+INPUT_ITEM_P2 dw   RADIO
+             dw   TAB_ITEM_1
+             dw   0                    ; No NEXT defined, use the selected item
+             dw   3,5
+             dw   INPUT_TYPE_STR
+             dw   config_input_p2_type
+             dw   2
+
+             dw   0
+             dw   INPUT_TYPE_OPT_1
+             dw   KEYBOARD_LIST_2
+
+             dw   2
+             dw   INPUT_TYPE_OPT_3
+             dw   SNESMAX_LIST_2
+
+
+SNESMAX_LIST_2 dw  NUMBER_SELECT
+              dw  INPUT_ITEM_P2
+              dw  0
+              dw  3,10
+              dw  INPUT_SNESMAX_PORT_STR
+              dw  config_input_p2_snesmax_port
+
+              dw  1            ; minimum value
+              dw  7            ; maximum value
+
+KEYBOARD_LIST_2 dw  CTRL_LIST
+              dw  6
+              dw  INPUT_ITEM_8
+              dw  INPUT_ITEM_9
+              dw  INPUT_ITEM_10
+              dw  INPUT_ITEM_11
+              dw  INPUT_ITEM_12
+              dw  INPUT_ITEM_13
+
+INPUT_ITEM_8 dw   KEYMAP
+             dw   INPUT_ITEM_P2
+             dw   INPUT_ITEM_9
+             dw   3,10
+             dw   INPUT_LEFT_MAP_STR
+             dw   config_input_p2_key_left
+
+INPUT_ITEM_9 dw   KEYMAP
+             dw   INPUT_ITEM_8
+             dw   INPUT_ITEM_10
+             dw   3,11
+             dw   INPUT_RIGHT_MAP_STR
+             dw   config_input_p2_key_right
+
+INPUT_ITEM_10 dw   KEYMAP
+             dw   INPUT_ITEM_9
+             dw   INPUT_ITEM_11
+             dw   3,12
+             dw   INPUT_UP_MAP_STR
+             dw   config_input_p2_key_up
+
+INPUT_ITEM_11 dw   KEYMAP
+             dw   INPUT_ITEM_10
+             dw   INPUT_ITEM_12
+             dw   3,13
+             dw   INPUT_DOWN_MAP_STR
+             dw   config_input_p2_key_down
+
+INPUT_ITEM_12 dw   BTNMAP
+             dw   INPUT_ITEM_11
+             dw   INPUT_ITEM_13
+             dw   3,15
+             dw   INPUT_BUTTON_A_STR
+             dw   config_input_p2_button_a
+
+INPUT_ITEM_13 dw   BTNMAP
+             dw   INPUT_ITEM_12
+             dw   0
+             dw   3,16
+             dw   INPUT_BUTTON_B_STR
+             dw   config_input_p2_button_b
 
             DO    SHOW_DEBUG_VARS
             put   ../../misc/App.Msg.s
