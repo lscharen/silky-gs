@@ -788,60 +788,25 @@ _ReadKeyboard2    lda       InputPlayer2
 _ReadKeyboard     pha                           ; low byte = key code, high byte = %ABsSUDLR  S = Start, s = select
                   sep       #$20
 
-                  ldal      OPTION_KEY_REG      ; 'B' button
-                  bpl       :opt_not_down
-
-                  lda:      PLAYER_INPUT_BUTTON_A,x
-                  cmp       #OPTION_KEY
-                  bne       :a_is_not_option
-                  lda:      PLAYER_INPUT_BUTTON_B,x
-                  cmp       #OPTION_KEY
-                  bne       :b_is_not_option
+                  ldal      MOD_REG             ; Load all of the modifiers
+                  bit:      PLAYER_INPUT_BUTTON_A,x
+                  beq       :a_is_not_pressed
+                  bit:      PLAYER_INPUT_BUTTON_B,x
+                  beq       :b_is_not_pressed 
                   lda       #>{PAD_BUTTON_B+PAD_BUTTON_A}
                   bra       :apply_opt
-:b_is_not_option
+:b_is_not_pressed
                   lda       #>{PAD_BUTTON_A}
                   bra       :apply_opt
-:a_is_not_option
-                  lda:      PLAYER_INPUT_BUTTON_B,x
-                  cmp       #OPTION_KEY
-                  bne       :opt_not_mapped
+:a_is_not_pressed
+                  bit:      PLAYER_INPUT_BUTTON_B,x
+                  beq       :no_buttons
                   lda       #>{PAD_BUTTON_B}
 
 :apply_opt        ora       2,s
                   sta       2,s
 
-:opt_not_mapped
-:opt_not_down
-                  ldal      COMMAND_KEY_REG
-                  bpl       :cmd_not_down
-
-                  lda       #>PAD_BUTTON_A
-                  ora       2,s
-                  sta       2,s
-
-                  lda:      PLAYER_INPUT_BUTTON_A,x
-                  cmp       #COMMAND_KEY
-                  bne       :a_is_not_command
-                  lda:      PLAYER_INPUT_BUTTON_B,x
-                  cmp       #COMMAND_KEY
-                  bne       :b_is_not_command
-                  lda       #>{PAD_BUTTON_B+PAD_BUTTON_A}
-                  bra       :apply_cmd
-:b_is_not_command
-                  lda       #>{PAD_BUTTON_A}
-                  bra       :apply_cmd
-:a_is_not_command
-                  lda:      PLAYER_INPUT_BUTTON_B,x
-                  cmp       #COMMAND_KEY
-                  bne       :cmd_not_mapped
-                  lda       #>{PAD_BUTTON_B}
-
-:apply_cmd        ora       2,s
-                  sta       2,s
-
-:cmd_not_mapped
-:cmd_not_down
+:no_buttons
                   lda       1,s                 ; read the current keypress
                   and       #$7F
                   cmp:      PLAYER_INPUT_KEY_DOWN,x

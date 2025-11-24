@@ -13,11 +13,13 @@ native_joy  ENT
 ; for the ROM routines to read.
 NES_ReadInput
             jsr   _ReadControl
-            sta   LastRead
+            sta   LastRead               ; The keyboard input is replicated in both, so save it
+
             pha
             sep   #$20
-            xba
+            lda   InputPlayer1+1         ; Copy the top byte into the native input locations
             sta   native_joy
+            lda   InputPlayer2+1
             sta   native_joy+1
             rep   #$20
             pla

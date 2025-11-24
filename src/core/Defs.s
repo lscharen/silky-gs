@@ -11,9 +11,14 @@ VOC_CONTROL_REG        equ   $00C0B1
 KBD_REG                equ   $E0C000
 KBD_STROBE_REG         equ   $E0C010
 VBL_STATE_REG          equ   $E0C019
-MOD_REG                equ   $E0C025
+MOD_REG                equ   $E0C025      ; Modifier key register
 COMMAND_KEY_REG        equ   $E0C061
 OPTION_KEY_REG         equ   $E0C062
+
+MOD_REG_SHIFT_DOWN     equ   $01
+MOD_REG_CONTROL_DOWN   equ   $02
+MOD_REG_OPTION_DOWN    equ   $40
+MOD_REG_COMMAND_DOWN   equ   $80
 
 SHADOW_SCREEN          equ   $012000
 SHADOW_SCREEN_SCB      equ   $019D00
@@ -166,9 +171,6 @@ LEFT_ARROW      equ   $08
 RIGHT_ARROW     equ   $15
 UP_ARROW        equ   $0B
 DOWN_ARROW      equ   $0A
-
-COMMAND_KEY     equ   0
-OPTION_KEY      equ   1
 
 ; DirtyBits definitions
 DIRTY_BIT_BG0_X        equ   $0001     ; The horizontal scroll position has changed

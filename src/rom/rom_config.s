@@ -7,13 +7,15 @@ NUMBER_SELECT   equ 5     ; select from a range of single-digit numbers
 BTNMAP          equ 6     ; button mapping for keyboard
 TAB             equ 7     ; tab control
 
-CHKBOX_YES          str 'YES'
-CHKBOX_NO           str ' NO'
-CHKBOX_ON           str ' ON'
-CHKBOX_OFF          str 'OFF'
+CHKBOX_YES      str 'YES'
+CHKBOX_NO       str ' NO'
+CHKBOX_ON       str ' ON'
+CHKBOX_OFF      str 'OFF'
 
-BTNMAP_COMMAND      str 'CMD'
-BTNMAP_OPTION       str 'OPT'
+BTNMAP_COMMAND  str 'CMD '
+BTNMAP_OPTION   str 'OPT '
+BTNMAP_CONTROL  str 'CNTL'
+BTNMAP_SHIFT    str 'SHFT'
 
 ; Control offsets from their base address
 MENU_TITLE      equ  0 
@@ -520,7 +522,7 @@ _DrawBtnmap0
 ; Move label to right for yes/no label
 
             clc
-            adc  #COL_STEP*4
+            adc  #COL_STEP*5
             tay
 
 ; Move to the label string
@@ -533,19 +535,41 @@ _DrawBtnmap0
             plx
 
             ldy: CTRL_VALUE_ADDR,x      ; load the variable address
-            ldx: 0,y                    ; load the variable value; 0 = command, 1 = options
+            ldx: 0,y                    ; load the variable value; 0 = command, 1 = option, 2 = control, 3 = shift
 
-            beq  :draw_cmd
+            cpx  #MOD_REG_COMMAND_DOWN
+            bne  :not_cmd
+            ldx  #BTNMAP_COMMAND
+            ldy  :addr
+            lda  :highlight
+            jmp  ConfigDrawString
+
+:not_cmd
+            cpx  #MOD_REG_OPTION_DOWN
+            bne  :not_opt
             ldx  #BTNMAP_OPTION
             ldy  :addr
             lda  :highlight
             jmp  ConfigDrawString
 
-:draw_cmd
-            ldx  #BTNMAP_COMMAND
+:not_opt
+            cpx  #MOD_REG_CONTROL_DOWN
+            bne  :not_cntl
+            ldx  #BTNMAP_CONTROL
             ldy  :addr
             lda  :highlight
             jmp  ConfigDrawString
+
+:not_cntl
+            cpx  #MOD_REG_SHIFT_DOWN
+            bne  :not_shft
+            ldx  #BTNMAP_SHIFT
+            ldy  :addr
+            lda  :highlight
+            jmp  ConfigDrawString
+
+:not_shft
+            rts
 
 ; Y = screen addr
 ; X = control addr
@@ -699,17 +723,33 @@ _WaitForBtnUp
             lda       #0                  ; clear high byte
             sep       #$20
 :waitloop1
-            ldal      OPTION_KEY_REG      ; 'B' button
-            bpl       :OptNotDown
-
-            lda       #OPTION_KEY
+            ldal      MOD_REG
+            bit       #MOD_REG_SHIFT_DOWN
+            beq       :no_shift
+            lda       #MOD_REG_SHIFT_DOWN
             bra       :done
 
-:OptNotDown
-            ldal      COMMAND_KEY_REG
-            bpl       :waitloop1
+:no_shift
+            bit       #MOD_REG_CONTROL_DOWN
+            beq       :no_ctrl
+            lda       #MOD_REG_CONTROL_DOWN
+            bra       :done
 
-            lda       #COMMAND_KEY
+:no_ctrl
+            bit       #MOD_REG_OPTION_DOWN
+            beq       :no_opt
+            lda       #MOD_REG_OPTION_DOWN
+            bra       :done
+
+:no_opt
+            bit       #MOD_REG_COMMAND_DOWN
+            beq       :no_cmd
+            lda       #MOD_REG_COMMAND_DOWN
+            bra       :done
+
+:no_cmd
+            bra       :waitloop1
+
 :done
             rep       #$20
             rts
