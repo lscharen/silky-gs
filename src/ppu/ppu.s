@@ -1390,7 +1390,7 @@ PPUDATA_WRITE ENT
         beq  :done
         stal PPU_MEM,x
 
-; Check if this location has already need marked for an update.  If it had, then do not add it to the update
+; Check if this location has already been marked for an update.  If it has, then do not add it to the update
 ; list again. 
 
         lda  PPU_VERSION              ; Get the current frame version 
@@ -1878,7 +1878,7 @@ y2bits  wrep8 $00FF,$807F,$C03F,$E01F,$F00F,$F807,$FC03,$FE01
         wrep8 $00FF,$807F,$C03F,$E01F,$F00F,$F807,$FC03,$FE01
         wrep8 $00FF,$807F,$C03F,$E01F,$F00F,$F807,$FC03,$FE01
 
-; 25 entries to multiple steps in the shadow bitmap to scanlines
+; 25 entries to multiply steps in the shadow bitmap to scanlines
 mul8    db   $00,$08,$10,$18,$20,$28,$30,$38
         db   $40,$48,$50,$58,$60,$68,$70,$78
         db   $80,$88,$90,$98,$A0,$A8,$B0,$B8
