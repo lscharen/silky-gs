@@ -3,6 +3,30 @@
 #            dw     $26,$27,$29,$2C
 #            dw     $30,$35,$3C,$37
 
+
+# From the game, there are two palettes but a lot of colors are not used in title screen
+#
+# Title
+# $0F $16 $16 $16
+# $0F $27 $27 $27
+# $0F $30 $2C $12
+# $0F $30 $29 $19
+# $0F $35 $35 $35
+# $0F $30 $27 $19
+# $0F $30 $27 $16
+# $0F $3C $12 $25
+#
+#
+# Gameplay
+# $0F $16 $16 $16
+# $0F $27 $27 $27
+# $0F $30 $2C $12
+# $0F $30 $29 $19
+# $0F $16 $37 $12
+# $0F $30 $27 $19
+# $0F $30 $27 $16
+# $0F $3C $12 $25
+
 # Title Screen
 node ../../swizzle.js L0_T0 4 4 4
 node ../../swizzle.js L0_T1 9 9 9

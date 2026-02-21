@@ -521,6 +521,42 @@ JMP_ABS_IND mac
 jai_patch   jmp  $0000
             <<<
 
+; Helpers for handling LDA (dp),y and STA (dp),y when the target value can also be on the zero page.  Since
+; this is a 2-byte instruction, more work has to be done where the value is patched in
+LDA_IND_Y   mac
+            lda  ]1+1
+            beq  zp
+            lda  (]1),y
+            rts
+zp          phx
+            tya
+            clc
+            adc  ]1
+            tax
+            lda  ]1,x
+            plx
+            pha
+            pla
+            rts
+            <<<
+
+STA_IND_Y   mac
+            php
+            lda  ]1+1
+            beq  zp
+            sta  (]1),y
+            plp
+            rts
+zp          phx
+            tya
+            clc
+            adc  ]1
+            tax
+            sta  ]1,x
+            plx
+            plp
+            rts
+            <<<
 
 ; Enter via a JML. A = target address, X = Stack and Direct page set up properly ahead of time. B = ROM bank. Called in 16-bit native mode
             mx    %00

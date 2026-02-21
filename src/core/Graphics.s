@@ -327,53 +327,6 @@ FillScreen         cmp   #0
                    rts
 
 
-; SetBG0XPos
-;
-; Set the virtual horizontal position of the primary background layer.  In addition to 
-; updating the direct page state locations, this routine needs to preserve the original
-; value as well.  This is a bit subtle, because if this routine is called multiple times
-; with different values, we need to make sure the *original* value is preserved and not
-; continuously overwrite it.
-;
-; We assume that there is a clean code field in this routine
-_SetBG0XPos
-                    DO    NAMETABLE_MIRRORING&HORIZONTAL_MIRRORING
-                    and   #$007F                     ; X position capped for horizontal mirroring
-                    ELSE
-                    and   #$00FF
-                    FIN
-
-                    cmp   StartX
-                    beq   :out                       ; Easy, if nothing changed, then nothing changes
-
-                    ldx   StartX                     ; Load the old value (but don't save it yet)
-                    sta   StartX                     ; Save the new position
-
-                    lda   #DIRTY_BIT_BG0_X
-                    tsb   DirtyBits                  ; Check if the value is already dirty, if so exit
-                    bne   :out                       ; without overwriting the original value
-
-;                    stx   OldStartX                  ; First change, so preserve the prior value
-:out                rts
-
-
-; SetBG0YPos
-;
-; Set the virtual position of the primary background layer.
-_SetBG0YPos
-                     cmp   StartY
-                     beq   :out                 ; Easy, if nothing changed, then nothing changes
-
-                     ldx   StartY               ; Load the old value (but don't save it yet)
-                     sta   StartY               ; Save the new position
-
-                     lda   #DIRTY_BIT_BG0_Y
-                     tsb   DirtyBits            ; Check if the value is already dirty, if so exit
-                     bne   :out                 ; without overwriting the original value
-
-;                     stx   OldStartY            ; First change, so preserve the value
-:out                 rts
-
 ;  0. Full Screen           : 40 x 25   320 x 200 (32,000 bytes (100.0%)) 
 ;  1. Sword of Sodan        : 34 x 24   272 x 192 (26,112 bytes ( 81.6%))
 ;  2. ~NES                  : 32 x 25   256 x 200 (25,600 bytes ( 80.0%))

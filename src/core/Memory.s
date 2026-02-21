@@ -1,28 +1,13 @@
 ; Initialize the memory
 ;
 ; * $01/2000 - $01/9FFF for the shadow screen
-; * $00/0000 - $00/07FF for NES RAM
+; * $xx/0000 - $xx/07FF for NES RAM in the NES code bank
 ; * 1 bank for cached tiles
 ; * 1 bank for cached sprites
 
                mx        %00
 
 InitMemory
-; We will use ALTZP to put the NES ROM stack and zero pack in  the IIgs Bank 01 (aux).  Unfortunately,
-; this area of IIgs rame is reserved by the system since allowing anytone to write onto the auxbank
-; zero page and stack and text page could cause problems.  But we're bold and not contrained by the rules,
-; so we'll just trample over the memory as we see fit.
-
-;               PushLong  #0                          ; space for result
-;               PushLong  #$000800                    ; size (2k)
-;               PushWord  UserId
-;               PushWord  #%11000000_00010111         ; Fixed location
-;               PushLong  #$010000                    ; Reserve space in Bank 01
-;               _NewHandle                            ; returns LONG Handle on stack
-;               plx                                   ; base address of the new handle
-;               ply                                   ; high address 00XX of the new handle (bank)
-;               bcs       :mem_err
-
                PushLong  #0                          ; space for result
                PushLong  #$008000                    ; size (32k)
                PushWord  UserId

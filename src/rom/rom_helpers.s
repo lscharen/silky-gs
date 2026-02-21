@@ -11,7 +11,7 @@
 ; Bank is selected by the PPU_BG_TILE_ADDR variable
 ROM_LoadBackgroundTiles
 
-            ldx  PPU_BG_TILE_ADDR
+            ldx  #PPU_BG_TILE_ADDR
             ldy  #0
 
 :tloop
@@ -30,11 +30,11 @@ ROM_LoadBackgroundTiles
             adc  #16             ; NES tiles are 16 bytes
             tax
 
-            cpx  #16*512         ; Have we done the last background tile?
+            cpx  #PPU_BG_TILE_ADDR+$1000         ; Have we done the last background tile?
             bcc  :tloop
 
             DO   BG_TILES_AS_SPRITES
-            ldx  PPU_BG_TILE_ADDR
+            ldx  #PPU_BG_TILE_ADDR
             ldy  #$8000
 :tloop2
             phx
@@ -61,7 +61,7 @@ ROM_LoadBackgroundTiles
             adc  #16             ; NES tiles are 16 bytes
             tax
 
-            cpx  #16*512         ; Have we done the last background tile?
+            cpx  #PPU_BG_TILE_ADDR+$1000         ; Have we done the last background tile?
             bcc  :tloop2
             FIN
             rts
@@ -76,7 +76,7 @@ ROM_LoadBackgroundTiles
 ; Bank is selected by the PPU_SPR_TILE_ADDR variable
 ROM_LoadSpriteTiles
 
-            ldx  PPU_SPR_TILE_ADDR
+            ldx  #PPU_SPR_TILE_ADDR
             ldy  #0
 
 :sloop
@@ -130,7 +130,7 @@ ROM_LoadSpriteTiles
             adc  #16             ; NES tiles are 16 bytes
             tax
 
-            cpx  #16*256         ; Have we done the last sprite tile?
+            cpx  #PPU_SPR_TILE_ADDR+$1000    ; Have we done the last sprite tile?
             bcc  :sloop
             rts
 

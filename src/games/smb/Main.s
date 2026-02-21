@@ -51,8 +51,8 @@ SCAN_OAM_XTRA_FILTER mac
             <<<
 
 ; Define which PPU address has the background and sprite tiles
-PPU_BG_TILE_ADDR  equ #$1000
-PPU_SPR_TILE_ADDR equ #$0000
+PPU_BG_TILE_ADDR  equ $1000
+PPU_SPR_TILE_ADDR equ $0000
 
 ; What kind of Nametable mirroring for this game
 NAMETABLE_MIRRORING equ VERTICAL_MIRRORING
@@ -92,7 +92,7 @@ NO_VERTICAL_CLIP equ 1
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 0
+NO_INTERRUPTS     equ 1
 
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 0
@@ -133,6 +133,9 @@ COMPILED_SPRITE_LIST       mac
 ;                           dw  $70*16,$71*16,$72*16,$73*16     ; goombas
                            dw  $FFFF
                            <<<
+
+; Do not check for specific Tile IDs to exclude from drawing
+NO_TILE_EXCLUDE equ 1
 
 ; Do we have a custom routine to execute RenderScreen.  If yes, put its address here
 CUSTOM_RENDER_SCREEN equ 1
@@ -254,7 +257,7 @@ InitPlayfield
 ;            beq   :better
 
             lda   #0
-            sta   MinYScroll
+;            sta   MinYScroll
 
             lda   #200
             sta   ScreenHeight
@@ -262,7 +265,7 @@ InitPlayfield
 
 :better
             lda   #16            ; Keep the GTE playfield below the status bar in PPU RAM
-            sta   MinYScroll
+;            sta   MinYScroll
 
             lda   #160           ; 160 lines high for 'better'
             sta   ScreenHeight
@@ -270,7 +273,7 @@ InitPlayfield
 
 :good
             lda   #16            ; Keep the GTE playfield below the status bar in PPU RAM
-            sta   MinYScroll
+;            sta   MinYScroll
 
             lda   #128           ; Only 128 lines tall for speed
             sta   ScreenHeight
@@ -286,7 +289,7 @@ InitPlayfield
             lda   #200           ; Only display down to this row
             sec
             sbc   ScreenHeight
-            sta   MaxYScroll
+;            sta   MaxYScroll
 
             lda   NesTop
             clc
@@ -308,14 +311,14 @@ InitPlayfield
             asl
             asl
             asl
-            sta   ScreenBase
+;            sta   ScreenBase
             asl
             asl
             clc
-            adc   ScreenBase
+;            adc   ScreenBase
             clc
             adc   #$2000+x_offset
-            sta   ScreenBase
+;            sta   ScreenBase
 
 ; Set a default palette for the title screen
 
@@ -568,11 +571,11 @@ ApplyConfig
             lda   config_video_fastmode
             beq   :normal_video
             lda   #CTRL_EVEN_RENDER
-            tsb   GTEControlBits
+            tsb   ControlBits
             bra   :apply_video
 :normal_video
             lda   #CTRL_EVEN_RENDER
-            trb   GTEControlBits
+            trb   ControlBits
 :apply_video
             lda   #0
             jsr   FillScreen
@@ -641,17 +644,35 @@ CopyStatusToScreen
 ; by prev/next pointers on the menu and control itmes that direct which control to
 ; select in response to the user's inputs.
 
+config_block_start
+
 config_audio_quality   ds  2  ; good / better / best audio quality (60Hz, 120Hz, 240Hz audio interrupts)
 config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
 config_video_small     ds  2  ; use a smaller playfield screen size
-config_input_p1_type   dw  0  ; keyboard  / snes max
-config_input_p2_type   dw  0
+
+; player 1 config block
+config_block_p1
+config_input_p1_type   dw  0  ; keyboard / snes max
 config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
+config_input_button_a  dw  MOD_REG_COMMAND_DOWN
+config_input_button_b  dw  MOD_REG_OPTION_DOWN
+
+; player 2 config block
+config_block_p2
+config_input_p2_type      dw  0
+config_input_p2_key_left  dw  'j'
+config_input_p2_key_right dw  'l'
+config_input_p2_key_up    dw  'i'
+config_input_p2_key_down  dw  'k'
+config_input_p2_snesmax_port dw 4
+config_input_p2_button_a  dw  MOD_REG_CONTROL_DOWN
+config_input_p2_button_b  dw  MOD_REG_SHIFT_DOWN
+config_block_end
 
 ;CONFIG_PALETTE      equ 1
 ;TILE_TOP_LEFT       equ $144

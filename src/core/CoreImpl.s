@@ -207,11 +207,11 @@ EngineReset
 ;                  lda       #32
 ;                  sta       ScreenTileWidth
 
-                  stz       StartX
+;                  stz       StartX
 ;                  stz       OldStartX
                   stz       StartXMod256
 
-                  stz       StartY
+;                  stz       StartY
 ;                  stz       OldStartY
                   stz       StartYMod240
 
@@ -397,8 +397,12 @@ _InitHorizontalMirroring
                   sta       MirrorMaskX
                   lda       #$01FF
                   sta       MirrorMaskY
+                  lda       #$3BFF
+                  sta       MirrorMask           ; 0011_1011_1111_1111 -> $2400 -> $2000
                   lda       #480
                   sta       MaxY
+                  lda       #256
+                  sta       MaxX
 
 ; Adjust lookup tables
 
@@ -490,8 +494,12 @@ _InitVerticalMirroring
                   sta       MirrorMaskX
                   lda       #$00FF
                   sta       MirrorMaskY
+                  lda       #$37FF    
+                  sta       MirrorMask         ; 0011_0111_1111_111 -> $2800 -> $2000
                   lda       #240
                   sta       MaxY
+                  lda       #512
+                  sta       MaxX
 
 ; Adjust lookup tables
 
@@ -917,10 +925,6 @@ _ReadSNESMAX
 
                   sep      #$30
                   tax
-
-;                  lda      #$ff
-;                  sta      SNESMAX_P1
-;                  sta      SNESMAX_P2
 
                   ldy      #8
                   stal     $E0C080,x           ; clock the latch

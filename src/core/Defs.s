@@ -37,20 +37,19 @@ ScreenY1               equ   6           ; End of playfield on the physical scre
 ScreenX0               equ   8           ; 100, then ScreenY1 = 120.
 ScreenX1               equ   10
 
-StartX                 equ   12          ; Which code buffer byte is the left edge of the screen. Range = 0 to 167
-StartY                 equ   14          ; Which code buffer line is the top of the screen. Range = 0 to 207
+MirrorMask             equ   12          ; Address mask for nametable access
+MirrorMaskX            equ   14          ; Either $00FF or $01FF depending on mirroring mode
+MirrorMaskY            equ   16          ; Either $01FF or $00FF depending on mirroring mode
 
-CompileBank0           equ   16          ; Always zero to allow [CompileBank0],y addressing
-CompileBank            equ   18          ; Data bank that holds compiled sprite code
-
-MirrorMaskX            equ   20
+CompileBank0           equ   18          ; Always zero to allow [CompileBank0],y addressing
+CompileBank            equ   20          ; Data bank that holds compiled sprite code
 
 StartXMod256           equ   22
 StartYMod240           equ   24
 
 ControlBits            equ   26          ; Enable / disable things
 
-MirrorMaskY            equ   28
+unused28               equ   28
 
 LastRender             equ   30          ; Record which render function was last executed
 DirtyBits              equ   32
@@ -101,10 +100,8 @@ InputPlayer2           equ   120
 
 ShowFPS                equ   126
 
-unused128              equ   128
-unused129              equ   129
-
-MaxY                   equ   130          ; Horizontal Mirroring = 480, Vertical Virroring = 240
+MaxX                   equ   128          ; Horizontal Mirroring = 256, Vertical Mirroring = 512
+MaxY                   equ   130          ; Horizontal Mirroring = 480, Vertical Mirroring = 240
 
 unused132              equ   132
 unused133              equ   133
@@ -257,6 +254,7 @@ TILE_ADDR_HI  equ $6000          ; pre-calculated address (high byte) of the loc
 TILE_VERSION0 equ $7000          ; version count of nametable byte (incremented on each PPUDATA_WRITE)
 TILE_VERSION1 equ $8000          ; version count of nametable byte (incremented on each PPUDATA_WRITE)
 TILE_ROW      equ $9000          ; pre-calculated row of the PPU address
+TILE_COL      equ $A000          ; pre-calculated column of the PPU address
 
 ; Return codes from the Event Loop harness
 USER_SAYS_QUIT  equ 'q'

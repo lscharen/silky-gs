@@ -54,15 +54,14 @@ SCAN_OAM_XTRA_FILTER mac
             <<<
 
 ; Define which PPU address has the background and sprite tiles
-PPU_BG_TILE_ADDR  equ #$1000
-PPU_SPR_TILE_ADDR equ #$0000
+PPU_BG_TILE_ADDR  equ $1000
+PPU_SPR_TILE_ADDR equ $0000
 
 ; What kind of Nametable mirroring for this game
 NAMETABLE_MIRRORING equ HORIZONTAL_MIRRORING
 
 ; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
-; in addition to the compiled representation (usually yes, since this is used for the config
-; screen)
+; in addition to the compiled representation (usually yes)
 BG_TILES_AS_SPRITES equ 1
 
 ; Define what kind of execution harness to use
@@ -95,7 +94,7 @@ NO_VERTICAL_CLIP  equ 0
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 0
+NO_INTERRUPTS     equ 1
 
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 0
@@ -237,7 +236,7 @@ mb_3F13
         ldx   SwizzleTables
         jsr   NES_SetPaletteMap
 
-        lda   #DIRTY_BIT_PAL_CHANGE
+        lda   #DIRTY_BIT_PAL_CHANGE    ; this needs to be set when the background palettes are changed
         tsb   DirtyBits
 
         pld
@@ -324,19 +323,19 @@ config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
-config_input_button_a  dw  COMMAND_KEY
-config_input_button_b  dw  OPTION_KEY
+config_input_button_a  dw  MOD_REG_COMMAND_DOWN
+config_input_button_b  dw  MOD_REG_OPTION_DOWN
 
 ; player 2 config block
 config_block_p2
 config_input_p2_type      dw  0
-config_input_p2_key_left  dw  LEFT_ARROW
-config_input_p2_key_right dw  RIGHT_ARROW
-config_input_p2_key_up    dw  UP_ARROW
-config_input_p2_key_down  dw  DOWN_ARROW
+config_input_p2_key_left  dw  'j'
+config_input_p2_key_right dw  'l'
+config_input_p2_key_up    dw  'i'
+config_input_p2_key_down  dw  'k'
 config_input_p2_snesmax_port dw 4
-config_input_p2_button_a  dw  COMMAND_KEY
-config_input_p2_button_b  dw  OPTION_KEY
+config_input_p2_button_a  dw  MOD_REG_CONTROL_DOWN
+config_input_p2_button_b  dw  MOD_REG_SHIFT_DOWN
 config_block_end
 
 config_tab_value    dw 0

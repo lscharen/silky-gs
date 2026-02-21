@@ -207,7 +207,7 @@ blt_return_lite ENT
 
                 rts
 
-; Helper routine that takes the horizontal and vertical scoll coordinated in the X and Y registers
+; Helper routine that takes the horizontal and vertical scoll coordinates in the X and Y registers
 ; and sets up the appropriate engine values.  
 ;
 ; The range of values is 0 - 511 for both X and Y.  This routine applies the mirroring masks and
@@ -220,16 +220,19 @@ NES_SetScrollX
                 cmp   StartXMod256
                 beq   :out                       ; Easy, if nothing changed, then nothing changes
 
-                ldx   StartXMod256               ; Load the old value (but don't save it yet)
+;                ldx   StartXMod256               ; Load the old value (but don't save it yet)
                 sta   StartXMod256               ; Save the new position
 
                 lda   #DIRTY_BIT_BG0_X
                 tsb   DirtyBits                  ; Check if the value is already dirty, if so exit
-                bne   :out                       ; without overwriting the original value
+;                bne   :out                       ; without overwriting the original value
 
 ;                stx   OldStartXMod256               ; First change, so preserve the prior value
 
 :out            rts
+
+NES_SetScroll   jsr   NES_SetScrollX
+;                jmp   NES_SetScrollY     ; Fall through
 
 NES_SetScrollY
                 tya
@@ -247,19 +250,16 @@ NES_SetScrollY
                 cmp   StartYMod240
                 beq   :out                       ; Easy, if nothing changed, then nothing changes
 
-                ldx   StartYMod240               ; Load the old value (but don't save it yet)
+;                ldx   StartYMod240               ; Load the old value (but don't save it yet)
                 sta   StartYMod240               ; Save the new position
 
                 lda   #DIRTY_BIT_BG0_Y
                 tsb   DirtyBits                  ; Check if the value is already dirty, if so exit
-                bne   :out                       ; without overwriting the original value
+;                bne   :out                       ; without overwriting the original value
 
 ;                stx   OldStartYMod240               ; First change, so preserve the prior value
 
 :out            rts
-
-NES_SetScroll   jsr   NES_SetScrollX
-                jmp   NES_SetScrollY
 
 
 ; A small variant for dirty rendering that just sets the BRA instruction in the code field assuming

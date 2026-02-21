@@ -47,7 +47,8 @@ wrep8    mac
 
 ; Helper to perform the essential functions of rendering a frame
 _ppuctrl    ds  2
-_ppuscroll  ds  2
+_ppuscroll_y dw 0          ; Pad the top-byte with zero to allow 8- or 16-bit access
+_ppuscroll_x dw 0          ; Pad the top-byte with zero to allow 8- or 16-bit access
 _ppumask    ds  2
 _ppuversion ds  2
 
@@ -183,9 +184,7 @@ _InitPPUTileMappingVert
         lda  BTableLow,y             ; Load the base address of the PEA row
 
         and  #$FF00                  ; Just keep the page
-;        ora  Col2PageOffset+2,x
-;        adc  Col2CodeOffset+2,x      ; Combine with the current column (get the left half of the tile)
-        adc  Col2CodeOffset+2,x
+        adc  Col2CodeOffset+2,x      ; Combine with the current column (get the left half of the tile)
         adc  #_PEA_OFFSET
         ldx  :ppuaddr
 
@@ -203,6 +202,10 @@ _InitPPUTileMappingVert
         lda  :row
         stal PPU_MEM+TILE_ROW,x
         stal PPU_MEM+TILE_ROW+$800,x
+
+        lda  :col
+        stal PPU_MEM+TILE_COL,x
+        stal PPU_MEM+TILE_COL+$800,x
 
         rep  #$21
         rts
@@ -301,6 +304,10 @@ _InitPPUTileMappingHorz
         lda  :row
         stal PPU_MEM+TILE_ROW,x
         stal PPU_MEM+TILE_ROW+$400,x
+
+        lda  :col
+        stal PPU_MEM+TILE_COL,x
+        stal PPU_MEM+TILE_COL+$400,x
 
         rep  #$21
         rts
@@ -439,15 +446,6 @@ RefreshMetatile                            ; Alternate entry point is not settin
         ldal  PPU_MEM+TILE_BANK+$20,x
         pha
 
-; NOTE: Because the metatiles are always aligned to 16x16 grids, we can get clever and keep a 16-bit address in 
-;       a table because we will only ever load the even addresses in this routine.
-;
-;       rep   #$21
-;       ldal  PPU_MEM+TILE_ADDR_LO+$20,x   ; 16-bit address load
-;       pha
-;       ldal  PPU_MEM+TILE_ADDR_LO,x
-;       tax
-;
 ; This saves a net amount of 14 cycles
 
         ldal  PPU_MEM+TILE_ADDR_HI+$20,x
@@ -700,7 +698,6 @@ bad_tile
 ; have already been swapped, so nothing can be updated while processing.  The PPU state
 ; is a snapshot from the end of the last frame processed.
 PPUFreezeNametableUpdates
-
 
 ; TODO: If the saturation flag is set, then just copy all of the nametable and attribute data into the SHADOW
 ;       arrays. Not loading from at_list or nt_list saves at least 6 cycles plus a bit more if the loop is
@@ -2419,6 +2416,12 @@ drawDirtyScreen
 ; Dirty State 2 -- erase the old sprites by restoring the background data and draw the new
 ;                  sprites on top and then blit 8x8 regions to expose the changes.
 ;
+;                  In this state any background tile updates are drawn on-screen and into
+;                  the background, as well.  This is still a win in the common cases where
+;                  only a score or timer is changing a few frames each second.  The code
+;                  to determine whether there are "too many" background tiles updated happen
+;                  outside of this loop and are responsible for setting the appropriate DirtyBits
+;
 ; An simple sequence of actions are
 ;
 ; 1. Turn shadowing off
@@ -2717,7 +2720,7 @@ drawSprites
 
 ; Convert the x-coordinate.
 
-        ldal _ppuscroll+1
+        ldal _ppuscroll_x
         and  #$01
         adcl OAM_COPY+3,x             ; X-coordinate (In NES pixels, need to convert to IIgs bytes)
         and  #$FE                     ; Mask before the shift so that we know a 0 goes into the carry
@@ -2855,26 +2858,6 @@ drawProcsClipped
 ; from the compiled sprite code bank for sprites that do not have a compiled representation.
 spr_comp_tbl ds 512,$00
 
-; Draw a tile directly to the screen
-;
-; A = tile id
-; Y = screen address
-; X = palette select 0,2,4,6
-blitTile
-        phb
-        pea   #^tiledata
-        plb
-
-        cmp   #$0100                  ; fancy multiply by 128
-        xba
-        ror
-
-        jsr   _blitTile
-
-        plb
-        plb
-        rts
-
 _blitTileNoMask
 ; A = tile address
 ; Y = screen address
@@ -2975,44 +2958,25 @@ _blitTileNoMask
 :done
         rts
 
-_blitTile
-; A = tile address
+; Blits from the top-half of the tiledata bank.  Assumes no mask. This routine is used if the dirty
+; renderer to selectively update the screen when a small number of backgrond tiles have changed.
+;
+; X = tile address
 ; Y = screen address
-; X = palette select 0,2,4,6
+;
+; Bank must be set to the tiledata bank
+_blitBGTile
 
-        sta   sprTmp0
-        sty   sprTmp1
+; Load data from the tiledata,x and store in a direct page buffer. The
+; Y register is over-written.
 
-        txa
-        sep  #$20
-        clc
-        adc  SwizzlePtr+1
-        sta  ActivePtr+1
-        rep  #$20
+        phy
+        jsr   _copyTileToBuffer
 
-]line     equ   0
-          lup   8
+; Copy data from the direct page buffer into the SHR screen memory
 
-          ldx   sprTmp0
-          ldy:  {]line*4},x                            ; Load the tile data lookup value
-          lda:  {]line*4}+32,x                         ; Load the mask value
-          ldx   sprTmp1
-          andl  $010000+{]line*SHR_LINE_WIDTH},x       ; Mask against the screen
-          db    ORA_IND_LONG_IDX,ActivePtr             ; Merge in the remapped tile data
-          stal  $010000+{]line*SHR_LINE_WIDTH},x
-
-          ldx   sprTmp0
-          ldy:  {]line*4}+2,x
-          lda:  {]line*4}+32+2,x
-          ldx   sprTmp1
-          andl  $010000+{]line*SHR_LINE_WIDTH}+2,x
-          db    ORA_IND_LONG_IDX,ActivePtr
-          stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
-
-]line     equ   ]line+1
-          --^
-
-        rts
+        plx
+        jmp   _copyBufferToScreenNoMask
 
 ; Define the opcodes directly so we can use then in a macro.  The bracket from long-indirect addressing, e.g. [],
 ; causes the macro processor to get confused since variables can be written as "]x"
@@ -3114,6 +3078,20 @@ _copyBufferToScreen
         ldal  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; Load the screen data
         and:  {]line*4}+32+2,y                       ; mask
         ora   blttmp+{]line*4}+2
+        stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+
+]line   equ   ]line+1
+        --^
+        rts
+
+_copyBufferToScreenNoMask
+]line   equ   0
+        lup   8
+
+        lda   blttmp+{]line*4}
+        stal  $010000+{]line*SHR_LINE_WIDTH},x
+
+        lda   blttmp+{]line*4}+2
         stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
 
 ]line   equ   ]line+1

@@ -55,8 +55,8 @@ SCAN_OAM_XTRA_FILTER mac
             <<<
 
 ; Define which PPU address has the background and sprite tiles
-PPU_BG_TILE_ADDR  equ #$1000
-PPU_SPR_TILE_ADDR equ #$0000
+PPU_BG_TILE_ADDR  equ $1000
+PPU_SPR_TILE_ADDR equ $0000
 
 ; What kind of Nametable mirroring for this game
 NAMETABLE_MIRRORING equ VERTICAL_MIRRORING
@@ -373,7 +373,7 @@ _RenderScreen
         ldal  $00004D,x
         and   #$01                    ; Isolate the nametable select bit
         xba                           ; put in the high byte
-        lda   _ppuscroll+1            ; load the scroll value
+        lda   _ppuscroll_x            ; load the scroll value
         rep   #$20
         tax
         jsr   NES_SetScrollX          ; This takes a NES pixel position (0 - 511)

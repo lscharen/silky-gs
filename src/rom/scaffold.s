@@ -390,7 +390,11 @@ NES_RenderFrame
             ELSE
             lda  ppuscroll
             FIN
-            sta  _ppuscroll
+            sep  #$20
+            sta  _ppuscroll_y             ; 8-bit values are not contiguous in order to allow blended 8/16 access
+            xba
+            sta  _ppuscroll_x
+            rep  #$20
 
             lda  ppumask
             and  ppumask_override
@@ -403,8 +407,8 @@ NES_RenderFrame
             and  #NES_PPUMASK_SPR
             jsr  EnableSprites
 
-            jsr  scanOAMSprites
-            jsr  PPUFreezeNametableUpdates ; New
+            jsr  scanOAMSprites            ; Copy the sprite OAM data into internal RAM space for rendering
+            jsr  PPUFreezeNametableUpdates ; Copy the updated tile data into internal RAM space for rendering
 
             plp
 
@@ -501,7 +505,7 @@ _GetPPUScrollX
             sep   #$20
             lda   _ppuctrl                ; Bit 0 is the high bit of the X scroll position
             lsr                           ; put in the carry bit
-            lda   _ppuscroll+1            ; load the scroll value
+            lda   _ppuscroll_x            ; load the scroll value
             ror                           ; put the high bit and divide by 2 for the engine
             rep   #$20
             and   #$00FF                  ; make sure nothing is in the high byte
@@ -514,13 +518,90 @@ _GetPPUScrollY
             lda   _ppuctrl                ; Bit 1 is the high bit of the Y scroll position
             lsr
             lsr                           ; put in the carry bit
-            lda   _ppuscroll              ; load the scroll value
+            lda   _ppuscroll_y            ; load the scroll value
             ror
             rep   #$20
             rol
             and   #$01FF
             tay
             rts
+
+; Given a nametable address ($2000 - $2FFF), return the screen address taking into account the current
+; scroll position.
+;
+; The address is in the range $2000
+;
+; Input
+;  X = nametable address
+;
+; Output
+;  X = SHR address
+;  C = 0 if visible, 1 if address is off-screen
+_NametableToScreen
+
+; The hardest issue to handle here is properly handling wrap-around based on the current mirroring
+; state of the game.
+;
+; Conceptually, the code looks up the logical row and column for the address and then adjusts the
+; value by both the current scroll position as well as the clipped range of what is actually
+; visible on the IIgs screen.
+;
+; Example: scroll_x = 45 and scroll_y = 168.  If vertical mirroring is on, then the maximum Y
+;          value is 239 and the maximum X value is 511.  Assume the 
+;
+; x_blk = 8
+;
+; col[addr] = 0 to 32/64
+; row[addr] = 0 to 30/60
+;
+; if mirror == horizontal, then all columns are always visible
+; if mirror == vertical, then
+; 
+; The visible blocks are
+
+; First, find the IIgs on-screen offset for this nametable address.
+
+            ldal PPU_MEM+TILE_COL,x       ; Get the logical column of this address
+            and  #$00FF
+            asl
+            asl                           ; Multiple by 4 to convert column to width in IIgs SHR bytes
+            sec
+            sbc  _ppuscroll_x             ; Subtract off the current scroll position
+            clc
+            adc  MaxX                     ; Add in the width of the NES nametables, which depends on the mirroring mode
+            cmp  MaxX
+            bcc  :no_wrap_x
+            sbc  MaxX                     ; If we wrapped around, subtract the width to get back into the visible range
+:no_wrap_x
+            cmp  #128                   ; Check to see if we're off outside of the visible area. C = 1 means abort
+            bcc  :x_visible
+            rts
+
+:x_visible
+            ldal PPU_MEM+TILE_ROW,x       ; Get the logical row of this address
+            and  #$00FF
+            asl
+            asl
+            asl
+            sbc  _ppuscroll_y
+            clc
+            adc  MaxY                     ; Add in the height of the NES nametables,
+            cmp  MaxY
+            bcc  :no_wrap_y               ; If we wrapped around, subtract the height to get back into the visible range
+            sbc  MaxY
+:no_wrap_y
+
+; At this point we have the scanline in term of NES scanlines, but the IIgs screen is only 200 lines tall,
+; so it clips a 200-line range
+
+            cmp  #y_offset
+            bcc  :y_not_visible
+            cmp  #max_nes_y
+            bcc  :y_visible
+:y_not_visible
+            sec
+:y_visible  rts
+
 
 ; Default render screen implementation.  The user-code can override this and provide their
 ; own to improve performance.
@@ -530,7 +611,7 @@ RenderScreen
 
             jsr   NES_SetScroll           ; Set the engine to this scroll position
 
-; If this frame changed the palettes, then we have to refresh all of the background tiles
+; If this frame changed any of the background palettes, then we have to refresh all of the background tiles
 
             lda   #DIRTY_BIT_PAL_CHANGE
             bit   DirtyBits
@@ -566,7 +647,6 @@ RenderScreen
             jsr   _BltSetupDirty
             sta   exitOffset
             jsr   drawDirtyScreen
-;            jsr   drawScreen
             ldy   exitOffset
             jsr   _RestoreBG0OpcodesLite
             bra   :dirty_done
