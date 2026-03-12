@@ -3,7 +3,7 @@
     mx  %00
 
 ; The physical screen must always be a multiple of 8 in the horizontal and vertical direction.  For
-; dirty updated, the 8x8 grid it marked for locations where the tiles need to be updated.  If the
+; dirty updates, the 8x8 grid it marked for locations where the tiles need to be updated.  If the
 ; display screen is aligned to the NES nametable grid (scroll_x and scroll_y are multiples of 8) then
 ; simple background updated like a timer or player score are 1:1 with on-screen tiles.
 ;
