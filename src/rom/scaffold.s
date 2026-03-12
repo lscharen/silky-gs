@@ -602,6 +602,12 @@ _NametableToScreen
             sec
 :y_visible  rts
 
+; VOC Renderer.
+            jsr   _GetPPUScrollX          ; Return in X register
+            jsr   _GetPPUScrollY          ; Return in Y register
+
+            jsr   NES_SetScroll           ; Set the engine to this scroll position
+
 
 ; Default render screen implementation.  The user-code can override this and provide their
 ; own to improve performance.

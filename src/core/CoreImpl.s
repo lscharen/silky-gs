@@ -273,7 +273,11 @@ EngineReset
 
                   lda       #^tiledata
                   xba
+                  DO   ENABLE_VOC_PASSTHROUGH
+                  ora       #$00E0
+                  ELSE
                   ora       #$0001
+                  FIN
                   sta       CMPL_BANK
 
 ; Insert jumps to the interrupt enable code every 16 lines

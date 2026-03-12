@@ -28,7 +28,7 @@ SHR_SCB                equ   $E19D00
 SHR_PALETTES           equ   $E19E00
 SHR_LINE_WIDTH         equ   160
 SHR_SCREEN_HEIGHT      equ   200
-
+SPRITE_SHR_ADDR        equ   $E02000     ; Write to this address for sprites
 ; Direct page locations used by the engine
 ScreenHeight           equ   0           ; Height of the playfield in scan lines
 ScreenWidth            equ   2           ; Width of the playfield in bytes
@@ -139,7 +139,7 @@ STATE_REG_R1W1         equ   168         ; These values all need to be 16-bit be
 STK_SAVE_BANK          equ   170         ; Bank 0 locations where the data bank values for the PEA fields are stored
 BANK_VALUES            equ   172         ; Room for two right here
 PPU_CLEAR_ADDR         equ   174         ; Current address for a rolling clear of PPU shadow memory
-CMPL_BANK              equ   176         ; ^tiledata << 8 | $01 (Bank $01 in low byte)
+CMPL_BANK              equ   176         ; ^tiledata << 8 | $01 (Bank $01 in low byte) [Set to $E0 for VOC]
 
 ; Free space from 176 to 192
 

@@ -92,15 +92,18 @@ NO_VERTICAL_CLIP equ 1
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 1
+NO_INTERRUPTS     equ 0
 
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 0
 
+ENABLE_VOC_PASSTHROUGH  equ 1
+
 ; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
 ; set the background color.
-PPU_PALETTE_DISPATCH equ SMB_PALETTE_DISPATCH
+; PPU_PALETTE_DISPATCH equ SMB_PALETTE_DISPATCH
+PPU_PALETTE_DISPATCH equ VOC_PALETTE_DISPATCH
 AUTOMATIC_PALETTE_MAPPING equ 0
 
 ; Turn on code that visualizes the CPU time used by the ROM code
@@ -342,6 +345,167 @@ InitPlayfield
 ; BG3,1 maps to IIgs Palette index 1    (Color cycle for blocks)
 ; SP0,1 maps to IIgs Palette index 14   (Player primary color; changes with fire flower)
 ; SP0,3 maps to IIgs Palette index 15   (Player primary color; changes with fire flower)
+VOC_PALETTE_DISPATCH
+        dw   voc_3F00,voc_3F01,voc_3F02,voc_3F03
+        dw   voc_3F04,voc_3F05,voc_3F06,voc_3F07
+        dw   voc_3F08,voc_3F09,voc_3F0A,voc_3F0B
+        dw   voc_3F0C,voc_3F0D,voc_3F0E,voc_3F0F
+        dw   voc_3F10,voc_3F11,voc_3F12,voc_3F13
+        dw   voc_3F14,voc_3F15,voc_3F16,voc_3F17
+        dw   voc_3F18,voc_3F19,voc_3F1A,voc_3F1B
+        dw   voc_3F1C,voc_3F1D,voc_3F1E,voc_3F1F
+
+; Assign new palettes to the appropriate bank/location.  The background palettes go
+; to Bank $E1
+voc_3F00
+        jsr  NES_ColorToIIgs
+        stal $E19E00
+        rts
+
+voc_3F01
+        jsr  NES_ColorToIIgs
+        stal $E19E02
+        rts
+
+voc_3F02
+        jsr  NES_ColorToIIgs
+        stal $E19E04
+        rts
+
+voc_3F03
+        jsr  NES_ColorToIIgs
+        stal $E19E06
+        rts
+
+voc_3F04
+        rts
+
+voc_3F05
+        jsr  NES_ColorToIIgs
+        stal $E19E0A
+        rts
+
+voc_3F06
+        jsr  NES_ColorToIIgs
+        stal $E19E0C
+        rts
+
+voc_3F07
+        jsr  NES_ColorToIIgs
+        stal $E19E0E
+        rts
+
+voc_3F08
+        rts
+
+voc_3F09
+        jsr  NES_ColorToIIgs
+        stal $E19E12
+        rts
+
+voc_3F0A
+        jsr  NES_ColorToIIgs
+        stal $E19E14
+        rts
+
+voc_3F0B
+        jsr  NES_ColorToIIgs
+        stal $E19E016
+        rts
+
+voc_3F0C
+        rts
+
+voc_3F0D
+        jsr  NES_ColorToIIgs
+        stal $E19E1A
+        rts
+
+voc_3F0E
+        jsr  NES_ColorToIIgs
+        stal $E19E1C
+        rts
+
+voc_3F0F
+        jsr  NES_ColorToIIgs
+        stal $E19E1E
+        rts
+
+; The sprite palettes go to Bank $E0
+voc_3F10
+        jsr  NES_ColorToIIgs     ; Writing here also sets the background color
+        stal $E19E00
+        rts                      ; Ignore the transparent color. We will set a unique chroma value that is not one of the 56 NES colors
+
+voc_3F11
+        jsr  NES_ColorToIIgs
+        stal $E09E02
+        rts
+
+voc_3F12
+        jsr  NES_ColorToIIgs
+        stal $E09E04
+        rts
+
+voc_3F13
+        jsr  NES_ColorToIIgs
+        stal $E09E06
+        rts
+
+voc_3F14
+        rts
+
+voc_3F15
+        jsr  NES_ColorToIIgs
+        stal $E09E0A
+        rts
+
+voc_3F16
+        jsr  NES_ColorToIIgs
+        stal $E09E0C
+        rts
+
+voc_3F17
+        jsr  NES_ColorToIIgs
+        stal $E09E0E
+        rts
+
+voc_3F18
+        rts
+
+voc_3F19
+        jsr  NES_ColorToIIgs
+        stal $E09E12
+        rts
+
+voc_3F1A
+        jsr  NES_ColorToIIgs
+        stal $E09E14
+        rts
+
+voc_3F1B
+        jsr  NES_ColorToIIgs
+        stal $E09E16
+        rts
+
+voc_3F1C
+        rts
+
+voc_3F1D
+        jsr  NES_ColorToIIgs
+        stal $E09E1A
+        rts
+
+voc_3F1E
+        jsr  NES_ColorToIIgs
+        stal $E09E1C
+        rts
+
+voc_3F1F
+        jsr  NES_ColorToIIgs
+        stal $E09E1E
+        rts
+
 
 SMB_PALETTE_DISPATCH
         dw   ppu_3F00,ppu_3F01,ppu_3F02,ppu_3F03
@@ -408,23 +572,23 @@ SMB_3F17
 ; so the palette does not get changed too early while old pixels are still on the screen.
 
 CheckForPaletteChange
-            ldal  ROMBase+$074E
-            and   #$0003                  ; There are four area types
-            cmp   LastAreaType            ;   order is WaterPaletteData, <GroundPaletteData, <UndergroundPaletteData, <CastlePaletteData
-            beq   :no_area_change
-            sta   LastAreaType
-            jmp   SetAreaPalette
-
-:no_area_change
-            lda   ROMBase+$0733
-            and   #$0001
-            cmp   LastAreaStyle
-            beq   :no_style_change
-            sta   LastAreaStyle
-            lda   LastAreaType
-            jmp   SetAreaPalette
-
-:no_style_change
+;            ldal  ROMBase+$074E
+;            and   #$0003                  ; There are four area types
+;            cmp   LastAreaType            ;   order is WaterPaletteData, <GroundPaletteData, <UndergroundPaletteData, <CastlePaletteData
+;            beq   :no_area_change
+;            sta   LastAreaType
+;            jmp   SetAreaPalette
+;
+;:no_area_change
+;            lda   ROMBase+$0733
+;            and   #$0001
+;            cmp   LastAreaStyle
+;            beq   :no_style_change
+;            sta   LastAreaStyle
+;            lda   LastAreaType
+;            jmp   SetAreaPalette
+;
+;:no_style_change
             rts
 
 ; Make the screen appear
@@ -468,7 +632,7 @@ _RenderScreen
 
 ; Copy the sprites and buffer to the graphics screen
 
-            jsr   drawScreen
+            jsr   vocDrawScreen
 
 ; Restore the buffer
 
@@ -522,9 +686,9 @@ SetAreaPalette
             bcs   :out
 
             asl
-            tay
-            ldx   AreaPalettes,y      ; First parameter to NESColorToIIgs
-            phx
+;            tay
+;            ldx   AreaPalettes,y      ; First parameter to NESColorToIIgs
+;            phx
 
             asl
             tay
@@ -532,37 +696,39 @@ SetAreaPalette
             ldx   SwizzleTables,y
             jsr   NES_SetPaletteMap
 
-            plx
+;            plx
 
-            ldal  ROMBase+$075f       ; World number
-            and   #$00FF
-            beq   :no_alt
+;            ldal  ROMBase+$075f       ; World number
+;            and   #$00FF
+;            beq   :no_alt
 
-            lda   LastAreaStyle       ; Check area style
-            and   #$00FF
-            cmp   #$0001
-            bne   :no_alt
-            ldx   #MushroomPalette
+;            lda   LastAreaStyle       ; Check area style
+;            and   #$00FF
+;            cmp   #$0001
+;            bne   :no_alt
+;            ldx   #MushroomPalette
 
-:no_alt
-            lda   #TmpPalette
-            jsr   NES_PaletteToIIgs
+;:no_alt
+;            lda   #TmpPalette
+;            jsr   NES_PaletteToIIgs
 
 ; Special copy routine; do not touch color indices 0, 1, 14 or 15 -- we let the NES PPU handle those
 
-            ldx   #4
-:loop
-            lda   TmpPalette,x
-            stal  $E19E00,x
-            inx
-            inx
-            cpx   #2*14
-            bcc   :loop
+;            ldx   #4
+;:loop
+;            lda   TmpPalette,x
+;            stal  $E19E00,x
+;            inx
+;            inx
+;            cpx   #2*14
+;            bcc   :loop
 :out
             rts
 
-AreaPalettes  dw   WaterPalette,Area1Palette,Area2Palette,Area3Palette,Area2Palette
-SwizzleTables adrl AT0_T0,AT1_T0,AT2_T0,AT3_T0,AT2_T0
+;AreaPalettes  dw   WaterPalette,Area1Palette,Area2Palette,Area3Palette,Area2Palette
+;SwizzleTables adrl AT0_T0,AT1_T0,AT2_T0,AT3_T0,AT2_T0
+SwizzleTables adrl AT1_T0
+
 
 ; ApplyConfig
 ;
@@ -857,6 +1023,7 @@ INPUT_ITEM_5 dw   KEYMAP
             FIN
 
             put   ../../ppu/ppu.s
+            put   ../../ppu/voc.s
 
             ds    \,$00                      ; pad to the next page boundary
 
@@ -901,7 +1068,7 @@ WaterPalette dw     $22, $00, $15, $12, $25, $3A, $1A, $0F, $30, $12, $27, $10, 
 MushroomPalette dw  $22, $00, $27, $16, $0F, $36, $17, $30, $21, $27, $1A, $16, $00, $00, $16, $18
 
 ; Palette remapping
-            put   pal_w11.s
+            put   pal_voc.s
             put   ../../apu/apu.s
 
 ; Core code

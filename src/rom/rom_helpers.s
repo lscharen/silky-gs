@@ -546,6 +546,9 @@ MLUT4       db    $FF,$F0,$0F,$00
 ; Extracted tiles
 TileBuff    ds    128
 
+; Unique chroma key RGB value
+ChromaKeyRGB equ $0F0F
+
 ; NES Palette (52 entries)
 NES_ColorPalette
    dw $0777

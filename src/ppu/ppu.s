@@ -2496,6 +2496,26 @@ drawDirtyScreen
         jmp   exposeCurrentSprites
 
 
+; Draw the screen using two SHR screens provided by the VOC
+vocDrawScreen
+
+        stz   DirtyState                ; Reset dirty state
+
+; There is no saved sprite data for this renderer
+
+        jsr   _ShadowOff              ; When VOC enabled, show off turns off bank $E0        
+        jsr   vocEraseSprites         ; Redraw the background for all of the previous sprites.  The background is now fully restored.
+
+        jsr   _ShadowOn               ; Now we can show the sprites again
+        jsr   drawSprites             ; Draw the new sprites; some parts of the old sprites may still be on-screen
+
+        jsr   vocExposeSprites
+
+        ldx   #0                        ; Blast the new background to the screen in one shot
+        ldy   #200
+        jsr   _BltRangeLite
+        rts
+
 ; Render the prepared frame date
 drawScreen
 
@@ -2662,7 +2682,11 @@ drawSprites
         phx
         ldx  sprTmp1
         ldy  sprTmp3                   ; Save the clamped screen address in sprTmp3
+        DO   ENABLE_VOC_PASSTHROUGH
+        jsr  vocSaveTileFromScreen8
+        ELSE
         jsr  saveTileFromScreen8
+        FIN
         plx
 :not_dirty8
         rts
@@ -3070,15 +3094,15 @@ _copyBufferToScreen
 ]line   equ   0
         lup   8
 
-        ldal  $010000+{]line*SHR_LINE_WIDTH},x       ; Load the screen data
+        ldal  SPRITE_SHR_ADDR+{]line*SHR_LINE_WIDTH},x       ; Load the screen data
         and:  {]line*4}+32,y                         ; mask
         ora   blttmp+{]line*4}
-        stal  $010000+{]line*SHR_LINE_WIDTH},x
+        stal  SPRITE_SHR_ADDR+{]line*SHR_LINE_WIDTH},x
 
-        ldal  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; Load the screen data
+        ldal  SPRITE_SHR_ADDR+{]line*SHR_LINE_WIDTH}+2,x     ; Load the screen data
         and:  {]line*4}+32+2,y                       ; mask
         ora   blttmp+{]line*4}+2
-        stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+        stal  SPRITE_SHR_ADDR+{]line*SHR_LINE_WIDTH}+2,x
 
 ]line   equ   ]line+1
         --^
@@ -3140,10 +3164,7 @@ clipBuffer125
 
 drawTileToScreenH
 
-;          lda   sprTmp0
-;          clc              ; There are a series of zero shifts before calling into this routine
           adc   #64
-;          sta   sprTmp0
 
 drawTileToScreen
 
@@ -3156,30 +3177,26 @@ drawTileToScreen
           ldy:  {]line*4},x                            ; Load the tile data lookup value
           lda:  {]line*4}+32,x                         ; Load the mask value
           ldx   sprTmp1
-          andl  $010000+{]line*SHR_LINE_WIDTH},x       ; Mask against the screen
+          andl  SPRITE_SHR_ADDR+{]line*SHR_LINE_WIDTH},x       ; Mask against the screen
           db    ORA_IND_LONG_IDX,ActivePtr             ; Merge in the remapped tile data
-          stal  $010000+{]line*SHR_LINE_WIDTH},x
+          stal  SPRITE_SHR_ADDR+{]line*SHR_LINE_WIDTH},x
 
           ldx   sprTmp0
           ldy:  {]line*4}+2,x
           lda:  {]line*4}+32+2,x
           ldx   sprTmp1
-          andl  $010000+{]line*SHR_LINE_WIDTH}+2,x
+          andl  SPRITE_SHR_ADDR+{]line*SHR_LINE_WIDTH}+2,x
           db    ORA_IND_LONG_IDX,ActivePtr
-          stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+          stal  SPRITE_SHR_ADDR+{]line*SHR_LINE_WIDTH}+2,x
 
 ]line     equ   ]line+1
           --^
 
-;          jmp   draw_rtn
           rts
 
 drawTileToScreenHV
 
-;          lda   sprTmp0
-;          clc
           adc   #64
-;          sta   sprTmp0
 
 drawTileToScreenV
 
@@ -3192,17 +3209,17 @@ drawTileToScreenV
           ldy:  {{7-]line}*4},x
           lda:  {{7-]line}*4}+32,x
           ldx   sprTmp1
-          andl  $010000+{]line*SHR_LINE_WIDTH},x
+          andl  SPRITE_SHR_ADDR+{]line*SHR_LINE_WIDTH},x
           db    ORA_IND_LONG_IDX,ActivePtr
-          stal  $010000+{]line*SHR_LINE_WIDTH},x
+          stal  SPRITE_SHR_ADDR+{]line*SHR_LINE_WIDTH},x
 
           ldx   sprTmp0
           ldy:  {{7-]line}*4}+2,x
           lda:  {{7-]line}*4}+32+2,x
           ldx   sprTmp1
-          andl  $010000+{]line*SHR_LINE_WIDTH}+2,x
+          andl  SPRITE_SHR_ADDR+{]line*SHR_LINE_WIDTH}+2,x
           db    ORA_IND_LONG_IDX,ActivePtr
-          stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+          stal  SPRITE_SHR_ADDR+{]line*SHR_LINE_WIDTH}+2,x
 
 ]line     equ   ]line+1
           --^
@@ -3222,7 +3239,6 @@ drawClippedTileToScreenP
 
         jsr   _copyMaskToBufferP      ; Build a screen mask in the direct page
         jsr   clipBuffer
-;        jmp   _copyBufferToScreenP
 
 _copyBufferToScreenP
         ldx   sprTmp0
@@ -3235,8 +3251,8 @@ _copyBufferToScreenP
 
         ldx   sprTmp1
         db    AND_IND_LONG_IDX,ActivePtr
-        oral  $010000+{]line*SHR_LINE_WIDTH}+0,x
-        stal  $010000+{]line*SHR_LINE_WIDTH}+0,x
+        oral  SPRITE_SHR_ADDR+{]line*SHR_LINE_WIDTH}+0,x
+        stal  SPRITE_SHR_ADDR+{]line*SHR_LINE_WIDTH}+0,x
 
         ldx   sprTmp0
 zl      ldy:  {]line*4}+2,x
@@ -3245,8 +3261,8 @@ zl      ldy:  {]line*4}+2,x
         beq   zr
         ldx   sprTmp1
         db    AND_IND_LONG_IDX,ActivePtr
-        oral  $010000+{]line*SHR_LINE_WIDTH}+2,x
-        stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+        oral  SPRITE_SHR_ADDR+{]line*SHR_LINE_WIDTH}+2,x
+        stal  SPRITE_SHR_ADDR+{]line*SHR_LINE_WIDTH}+2,x
 
         ldx   sprTmp0
 zr
@@ -3254,6 +3270,7 @@ zr
         --^
         rts
 
+; These must read from the background
 _copyMaskToBufferP
 ]line   equ   0
         lup   8
@@ -3332,7 +3349,7 @@ zero_left
 
           db    AND_IND_LONG_IDX,ActivePtr             ; Apply against the sprite data
           oral  $010000+{]line*SHR_LINE_WIDTH}+0,x
-          stal  $010000+{]line*SHR_LINE_WIDTH}+0,x
+          stal  SPRITE_SHR_ADDR+{]line*SHR_LINE_WIDTH}+0,x
 skip_left
 
           ldx   sprTmp0
@@ -3359,13 +3376,12 @@ zero_right
 
           db    AND_IND_LONG_IDX,ActivePtr
           oral  $010000+{]line*SHR_LINE_WIDTH}+2,x
-          stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+          stal  SPRITE_SHR_ADDR+{]line*SHR_LINE_WIDTH}+2,x
 skip_right
 
 ]line     equ   ]line+1
           --^
 
-;          jmp   draw_rtn
           rts
 
 incborder
@@ -3435,6 +3451,26 @@ saveTileFromScreen8
 
 sprBlockAddr ds 64*2           ; Maximum of 64 8x8 blocks, each with a 16-bit address 
 
+; VOC routine to save the list of sprites.  We just need location data for this because
+; erasing sprites for the VOC is always just writing the zeros to the screen.
+vocSaveTileFromScreen8
+
+          tsc
+          sta   sprTmp0                                ; Save the current stack in the y-register
+
+          lda   SprSaveAddr
+          tcs                                          ; Set the stack to the save buffer area
+
+          phy                                          ; Save the SHR screen address for shadowing
+          phx                                          ; Save the SHR screen address of the 8x8 block
+          tsc
+          sta   SprSaveAddr
+
+          lda   sprTmp0                                ; Restore the original stack
+          tcs
+
+          rts
+
 ; Expose the 8x8 blocks from the list populated by saveTileFromScreen.
         mx  %00
 exposeTilesToScreen
@@ -3456,6 +3492,39 @@ exposeTilesToScreen
         stal  $010000+{]line*SHR_LINE_WIDTH},x
         ldal  $010000+{]line*SHR_LINE_WIDTH}+2,x
         stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+
+]line   equ   ]line-1
+        --^
+
+        dey
+        dey
+        bmi   :out
+        brl   :loop            ; Are there more blocks to expose?
+:out
+        stz   SprAddrCount
+        rts
+
+; Same routine, except for VOC target.
+        mx  %00
+vocExposeSprites
+
+        ldy   SprAddrCount     ; Number of sprite block addresses (x2)
+        bne   :ok
+        rts
+
+:ok
+        dey                    ; Can be done in any order
+        dey
+
+:loop
+        ldx   sprBlockAddr,y   ; Load the screen address
+]line   equ   7
+        lup   8
+
+        ldal  $E00000+{]line*SHR_LINE_WIDTH},x
+        stal  $E00000+{]line*SHR_LINE_WIDTH},x
+        ldal  $E00000+{]line*SHR_LINE_WIDTH}+2,x
+        stal  $E00000+{]line*SHR_LINE_WIDTH}+2,x
 
 ]line   equ   ]line-1
         --^
@@ -3501,6 +3570,51 @@ restoreTilesToScreen
         stal  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; And write back to the screen (reverse order)
         pla
         stal  $010000+{]line*SHR_LINE_WIDTH},x
+
+]line   equ   ]line-1
+        --^
+
+        iny
+        iny
+
+:test
+        tsc
+        cmp   SprSaveTop
+        bcc   :loop
+
+        sta   SprSaveAddr                            ; Update the save stack pointer to indicate an empty buffer
+
+        lda   tmp0                                   ; Restore the original stack pointer
+        tcs
+
+:done
+        sty   SprAddrCount
+        rts
+
+; Fill the blocks in Bank $E0 with zero values
+vocEraseSprites
+
+        ldy   #0
+
+        lda   SprSaveAddr                            ; If the stack is empty, do nothing
+        cmp   SprSaveTop
+        beq   :done
+
+        tsx
+        stx   tmp0
+        tcs
+
+:loop
+        plx                                          ; Pop the SHR screen address
+        pla                                          ; Pop the SHR shadow address
+        sta   sprBlockAddr,y                         ; Save it for later use
+
+        lda   #$0000                                 ; Erasing is just writing zeros to the screen
+]line   equ   7
+        lup   8
+
+        stal  $E00000+{]line*SHR_LINE_WIDTH}+2,x
+        stal  $E00000+{]line*SHR_LINE_WIDTH},x
 
 ]line   equ   ]line-1
         --^

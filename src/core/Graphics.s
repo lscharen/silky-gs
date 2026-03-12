@@ -10,6 +10,9 @@ InitGraphics
                  ldx   #$2FE
                  lda   #0
 :lp              stal  $E19D00,x
+                 DO ENABLE_VOC_PASSTHROUGH
+                 stal  $E09D00,x
+                 FIN
                  dex
                  dex
                  bpl   :lp
@@ -126,6 +129,9 @@ _SetBorderColor  sep   #$20                 ; ACC = $X_Y, REG = $W_Z
 _ClearToColor
                  ldx  #$7CFE
 :loop            stal $012000,x
+                 DO   ENABLE_VOC_PASSTHROUGH
+                 stal $E02000,x
+                 FIN
                  dex
                  dex
                  bpl  :loop
@@ -165,6 +171,9 @@ _GrafOn
                  sep   #$20
                  lda   #$C1              ; SHR On, Linear Memory Map On, Ignore Bank Latch
                  stal  NEW_VIDEO_REG
+                 DO   ENABLE_VOC_PASSTHROUGH
+                 jsr   SetupVOC
+                 FIN
                  rep   #$20
                  rts
 
@@ -178,19 +187,29 @@ _GrafOff
 ; Enable/Disable Shadowing.
 _ShadowOn
                  sep   #$20
+                 DO  ENABLE_VOC_PASSTHROUGH
+                 ldal  VOC_CONTROL_REGISTER
+                 and   #$FE
+                 stal  VOC_CONTROL_REGISTER
+                 ELSE
                  ldal  SHADOW_REG
-;                 and   #$F7
                  and   #$F1
                  stal  SHADOW_REG
+                 FIN
                  rep   #$20
                  rts
 
 _ShadowOff
                  sep   #$20
+                 DO    ENABLE_VOC_PASSTHROUGH
+                 ldal  VOC_CONTROL_REGISTER
+                 ora   #$01
+                 stal  VOC_CONTROL_REGISTER
+                 ELSE
                  ldal  SHADOW_REG
-;                 ora   #$08
                  ora   #$0E
                  stal  SHADOW_REG
+                 FIN
                  rep   #$20
                  rts
 
