@@ -64,8 +64,8 @@ const execFileP = promisify(execFile);
 // successful run and check for out.dat instead of throwing.
 const IIX_NORMAL_EXIT = 4294967294; // 0xFFFFFFFE = -2 as uint32
 
-const IIX      = 'C:\\Program Files (x86)\\GoldenGate\\iix.exe';
-const MERLIN32 = 'C:\\Programs\\IIgsXDev\\bin\\Merlin32-BD-1.1.0.exe';
+const IIX      = process.env.AUNIT_IIX      ?? 'C:\\Program Files (x86)\\GoldenGate\\iix.exe';
+const MERLIN32 = process.env.AUNIT_MERLIN32 ?? 'C:\\Programs\\IIgsXDev\\bin\\Merlin32-BD-1.1.0.exe';
 
 // Resolved once at module load time.
 const _runnerDir      = dirname(fileURLToPath(import.meta.url));

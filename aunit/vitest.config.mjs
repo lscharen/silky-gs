@@ -3,7 +3,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     // Tests live in tests/**/*.test.mjs
-    include: ['tests/**/*.test.mjs'],
+    include: ['tests/**/*.test.mjs', 'test/**/*.test.mjs'],
     // Each test file assembles and runs a GoldenGate binary —
     // allow up to 60 s per test.
     testTimeout: 60_000,

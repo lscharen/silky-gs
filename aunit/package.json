@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "65816 assembly unit-testing framework for GoldenGate",
   "type": "module",
+  "scripts": {
+    "test": "vitest run --config vitest.config.mjs",
+    "test:watch": "vitest --config vitest.config.mjs"
+  },
   "exports": {
     ".":         "./runner.mjs",
     "./parser":  "./parser.mjs",
