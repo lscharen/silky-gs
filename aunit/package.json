@@ -1,0 +1,12 @@
+{
+  "name": "aunit",
+  "version": "1.0.0",
+  "description": "65816 assembly unit-testing framework for GoldenGate",
+  "type": "module",
+  "exports": {
+    ".":         "./runner.mjs",
+    "./parser":  "./parser.mjs",
+    "./mem":     "./mem.mjs",
+    "./shr2png": "./shr2png.mjs"
+  }
+}

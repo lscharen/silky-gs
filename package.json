@@ -35,7 +35,9 @@
     "debug:ic": "cd src/games/iceclimber && %npm_package_config_crossrunner% IceClimberGS -source IceClimberGS_S02__Output.txt IceClimberGS_S03__Output.txt IceClimberGS_S04__Output.txt IceClimberGS_S05__Output.txt -map Master.s -Debug -CompatibilityLayer",
     "debug:mb": "cd src/games/mb && %npm_package_config_crossrunner% MarioBrosGS -source MarioBrosGS_S02__Output.txt MarioBrosGS_S03__Output.txt MarioBrosGS_S04__Output.txt MarioBrosGS_S05__Output.txt -map Master.s -Debug -CompatibilityLayer",
     "cyrene:bf": "npm run build-image && concurrently '%npm_package_config_cyrene%' '%npm_package_config_kegscyrene%'",
-    "build-image": "build-image.bat %npm_package_config_cadius% .\\emu\\Target.2mg /ClassicsGS/"
+    "build-image": "build-image.bat %npm_package_config_cadius% .\\emu\\Target.2mg /ClassicsGS/",
+    "test:unit": "vitest run --config aunit/vitest.config.mjs",
+    "test:unit:watch": "vitest --config aunit/vitest.config.mjs"
   },
   "repository": {
     "type": "git",
@@ -47,11 +49,15 @@
     "url": "https://github.com/lscharen/iigs-game-engine/issues"
   },
   "homepage": "https://github.com/lscharen/iigs-game-engine#readme",
+  "dependencies": {
+    "aunit": "file:./aunit"
+  },
   "devDependencies": {
     "concurrently": "^9.1.2",
     "csv-parse": "^5.5.6",
     "pngjs": "^6.0.0",
     "string-builder": "^0.1.8",
+    "vitest": "^2.0.0",
     "watch": "latest",
     "xml2json": "^0.12.0"
   }
