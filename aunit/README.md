@@ -26,11 +26,11 @@ Main.s  ──Merlin32──▶  Main.aunit  (OMF executable, assemble+link in o
 ## Running the Tests
 
 ```bash
-npm run test:unit        # run once
-npm run test:unit:watch  # re-run on file change
+npm run test        # run once
+npm run test:watch  # re-run on file change
 ```
 
-Tests live in `tests/**/*.test.mjs` and are discovered automatically by Vitest.
+Tests live in `test/**/*.test.mjs` and are discovered automatically by Vitest.
 
 ---
 
@@ -157,15 +157,15 @@ const r = await jsl('MyFunc', {
   DBR: 0x02,        // data bank register (8-bit)
   P:   0x30,        // processor status (8-bit)
 
-  // --- memory to write before the call ---
+  // --- existing memory labels to write before the call ---
   memory: [
-    { label: 'NESPalette', data: [0x00, 0x08, 0x88] },
-    { label: 'NESPalette', offset: 4, data: Buffer.from([0xFF]) },
+    { label: 'mydata', data: [0x00, 0x08, 0x88] },
+    { label: 'mydata', offset: 4, data: Buffer.from([0xFF]) },
   ],
 
   // --- memory to snapshot after the call ---
   captureMemory: [
-    { label: 'NESPalette', length: 8 },           // → raw Buffer
+    { label: 'mydata', length: 8 },           // → raw Buffer
     { label: 'counter',    as: 'word' },           // → number
     { label: 'table',      as: 'byte', count: 4 }, // → number[]
   ],
@@ -273,7 +273,6 @@ expect(result.memory[0].data).toEqual(Buffer.from([...]));
 | `assembler` | string | `'orca'` | `'orca'` or `'merlin32'`. |
 | `call` | string | required | Assembly label of the function under test. |
 | `includes` | string[] | `[]` | Absolute (or `testDir`-relative) paths to source files. |
-| `testDir` | string | `process.cwd()` | Base for resolving relative include paths. |
 | `callMode` | string | `'jsl'` | `'jsl'` or `'jsr'`. |
 | `registers` | object | `{}` | Initial register values — any subset of `{ A, X, Y, DP, SP, DBR, P }`. Unspecified registers are not initialised. String values load the label address. |
 | `memory` | object[] | `[]` | Regions to pre-populate before the call. |
