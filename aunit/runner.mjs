@@ -54,7 +54,7 @@ import { readFile, writeFile, unlink,
 import { tmpdir }                            from 'node:os';
 import { fileURLToPath }                     from 'node:url';
 import { dirname, basename, join,
-         resolve }                           from 'node:path';
+         resolve, relative }                from 'node:path';
 import { parseResult }                       from './parser.mjs';
 
 const execFileP = promisify(execFile);
@@ -112,25 +112,36 @@ async function _runTest(absSource, sourceDir, tmpDir, opts = {}) {
     const iixArgs = trace ? ['--trace-gsos', exePath] : [exePath];
 
     let iixExitCode = 0;
+    let iixError    = null;
     try {
       await execFileP(IIX, iixArgs, { cwd: tmpDir });
     } catch (err) {
       iixExitCode = err.code;
-      if (iixExitCode !== IIX_NORMAL_EXIT) {
-        throw new AssemblyError(
-          `execution failed (exit ${iixExitCode}): ${err.stderr || err.message}`
-        );
-      }
+      iixError    = err;
     }
 
     // --- read and parse ---
+    // Check for out.dat before reporting execution failures: a harness that
+    // crashes without writing out.dat should surface as a missing-results error.
     let raw;
     try {
       raw = await readFile(outPath);
     } catch (err) {
+      if (iixError && iixExitCode !== IIX_NORMAL_EXIT) {
+        throw new AssemblyError(
+          `out.dat not found — did the harness call AUnit_WriteResults? ` +
+          `iix exit ${iixExitCode} (${iixError.message})`
+        );
+      }
       throw new AssemblyError(
         `out.dat not found — did the harness call AUnit_WriteResults? ` +
         `iix exit ${iixExitCode} (${err.message})`
+      );
+    }
+
+    if (iixError && iixExitCode !== IIX_NORMAL_EXIT) {
+      throw new AssemblyError(
+        `execution failed (exit ${iixExitCode}): ${iixError.stderr || iixError.message}`
       );
     }
 
@@ -149,7 +160,12 @@ async function _runTest(absSource, sourceDir, tmpDir, opts = {}) {
 //
 // absSource  absolute path to the master .s source file
 // sourceDir  cwd for Merlin32 (affects relative PUT paths in the source)
-// tmpDir     where the link file, OMF exe, and out.dat land
+// tmpDir     where the link file and out.dat land; also iix execution cwd
+//
+// The DSK directive uses a bare filename (no path) so Merlin32 writes the
+// OMF to its own cwd (sourceDir).  This avoids ProDOS path validation on
+// every Windows path component, which would reject any component containing
+// characters illegal in ProDOS names (e.g. dashes in temp-dir suffixes).
 // ---------------------------------------------------------------------------
 async function _runTestMerlin32(absSource, sourceDir, tmpDir, opts = {}) {
   const {
@@ -157,17 +173,23 @@ async function _runTestMerlin32(absSource, sourceDir, tmpDir, opts = {}) {
     outFile = 'out.dat',
   } = opts;
 
-  const base     = basename(absSource, '.s');
-  const exePath  = join(tmpDir, base + '.aunit');
-  const linkPath = join(tmpDir, `_link_${base}.s`);
+  const rawBase  = basename(absSource, '.s');
+  // ProDOS: 15-char max, only letters/numbers/dots.  '.aunit' = 6 chars → stem ≤ 8.
+  const proBase  = rawBase.replace(/[^a-z0-9]/gi, '').slice(0, 8) || 'aunit';
+  const exeName  = proBase + '.aunit';
+  // DSK with a bare filename is resolved relative to the link file, which lives
+  // in tmpDir — so the OMF lands in tmpDir regardless of the Merlin32 CWD.
+  const exePath  = join(tmpDir, exeName);
+  const linkPath = join(tmpDir, `_link_${rawBase}.s`);
   const outPath  = join(tmpDir, outFile);
 
-  // Generate a minimal Merlin32 link file that points to the source and
-  // writes the OMF output to tmpDir.
+  // Generate a minimal Merlin32 link file.  DSK is a bare filename so Merlin32
+  // resolves it relative to the link file (in tmpDir) without validating any
+  // intermediate Windows path components as ProDOS names.
   const linkSource = [
     '* Auto-generated AUnit link file — do not edit',
     '            TYP   S16',
-    `            DSK   ${exePath}`,
+    `            DSK   ${exeName}`,
     `            ASM   ${absSource}`,
   ].join('\n') + '\n';
 
@@ -175,6 +197,7 @@ async function _runTestMerlin32(absSource, sourceDir, tmpDir, opts = {}) {
 
   // --- assemble + link (one Merlin32 invocation) ---
   // cwd = sourceDir so relative PUT paths in the source file resolve correctly.
+  // The bare DSK filename is resolved relative to the link file (in tmpDir).
   try {
     await execFileP(MERLIN32, [MERLIN32_MACROS, linkPath], { cwd: sourceDir });
   } catch (err) {
@@ -184,29 +207,41 @@ async function _runTestMerlin32(absSource, sourceDir, tmpDir, opts = {}) {
   }
 
   // --- execute ---
-  // cwd = tmpDir so out.dat is written there.
+  // cwd = tmpDir so out.dat is written there, not into sourceDir.
+  // exePath is absolute so iix finds the OMF regardless of its cwd.
   const iixArgs = trace ? ['--trace-gsos', exePath] : [exePath];
 
   let iixExitCode = 0;
+  let iixError    = null;
   try {
     await execFileP(IIX, iixArgs, { cwd: tmpDir });
   } catch (err) {
     iixExitCode = err.code;
-    if (iixExitCode !== IIX_NORMAL_EXIT) {
-      throw new AssemblyError(
-        `execution failed (exit ${iixExitCode}): ${err.stderr || err.message}`
-      );
-    }
+    iixError    = err;
   }
 
   // --- read and parse ---
+  // Check for out.dat before reporting execution failures: a harness that
+  // crashes without writing out.dat should surface as a missing-results error.
   let raw;
   try {
     raw = await readFile(outPath);
   } catch (err) {
+    if (iixError && iixExitCode !== IIX_NORMAL_EXIT) {
+      throw new AssemblyError(
+        `out.dat not found — did the harness call AUnit_WriteResults? ` +
+        `iix exit ${iixExitCode} (${iixError.message})`
+      );
+    }
     throw new AssemblyError(
       `out.dat not found — did the harness call AUnit_WriteResults? ` +
       `iix exit ${iixExitCode} (${err.message})`
+    );
+  }
+
+  if (iixError && iixExitCode !== IIX_NORMAL_EXIT) {
+    throw new AssemblyError(
+      `execution failed (exit ${iixExitCode}): ${iixError.stderr || iixError.message}`
     );
   }
 
@@ -235,7 +270,7 @@ export async function runAssemblyTest(sourcePath, opts = {}) {
 
   const absSource = resolve(sourcePath);
   const sourceDir = dirname(absSource);
-  const tmpDir    = await mkdtemp(join(tmpdir(), 'aunit-'));
+  const tmpDir    = await mkdtemp(join(tmpdir(), 'au'));
 
   try {
     if (assembler === 'merlin32') {
@@ -302,21 +337,21 @@ export async function runAssemblyTest(sourcePath, opts = {}) {
 export async function runGeneratedTest(config, opts = {}) {
   const {
     assembler     = 'orca',
-    testDir,
+    testDir       = process.cwd(),
     call,
     callMode      = 'jsl',
     includes      = [],
     registers     = {},
     memory        = [],
     captureMemory = [],
+    allocMemory   = [],
   } = config;
 
-  if (!testDir) throw new Error('runGeneratedTest: config.testDir is required');
-  if (!call)    throw new Error('runGeneratedTest: config.call is required');
+  if (!call) throw new Error('runGeneratedTest: config.call is required');
 
   const { keepArtifacts = false } = opts;
 
-  const tmpDir = await mkdtemp(join(tmpdir(), 'aunit-'));
+  const tmpDir = await mkdtemp(join(tmpdir(), 'au'));
 
   // Unique suffix to avoid collisions when tests run sequentially.
   const suffix  = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -325,12 +360,12 @@ export async function runGeneratedTest(config, opts = {}) {
   try {
     if (assembler === 'merlin32') {
       return await _runGeneratedMerlin32(
-        { testDir, call, callMode, includes, registers, memory, captureMemory },
+        { testDir, call, callMode, includes, registers, memory, captureMemory, allocMemory },
         genName, tmpDir, opts
       );
     }
     return await _runGeneratedOrca(
-      { testDir, call, callMode, includes, registers, memory, captureMemory },
+      { testDir, call, callMode, includes, registers, memory, captureMemory, allocMemory },
       genName, tmpDir, opts
     );
   } finally {
@@ -343,10 +378,61 @@ export async function runGeneratedTest(config, opts = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// _emitRegSetup — emit register-initialisation instructions (assembler-neutral)
+//
+// Registers whose value is undefined are silently skipped.
+// Order is mandatory for correctness:
+//   DP  — tcd clobbers nothing else
+//   DBR — pha+plb (net −1 to SP; must precede any TCS so the adjusted value
+//          is correct)
+//   SP  — tcs; if P is also set the stored value is pre-adjusted by +1 so
+//          that the subsequent plp leaves SP at exactly the requested value
+//   X, Y — ldx / ldy (order between them doesn't matter)
+//   P push — lda #<P_value>; pha  (P in low byte; pha pushes low byte on top)
+//   A  — lda #<A_value>  (loaded after P is staged so A is correct at call)
+//   P pop  — plp  (final act before the call; may change M/X width bits)
+//
+// indent  leading whitespace string that matches the surrounding column style
+// emit    the generator's emit(...lines) function
+// ---------------------------------------------------------------------------
+function _emitRegSetup(registers, indent, emit) {
+  const { A, X, Y, DP, DBR, SP, P } = registers;
+  if ([A, X, Y, DP, DBR, SP, P].every(v => v === undefined)) return;
+
+  const i    = indent;
+  const hex4 = (n) => `$${(n & 0xFFFF).toString(16).padStart(4, '0').toUpperCase()}`;
+  // String values are treated as assembly label names (load address of label).
+  const regVal = (v) => (typeof v === 'string') ? v : hex4(v);
+
+  emit('* --- register setup ---');
+
+  if (DP !== undefined)
+    emit(`${i}lda   #${hex4(DP)}`, `${i}tcd`);
+
+  if (SP !== undefined)
+    emit(`${i}lda   #${hex4(SP)}`, `${i}tcs`);
+
+  // Push P first (deepest), then DBR (on top).  Each uses a sep/rep pair so
+  // only 1 byte is pushed.  Value is loaded into A while M=0 so that ORCA/M
+  // assembles lda #imm as a 2-byte immediate rather than a 3-byte one.
+  if (P !== undefined)
+    emit(`${i}lda   #${hex4(P & 0xFF)}`, `${i}sep   #$20`, `${i}pha`, `${i}rep   #$20`);
+
+  if (DBR !== undefined)
+    emit(`${i}lda   #${hex4(DBR & 0xFF)}`, `${i}sep   #$20`, `${i}pha`, `${i}rep   #$20`);
+
+  if (X !== undefined) emit(`${i}ldx   #${regVal(X)}`);
+  if (Y !== undefined) emit(`${i}ldy   #${regVal(Y)}`);
+  if (A !== undefined) emit(`${i}lda   #${regVal(A)}`);
+
+  emit('');
+}
+
+// ---------------------------------------------------------------------------
 // _runGeneratedOrca — generate and run an ORCA/M harness
 // ---------------------------------------------------------------------------
 async function _runGeneratedOrca(config, genName, tmpDir, opts) {
-  const { testDir, call, callMode = 'jsl', includes, registers, memory, captureMemory } = config;
+  const { testDir, call, callMode = 'jsl', includes, registers, memory, captureMemory, allocMemory } = config;
 
   const aunitS = join(_runnerDir, 'lib', 'aunit.s');
   const ioS    = join(_runnerDir, 'lib', 'io.s');
@@ -378,16 +464,7 @@ async function _runGeneratedOrca(config, genName, tmpDir, opts) {
     '',
   );
 
-  const A = registers.A ?? 0;
-  const X = registers.X ?? 0;
-  const Y = registers.Y ?? 0;
-  emit(
-    '* --- register setup ---',
-    `        lda    #${hex4(A)}`,
-    `        ldx    #${hex4(X)}`,
-    `        ldy    #${hex4(Y)}`,
-    '',
-  );
+  _emitRegSetup(registers, '        ', emit);
 
   memory.forEach((item, i) => {
     const offset = item.offset ?? 0;
@@ -403,8 +480,10 @@ async function _runGeneratedOrca(config, genName, tmpDir, opts) {
     );
   });
 
+  emit('* --- call ---');
+  if (registers.DBR !== undefined) emit('        plb');
+  if (registers.P   !== undefined) emit('        plp');
   emit(
-    '* --- call ---',
     `        ${callMode}    ${call}`,
     '',
     '* --- capture registers ---',
@@ -439,6 +518,10 @@ async function _runGeneratedOrca(config, genName, tmpDir, opts) {
     emit(`_AUSetup${i} dc h'${data.toString('hex').toUpperCase()}'`);
   });
 
+  allocMemory.forEach(item => {
+    emit(`${item.label}    ds    ${item.length}`);
+  });
+
   emit(
     '',
     '        end',
@@ -461,16 +544,54 @@ async function _runGeneratedOrca(config, genName, tmpDir, opts) {
 }
 
 // ---------------------------------------------------------------------------
+// Path helpers for Merlin32 generated harnesses
+// ---------------------------------------------------------------------------
+
+// Resolve a user-supplied include path to a proper absolute Windows path.
+// Handles the URL.pathname format that vitest's `new URL(...).pathname` emits
+// on Windows: '/C:/some/path' → 'C:\...' (leading slash from URL)
+// and the path.join artifact: '\C:\some\path' → 'C:\...' (backslash from join).
+function _normAbsPath(testDir, p) {
+  // charCode 47 = '/', 92 = '\'.  Strip leading separator before drive letter.
+  const first = p.charCodeAt(0);
+  if ((first === 47 || first === 92) && /^[A-Za-z]:/.test(p.slice(1))) p = p.slice(1);
+  return resolve(testDir, p);
+}
+
+// Return the deepest directory that is a common ancestor of every path in
+// `absDirs` (an array of already-resolved absolute directory paths).
+function _commonParent(absDirs) {
+  if (absDirs.length === 1) return absDirs[0];
+  const parts = absDirs.map(d => d.replace(/\\/g, '/').split('/'));
+  const minLen = Math.min(...parts.map(p => p.length));
+  const common = [];
+  for (let i = 0; i < minLen; i++) {
+    if (parts.every(p => p[i].toLowerCase() === parts[0][i].toLowerCase())) {
+      common.push(parts[0][i]);
+    } else break;
+  }
+  // If nothing in common beyond the drive letter, return just the drive root.
+  return common.join('\\') || (parts[0][0] + '\\');
+}
+
+// ---------------------------------------------------------------------------
 // _runGeneratedMerlin32 — generate and run a Merlin32 harness
 // ---------------------------------------------------------------------------
 async function _runGeneratedMerlin32(config, genName, tmpDir, opts) {
-  const { testDir, call, callMode = 'jsl', includes, registers, memory, captureMemory } = config;
+  const { testDir, call, callMode = 'jsl', includes, registers, memory, captureMemory, allocMemory } = config;
 
-  const aunitS = join(_runnerDir, 'lib', 'aunit.merlin.s');
-  const ioS    = join(_runnerDir, 'lib', 'io.merlin.s');
+  const aunitS = resolve(_runnerDir, 'lib', 'aunit.merlin.s');
+  const ioS    = resolve(_runnerDir, 'lib', 'io.merlin.s');
 
-  // Absolute path with forward slashes for PUT directives.
-  const putPath  = (p) => resolve(testDir, p).replace(/\\/g, '/');
+  // Resolve all include paths to proper absolute Windows paths (handling the
+  // '/C:/...' URL.pathname format that vitest env vars can produce on Windows).
+  const absIncludes = includes.map(p => _normAbsPath(testDir, p));
+
+  // Merlin32 resolves PUT paths relative to the primary source file's directory,
+  // which is tmpDir (where the generated harness lives).  Use forward-slash
+  // relative paths from tmpDir so no drive-letter prefix appears in any path
+  // Merlin32's ProDOS layer must parse.
+  const putPath  = (absPath) => relative(tmpDir, absPath).replace(/\\/g, '/');
   const hex4     = (n) => `$${(n & 0xFFFF).toString(16).padStart(4, '0').toUpperCase()}`;
   const addrExpr = (label, offset = 0) => offset === 0 ? label : `${label}+${offset}`;
 
@@ -496,16 +617,7 @@ async function _runGeneratedMerlin32(config, genName, tmpDir, opts) {
     '',
   );
 
-  const A = registers.A ?? 0;
-  const X = registers.X ?? 0;
-  const Y = registers.Y ?? 0;
-  emit(
-    '* --- register setup ---',
-    `            lda   #${hex4(A)}`,
-    `            ldx   #${hex4(X)}`,
-    `            ldy   #${hex4(Y)}`,
-    '',
-  );
+  _emitRegSetup(registers, '            ', emit);
 
   memory.forEach((item, i) => {
     const offset = item.offset ?? 0;
@@ -521,8 +633,10 @@ async function _runGeneratedMerlin32(config, genName, tmpDir, opts) {
     );
   });
 
+  emit('* --- call ---');
+  if (registers.DBR !== undefined) emit('            plb');
+  if (registers.P   !== undefined) emit('            plp');
   emit(
-    '* --- call ---',
     `            ${callMode}   ${call}`,
     '',
     '* --- capture registers ---',
@@ -558,11 +672,16 @@ async function _runGeneratedMerlin32(config, genName, tmpDir, opts) {
     emit(`_AUSetup${i} hex   ${data.toString('hex').toUpperCase()}`);
   });
 
+  allocMemory.forEach(item => {
+    emit(`${item.label}    ds    ${item.length}`);
+  });
+
   emit('');
 
-  // PUT includes: user files first, then AUnit library (all absolute paths).
-  for (const inc of includes) {
-    emit(`            put   ${putPath(inc)}`);
+  // PUT includes: user files first, then AUnit library.
+  // Paths are relative from sourceDir (the Merlin32 CWD).
+  for (const absInc of absIncludes) {
+    emit(`            put   ${putPath(absInc)}`);
   }
   emit(
     `            put   ${putPath(aunitS)}`,
@@ -573,7 +692,8 @@ async function _runGeneratedMerlin32(config, genName, tmpDir, opts) {
   const genPath = join(tmpDir, genName + '.s');
   await writeFile(genPath, source, 'utf8');
 
-  // sourceDir = tmpDir: all PUT paths are absolute, so cwd doesn't matter.
+  // sourceDir = tmpDir: Merlin32 resolves PUT paths relative to the primary
+  // source file directory (genPath's dir = tmpDir), so cwd = tmpDir is correct.
   return await _runTestMerlin32(genPath, tmpDir, tmpDir, opts);
 }
 
@@ -631,7 +751,7 @@ function _decodeMemory(buf, as, count) {
 export function cpu65816(sharedConfig) {
   const {
     includes      = [],
-    testDir,
+    testDir       = process.cwd(),
     assembler     = 'orca',
     keepArtifacts = false,
     trace         = false,
@@ -639,11 +759,10 @@ export function cpu65816(sharedConfig) {
 
   async function _call(callMode, label, callConfig = {}) {
     const {
-      A             = 0,
-      X             = 0,
-      Y             = 0,
+      A, X, Y, DP, DBR, SP, P,
       memory        = [],
       captureMemory = [],
+      allocMemory   = [],
       ...perCallOpts
     } = callConfig;
 
@@ -657,9 +776,28 @@ export function cpu65816(sharedConfig) {
       return { label: spec.label, offset: spec.offset, length: size * count };
     });
 
+    // Normalize allocMemory: same shape as captureMemory.
+    // With 'as': length is derived from the type size × count; result is typed numbers.
+    // Without 'as': 'length' must be given directly; result is a raw Buffer (supports .toString()).
+    const normalizedAlloc = allocMemory.map(spec => {
+      if (spec.as !== undefined) {
+        const size = _AS_SIZE[spec.as];
+        if (size === undefined) throw new Error(`cpu65816: unknown allocMemory type '${spec.as}'`);
+        const count = spec.count ?? 1;
+        return { ...spec, length: size * count };
+      }
+      if (spec.length === undefined) throw new Error(`cpu65816: allocMemory entry '${spec.label}' must specify either 'as' or 'length'`);
+      return { ...spec };
+    });
+
+    // allocMemory entries are automatically captured after the call so their
+    // values are available in result.memory, keyed by label.
+    const totalCapture = [...normalizedCapture, ...normalizedAlloc];
+
     const result = await runGeneratedTest(
       { assembler, testDir, includes, call: label, callMode,
-        registers: { A, X, Y }, memory, captureMemory: normalizedCapture },
+        registers: { A, X, Y, DP, DBR, SP, P }, memory,
+        captureMemory: totalCapture, allocMemory: normalizedAlloc },
       { keepArtifacts, trace, ...perCallOpts }
     );
 
@@ -669,10 +807,11 @@ export function cpu65816(sharedConfig) {
       );
     }
 
-    // Build memory output keyed by label.  Entries with 'as' are decoded into
-    // typed JS numbers; entries without 'as' expose the raw Buffer.
+    // Build memory output keyed by label.  Combine captureMemory and
+    // allocMemory (in that order) to match the order passed to runGeneratedTest.
+    const allCaptureSpecs = [...captureMemory, ...allocMemory];
     const memOut = {};
-    captureMemory.forEach((spec, i) => {
+    allCaptureSpecs.forEach((spec, i) => {
       const entry = result.memory[i];
       if (!entry) return;
       if (spec.as !== undefined) {

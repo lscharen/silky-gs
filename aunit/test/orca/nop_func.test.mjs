@@ -20,8 +20,8 @@ describe.skipIf(!hasIix)('NopFunc — ORCA/M', () => {
     testDir:  __dirname,
   });
 
-  test('default call returns A=0', async () => {
-    const r = await jsl('NopFunc');
+  test('call with A=0 returns A=0', async () => {
+    const r = await jsl('NopFunc', { A: 0 });
     expect(r.A).toBe(0);
   });
 
