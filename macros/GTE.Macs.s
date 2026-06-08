@@ -8,6 +8,13 @@ jeq     mac
         jmp   ]1
         <<<
 
+; Marker macro used in conjunction with scrips/gen-include.js.  A macro both can't
+; be empty otherwise the assembly process terminated after "Replace Macros with Code..."
+; with no error message.
+mput    mac
+        ds   0                ;       include module ]1
+        <<<
+
 _Deref  MAC
         phb                   ; save caller's data bank register
         pha                   ; push high word of handle on stack

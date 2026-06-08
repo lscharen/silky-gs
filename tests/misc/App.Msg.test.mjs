@@ -3,7 +3,7 @@
  */
 import { describe, test, expect } from 'vitest';
 import { join }                   from 'node:path';
-import { cpu65816 }               from 'aunit';
+import { cpu65816 }               from 'iigs-unit';
 
 const SRC      = join(process.env.SRC_ROOT, './misc/App.Msg.s');
 const FONT_SRC = join(process.env.SRC_ROOT, './misc/font.s');

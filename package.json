@@ -16,8 +16,10 @@
     "gsport": "%npm_package_config_gsport%",
     "kegs": "%npm_package_config_kegscyrene%",
     "cr": "%npm_package_config_crossrunner%",
-    "test": "npm run build-image && %npm_package_config_gsport%",
-    "build:all": "npm run build:smb && npm run build:bf && npm run build:wump && npm run build:lo && npm run build:ic && npm run build:eb && npm run build:dk",
+    "test": "vitest run --config vitest.config.mjs",
+    "run": "npm run build-image && %npm_package_config_gsport%",
+    "build:all": "npm run gen-includes ./src/games/smb/Main.s ./src/games/bf/Main.s ./src/games/wumpus/Main.s ./src/games/lightsout/Main.s ./src/games/iceclimber/Main.s ./src/games/excitebike/Main.s ./src/games/dk/Main.s ./src/games/mb/Main.s && npm run build:smb && npm run build:bf && npm run build:wump && npm run build:lo && npm run build:ic && npm run build:eb && npm run build:dk",
+    "build:_smb": "npm run gen-includes ./src/games/smb/Main.s && %npm_package_config_merlin32% -V %npm_package_config_macros% ./src/games/smb/SMB.s",
     "build:smb": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/games/smb/SMB.s",
     "build:bf": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/games/bf/BF.s",
     "build:wump": "%npm_package_config_merlin32% -V %npm_package_config_macros% ./src/games/wumpus/Wump.s",
@@ -36,8 +38,9 @@
     "debug:mb": "cd src/games/mb && %npm_package_config_crossrunner% MarioBrosGS -source MarioBrosGS_S02__Output.txt MarioBrosGS_S03__Output.txt MarioBrosGS_S04__Output.txt MarioBrosGS_S05__Output.txt -map Master.s -Debug -CompatibilityLayer",
     "cyrene:bf": "npm run build-image && concurrently '%npm_package_config_cyrene%' '%npm_package_config_kegscyrene%'",
     "build-image": "build-image.bat %npm_package_config_cadius% .\\emu\\Target.2mg /ClassicsGS/",
-    "test:unit": "vitest run --config aunit/vitest.config.mjs",
-    "test:unit:watch": "vitest --config aunit/vitest.config.mjs"
+    "gen-includes": "node scripts/gen-includes.js",
+    "test:unit": "vitest run --config vitest.config.mjs",
+    "test:unit:watch": "vitest --config vitest.config.mjs"
   },
   "repository": {
     "type": "git",
@@ -49,12 +52,11 @@
     "url": "https://github.com/lscharen/iigs-game-engine/issues"
   },
   "homepage": "https://github.com/lscharen/iigs-game-engine#readme",
-  "dependencies": {
-    "aunit": "file:./aunit"
-  },
   "devDependencies": {
     "concurrently": "^9.1.2",
     "csv-parse": "^5.5.6",
+    "dotenv": "^17.4.2",
+    "iigs-unit": "file:../iigs-unit",
     "pngjs": "^6.0.0",
     "string-builder": "^0.1.8",
     "vitest": "^2.0.0",

@@ -356,17 +356,77 @@ _UpdateDiagonalBlock
     sta:  {2*ROW_WIDTH}+{3*COL_WIDTH},x     ; Store in location [B]
     rts
 
-; _UpdateOffDiagonalBlock
+; _UpdateBlock
 ;
-; Updates a 4x4 block of the swizzle table.  Within each block, two of the values remain constant
-; and the other two values take on the four index values.  The first index value is always zero
-; because it represents the transparent color, so only three of the values need to be set.
+; Updates all 16 entries of an off-diagonal 4x4 block of the swizzle table.  Called for blocks
+; where W ≠ Y, so the XBA anti-symmetry used by _UpdateDiagonalBlock does not apply and each
+; of the 16 entries must be computed independently.
 ;
-; When 
+; Within each block W and Y are constant; Z varies across rows (ROW_WIDTH = 2 bytes per Z step)
+; and X varies across columns (COL_WIDTH = 32 bytes per X step).  The value at position
+; [Z=r, X=c] = pal_y[y] | pal_z[r] | pal_w[w] | pal_x[c].
+;
+; The pal_ tables place their IIgs palette index into a specific nibble of the output word:
+;   pal_y[i] → nibble 3 (bits 15-12)
+;   pal_z[i] → nibble 2 (bits 11-8)
+;   pal_w[i] → nibble 1 (bits 7-4)
+;   pal_x[i] → nibble 0 (bits 3-0)
+;
+; AND #$FFF0 clears nibble 0 (pal_x) between columns within a row.
+; AND #$F0F0 clears nibble 2 (pal_z) AND nibble 0 (pal_x) between rows.
+;
+; A = pal_y[y] | pal_w[w]   (constant Y and W contributions; X=0 and Z=0 contribute zero)
+; X = block base byte offset (= w*128 + y*8 within the 512-byte palette sub-table)
 
 _UpdateBlock
-    lda  #$0000
 
+    ; Row 0 (Z=0): base value only, sweep X across columns
+    sta:  {0*ROW_WIDTH}+{0*COL_WIDTH},x     ; [Z=0, X=0]
+    ora   pal_x+2
+    sta:  {0*ROW_WIDTH}+{1*COL_WIDTH},x     ; [Z=0, X=1]
+    and   #$FFF0                             ; clear pal_x nibble
+    ora   pal_x+4
+    sta:  {0*ROW_WIDTH}+{2*COL_WIDTH},x     ; [Z=0, X=2]
+    and   #$FFF0
+    ora   pal_x+6
+    sta:  {0*ROW_WIDTH}+{3*COL_WIDTH},x     ; [Z=0, X=3]
 
+    ; Row 1 (Z=1): clear pal_x and pal_z, install pal_z[1], sweep X
+    and   #$F0F0                             ; clear pal_x (nibble 0) and pal_z (nibble 2)
+    ora   pal_z+2                            ; add pal_z[1]
+    sta:  {1*ROW_WIDTH}+{0*COL_WIDTH},x     ; [Z=1, X=0]
+    ora   pal_x+2
+    sta:  {1*ROW_WIDTH}+{1*COL_WIDTH},x     ; [Z=1, X=1]
+    and   #$FFF0
+    ora   pal_x+4
+    sta:  {1*ROW_WIDTH}+{2*COL_WIDTH},x     ; [Z=1, X=2]
+    and   #$FFF0
+    ora   pal_x+6
+    sta:  {1*ROW_WIDTH}+{3*COL_WIDTH},x     ; [Z=1, X=3]
 
-    sta: 0,x
+    ; Row 2 (Z=2)
+    and   #$F0F0
+    ora   pal_z+4                            ; add pal_z[2]
+    sta:  {2*ROW_WIDTH}+{0*COL_WIDTH},x     ; [Z=2, X=0]
+    ora   pal_x+2
+    sta:  {2*ROW_WIDTH}+{1*COL_WIDTH},x     ; [Z=2, X=1]
+    and   #$FFF0
+    ora   pal_x+4
+    sta:  {2*ROW_WIDTH}+{2*COL_WIDTH},x     ; [Z=2, X=2]
+    and   #$FFF0
+    ora   pal_x+6
+    sta:  {2*ROW_WIDTH}+{3*COL_WIDTH},x     ; [Z=2, X=3]
+
+    ; Row 3 (Z=3)
+    and   #$F0F0
+    ora   pal_z+6                            ; add pal_z[3]
+    sta:  {3*ROW_WIDTH}+{0*COL_WIDTH},x     ; [Z=3, X=0]
+    ora   pal_x+2
+    sta:  {3*ROW_WIDTH}+{1*COL_WIDTH},x     ; [Z=3, X=1]
+    and   #$FFF0
+    ora   pal_x+4
+    sta:  {3*ROW_WIDTH}+{2*COL_WIDTH},x     ; [Z=3, X=2]
+    and   #$FFF0
+    ora   pal_x+6
+    sta:  {3*ROW_WIDTH}+{3*COL_WIDTH},x     ; [Z=3, X=3]
+    rts

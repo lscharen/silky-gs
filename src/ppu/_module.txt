@@ -1,0 +1,14 @@
+# Make sure files are ordered to satify forward dependencies
+ppu_macros.s
+ppu.s
+ppu_attributes.s
+ppu_init.s
+# ppu_dirty.s -- not ready yet
+ppu_metatiles.s
+ppu_nametable.s
+ppu_queues.s
+ppu_palette.s
+ppu_regs.s
+ppu_render.s
+ppu_sprites.s
+scanline_bitmap.s
