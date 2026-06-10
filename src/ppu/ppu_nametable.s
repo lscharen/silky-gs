@@ -50,6 +50,7 @@
 ; HMIRROR_ADDR = PPU_ADDR & $FBFF
 ; VMIRROR_ADDR = PPU_ADDR & $FDFF
 
+        mx    %00
 _InitPPUTileMappingVert
 :row     equ  tmp3
 :col     equ  tmp4
@@ -144,6 +145,7 @@ _InitPPUTileMappingVert
         rep  #$21
         rts
 
+        mx    %00
 _InitPPUTileMappingHorz
 :row     equ  tmp3
 :col     equ  tmp4
@@ -245,4 +247,3 @@ _InitPPUTileMappingHorz
 
         rep  #$21
         rts
-

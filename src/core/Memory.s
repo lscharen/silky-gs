@@ -6,7 +6,6 @@
 ; * 1 bank for cached sprites
 
                mx        %00
-
 InitMemory
                PushLong  #0                          ; space for result
                PushLong  #$008000                    ; size (32k)
@@ -40,6 +39,7 @@ mem_err
 
 
 ; Set up the data tables for horizontal mirroring
+               mx        %00
 InitLiteBlitterHorz
                ldx       #0
                ldy       #lite_base_1
@@ -83,6 +83,7 @@ InitLiteBlitterHorz
                rts
 
 ; Set up the data tables for vertical mirroring
+               mx        %00
 InitLiteBlitter
 
 ; Fill in the BTable and BRowTable values.  There are 120 lines in each bank and each line covers two of
@@ -131,6 +132,7 @@ InitLiteBlitter
 
 ; Bank allocator (for one full, fixed bank of memory. Can be immediately deferenced)
 
+               mx        %00
 AllocOneBank   PushLong  #0
                PushLong  #$10000
                PushWord  UserId
@@ -145,6 +147,7 @@ AllocOneBank   PushLong  #0
                rts
 
 ; Variation that returns the pointer in the X/A registers (X = low, A = high)
+               mx        %00
 AllocOneBank2  PushLong  #0
                PushLong  #$10000
                PushWord  UserId

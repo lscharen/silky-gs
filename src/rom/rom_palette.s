@@ -116,7 +116,7 @@ NES_BuildStaticPalette
 ; Rather than use a bitmask to identify free slots, assume that all of the fixed
 ; palette indices come first and then increment a free slot counter for each color
 ; that is needed to be assigned.
-    mx   #$00
+    mx   %00
 NES_BuildGreedyPalette
     lda  #FIRST_OPEN_INDEX      ; Defined by the game driver, e.g. SMB reserves 5 colors (background, coin, and the three player colors)
     sta  :next_index
@@ -254,6 +254,7 @@ NES_BuildGreedyPalette
 ; A' = swap(A) and swap exchanges the high and low bytes of the 16-bit word.  This can
 ; implemented efficiently by using the 65816 XBA instruction.
 
+        mx   %00
 NES_UpdateSwizzleTable
 
 ; UpdateSingle
@@ -263,6 +264,7 @@ NES_UpdateSwizzleTable
 ; The W bits change every 4 word, but are constant in each column
 ; X = block offset
 ; Y = palette index select
+        mx   %00
 UpdateOnlyW
     lda:  {0*ROW_WIDTH}+{0*COL_WIDTH},x
     and   #$0FFF
@@ -271,12 +273,15 @@ UpdateOnlyW
     
 
 ; The X bits change every word, but are contant in each column
+        mx   %00
 UpdateOnlyX
 
 ; The Y bits change every 4 rows, and are constant in each row
+        mx   %00
 UpdateOnlyY
 
 ; The Z bits change every row, and are constant in each row
+        mx   %00
 UpdateOnlyZ
 
 

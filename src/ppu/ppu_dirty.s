@@ -13,6 +13,7 @@
 ; adjacent grid locations, the amount of overhead is curtailed.  Restricting the updates to
 ; the on-screen grid also means that there is no need to worry about clipping.
 
+    mx  %00
 revealTiles
         lda   tile_head
         bmi   :out                ; Nothing to reveal

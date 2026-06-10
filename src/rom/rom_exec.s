@@ -9,6 +9,7 @@
 ;
 ; X = ROM Address
 ; Interrupts must be disabled
+            mx  %00
 romxfer     tsc
             sta   StkSave                   ; Save the current stack in the main program
 
@@ -27,6 +28,7 @@ romxfer     tsc
             ldx   yield_s                   ; Put 16-bit stack addr in X to protect against NES code using TXS
 
             jml   ExtIn
+            mx  %00
 ExtRtn      ENT
 
             tsx                             ; Copy the stack address returned by the emulator

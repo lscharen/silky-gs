@@ -10,6 +10,7 @@ native_joy  ENT
 ;
 ; Read input for the configured controller inputs and place in the appropriate joypad byte
 ; for the ROM routines to read.
+            mx  %00
 NES_ReadInput
             jsr   _ReadControl
             sta   LastRead               ; The keyboard input is replicated in both, so save it

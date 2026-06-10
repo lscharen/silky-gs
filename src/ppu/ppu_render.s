@@ -134,6 +134,7 @@ drawDirtyScreen
 
 
 ; Render the prepared frame date
+        mx   %00
 drawScreen
 
 ; Reset the dirty state to 0 (normal)

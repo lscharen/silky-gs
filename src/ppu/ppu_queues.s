@@ -63,7 +63,6 @@ at_list            ds {AT_LIST_LEN*4}
 ; processing.  The PPU state is a snapshot from the end of the last frame.
 
         mx  %00
-
 PPUFreezeNametableUpdates
 
 ; TODO: If the saturation flag is set, then just copy all of the nametable and attribute data into the SHADOW

@@ -118,12 +118,12 @@ ForceMetatileRefresh
 ; P = 8-bit A / 16-bit XY
         mx    %10
 SyncPPUMetatile
-
         stal PPU_MEM+ATTR_SHADOW+$00,x     ; Store the palette select bits in the shadow page of the PPU MEM bank ($6000 - $7FFF)
         stal PPU_MEM+ATTR_SHADOW+$01,x
         stal PPU_MEM+ATTR_SHADOW+$20,x
         stal PPU_MEM+ATTR_SHADOW+$21,x
 
+        mx    %10
 RefreshMetatile                            ; Alternate entry point is not setting a new value, just drawing
         clc
         adc   SwizzlePtr+1                 ; Set the palette selection (used for all 4 tiles)

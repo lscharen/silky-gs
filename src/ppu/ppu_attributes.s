@@ -17,8 +17,8 @@
 ; correct bank address for the tile compilation bank.
 
 ; Alternate entry point to DrawPPUAttribute from the ATQueuePush macro
-_DrawPPUAttribute
         mx    %00
+_DrawPPUAttribute
         tya
         sep   #$20
         stal  PPU_MEM+TILE_SHADOW,x
@@ -194,8 +194,7 @@ bad_tile
 ; X = PPU Attribute byte address
 ; A = 8-bit attribute value
 
-        mx %10
-
+        mx    %10
 RenderPPUAttr
 :attr_diff equ tmp5
 :attr_copy equ tmp6

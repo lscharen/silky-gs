@@ -36,6 +36,7 @@ VERT_ADDR_OFFSET equ 21
 HORZ_ADDR_OFFSET equ 24
 PREAMBLE_SIZE    equ 26
 
+        mx    %00
 CompileSprite
 :base   equ tmp9                 ; start of the sprite
 
@@ -112,6 +113,7 @@ CompileSprite
 
         rts
 
+        mx    %00
 CompileSpritePreamble
 
         lda  #$A6+{256*sprTmp1}  ; LDX dp
@@ -178,6 +180,7 @@ CompileSpritePreamble
 
         rts
 
+        mx    %00
 CompileSpriteNormal
 :flags  equ tmp8
 
@@ -204,6 +207,7 @@ CompileSpriteNormal
 :exit
         jmp  _EmitReturn
 
+        mx    %00
 CompileSpriteHorz
 :flags  equ tmp8
 
@@ -230,6 +234,7 @@ CompileSpriteHorz
 :exit
         jmp  _EmitReturn
 
+        mx    %00
 CompileSpriteVert
 :flags  equ tmp8
 
@@ -256,6 +261,7 @@ CompileSpriteVert
 :exit
         jmp  _EmitReturn
 
+        mx    %00
 CompileSpriteBoth
 :flags  equ tmp8
 
@@ -282,6 +288,7 @@ CompileSpriteBoth
 :exit
         jmp  _EmitReturn
 
+        mx    %00
 _EmitReturn
         lda  #$005C           ; return instruction jumps back to draw_rtn
         sta  [SpriteBank0],y
@@ -296,6 +303,7 @@ _EmitReturn
 
         rts
 
+        mx    %00
 emit_op
         sta  tmp7
 
@@ -366,6 +374,7 @@ emit_op
         iny
         rts
 
+        mx    %00
 emit_op_flip
         sta  tmp7
 

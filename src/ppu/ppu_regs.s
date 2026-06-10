@@ -50,6 +50,7 @@ ppumask_override dw $FFFF
 
 
 ; $2000 - PPUCTRL (Write only) (optimized, if we can defer resolving ntaddr, spadr and bgadr, this can be simplified further))
+        mx    %11
 PPUCTRL_WRITE ENT
         php
 
@@ -92,12 +93,14 @@ PPUCTRL_WRITE ENT
         rtl
 
 ; $2001 - PPUMASK (Write only)
+        mx    %11
 PPUMASK_WRITE ENT
         stal ppumask
         rtl
 
 
 ; $2002 - PPUSTATUS For "ldx ppustatus"
+        mx    %11
 PPUSTATUS_READ_X ENT
         pha
 
@@ -118,6 +121,7 @@ PPUSTATUS_READ_X ENT
 
 ; $2002 - PPUSTATUS For "lda ppustatus"
 ; MUST NOT change any P flags not set by the PLA before the return.
+        mx    %11
 PPUSTATUS_READ ENT
         lda  #1
         stal w_bit           ; Reset the address latch used by PPUSCROLL and PPUADDR
@@ -132,11 +136,13 @@ PPUSTATUS_READ ENT
 
 
 ; $2003
+        mx    %11
 OAMADDR_WRITE ENT
         stal oamaddr
         rtl
 
 ; $2005 - PPU SCROLL
+        mx    %11
 PPUSCROLL_WRITE ENT
         php
         phx
@@ -155,6 +161,7 @@ PPUSCROLL_WRITE ENT
         rtl
 
 ; $2006 - PPUADDR
+        mx    %11
 PPUADDR_WRITE ENT
         php
         phb
@@ -185,6 +192,7 @@ PPUADDR_WRITE ENT
 ;
 ; If reading from the $0000 - $3EFF range, the value from vram_buff is returned and the actual data is loaded
 ; post-fetch.
+        mx    %11
 PPUDATA_READ0 ENT
         php
         phb
@@ -231,6 +239,7 @@ PPUDATA_READ0 ENT
         pla
         rtl
 
+        mx    %11
 PPUDATA_READ ENT
         php
         phb
@@ -431,6 +440,8 @@ PPUDATA_WRITE ENT
         mx   %11
 * ; Trigger a copy from a page of memory to OAM.  Since this is a DMA operation, we can cheat a little and do a 16-bit copy
 PPU_OAM equ 0                       ; direct page base address
+
+        mx    %11
 PPUDMA_WRITE ENT
         DO DIRECT_OAM_READ
         rtl                         ; Cheat a lot and pretend it didn't happen.  Read from NES RAM directly when we render

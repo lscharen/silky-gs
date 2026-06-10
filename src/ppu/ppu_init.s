@@ -9,11 +9,10 @@
 ;                 out-of-range sentinel values so the first real palette
 ;                 write is never skipped.  Returns carry clear on success.
 
-        mx   %00
-
 ; Initialize any data structure and internal state for emulating the NES PPU
 ;
 ; Must return carry clear on success
+        mx   %00
 PPUStartUp
         lda   CompileBank0+1            ; Patch some dispatch addresses with the tile compilation bank
         sta   patch0+2

@@ -2,11 +2,10 @@
 ; wrapper code.  It is expected that the wrapped defined several callback functions
 ; and constants that can be used to parametering the NES runtime layer
 
-            mx %00
-
 ; Scaffold init
 ;
 ; Should be called immediately afte the application gets control from GS/OS
+            mx    %00
 NES_StartUp
             sta   UserId                  ; GS/OS passes the memory manager user ID for the application into the program
             _MTStartUp                    ; Require the miscellaneous toolset to be running
@@ -104,18 +103,21 @@ Fail        brk   $FE
 
 
 ; Perform any initialization actions
+            mx  %00
 StartUp
             jsr   PPUResetQueues
             lda   UserId
             jmp   _CoreStartUp
 
 ; Perform any shutdown/cleanup actions
+            mx  %00
 ShutDown
             jmp   _CoreShutDown
 
 ; NES_ColdBoot
 ;
 ; Invoke the reset vector
+            mx  %00
 NES_ColdBoot
             ldal  ROMBase+$FFFC         ; Reset Vector
             tax
@@ -124,6 +126,7 @@ NES_ColdBoot
             cli
             rts
 
+            mx  %00
 NES_WarmBoot
             ldal  ROMBase+$FFFC
             tax
@@ -139,11 +142,13 @@ NES_WarmBoot
 ;
 ; NES_StopExecution
 ; NES_StartExecution
+            mx  %00
 NES_StopExecution
             lda  #1
             sta  skipInterruptHandling
             rts
 
+            mx  %00
 NES_StartExecution
             lda  #0
             sta  skipInterruptHandling
@@ -153,6 +158,7 @@ NES_StartExecution
 ;
 ; The main control loop.  Pressing 'q' will exit the driver.
             PRE_EVT_LOOP
+            mx  %00
 NES_EvtLoop
             EVT_LOOP_BEGIN
 
@@ -289,6 +295,7 @@ NES_EvtLoop
             rts
 
 ; Clean up the runtime
+            mx  %00
 NES_ShutDown
             lda   BorderColor              ; Restore the border color
             jsr   _SetBorderColor
@@ -309,6 +316,7 @@ BorderColor       dw  0            ; save/restore border color
 ; Built-in user key actions
 
 ; Toggle an APU control bit
+            mx  %00
 ToggleAPUChannel
             pha
             lda   #$0001
@@ -487,6 +495,7 @@ NES_RenderFrame
 ; Helper functions for patching and restoring the PEA field.  These could
 ; be overridden for games that want to preserve the ability to switch between
 ; dirty an full rendering, but still have a custom screen layout
+            mx  %00
 _SetupPEAField
             jsr   _BltSetup
             sta   exitOffset              ; cache the :exit_offset value returned from this function
@@ -495,12 +504,14 @@ _SetupPEAField
             sta   peaFieldIsPatched
             rts
 
+            mx  %00
 _ResetPEAField
             stz   peaFieldIsPatched
 
             ldy   exitOffset              ; offset to patch
             jmp   _RestoreBG0OpcodesLite
 
+            mx  %00
 _GetPPUScrollX
             sep   #$20
             lda   _ppuctrl                ; Bit 0 is the high bit of the X scroll position
@@ -513,6 +524,7 @@ _GetPPUScrollX
             tax
             rts
 
+            mx  %00
 _GetPPUScrollY
             sep   #$20
             lda   _ppuctrl                ; Bit 1 is the high bit of the Y scroll position
@@ -537,6 +549,7 @@ _GetPPUScrollY
 ; Output
 ;  X = SHR address
 ;  C = 0 if visible, 1 if address is off-screen
+            mx  %00
 _NametableToScreen
 
 ; The hardest issue to handle here is properly handling wrap-around based on the current mirroring
@@ -605,6 +618,7 @@ _NametableToScreen
 
 ; Default render screen implementation.  The user-code can override this and provide their
 ; own to improve performance.
+            mx  %00
 RenderScreen
             jsr   _GetPPUScrollX          ; Return in X register
             jsr   _GetPPUScrollY          ; Return in Y register

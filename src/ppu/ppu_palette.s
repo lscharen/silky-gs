@@ -20,8 +20,8 @@
 ; The dispatch table itself (PPU_PALETTE_DISPATCH) is defined by the game in
 ; Main.s and typically points either here or to game-specific handlers.
 
-        mx   %00
 ; Background color
+        mx   %00
 ppu_3F00  ldal PPU_MEM+$3F00
           jsr  NES_ColorToIIgs
           stal $E19E00

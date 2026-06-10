@@ -81,6 +81,7 @@ NES_ColorPalette
 ; NES_ColorToIIgs
 ; A = NES colour index (0-63; high byte ignored)
 ; Returns: A = IIgs 12-bit RGB word, Y clobbered
+            mx    %00
 NES_ColorToIIgs
             and   #$003F
             asl
@@ -91,6 +92,7 @@ NES_ColorToIIgs
 ; NES_ColorToIIgs_X
 ; A = NES colour index (0-63; high byte ignored)
 ; Returns: A = IIgs 12-bit RGB word, X clobbered
+            mx    %00
 NES_ColorToIIgs_X
             and   #$003F
             asl

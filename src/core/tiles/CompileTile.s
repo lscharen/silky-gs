@@ -22,6 +22,7 @@
 ;  stz $0004,x        opcode = $9E
 ;  ...
 ;  rtl
+        mx    %00
 CompileTile
 :target equ tmp4
 :source equ tmp5
@@ -178,6 +179,7 @@ CompileTile
 ; Y = compiled tile address
 ;
 ; Assumes the SwizzlePtr has already been set to point at the correct remapping table
+        mx    %00
 DrawCompiledTile
         phb
 

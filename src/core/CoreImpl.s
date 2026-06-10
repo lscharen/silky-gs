@@ -66,7 +66,7 @@ spritemask        EXT
 ; Core engine functionality.  The idea is that that source file can be PUT into
 ; a main source file and all of the functionality will be available.
 ;
-; There are some constancts that must be externally defined that can affect how
+; There are some constants that must be externally defined that can affect how
 ; the GTE runtime works
 ;
 ; NO_MUSIC      : Set to non-zero to avoid using any source

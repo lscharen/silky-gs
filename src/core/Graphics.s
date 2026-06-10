@@ -60,6 +60,7 @@ SystemPalette   dw    $0000,$0777,$0841,$072C
 ;
 ;  X = mode number OR width in bytes
 ;  Y = height in pixels (if X > 8)
+                 mx    %00
 _SetScreenMode
                   cpx       #11
                   bcs       :direct             ; if x > 10, then assume X and Y are the dimensions
@@ -106,6 +107,7 @@ _SetScreenMode
                   rts
 
 ; Return the current border color ($0 - $F) in the accumulator
+                 mx    %00
 _GetBorderColor  lda   #0000
                  sep   #$20
                  ldal  BORDER_REG
@@ -114,6 +116,7 @@ _GetBorderColor  lda   #0000
                  rts
 
 ; Set the border color to the accumulator value.
+                 mx    %00
 _SetBorderColor  sep   #$20                 ; ACC = $X_Y, REG = $W_Z
                  eorl  BORDER_REG           ; ACC = $(X^Y)_(Y^Z)
                  and   #$0F                 ; ACC = $0_(Y^Z)
@@ -123,6 +126,7 @@ _SetBorderColor  sep   #$20                 ; ACC = $X_Y, REG = $W_Z
                  rts
 
 ; Clear to SHR screen to a specific color
+                 mx    %00
 _ClearToColor
                  ldx  #$7CFE
 :loop            stal $012000,x
@@ -133,6 +137,7 @@ _ClearToColor
 
 ; Set a palette values
 ; A = palette number, X = palette address
+                 mx    %00
 _SetPalette
                  and   #$000F               ; palette values are 0 - 15 and each palette is 32 bytes
                  asl
@@ -152,6 +157,7 @@ _SetPalette
                  rts
 
 ; Initialize the SCB
+                 mx    %00
 _SetSCBs
                  ldx   #$0100               ;set all $100 scbs to A
 :scbloop         dex
@@ -161,6 +167,7 @@ _SetSCBs
                  rts
 
 ; Turn SHR screen On/Off
+                 mx    %00
 _GrafOn
                  sep   #$20
                  lda   #$C1              ; SHR On, Linear Memory Map On, Ignore Bank Latch
@@ -168,6 +175,7 @@ _GrafOn
                  rep   #$20
                  rts
 
+                 mx    %00
 _GrafOff
                  sep   #$20
                  lda   #$01              ; SHR Off, Linear Memory Map Off
@@ -176,6 +184,7 @@ _GrafOff
                  rts
 
 ; Enable/Disable Shadowing.
+                 mx    %00
 _ShadowOn
                  sep   #$20
                  ldal  SHADOW_REG
@@ -185,6 +194,7 @@ _ShadowOn
                  rep   #$20
                  rts
 
+                 mx    %00
 _ShadowOff
                  sep   #$20
                  ldal  SHADOW_REG
@@ -194,6 +204,7 @@ _ShadowOff
                  rep   #$20
                  rts
 
+                 mx    %00
 _GetVBL
                  sep   #$20
                  ldal  VBL_HORZ_REG
@@ -204,6 +215,7 @@ _GetVBL
                  and   #$00FF
                  rts
 
+                 mx    %00
 _WaitForVBL
                  sep   #$20
 :wait1           ldal  VBL_STATE_REG        ; If we are already in VBL, then wait
@@ -229,6 +241,7 @@ _WaitForVBL
 ; usually only be executed once during app initialization.  It doesn't get called
 ; with any significant frequency.
 
+                   mx    %00
 SetScreenRect      sty   ScreenHeight               ; Save the screen height and width
                    stx   ScreenWidth
 
@@ -288,6 +301,7 @@ SetScreenRect      sty   ScreenHeight               ; Save the screen height and
                    rts
 
 ; Clear the SHR screen and then infill the defined field
+                   mx    %00
 FillScreen         cmp   #0
                    bne   :fullfill
                    jmp   _ClearToColor

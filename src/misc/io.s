@@ -2,6 +2,7 @@
 ;
 ; Assumes file in named 'rom.dat'
 ; X = 16-bin address in NES ROM space
+            mx    %00
 LoadROMData
             sta        readRec+8               ; Number of bytes to read
             stz        readRec+10
@@ -35,6 +36,7 @@ LoadROMData
 :gsosNoErr   rts
 
 ; Load the preference data
+            mx    %00
 LoadPrefData
             lda        #{config_block_end-config_block_start}
             sta        readRec+8               ; Number of bytes to read
@@ -72,6 +74,7 @@ LoadPrefData
 ;
 ; X = 16-bin address in NES ROM space
 ; A = number of bytes to write
+            mx    %00
 SaveROMData
             sta        writeRec+8              ; Number of bytes to write
             stz        writeRec+10
@@ -110,6 +113,7 @@ SaveROMData
             rts
 
 ; Save the preferences
+            mx    %00
 SavePrefData
             lda        #{config_block_end-config_block_start}
             sta        writeRec+8              ; Number of bytes to write

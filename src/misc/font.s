@@ -22,6 +22,7 @@
 ;x = TopLeft screen pos
 ;y = font mask
 ;a = 8-bit char
+               mx    %00
 DrawBottom
                pha                        ; local variable space
                pha
@@ -46,6 +47,7 @@ DrawBottom
 ;x = TopLeft screen pos
 ;y = font mask
 ;a = 8-bit char
+               mx    %00
 DrawChar
                pha                        ; local variable space
                pha
@@ -67,7 +69,7 @@ DrawChar
                pla
                rts
 
-
+               mx    %00
 DrawString
                pha                        ; local variable space
                pha
@@ -83,6 +85,7 @@ DrawString
                and   #$00ff               ;strip off first char (len is only one byte)
                sta   ]F_Length            ;get our length byte
 
+               mx    %00
 NextChar       lda   ]F_CharIdx
                cmp   ]F_Length
                bne   :notDone
@@ -108,12 +111,14 @@ NextChar       lda   ]F_CharIdx
                inc   ]F_CurrentPos        ;update screen pos (2 words=8 pixels)
                bra   NextChar
 
+               mx    %00
 drawBottom     lda   FontTable,y          ;get real address of char data
                sec
                sbc   #FontData            ;pivot offset - now a is offset of fontdata
                tay                        ;so we'll index with that
                brl   bottom
 
+               mx    %00
 drawChar       lda   FontTable,y          ;get real address of char data
                sec
                sbc   #FontData            ;pivot offset - now a is offset of fontdata

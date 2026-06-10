@@ -1,5 +1,6 @@
 ; A = 0 turn off background
 ; A > 0 turn on background
+          mx    %00
 EnableBackground
     cmp   #0
     beq   :turn_off
@@ -22,6 +23,7 @@ EnableBackground
 
 ; A = 0 turn off sprites
 ; A > 0 turn on sprites
+          mx    %00
 EnableSprites
     cmp   #0
     beq   :turn_off

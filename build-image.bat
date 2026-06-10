@@ -21,23 +21,15 @@ REM Cadius does not overwrite files, so clear the files first
 %CADIUS% DELETEFOLDER %IMAGE% %FOLDER%Icons
 
 REM Collect the files in a single spot
-COPY .\src\games\smb\SuperMarioGS .\src\games\SuperMarioGS
-COPY .\src\games\bf\BalloonFgtGS .\src\games\BalloonFighGS
-COPY .\src\games\lightsout\LightsOutGS .\src\games\LightsOutGS
-COPY .\src\games\wumpus\WumpusGS .\src\games\WumpusGS
-COPY .\src\games\iceclimber\IceClimberGS .\src\games\IceClimberGS
-COPY .\src\games\excitebike\ExciteBikeGS .\src\games\ExciteBikeGS
-COPY .\src\games\dk\DonkeyKongGS .\src\games\DonkeyKongGS
-COPY .\src\games\mb\MarioBrosGS .\src\games\MarioBrosGS
 
 REM Now copy files and folders as needed
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\smb\SuperMarioGS
-%CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\bf\BalloonFgtGS
+REM %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\bf\BalloonFgtGS
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\lightsout\LightsOutGS
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\wumpus\WumpusGS
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\iceclimber\IceClimberGS
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\excitebike\ExciteBikeGS
-%CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\dk\DonkeyKongGS
+REM %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\dk\DonkeyKongGS
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\mb\MarioBrosGS
 
 %CADIUS% CREATEFOLDER %IMAGE% %FOLDER%Icons

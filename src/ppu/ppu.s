@@ -2,13 +2,11 @@
 ;
 ; Any read/write to the PPU registers in the ROM is intercepted and passed here.
 ; Helper to perform the essential functions of rendering a frame
-_ppuctrl    ds  2
-_ppuscroll_y dw 0          ; Pad the top-byte with zero to allow 8- or 16-bit access
-_ppuscroll_x dw 0          ; Pad the top-byte with zero to allow 8- or 16-bit access
-_ppumask    ds  2
-_ppuversion ds  2
-
-        mx    %00
+_ppuctrl     ds  2
+_ppuscroll_y dw  0          ; Pad the top-byte with zero to allow 8- or 16-bit access
+_ppuscroll_x dw  0          ; Pad the top-byte with zero to allow 8- or 16-bit access
+_ppumask     ds  2
+_ppuversion  ds  2
 
 ; Alternate scanOAMSprites that unrolls the loop, uses exclusion tables and 8-bit operations
 ; to improve scanning speed
@@ -211,6 +209,7 @@ scanOAMSprites
 
 ; Handle 8x16 sprite mode. We cheat and pretend that there are 2 8x8 sprites.  Fix once we have to handle
 ; a game that has >32 8x16 sprites
+        mx    %00
 scan8x16
 
 ; We're committed to 8x16 mode, so patch things
@@ -301,12 +300,7 @@ scan8x16
 
 ; Screen is 200 lines tall. It's worth it be exact when building the list because one extra
 ; draw + shadow sequence takes at least 1,000 cycles.
-
-; A representation of the list as [top, bot) pairs
-shadowListCount dw 0            ; Pad for 16-bit comparisons
-shadowListTop   ds 64
-shadowListBot   ds 64
-
+;
 ; This maps a screen y-coordinate to a byte index
 y2idx   wconst32 $00                ; $0000 $0000 $0000 $0000 $0001 $0001 $0001 $0001
         wconst32 $04
@@ -322,55 +316,6 @@ y2bits  wrep8 $00FF,$807F,$C03F,$E01F,$F00F,$F807,$FC03,$FE01
         wrep8 $00FF,$807F,$C03F,$E01F,$F00F,$F807,$FC03,$FE01
         wrep8 $00FF,$807F,$C03F,$E01F,$F00F,$F807,$FC03,$FE01
         wrep8 $00FF,$807F,$C03F,$E01F,$F00F,$F807,$FC03,$FE01
-
-; 25 entries to multiply steps in the shadow bitmap to scanlines
-mul8    db   $00,$08,$10,$18,$20,$28,$30,$38
-        db   $40,$48,$50,$58,$60,$68,$70,$78
-        db   $80,$88,$90,$98,$A0,$A8,$B0,$B8
-        db   $C0,$C8,$D0,$D8,$E0,$E8,$F0,$F8
-
-; Given a bit pattern, create a LUT that count to the first set bit (MSB -> LSB), e.g. $0F = 4, $3F = 2
-offset
-        db   8,7,6,6,5,5,5,5,4,4,4,4,4,4,4,4,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3
-        db   2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
-        db   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
-        db   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
-        db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-invOffset
-        db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        db   0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-        db   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
-        db   1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
-        db   2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2
-        db   3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,4,4,5,5,5,5,6,6,7,8
-
-; Mask off all of the high 1 bits, keep all of the low bits after the first zero, e.g.
-; offsetMask($E3) = offsetMask(11100011) = $1F.  %11100011 & $1F = $03
-offsetMask
-        db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
-        db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
-        db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
-        db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
-        db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
-        db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
-        db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF
-        db   $FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF,$FF  ; 127 (everything here has a 0 in the high bit)
-
-        db   $7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F  ; $80 - $8F
-        db   $7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F  ; $90 - $9F
-        db   $7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F  ; $A0 - $AF
-        db   $7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F,$7F  ; $B0 - $BF
-
-        db   $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F  ; $C0 - $CF
-        db   $3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F,$3F  ; $D0 - $DF
-
-        db   $1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F,$1F  ; $E0 - $EF
-        db   $0F,$0F,$0F,$0F,$0F,$0F,$0F,$0F,$07,$07,$07,$07,$03,$03,$01,$00  ; $F0 - $FF
 
 ; Change all of the 1-bits from the MSB to the first one bit to zeros, i.e. 11011000 -> 00011000
 flipLeadingOnes
@@ -415,173 +360,6 @@ flipLeadingZeros
         db   $D0,$D1,$D2,$D3,$D4,$D5,$D6,$D7,$D8,$D9,$DA,$DB,$DC,$DD,$DE,$DF  ; $D0 - $DF
         db   $E0,$E1,$E2,$E3,$E4,$E5,$E6,$E7,$E8,$E9,$EA,$EB,$EC,$ED,$EE,$EF  ; $E0 - $EF
         db   $F0,$F1,$F2,$F3,$F4,$F5,$F6,$F7,$F8,$F9,$FA,$FB,$FC,$FD,$FE,$FF  ; $F0 - $FF
-
-
-
-; Scan the bitmap list and call BltRange on the ranges
-        mx   %00
-drawShadowList
-        ldx  #0
-        cpx  shadowListCount
-        beq  :exit
-
-:loop
-        phx
-
-        lda  shadowListBot,x
-        and  #$00FF
-        tay
-
-        lda  shadowListTop,x
-        and  #$00FF
-        tax
-
-        jsr  _BltRangeLite
-
-        plx
-        inx
-        cpx  shadowListCount
-        bcc  :loop
-:exit
-        rts
-
-; Altername between BltRange and PEISlam to expose the screen
-;
-; Bug in BF after running for a long period of time -- hits BRK $66
-exposeShadowList
-:last   equ  tmp3
-:top    equ  tmp4
-:bottom equ  tmp5
-
-        ldx  #0
-        stx  :last
-        cpx  shadowListCount
-        beq  :exit
-:loop
-        phx
-
-        lda  shadowListTop,x
-        and  #$00FF
-        sta  :top
-
-        cmp  #200
-        bcc  *+4
-        brk  $44
-
-        lda  shadowListBot,x
-        and  #$00FF
-        sta  :bottom
-
-        cmp  #201
-        bcc  *+4
-        brk   $66
-
-        cmp  :top
-        bcs  *+4
-        brk  $55
-
-        ldx  :last
-        ldy  :top
-        jsr  _BltRangeLite      ; Draw the background up to this range
-
-        ldx  :top
-        ldy  :bottom
-        sty  :last              ; This is where we ended
-        jsr  _PEISlam           ; Expose the already-drawn sprites
-
-        plx
-        inx
-        cpx  shadowListCount
-        bcc  :loop
-
-:exit
-        ldx  :last              ; Expose the final part
-        ldy  #y_height
-        jmp  _BltRangeLite
-
-* ; This routine needs to adjust the y-coordinates based of the offset of the GTE playfield within
-* ; the PPU RAM
-shadowBitmapToList
-:top      equ  tmp0
-:bottom   equ  tmp2
-:bitfield equ  tmp4
-
-        sep  #$30
-
-        ldy  #y_offset_rows               ; Start at the top of the physical screen and walk the bitmap for 25 bytes (200 lines of height)
-        lda  #0
-        sta  shadowListCount              ; zero out the shadow list count
-
-; This loop is called when we are not tracking a sprite range
-:zero_loop
-        lda  (CurrShadowBitmap),y
-:zero_chk
-        beq  :zero_next
-        tax
-
-        lda  {mul8-y_offset_rows},y       ; This is the scanline we're on (offset by the starting byte)
-        clc
-        adc  offset,x                     ; This is the first line defined by the bit pattern
-        sta  :top
-        bra  :one_next
-
-:zero_next
-        iny
-        cpy  #y_height_rows+y_offset_rows ; +1              ; End at byte 27
-        bcc  :zero_loop
-        bra  :exit           ; ended while not tracking a sprite, so exit the function
-
-:one_loop
-        lda  (CurrShadowBitmap),y     ; if the next byte is all sprite, just continue
-        cmp  #$FF
-        beq  :one_next
-
-* ; The byte has to look like 1..10..0  The first step is to mask off the high bits and store the result
-* ; back into the shadowBitmap
-
-        tax
-        and  offsetMask,x
-        sta  :bitfield
-
-        lda  {mul8-y_offset_rows},y
-        clc
-        adc  invOffset,x
-
-        ldx  shadowListCount
-        sta  shadowListBot,x
-        lda  :top
-        sta  shadowListTop,x
-        inx
-        stx  shadowListCount
-
-; Loop back to check if there is more sprite data on this byte
-
-        lda  :bitfield
-        bra  :zero_chk
-
-:one_next
-        iny
-        cpy  #y_height_rows+y_offset_rows
-        bcc  :one_loop
-
-; If we end while tracking a sprite, add to the list as the last item
-
-        ldy  shadowListCount
-        lda  :top
-        sta  shadowListTop,y
-        lda  #y_height
-        sta  shadowListBot,y
-        iny
-        sty  shadowListCount
-
-:exit
-        rep  #$30
-        lda  shadowListCount
-        cmp  #64
-        bcc  *+4
-        brk  $13
-
-        rts
 
 ; Variation on shadowBitmapToList that uses a temporary variable for the current byte and does not modify
 ; the bitmap list itself
@@ -654,9 +432,11 @@ _exposeScreen
 clearPreviousSprites
         WALK_BITMAP LOAD_INTERSECTION;y_offset_rows;y_ending_row;_drawBackground
 
+        mx    %00
 exposeCurrentSprites
         WALK_BITMAP LOAD_CURRENT;y_offset_rows;y_ending_row;_exposeScreen
 
+        mx    %00
 drawOtherLines
         WALK_BITMAP LOAD_OTHERS;y_offset_rows;y_ending_row;_drawBackground
 
@@ -994,6 +774,7 @@ draw_rtn2
 ; Finish calculating the jump address. We dispatch differently based on the horizontal flip, vertical
 ; flip and priority bits. when calling the rendering function, Y = screen address, X = tile data address
 
+        mx    %00
 as_bitmap
         DO   SHOW_DEBUG_VARS
         lda  #$FFFF         ; color for priority bit
@@ -1020,6 +801,7 @@ as_bitmap
         jmp  (drawProcs,x)            ; Executes an RTS to return directly to caller
         FIN
 
+        mx    %00
 as_bitmap_clip
         lda  sprTmp2+1
         and  #$00E0
@@ -1045,6 +827,7 @@ drawProcsClipped
 ; from the compiled sprite code bank for sprites that do not have a compiled representation.
 spr_comp_tbl ds 512,$00
 
+        mx    %00
 _blitTileNoMask
 ; A = tile address
 ; Y = screen address
@@ -1152,6 +935,7 @@ _blitTileNoMask
 ; Y = screen address
 ;
 ; Bank must be set to the tiledata bank
+        mx    %00
 _blitBGTile
 
 ; Load data from the tiledata,x and store in a direct page buffer. The
@@ -1171,21 +955,26 @@ LDA_IND_LONG_IDX equ $B7
 ORA_IND_LONG_IDX equ $17
 AND_IND_LONG_IDX equ $37
 
+        mx    %00
 drawClippedTileToScreenHV
         adc   #64
 
+        mx    %00
 drawClippedTileToScreenV
         tax
         jsr   _copyTileToBufferV
         bra   _clippedCommon
 
+        mx    %00
 drawClippedTileToScreenH
         adc   #64
 
+        mx    %00
 drawClippedTileToScreen
         tax
         jsr   _copyTileToBuffer
 
+        mx    %00
 _clippedCommon
         jsr   clipBuffer
 :no_clip
@@ -1199,12 +988,15 @@ _clippedCommon
 ; handle corner cases, the sprite data and mask are copied into temporary direct page space and then copied
 ; to the screen.  This helps maximize the use of registers and allows the data or mask to be altered before
 ; drawing, if needed.
+        mx    %00
 copyTileToBufferHV
         adc   #64
 
+        mx    %00
 copyTileToBufferV
         tax                                          ; Put the sprite data address in the register
 
+        mx    %00
 _copyTileToBufferV
 ]line   equ   0
         lup   8
@@ -1221,12 +1013,15 @@ _copyTileToBufferV
         --^
         rts
 
+        mx    %00
 copyTileToBufferH
         adc   #64
 
+        mx    %00
 copyTileToBuffer
         tax                                          ; Put the sprite data address in the register
 
+        mx    %00
 _copyTileToBuffer
 ]line   equ   0
         lup   8
@@ -1247,12 +1042,15 @@ _copyTileToBuffer
 ;
 ; A = tile address
 ; X = screen address
+        mx    %00
 copyBufferToScreenH
         adc   #64
 
+        mx    %00
 copyBufferToScreen
         tay
 
+        mx    %00
 _copyBufferToScreen
 ]line   equ   0
         lup   8
@@ -1271,6 +1069,7 @@ _copyBufferToScreen
         --^
         rts
 
+        mx    %00
 _copyBufferToScreenNoMask
 ]line   equ   0
         lup   8
@@ -1288,6 +1087,7 @@ _copyBufferToScreenNoMask
 ; If the tile needs to be clipped, then set the pixels in the direct page buffer to zero.  This is not exact clipping, but
 ; creates the illusion of the sprite being clipped.  The only time this actually matters is when dirty rendering is engaged
 ; and a sprite is placed with x in [125, 126, 127].
+        mx    %00
 clipBuffer
         lda   sprTmp4
         bne   *+3
@@ -1325,13 +1125,11 @@ clipBuffer125
         rep   #$20
         rts
 
+        mx    %00
 drawTileToScreenH
-
-;          lda   sprTmp0
-;          clc              ; There are a series of zero shifts before calling into this routine
           adc   #64
-;          sta   sprTmp0
 
+        mx    %00
 drawTileToScreen
 
           sta   sprTmp0
@@ -1358,16 +1156,13 @@ drawTileToScreen
 ]line     equ   ]line+1
           --^
 
-;          jmp   draw_rtn
           rts
 
+        mx    %00
 drawTileToScreenHV
-
-;          lda   sprTmp0
-;          clc
           adc   #64
-;          sta   sprTmp0
 
+        mx    %00
 drawTileToScreenV
 
           sta   sprTmp0
@@ -1396,11 +1191,13 @@ drawTileToScreenV
 
           rts
 
+        mx    %00
 drawClippedTileToScreenPHV
 drawClippedTileToScreenPH
 
         adc   #64
 
+        mx    %00
 drawClippedTileToScreenPV
 drawClippedTileToScreenP
 
@@ -1411,6 +1208,7 @@ drawClippedTileToScreenP
         jsr   clipBuffer
 ;        jmp   _copyBufferToScreenP
 
+        mx    %00
 _copyBufferToScreenP
         ldx   sprTmp0
 ]line   equ   0
@@ -1441,6 +1239,7 @@ zr
         --^
         rts
 
+        mx    %00
 _copyMaskToBufferP
 ]line   equ   0
         lup   8
@@ -1482,11 +1281,13 @@ zero_right
         --^
         rts
 
+        mx    %00
 drawTileToScreenPHV
 drawTileToScreenPH
 
         adc   #64
 
+        mx    %00
 drawTileToScreenPV
 drawTileToScreenP
 
@@ -1555,6 +1356,7 @@ skip_right
 ;          jmp   draw_rtn
           rts
 
+        mx    %00
 incborder
         php
         sep  #$20
@@ -1565,171 +1367,4 @@ incborder
         eorl $E0C034
         stal $E0C034
         plp
-        rts
-
-; Copies the screen data into a buffer to be restored later.  The save buffer is just a chunk of Bank 0 memory
-; that is 4kb + 256b.  The extra space is because the address of the 8x8 block is pushed last and an interrupt
-; may happen during this process, so we need to keep some extra stack space available.
-;
-; In the worst case, we may have to save 64 8x16 sprites, which corresponds to 64 * 4 * 16 = 4096 bytes, plus
-; 4 bytes per sprite for the screen and shadow addresses, which adds up to 256 additional bytes
-;
-; Input: X register is the SHR address
-; Input: Y register is the Clamped SHR address
-          mx  %00
-
-saveTileFromScreen16
-
-          jsr   saveTileFromScreen8
-          txa
-          clc
-          adc   #8*160
-          tax
-          tya
-          clc
-          adc   #8*160
-          tay
-
-saveTileFromScreen8
-
-          tsc
-          sta   sprTmp0                                ; Save the current stack in the y-register
-
-          lda   SprSaveAddr
-          tcs                                          ; Set the stack to the save buffer area
-          clc
-
-]line     equ   0
-          lup   8
-
-          ldal  $010000+{]line*SHR_LINE_WIDTH},x       ; Load the screen data
-          pha                                          ; Save onto the stack
-          ldal  $010000+{]line*SHR_LINE_WIDTH}+2,x
-          pha
-
-]line     equ   ]line+1
-          --^
-
-          phy                                          ; Save the SHR screen address for shadowing
-          phx                                          ; Save the SHR screen address of the 8x8 block
-          tsc
-          sta   SprSaveAddr
-
-          lda   sprTmp0                                ; Restore the original stack
-          tcs
-
-          rts
-
-sprBlockAddr ds 64*2           ; Maximum of 64 8x8 blocks, each with a 16-bit address 
-
-; Expose the 8x8 blocks from the list populated by saveTileFromScreen.
-        mx  %00
-exposeTilesToScreen
-
-        ldy   SprAddrCount     ; Number of sprite block addresses (x2)
-        bne   :ok
-        rts
-
-:ok
-        dey                    ; Can be done in any order
-        dey
-
-:loop
-        ldx   sprBlockAddr,y   ; Load the screen address
-]line   equ   7
-        lup   8
-
-        ldal  $010000+{]line*SHR_LINE_WIDTH},x
-        stal  $010000+{]line*SHR_LINE_WIDTH},x
-        ldal  $010000+{]line*SHR_LINE_WIDTH}+2,x
-        stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
-
-]line   equ   ]line-1
-        --^
-
-        dey
-        dey
-        bmi   :out
-        brl   :loop            ; Are there more blocks to expose?
-:out
-        stz   SprAddrCount
-        rts
-
-; Restores all of the saved tiles to the screen using the data from the stack.  The stack
-; format is a set of nine 16-bit values.
-;
-;   <base_address> <tile_data x 8>
-;
-; The data is pushed onto the stack in top-down, left-right order so it needs to be restored
-; in bottom-up, right-left order.  There can be at most 128 8x8 pixel tiles saved, so the
-; stack depth is at most 128 * 9 * 2 = 2304 bytes (11 bits).
-
-restoreTilesToScreen
-
-        ldy   #0
-
-        lda   SprSaveAddr                            ; If the stack is empty, do nothing
-        cmp   SprSaveTop
-        beq   :done
-
-        tsx
-        stx   tmp0
-        tcs
-
-:loop
-        plx                                          ; Pop the SHR screen address
-        pla                                          ; Pop the SHR shadow address
-        sta   sprBlockAddr,y                         ; Save it for later use
-
-]line   equ   7
-        lup   8
-
-        pla                                          ; Load the screen data (5 cycles)
-        stal  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; And write back to the screen (reverse order)
-        pla
-        stal  $010000+{]line*SHR_LINE_WIDTH},x
-
-]line   equ   ]line-1
-        --^
-
-        iny
-        iny
-
-:test
-        tsc
-        cmp   SprSaveTop
-        bcc   :loop
-
-        sta   SprSaveAddr                            ; Update the save stack pointer to indicate an empty buffer
-
-        lda   tmp0                                   ; Restore the original stack pointer
-        tcs
-
-:done
-        sty   SprAddrCount
-        rts
-
-outlineColor ds 2
-drawOutline
-        ldal  outlineColor
-        stal  $010000+{0*SHR_LINE_WIDTH},x
-        stal  $010000+{0*SHR_LINE_WIDTH}+2,x
-        stal  $010000+{7*SHR_LINE_WIDTH},x
-        stal  $010000+{7*SHR_LINE_WIDTH}+2,x
-
-]line   equ   1
-        lup   6
-        ldal  $010000+{]line*SHR_LINE_WIDTH},x
-        eorl  outlineColor
-        and   #$00F0
-        eorl  $010000+{]line*SHR_LINE_WIDTH},x
-        stal  $010000+{]line*SHR_LINE_WIDTH},x
-
-        ldal  $010000+{]line*SHR_LINE_WIDTH}+2,x
-        eorl  outlineColor
-        and   #$0F00
-        eorl  $010000+{]line*SHR_LINE_WIDTH}+2,x
-        stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
-]line   equ   ]line+1
-        --^
         rts
