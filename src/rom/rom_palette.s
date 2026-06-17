@@ -30,8 +30,348 @@
 ; Since we must accept that not all games can be perfectly replicated, the runtime support
 ; tries to include a number of hooks and configuration options to allow per-game heuristics
 ; to be implemented, and to prioritize certain palettes over others.
+;
+; There are also lookup table provided that return the closest perceptual color to an given
+; NES color.  This can be leverages to perform palette decimation or possibly constrain
+; the total number of colors used in a game to 16 while degrading fidelity and contrast.
 
-color_freq ds 128            ; Technically there are 64 possible colors, but only 52 legal ones
+COL_WIDTH   equ  2            ; each cell is a word
+ROW_WIDTH   equ  COL_WIDTH*16 ; 4 columns per block; 4 blocks per row
+
+color_freq ds 128             ; Technically there are 64 possible colors, but only 52 legal ones
+
+; Store pre-shifted values for the mapped palette values which can be used to construct
+; the swizzle table quickly.
+_indexLow
+    db  $00,$01,$02,$03,$04,$05,$06,$07
+    db  $08,$09,$0A,$0B,$0C,$0D,$0E,$0F
+_indexHigh
+    db  $00,$10,$20,$30,$40,$50,$60,$70
+    db  $80,$90,$A0,$B0,$C0,$D0,$E0,$F0
+
+; Define the fixed swizzle table. Page-aligned and 4kb of memory total
+            ds    \,$00
+_swizzleTbl ds    4096
+
+; Scratch variables used by _fillSwizzleTable.
+; Caller sets _palIdx0..3 to the IIgs palette indices for NES colors 0-3,
+; and _tblPtr to the 16-bit base address of the 512-byte swizzle table to fill.
+
+; Temp variables to store the IIgs palette indexes for a NES palette
+_palIdx0    equ tmp0
+_palIdx1    equ tmp0+1
+_palIdx2    equ tmp0+2
+_palIdx3    equ tmp0+3
+
+; Temp variables to store the low and high nibbles for each palette index to make it fast
+; to construct pairs by ORA instructions.
+_nibLo0     equ tmp0+4
+_nibLo1     equ tmp0+5
+_nibLo2     equ tmp0+6
+_nibLo3     equ tmp0+7
+_nibHi0     equ tmp0+8
+_nibHi1     equ tmp0+9
+_nibHi2     equ tmp0+10
+_nibHi3     equ tmp0+11
+
+; When Filling the table, each full row has the fixed w/x pair in the low byte
+; and each column has a fixed y/z pair in the high byte.
+;
+; X = row offset (16-bit)
+; A = constant (8-bit)
+    mx     %10
+_fillSwizzleRow
+    sta:   _swizzleTbl+{0*COL_WIDTH},x
+    sta:   _swizzleTbl+{1*COL_WIDTH},x
+    sta:   _swizzleTbl+{2*COL_WIDTH},x
+    sta:   _swizzleTbl+{3*COL_WIDTH},x
+
+    sta:   _swizzleTbl+{4*COL_WIDTH},x
+    sta:   _swizzleTbl+{5*COL_WIDTH},x
+    sta:   _swizzleTbl+{6*COL_WIDTH},x
+    sta:   _swizzleTbl+{7*COL_WIDTH},x
+
+    sta:   _swizzleTbl+{8*COL_WIDTH},x
+    sta:   _swizzleTbl+{9*COL_WIDTH},x
+    sta:   _swizzleTbl+{10*COL_WIDTH},x
+    sta:   _swizzleTbl+{11*COL_WIDTH},x
+
+    sta:   _swizzleTbl+{12*COL_WIDTH},x
+    sta:   _swizzleTbl+{13*COL_WIDTH},x
+    sta:   _swizzleTbl+{14*COL_WIDTH},x
+    sta:   _swizzleTbl+{15*COL_WIDTH},x
+
+    rts
+
+; X = row offset (16-bit)
+; A = constant (8-bit)
+    mx     %10
+_fillSwizzleColumn
+    sta:   _swizzleTbl+{0*ROW_WIDTH},x
+    sta:   _swizzleTbl+{1*ROW_WIDTH},x
+    sta:   _swizzleTbl+{2*ROW_WIDTH},x
+    sta:   _swizzleTbl+{3*ROW_WIDTH},x
+
+    sta:   _swizzleTbl+{4*ROW_WIDTH},x
+    sta:   _swizzleTbl+{5*ROW_WIDTH},x
+    sta:   _swizzleTbl+{6*ROW_WIDTH},x
+    sta:   _swizzleTbl+{7*ROW_WIDTH},x
+
+    sta:   _swizzleTbl+{8*ROW_WIDTH},x
+    sta:   _swizzleTbl+{9*ROW_WIDTH},x
+    sta:   _swizzleTbl+{10*ROW_WIDTH},x
+    sta:   _swizzleTbl+{11*ROW_WIDTH},x
+
+    sta:   _swizzleTbl+{12*ROW_WIDTH},x
+    sta:   _swizzleTbl+{13*ROW_WIDTH},x
+    sta:   _swizzleTbl+{14*ROW_WIDTH},x
+    sta:   _swizzleTbl+{15*ROW_WIDTH},x
+    rts
+
+; _fillSetup
+;
+; For any of the _fill* functions, start by setting up the index mapping. This
+; cost can be amortized over many updates, if needed.
+;
+; Assumes that _palIdx0..3 are set to the IIgs palette indices for NES colors 0-3.
+    mx     %11
+_fillSetup
+    ldx    _palIdx0
+    lda    _indexLow,x
+    sta    _nibLo0
+    lda    _indexHigh,x
+    sta    _nibHi0
+
+    ldx    _palIdx1
+    lda    _indexLow,x
+    sta    _nibLo1
+    lda    _indexHigh,x
+    sta    _nibHi1
+
+    ldx    _palIdx2
+    lda    _indexLow,x
+    sta    _nibLo2
+    lda    _indexHigh,x
+    sta    _nibHi2
+
+    ldx    _palIdx3
+    lda    _indexLow,x
+    sta    _nibLo3
+    lda    _indexHigh,x
+    sta    _nibHi3
+    
+    rts
+
+; _fillSwizzleBlock
+;
+; Fill a 4x4 block in the swizzle table.  Assumes that the _nibLo and _nibHi values
+; have bee setup properly.
+;
+; A = yy
+; Y = ww
+; X = block offset (16-bit)  address = 128*blk_y + 8*blk_x
+    mx     %10
+_fillSwizzleBlock
+    ora    _nibLo0
+    sta:   _swizzleTbl+{0*ROW_WIDTH}+{0*COL_WIDTH},x
+    sta:   _swizzleTbl+{0*ROW_WIDTH}+{1*COL_WIDTH},x
+    sta:   _swizzleTbl+{0*ROW_WIDTH}+{2*COL_WIDTH},x
+    sta:   _swizzleTbl+{0*ROW_WIDTH}+{3*COL_WIDTH},x
+    and    #$F0
+    ora    _nibLo1
+    sta:   _swizzleTbl+{1*ROW_WIDTH}+{0*COL_WIDTH},x
+    sta:   _swizzleTbl+{1*ROW_WIDTH}+{1*COL_WIDTH},x
+    sta:   _swizzleTbl+{1*ROW_WIDTH}+{2*COL_WIDTH},x
+    sta:   _swizzleTbl+{1*ROW_WIDTH}+{3*COL_WIDTH},x
+    and    #$F0
+    ora    _nibLo2
+    sta:   _swizzleTbl+{2*ROW_WIDTH}+{0*COL_WIDTH},x
+    sta:   _swizzleTbl+{2*ROW_WIDTH}+{1*COL_WIDTH},x
+    sta:   _swizzleTbl+{2*ROW_WIDTH}+{2*COL_WIDTH},x
+    sta:   _swizzleTbl+{2*ROW_WIDTH}+{3*COL_WIDTH},x
+    and    #$F0
+    ora    _nibLo3
+    sta:   _swizzleTbl+{3*ROW_WIDTH}+{0*COL_WIDTH},x
+    sta:   _swizzleTbl+{3*ROW_WIDTH}+{1*COL_WIDTH},x
+    sta:   _swizzleTbl+{3*ROW_WIDTH}+{2*COL_WIDTH},x
+    sta:   _swizzleTbl+{3*ROW_WIDTH}+{3*COL_WIDTH},x
+
+    tya
+    ora    _nibLo0
+    sta:   _swizzleTbl+{0*ROW_WIDTH}+{0*COL_WIDTH}+1,x
+    sta:   _swizzleTbl+{1*ROW_WIDTH}+{0*COL_WIDTH}+1,x
+    sta:   _swizzleTbl+{2*ROW_WIDTH}+{0*COL_WIDTH}+1,x
+    sta:   _swizzleTbl+{3*ROW_WIDTH}+{0*COL_WIDTH}+1,x
+    and    #$F0
+    ora    _nibLo1
+    sta:   _swizzleTbl+{0*ROW_WIDTH}+{1*COL_WIDTH}+1,x
+    sta:   _swizzleTbl+{1*ROW_WIDTH}+{1*COL_WIDTH}+1,x
+    sta:   _swizzleTbl+{2*ROW_WIDTH}+{1*COL_WIDTH}+1,x
+    sta:   _swizzleTbl+{3*ROW_WIDTH}+{1*COL_WIDTH}+1,x
+    and    #$F0
+    ora    _nibLo2
+    sta:   _swizzleTbl+{0*ROW_WIDTH}+{2*COL_WIDTH}+1,x
+    sta:   _swizzleTbl+{1*ROW_WIDTH}+{2*COL_WIDTH}+1,x
+    sta:   _swizzleTbl+{2*ROW_WIDTH}+{2*COL_WIDTH}+1,x
+    sta:   _swizzleTbl+{3*ROW_WIDTH}+{2*COL_WIDTH}+1,x
+    and    #$F0
+    ora    _nibLo3
+    sta:   _swizzleTbl+{0*ROW_WIDTH}+{3*COL_WIDTH}+1,x
+    sta:   _swizzleTbl+{1*ROW_WIDTH}+{3*COL_WIDTH}+1,x
+    sta:   _swizzleTbl+{2*ROW_WIDTH}+{3*COL_WIDTH}+1,x
+    sta:   _swizzleTbl+{3*ROW_WIDTH}+{3*COL_WIDTH}+1,x
+    rts
+
+; _fillSwizzleTable
+;
+; Fill the entire 512-byte swizzle table for one NES palette.
+;
+; Before calling, set:
+;   _palIdx0..3 = IIgs palette indices for NES colors 0, 1, 2, 3
+;
+; The table is divided into 16 rows (one per (ww,xx) pair) and 16 columns
+; (one per (yy,zz) pair).  Each row gets a constant low byte written to all
+; 16 of its word entries via _fillSwizzleRow; each column gets a constant
+; high byte written to all 16 of its word entries via _fillSwizzleColumn.
+;
+; Low byte  for row    (ww,xx) = _indexHigh[p_ww] | _indexLow[p_xx]
+; High byte for column (yy,zz) = _indexHigh[p_yy] | _indexLow[p_zz]
+;
+; Row offsets (bytes from base):    ww*128 + xx*32 = 0, 32, 64, ..., 480
+; Column offsets (high-byte addr):  yy*8   + zz*2  + 1 = 1, 3, 5, ..., 31
+;
+; A = 8-bit, X/Y = 16-bit
+;
+; On entry, X/Y contain the index bytes
+
+    mx   %10
+_fillSwizzleTable
+    php                    ; save caller's P (M and X flags)
+    sep  #$20              ; A = 8-bit (M=1); X/Y unchanged (still 16-bit from caller)
+
+    stx  _palIdx0
+    sty  _palIdx2          ; Now all four palette indices are set
+
+    sep  #$10
+    jsr  _fillSetup        ; Cache some intermediate values
+    rep  #$10
+
+; Now, just blast each row and column
+    lda  _nibHi0
+    ora  _nibLo0
+
+    ldx  #{0*ROW_WIDTH}+{0*COL_WIDTH}
+    jsr  _fillSwizzleRow
+    ldx  #{0*ROW_WIDTH}+{0*COL_WIDTH}+1
+    jsr  _fillSwizzleColumn
+
+    and  #$F0
+    ora  _nibLo1
+    ldx  #{1*ROW_WIDTH}+{0*COL_WIDTH}
+    jsr  _fillSwizzleRow
+    ldx  #{0*ROW_WIDTH}+{1*COL_WIDTH}+1
+    jsr  _fillSwizzleColumn
+
+    and  #$F0
+    ora  _nibLo2
+    ldx  #{2*ROW_WIDTH}+{0*COL_WIDTH}
+    jsr  _fillSwizzleRow
+    ldx  #{0*ROW_WIDTH}+{2*COL_WIDTH}+1
+    jsr  _fillSwizzleColumn
+
+    and  #$F0
+    ora  _nibLo3
+    ldx  #{3*ROW_WIDTH}+{0*COL_WIDTH}
+    jsr  _fillSwizzleRow
+    ldx  #{0*ROW_WIDTH}+{3*COL_WIDTH}+1
+    jsr  _fillSwizzleColumn
+
+    lda  _nibHi1
+    ora  _nibLo0
+    ldx  #{4*ROW_WIDTH}+{0*COL_WIDTH}
+    jsr  _fillSwizzleRow
+    ldx  #{0*ROW_WIDTH}+{4*COL_WIDTH}+1
+    jsr  _fillSwizzleColumn
+
+    and  #$F0
+    ora  _nibLo1
+    ldx  #{5*ROW_WIDTH}+{0*COL_WIDTH}
+    jsr  _fillSwizzleRow
+    ldx  #{0*ROW_WIDTH}+{5*COL_WIDTH}+1
+    jsr  _fillSwizzleColumn
+
+    and  #$F0
+    ora  _nibLo2
+    ldx  #{6*ROW_WIDTH}+{0*COL_WIDTH}
+    jsr  _fillSwizzleRow
+    ldx  #{0*ROW_WIDTH}+{6*COL_WIDTH}+1
+    jsr  _fillSwizzleColumn
+
+    and  #$F0
+    ora  _nibLo3
+    ldx  #{7*ROW_WIDTH}+{0*COL_WIDTH}
+    jsr  _fillSwizzleRow
+    ldx  #{0*ROW_WIDTH}+{7*COL_WIDTH}+1
+    jsr  _fillSwizzleColumn
+
+    lda  _nibHi2
+    ora  _nibLo0
+    ldx  #{8*ROW_WIDTH}+{0*COL_WIDTH}
+    jsr  _fillSwizzleRow
+    ldx  #{0*ROW_WIDTH}+{8*COL_WIDTH}+1
+    jsr  _fillSwizzleColumn
+
+    and  #$F0
+    ora  _nibLo1
+    ldx  #{9*ROW_WIDTH}+{0*COL_WIDTH}
+    jsr  _fillSwizzleRow
+    ldx  #{0*ROW_WIDTH}+{9*COL_WIDTH}+1
+    jsr  _fillSwizzleColumn
+
+    and  #$F0
+    ora  _nibLo2
+    ldx  #{10*ROW_WIDTH}+{0*COL_WIDTH}
+    jsr  _fillSwizzleRow
+    ldx  #{0*ROW_WIDTH}+{10*COL_WIDTH}+1
+    jsr  _fillSwizzleColumn
+
+    and  #$F0
+    ora  _nibLo3
+    ldx  #{11*ROW_WIDTH}+{0*COL_WIDTH}
+    jsr  _fillSwizzleRow
+    ldx  #{0*ROW_WIDTH}+{11*COL_WIDTH}+1
+    jsr  _fillSwizzleColumn
+
+    lda  _nibHi3
+    ora  _nibLo0
+    ldx  #{12*ROW_WIDTH}+{0*COL_WIDTH}
+    jsr  _fillSwizzleRow
+    ldx  #{0*ROW_WIDTH}+{12*COL_WIDTH}+1
+    jsr  _fillSwizzleColumn
+
+    and  #$F0
+    ora  _nibLo1
+    ldx  #{13*ROW_WIDTH}+{0*COL_WIDTH}
+    jsr  _fillSwizzleRow
+    ldx  #{0*ROW_WIDTH}+{13*COL_WIDTH}+1
+    jsr  _fillSwizzleColumn
+
+    and  #$F0
+    ora  _nibLo2
+    ldx  #{14*ROW_WIDTH}+{0*COL_WIDTH}
+    jsr  _fillSwizzleRow
+    ldx  #{0*ROW_WIDTH}+{14*COL_WIDTH}+1
+    jsr  _fillSwizzleColumn
+
+    and  #$F0
+    ora  _nibLo3
+    ldx  #{15*ROW_WIDTH}+{0*COL_WIDTH}
+    jsr  _fillSwizzleRow
+    ldx  #{0*ROW_WIDTH}+{15*COL_WIDTH}+1
+    jsr  _fillSwizzleColumn
+
+    plp                    ; restore caller's P (M and X flags)
+    rts
 
 ; ROM_CountFreq
 ;
@@ -50,7 +390,7 @@ ROM_CountFreq
 
 :loop
     ldx  NESPalIndices,y    ; Load one of the palette colors that matters.  Mostly skips index 0....
-    ldal PPU_MEM+$3F00,x    ; Load the color index from the PPU memory
+    lda: nes_palette,x      ; Load the color index from nes_palette (already a byte offset)
     tax
     inc  color_freq,x       ; Increment the color count
 
@@ -152,7 +492,9 @@ NES_BuildGreedyPalette
 ;    jmp  :assign_all_colors
 
 :assign_all_colors
-    ldx: nes_palette,y
+    lda: nes_palette,y
+    asl
+    tax
     lda  ReverseMap,x           ; Is this color index already assigned to a IIgs palette index?
     bne  :pal_1_mapped          ; Palette zero is reserved and used as a value for "not assigned"
     lda  :next_index            ; Load the next free IIgs palette index value
@@ -164,7 +506,10 @@ NES_BuildGreedyPalette
 :skip_1
 
 :assign_colors_2_and_3
-    ldx: nes_palette+2,y
+    lda: nes_palette+2,y
+    asl
+    tax
+
     lda  ReverseMap,x
     bne  :pal_2_mapped
     lda  :next_index            ; Load the next free IIgs palette index value
@@ -175,7 +520,10 @@ NES_BuildGreedyPalette
     sta  current+2,y            ; Assign this color to BG0[2]
 :skip_2
 
-    ldx  nes_palette+4,y
+    lda  nes_palette+4,y
+    asl
+    tax
+
     lda  ReverseMap,x
     bne  :pal_3_mapped
     lda  :next_index            ; Load the next free IIgs palette index value
@@ -203,7 +551,9 @@ NES_BuildGreedyPalette
     lda  current,y
     cmp  #16
     bcc  :ok_1
-    ldx  nes_palette,y
+    lda  nes_palette,y
+    asl
+    tax
     lda  #0
     sta  ReverseMap,x
     sta  current,y
@@ -212,7 +562,9 @@ NES_BuildGreedyPalette
     lda  current+2,y
     cmp  #16
     bcc  :ok_2
-    ldx  nes_palette+2,y
+    lda  nes_palette+2,y
+    asl
+    tax
     lda  #0
     sta  ReverseMap,x
     sta  current+2,y
@@ -221,15 +573,19 @@ NES_BuildGreedyPalette
     lda  current+4,y
     cmp  #16
     bcc  :ok_3
-    ldx  nes_palette+4,y
+    lda  nes_palette+4,y
+    asl
+    tax    
     lda  #0
-    sta  ReverseMap+4,x
+    sta  ReverseMap,x
     sta  current+4,y
 :ok_3
 
 :disable
     stz  :next_index
     rts
+
+:next_index ds   2           ; scratch: next free IIgs palette slot index (0 = exhausted)
 
 ; NES_UpdateSwizzleTable
 ;
@@ -248,7 +604,7 @@ NES_BuildGreedyPalette
 ;
 ; Updating a swizzle table requires the code to set the values for a single NES palette index.
 ; The table has a recursive 4x4 structure as shown below, and within each block each variable
-; pair steps from 0 to 3 with the 16-bit value in the table and each subblock had the same symmetry
+; pair steps from 0 to 3 with the 16-bit value in the table and each subblock have the same symmetry
 ;
 ; Also, the table as a whole is anti-symmetric where
 ; A' = swap(A) and swap exchanges the high and low bytes of the 16-bit word.  This can
@@ -256,182 +612,42 @@ NES_BuildGreedyPalette
 
         mx   %00
 NES_UpdateSwizzleTable
+        rts
 
-; UpdateSingle
+; _ClearBlock
 ;
-; If only one index is changed, then each block can be updated more efficiently. 
-
-; The W bits change every 4 word, but are constant in each column
-; X = block offset
-; Y = palette index select
-        mx   %00
-UpdateOnlyW
-    lda:  {0*ROW_WIDTH}+{0*COL_WIDTH},x
-    and   #$0FFF
-    ora   pal_w,y
-    sta:  {0*ROW_WIDTH}+{0*COL_WIDTH},x
-    
-
-; The X bits change every word, but are contant in each column
-        mx   %00
-UpdateOnlyX
-
-; The Y bits change every 4 rows, and are constant in each row
-        mx   %00
-UpdateOnlyY
-
-; The Z bits change every row, and are constant in each row
-        mx   %00
-UpdateOnlyZ
-
-
-; _UpdateDiagonalBlock
+; Zeros all 16 entries of a 4×4 block of the swizzle table.  Equivalent to calling
+; _UpdateBlock with A=0 and all pal_z/pal_x entries zero.
 ;
-; A diagonal block is one where the outer variables (W and Y) are set to the same NES palette index. The
-; block itself is symmetric and can be updated slightly more efficiently, since the two variables will
-; map to the same IIgs palette index.
-;
-; X = block index
-; Y = palette index
-;
-; For a given palette, there are four values that are set that contain the IIgs palette index for the NES palette index. Note that zero is always zero.
-; Use a single address offset to reference a mask table.
-;
-; pal_w  dw  $0000, $5000, $E000, $2000   <-- Example NES palette that is mapped to IIgs indices (0, 5, E, 2) on NES indices (0, 1, 2, 3)
-; pal_x  dw  $0000, $0500, $0E00, $0200
-; pal_y  dw  $0000, $0050, $00E0, $0020
-; pal_z  dw  $0000, $0005, $000E, $0002
-_UpdateDiagonalBlock
-
-    sta:  {0*ROW_WIDTH}+{0*COL_WIDTH},x             ; Save this value in the top-left corner, a[0][0]
-    ora   pal_x+2
-    ora   pal_z+2
-    sta:  {1*ROW_WIDTH}+{1*COL_WIDTH},x             ; Save on the next diagonal, a[1][1]
-    and   #$F0F0
-    ora   pal_x+4
-    ora   pal_z+4
-    sta:  {2*ROW_WIDTH}+{2*COL_WIDTH},x             ; a[2][2]
-    and   #$F0F0
-    ora   pal_x+6
-    ora   pal_z+6
-    sta:  {3*ROW_WIDTH}+{3*COL_WIDTH},x             ; a[3][3]
-
-; Now, fill in the off-diagonal entries. These are calculated in a zig-zag pattern to keep the working value in the acumulator
-; and to utilize the XBA symmetry of the block to avoid extra calculations.
-;
-; +---+---+---+---+
-; | 0 | 1 | 2 | 3 |  Order:
-; +---+---+---+---+   1 -> XBA -> 4
-; | 4 | 5 | 6 | 7 |   8 -> XBA -> 2
-; +---+---+---+---+   3 -> XBA -> C -> 9 -> XBA -> 6
-; | 8 | 9 | A | B |   7 -> XBA -> D
-; +---+---+---+---+   E -> XBA -> B
-; | C | D | E | F |
-; +---+---+---+---+
-
-    and   #$F0F0                            ; Clear the X/Z nibbles
-    ora   pal_x+2
-    sta:  {0*ROW_WIDTH}+{1*COL_WIDTH},x     ; Store in location [1]
-    xba
-    sta:  {1*ROW_WIDTH}+{0*COL_WIDTH},x     ; Store in location [4]
-    and   #$FFF0                            ; Only clear the Z nibble, X remains constant
-    ora   pal_z+4
-    sta:  {2*ROW_WIDTH}+{0*COL_WIDTH},x     ; Store in location [8]
-    xba
-    sta:  {0*ROW_WIDTH}+{2*COL_WIDTH},x     ; Store in location [2]
-    and   #$FFF0                            ; Only clear the Z nibble, X remains constant
-    ora   pal_z+2
-    sta:  {1*ROW_WIDTH}+{2*COL_WIDTH},x     ; Store in location [6]
-    xba
-    sta:  {2*ROW_WIDTH}+{1*COL_WIDTH},x     ; Store in location [9]
-    and   #$FFF0                            ; Only clear the Z nibble, X remains constant
-    ora   pal_z+6
-    sta:  {3*ROW_WIDTH}+{1*COL_WIDTH},x     ; Store in location [D]
-    xba 
-    sta:  {1*ROW_WIDTH}+{3*COL_WIDTH},x     ; Store in location [7]
-    and   #$FFF0                            ; Only clear the Z nibble, X remains constant
-    ora   pal_z+0
-    sta:  {0*ROW_WIDTH}+{3*COL_WIDTH},x     ; Store in location [3]
-    xba
-    sta:  {3*ROW_WIDTH}+{0*COL_WIDTH},x
-    and   #$F0FF                            ; Only clear the X nibble, Z remains constant
-    ora   pal_x+6
-    sta:  {3*ROW_WIDTH}+{2*COL_WIDTH},x     ; Store in location [E]
-    xba
-    sta:  {2*ROW_WIDTH}+{3*COL_WIDTH},x     ; Store in location [B]
+; X = block base byte offset (= w*128 + y*8 within the 512-byte palette sub-table)
+    mx    %00
+_clearSwizzleTable
+    lda   #0
+    ldx   #{16*ROW_WIDTH}+{16*COL_WIDTH}-2
+:loop
+    sta:  _swizzleTbl,x
+    dex
+    dex
+    bpl   :loop
     rts
 
-; _UpdateBlock
-;
-; Updates all 16 entries of an off-diagonal 4x4 block of the swizzle table.  Called for blocks
-; where W ≠ Y, so the XBA anti-symmetry used by _UpdateDiagonalBlock does not apply and each
-; of the 16 entries must be computed independently.
-;
-; Within each block W and Y are constant; Z varies across rows (ROW_WIDTH = 2 bytes per Z step)
-; and X varies across columns (COL_WIDTH = 32 bytes per X step).  The value at position
-; [Z=r, X=c] = pal_y[y] | pal_z[r] | pal_w[w] | pal_x[c].
-;
-; The pal_ tables place their IIgs palette index into a specific nibble of the output word:
-;   pal_y[i] → nibble 3 (bits 15-12)
-;   pal_z[i] → nibble 2 (bits 11-8)
-;   pal_w[i] → nibble 1 (bits 7-4)
-;   pal_x[i] → nibble 0 (bits 3-0)
-;
-; AND #$FFF0 clears nibble 0 (pal_x) between columns within a row.
-; AND #$F0F0 clears nibble 2 (pal_z) AND nibble 0 (pal_x) between rows.
-;
-; A = pal_y[y] | pal_w[w]   (constant Y and W contributions; X=0 and Z=0 contribute zero)
-; X = block base byte offset (= w*128 + y*8 within the 512-byte palette sub-table)
-
-_UpdateBlock
-
-    ; Row 0 (Z=0): base value only, sweep X across columns
-    sta:  {0*ROW_WIDTH}+{0*COL_WIDTH},x     ; [Z=0, X=0]
-    ora   pal_x+2
-    sta:  {0*ROW_WIDTH}+{1*COL_WIDTH},x     ; [Z=0, X=1]
-    and   #$FFF0                             ; clear pal_x nibble
-    ora   pal_x+4
-    sta:  {0*ROW_WIDTH}+{2*COL_WIDTH},x     ; [Z=0, X=2]
-    and   #$FFF0
-    ora   pal_x+6
-    sta:  {0*ROW_WIDTH}+{3*COL_WIDTH},x     ; [Z=0, X=3]
-
-    ; Row 1 (Z=1): clear pal_x and pal_z, install pal_z[1], sweep X
-    and   #$F0F0                             ; clear pal_x (nibble 0) and pal_z (nibble 2)
-    ora   pal_z+2                            ; add pal_z[1]
-    sta:  {1*ROW_WIDTH}+{0*COL_WIDTH},x     ; [Z=1, X=0]
-    ora   pal_x+2
-    sta:  {1*ROW_WIDTH}+{1*COL_WIDTH},x     ; [Z=1, X=1]
-    and   #$FFF0
-    ora   pal_x+4
-    sta:  {1*ROW_WIDTH}+{2*COL_WIDTH},x     ; [Z=1, X=2]
-    and   #$FFF0
-    ora   pal_x+6
-    sta:  {1*ROW_WIDTH}+{3*COL_WIDTH},x     ; [Z=1, X=3]
-
-    ; Row 2 (Z=2)
-    and   #$F0F0
-    ora   pal_z+4                            ; add pal_z[2]
-    sta:  {2*ROW_WIDTH}+{0*COL_WIDTH},x     ; [Z=2, X=0]
-    ora   pal_x+2
-    sta:  {2*ROW_WIDTH}+{1*COL_WIDTH},x     ; [Z=2, X=1]
-    and   #$FFF0
-    ora   pal_x+4
-    sta:  {2*ROW_WIDTH}+{2*COL_WIDTH},x     ; [Z=2, X=2]
-    and   #$FFF0
-    ora   pal_x+6
-    sta:  {2*ROW_WIDTH}+{3*COL_WIDTH},x     ; [Z=2, X=3]
-
-    ; Row 3 (Z=3)
-    and   #$F0F0
-    ora   pal_z+6                            ; add pal_z[3]
-    sta:  {3*ROW_WIDTH}+{0*COL_WIDTH},x     ; [Z=3, X=0]
-    ora   pal_x+2
-    sta:  {3*ROW_WIDTH}+{1*COL_WIDTH},x     ; [Z=3, X=1]
-    and   #$FFF0
-    ora   pal_x+4
-    sta:  {3*ROW_WIDTH}+{2*COL_WIDTH},x     ; [Z=3, X=2]
-    and   #$FFF0
-    ora   pal_x+6
-    sta:  {3*ROW_WIDTH}+{3*COL_WIDTH},x     ; [Z=3, X=3]
+_clearBlock
+    ldx   #0
+_fillBlock
+    sta:  {0*ROW_WIDTH}+{0*COL_WIDTH},x
+    sta:  {1*ROW_WIDTH}+{0*COL_WIDTH},x
+    sta:  {2*ROW_WIDTH}+{0*COL_WIDTH},x
+    sta:  {3*ROW_WIDTH}+{0*COL_WIDTH},x
+    sta:  {0*ROW_WIDTH}+{1*COL_WIDTH},x
+    sta:  {1*ROW_WIDTH}+{1*COL_WIDTH},x
+    sta:  {2*ROW_WIDTH}+{1*COL_WIDTH},x
+    sta:  {3*ROW_WIDTH}+{1*COL_WIDTH},x
+    sta:  {0*ROW_WIDTH}+{2*COL_WIDTH},x
+    sta:  {1*ROW_WIDTH}+{2*COL_WIDTH},x
+    sta:  {2*ROW_WIDTH}+{2*COL_WIDTH},x
+    sta:  {3*ROW_WIDTH}+{2*COL_WIDTH},x
+    sta:  {0*ROW_WIDTH}+{3*COL_WIDTH},x
+    sta:  {1*ROW_WIDTH}+{3*COL_WIDTH},x
+    sta:  {2*ROW_WIDTH}+{3*COL_WIDTH},x
+    sta:  {3*ROW_WIDTH}+{3*COL_WIDTH},x
     rts
