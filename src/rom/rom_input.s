@@ -12,6 +12,22 @@ native_joy  ENT
 ; for the ROM routines to read.
             mx  %00
 NES_ReadInput
+            DO    BENCH_MODE
+; MAME bench harness (scripts/run-bench.js): feed player 1 from a canned
+; input file instead of the keyboard/joystick (see BenchInputData /
+; BENCH_MODE in the game's Main.s). NES_ReadInput may be called more than
+; once within the same virtual 1/60th of a second, so the index is NOT
+; advanced here -- only src/rom/rom_exec.s::NES_TriggerNMI (one call per
+; virtual NMI) advances it, so every read within that frame returns the
+; same value.
+            sep   #$20
+            ldx   BenchInputIndex
+            lda   BenchInputData,x
+            sta   native_joy
+            stz   native_joy+1           ; player 2: no input
+            rep   #$20
+            rts
+            ELSE
             jsr   _ReadControl
             sta   LastRead               ; The keyboard input is replicated in both, so save it
 
@@ -24,3 +40,4 @@ NES_ReadInput
             rep   #$20
             pla
             rts
+            FIN

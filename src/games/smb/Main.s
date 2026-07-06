@@ -68,6 +68,18 @@ BG_TILES_AS_SPRITES equ 1
 ; 1 = Reset code is the game code
 ROM_DRIVER_MODE   equ 0
 
+; Flag for the MAME cycle-count benchmark harness (scripts/run-bench.js):
+; skips GS/OS-dependent quit handling (there is no GS/OS to return to when
+; booted directly by the harness) and feeds NES_ReadInput from a canned
+; input file instead of the keyboard/joystick, advancing one entry per
+; virtual NMI (see src/rom/rom_input.s).
+;
+; 0 = normal build (this is the only other game/build that shares
+;     rom_input.s, so it must always default to 0 there too)
+; 1 = bench harness build
+BENCH_MODE        equ 1
+BENCH_MODE_LEN    equ 600
+
 ; Flag whether the backend should use the OAMDMA to get the sprite information,
 ; or if it can scan the NES RAM area directly
 ;
@@ -107,7 +119,7 @@ AUTOMATIC_PALETTE_MAPPING equ 0
 SHOW_ROM_EXECUTION_TIME equ 0
 
 ; Turn on some off-screen information
-SHOW_DEBUG_VARS equ 0
+SHOW_DEBUG_VARS equ 1
 
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 1
@@ -152,6 +164,9 @@ min_nes_y   equ y_offset
 max_nes_y   equ min_nes_y+y_height
 
 x_offset    equ   16                      ; number of bytes from the left edge
+
+            nop                           ; workaround when loading into emulator memory before boot.  The ROM memory detection routine writed to the first two bytes
+            nop
 
             phk
             plb
@@ -212,6 +227,11 @@ ContinueArea           = $7E00   ; patches operand
 
             jsr   NES_EvtLoop
 
+; (BENCH_MODE's exhausted-input quit check now lives in NES_EvtLoop
+; itself, right after NES_RenderFrame -- see src/rom/scaffold.s. It has
+; to be there, not here, since NES_EvtLoop never returns under BENCH_MODE
+; in the first place.)
+
             cmp   #USER_SAYS_QUIT
             beq   quit
 
@@ -226,9 +246,16 @@ ContinueArea           = $7E00   ; patches operand
 quit
             jsr   NES_ShutDown
 
-; Exit the application
+; Exit the application. Under the MAME bench harness there is no GS/OS to
+; return to (it boots straight into this code, bypassing GS/OS entirely --
+; see BENCH_MODE above), so _QuitGS would fail; just RTL back to the boot
+; stub's WDM $01 completion loop instead.
 
+            DO    BENCH_MODE
+            rtl
+            ELSE
             _QuitGS    qtRec
+            FIN
 qtRec       adrl  $0000
             da    $00
 
@@ -236,6 +263,17 @@ Greyscale   dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
+
+            DO    BENCH_MODE
+; Canned controller input for the MAME bench harness, one byte per
+; virtual NES frame in the same A-B-Select-Start-Up-Down-Left-Right bit
+; layout NES_ReadInput normally produces (see src/rom/rom_input.s).
+; Extracted from an FCEUX .fm2 movie via scripts/fm2-extract.js, e.g.:
+;   node scripts/fm2-extract.js -n 1000 replay.fm2 -o src/games/smb/bench_input.bin
+BenchInputIndex   dw    0
+BenchInputData
+            putbin bench_input.bin
+            FIN
 
 ; Program variables
 LastAreaType      dw  0
@@ -433,6 +471,7 @@ nesBottomOffset ds 2
 _RenderScreen
 
 ; Do the basic setup
+            jsr   _ShowDebugInfo
 
             jsr   _GetPPUScrollX
             jsr   NES_SetScrollX
@@ -856,7 +895,25 @@ INPUT_ITEM_5 dw   KEYMAP
             put   ../../misc/font.s
             FIN
 
-            put   ../../ppu/ppu.s
+            mput  ../../ppu
+; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
+            put    ../../ppu/ppu_macros.s
+            put    ../../ppu/ppu_init.s
+            put    ../../ppu/ppu_shadowlist.s
+            put    ../../ppu/ppu.s
+            put    ../../ppu/ppu_attributes.s
+            put    ../../ppu/ppu_tiles.s
+            put    ../../ppu/ppu_metatiles.s
+            put    ../../ppu/ppu_nametable.s
+            put    ../../ppu/ppu_queues.s
+            put    ../../ppu/ppu_palette.s
+            put    ../../ppu/ppu_regs.s
+            put    ../../ppu/ppu_render.s
+            put    ../../ppu/ppu_sprites.s
+            put    ../../ppu/ppu_tile_blitters.s
+            put    ../../ppu/scanline_bitmap.s
+; AUTOINC:END
+
 
             ds    \,$00                      ; pad to the next page boundary
 
@@ -905,11 +962,15 @@ MushroomPalette dw  $22, $00, $27, $16, $0F, $36, $17, $30, $21, $27, $1A, $16, 
             put   ../../apu/apu.s
 
 ; Core code
-            put   ../../rom/scaffold.s
-            put   ../../rom/rom_helpers.s
-            put   ../../rom/rom_input.s
-            put   ../../rom/rom_exec.s
-            put   ../../rom/rom_config.s
+             mput  ../../rom
+; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
+            put    ../../rom/scaffold.s
+            put    ../../rom/rom_color.s
+            put    ../../rom/rom_helpers.s
+            put    ../../rom/rom_input.s
+            put    ../../rom/rom_exec.s
+            put    ../../rom/rom_config.s
+; AUTOINC:END
 
             put   ../../core/CoreData.s
             put   ../../core/CoreImpl.s

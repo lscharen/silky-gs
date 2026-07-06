@@ -13,4 +13,5 @@ ppu_palette.s
 ppu_regs.s
 ppu_render.s
 ppu_sprites.s
+ppu_tile_blitters.s
 scanline_bitmap.s

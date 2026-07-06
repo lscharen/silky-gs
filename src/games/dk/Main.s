@@ -71,6 +71,11 @@ BG_TILES_AS_SPRITES equ 1
 ; 1 = Reset code is the game code
 ROM_DRIVER_MODE   equ 1
 
+; MAME cycle-count benchmark harness flag (scripts/run-bench.js) -- see
+; src/games/smb/Main.s for details. Always 0 here; rom_input.s is shared
+; across all games and must default to normal (non-bench) behavior.
+BENCH_MODE        equ 0
+
 ; Flag whether the backend should use the OAMDMA to get the sprite information,
 ; or if it can scan the NES RAM area directly
 ;
@@ -111,7 +116,7 @@ AUTOMATIC_PALETTE_MAPPING equ 1
 SHOW_ROM_EXECUTION_TIME equ 0
 
 ; Turn on some off-screen information
-SHOW_DEBUG_VARS equ 0
+SHOW_DEBUG_VARS equ 1
 
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 0
@@ -303,7 +308,7 @@ CheckForPaletteChange
 
 :update_palette
 ;       jsr  NES_BuildPalette         ; Create a mapping of the NES palette to the Apple IIgs palette
-        jsr  NES_BuildStaticPalette    ; Create a mapping to a statis list of colors
+        jsr  NES_BuildStaticPalette    ; Create a mapping to a static list of colors
 
         ldy  #current
         lda  SwizzleTables
@@ -623,7 +628,24 @@ INPUT_ITEM_7 dw   BTNMAP
             FIN
             put   ../../misc/io.s
             
-            put   ../../ppu/ppu.s
+            mput  ../../ppu
+; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
+            put    ../../ppu/ppu_macros.s
+            put    ../../ppu/ppu_init.s
+            put    ../../ppu/ppu_shadowlist.s
+            put    ../../ppu/ppu.s
+            put    ../../ppu/ppu_attributes.s
+            put    ../../ppu/ppu_tiles.s
+            put    ../../ppu/ppu_metatiles.s
+            put    ../../ppu/ppu_nametable.s
+            put    ../../ppu/ppu_queues.s
+            put    ../../ppu/ppu_palette.s
+            put    ../../ppu/ppu_regs.s
+            put    ../../ppu/ppu_render.s
+            put    ../../ppu/ppu_sprites.s
+            put    ../../ppu/ppu_tile_blitters.s
+            put    ../../ppu/scanline_bitmap.s
+; AUTOINC:END
 
 ; Palette remapping
             ds    \,$00
@@ -631,11 +653,15 @@ INPUT_ITEM_7 dw   BTNMAP
             put   ../../apu/apu.s
 
 ; Core code
-            put   ../../rom/scaffold.s
-            put   ../../rom/rom_helpers.s
-            put   ../../rom/rom_input.s
-            put   ../../rom/rom_exec.s
-            put   ../../rom/rom_config.s
+            mput  ../../rom
+; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
+            put    ../../rom/scaffold.s
+            put    ../../rom/rom_color.s
+            put    ../../rom/rom_helpers.s
+            put    ../../rom/rom_input.s
+            put    ../../rom/rom_exec.s
+            put    ../../rom/rom_config.s
+; AUTOINC:END
 
             put   ../../core/ControlBits.s
             put   ../../core/CoreData.s

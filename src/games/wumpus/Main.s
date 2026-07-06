@@ -76,6 +76,11 @@ BG_TILES_AS_SPRITES equ 1
 ; 1 = Reset code is the game code
 ROM_DRIVER_MODE   equ 1
 
+; MAME cycle-count benchmark harness flag (scripts/run-bench.js) -- see
+; src/games/smb/Main.s for details. Always 0 here; rom_input.s is shared
+; across all games and must default to normal (non-bench) behavior.
+BENCH_MODE        equ 0
+
 ; Flag whether the backend should use the OAMDMA to get the sprite information,
 ; or if it can scan the NES RAM area directly
 ;
@@ -443,7 +448,21 @@ INPUT_ITEM_5 dw   KEYMAP
             put   ../../misc/font.s
             FIN
 
-            put   ../../ppu/ppu.s
+            mput  ../../ppu
+; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
+            put    ../../ppu/ppu_macros.s
+            put    ../../ppu/ppu.s
+            put    ../../ppu/ppu_attributes.s
+            put    ../../ppu/ppu_init.s
+            put    ../../ppu/ppu_metatiles.s
+            put    ../../ppu/ppu_nametable.s
+            put    ../../ppu/ppu_queues.s
+            put    ../../ppu/ppu_palette.s
+            put    ../../ppu/ppu_regs.s
+            put    ../../ppu/ppu_render.s
+            put    ../../ppu/ppu_sprites.s
+            put    ../../ppu/scanline_bitmap.s
+; AUTOINC:END
 
 ; Palette remapping
             put   palettes.s

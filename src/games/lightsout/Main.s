@@ -70,6 +70,11 @@ BG_TILES_AS_SPRITES equ 1
 ; 1 = Reset code is the game code
 ROM_DRIVER_MODE   equ 1
 
+; MAME cycle-count benchmark harness flag (scripts/run-bench.js) -- see
+; src/games/smb/Main.s for details. Always 0 here; rom_input.s is shared
+; across all games and must default to normal (non-bench) behavior.
+BENCH_MODE        equ 0
+
 ; Flag whether the backend should use the OAMDMA to get the sprite information,
 ; or if it can scan the NES RAM area directly
 ;
@@ -94,7 +99,7 @@ NO_VERTICAL_CLIP  equ 0
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 0
+NO_INTERRUPTS     equ 1
 
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 0
@@ -216,14 +221,14 @@ PALETTE_DISPATCH
 
 
 ; For this game, we utilize a single, static palette
+        mx      %00
 SetDefaultPalette
 
 ; Set the tile/sprite mapping
-
-            lda   SwizzleTables+2
-            ldx   SwizzleTables
-            jsr   NES_SetPaletteMap
-            rts
+        lda   SwizzleTables+2
+        ldx   SwizzleTables
+        jsr   NES_SetPaletteMap
+        rts
 
 SwizzleTables adrl L1_T0
 
@@ -261,17 +266,32 @@ ApplyConfig
 ; select in response to the user's inputs.
 
 config_block_start
+
 config_audio_quality   ds  2  ; good / better / best audio quality (60Hz, 120Hz, 240Hz audio interrupts)
 config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
+
+; player 1 config block
+config_block_p1
 config_input_p1_type   dw  0  ; keyboard / snes max
 config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
-config_input_button_a  dw  COMMAND_KEY
-config_input_button_b  dw  OPTION_KEY
+config_input_button_a  dw  MOD_REG_COMMAND_DOWN
+config_input_button_b  dw  MOD_REG_OPTION_DOWN
+
+; player 2 config block
+config_block_p2
+config_input_p2_type      dw  0
+config_input_p2_key_left  dw  'j'
+config_input_p2_key_right dw  'l'
+config_input_p2_key_up    dw  'i'
+config_input_p2_key_down  dw  'k'
+config_input_p2_snesmax_port dw 4
+config_input_p2_button_a  dw  MOD_REG_CONTROL_DOWN
+config_input_p2_button_b  dw  MOD_REG_SHIFT_DOWN
 config_block_end
 
 AUDIO_TITLE_STR     str 'AUDIO'
@@ -454,7 +474,24 @@ INPUT_ITEM_7 dw   BTNMAP
             FIN
             put   ../../misc/io.s
 
-            put   ../../ppu/ppu.s
+            mput  ../../ppu
+; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
+            put    ../../ppu/ppu_macros.s
+            put    ../../ppu/ppu_init.s
+            put    ../../ppu/ppu_shadowlist.s
+            put    ../../ppu/ppu.s
+            put    ../../ppu/ppu_attributes.s
+            put    ../../ppu/ppu_tiles.s
+            put    ../../ppu/ppu_metatiles.s
+            put    ../../ppu/ppu_nametable.s
+            put    ../../ppu/ppu_queues.s
+            put    ../../ppu/ppu_palette.s
+            put    ../../ppu/ppu_regs.s
+            put    ../../ppu/ppu_render.s
+            put    ../../ppu/ppu_sprites.s
+            put    ../../ppu/ppu_tile_blitters.s
+            put    ../../ppu/scanline_bitmap.s
+; AUTOINC:END
 
 ; Palette remapping
             ds    \,$00
@@ -462,11 +499,15 @@ INPUT_ITEM_7 dw   BTNMAP
             put   ../../apu/apu.s
 
 ; Core code
-            put   ../../rom/scaffold.s
-            put   ../../rom/rom_helpers.s
-            put   ../../rom/rom_input.s
-            put   ../../rom/rom_exec.s
-            put   ../../rom/rom_config.s
+            mput   ../../rom
+; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
+            put    ../../rom/scaffold.s
+            put    ../../rom/rom_color.s
+            put    ../../rom/rom_helpers.s
+            put    ../../rom/rom_input.s
+            put    ../../rom/rom_exec.s
+            put    ../../rom/rom_config.s
+; AUTOINC:END
 
             put   ../../core/ControlBits.s
             put   ../../core/CoreData.s

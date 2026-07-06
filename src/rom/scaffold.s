@@ -184,6 +184,21 @@ NES_EvtLoop
 
             jsr   NES_RenderFrame
 
+; MAME bench harness (scripts/run-bench.js): once the canned input file
+; (BenchInputData) is exhausted, quit -- this has to happen here, right
+; after a frame has actually rendered, rather than relying on the normal
+; LastRead/PAD_KEY_DOWN check below returning control to the caller,
+; since BENCH_MODE's NES_ReadInput never sets LastRead and the check
+; below would just loop back to NES_EvtLoop forever.
+            DO    BENCH_MODE
+            lda   BenchInputIndex
+            cmp   #BENCH_MODE_LEN-1
+            bcc   :bench_not_done
+            lda   #'q'             ; make it a quit
+            brl   :exit
+:bench_not_done
+            FIN
+
 ; The input is read from the VBL interrupt handler.  If no
 ; new key input is available, then nothing else to do here
 
@@ -616,10 +631,85 @@ _NametableToScreen
 :y_visible  rts
 
 
+; Helper that can be called by custom renderers to display the standard debug variable
+_ShowDebugInfo
+            DO    SHOW_DEBUG_VARS
+            inc   dirtyCount
+            ldx   frameTick
+            lda   Mul160Tbl,x
+            tax
+            lda   #$EEEE
+            stal  $012000+{40*160},x
+
+; Show the current frames per second
+            lda   framesPerSecond
+            ldx   #0
+            ldy   #$FFFF
+            jsr   DrawByte
+
+; Show the current player one input byte
+            lda   InputPlayer1
+            ldx   #8*160
+            ldy   #$FFFF
+            jsr   DrawWord
+
+; Show the number of dirty and full frames rendered
+            lda   dirtyCount
+            ldx   #16*160
+            ldy   #$EEEE
+            jsr   DrawWord
+
+            lda   fullCount
+            ldx   #24*160
+            ldy   #$8888
+            jsr   DrawWord
+
+
+; Show the size of the NT and AT queues
+            lda   curr_at_list_end
+            sec
+            sbc   curr_at_list_start
+            ldx   #{0*160}+144
+            ldy   #$FFFF
+            jsr   DrawWord
+
+            lda   prev_at_list_end
+            sec
+            sbc   prev_at_list_start
+            ldx   #{8*160}+144
+            ldy   #$FFFF
+            jsr   DrawWord
+
+            lda   curr_nt_list_end
+            sec
+            sbc   curr_nt_list_start
+            ldx   #{16*160}+144
+            ldy   #$FFFF
+            jsr   DrawWord
+
+            lda   prev_nt_list_end
+            sec
+            sbc   prev_nt_list_start
+            ldx   #{24*160}+144
+            ldy   #$FFFF
+            jsr   DrawWord
+
+; Move the frameTick to the next position
+            lda   frameTick
+            inc
+            inc
+            and   #$00FE
+            sta   frameTick
+            FIN
+
+            rts
+
 ; Default render screen implementation.  The user-code can override this and provide their
 ; own to improve performance.
             mx  %00
 RenderScreen
+            jsr   _ShowDebugInfo
+            
             jsr   _GetPPUScrollX          ; Return in X register
             jsr   _GetPPUScrollY          ; Return in Y register
 
@@ -649,14 +739,6 @@ RenderScreen
             bne   :full_update
 
 ; This is code path for performing dirty rendering.
-            DO    SHOW_DEBUG_VARS
-            inc   dirtyCount
-            ldx   frameTick
-            lda   Mul160Tbl,x
-            tax
-            lda   #$EEEE
-            stal  $012000+{40*160},x
-            FIN
 
             jsr   _BltSetupDirty
             sta   exitOffset
@@ -666,19 +748,12 @@ RenderScreen
             bra   :dirty_done
 
 :full_update
-            DO    SHOW_DEBUG_VARS
-            inc   fullCount
-            ldx   frameTick
-            lda   Mul160Tbl,x
-            tax
-            lda   #$8888
-            stal  $012000+{40*160},x
-            FIN
             jsr   _BltSetup
             sta   exitOffset
             jsr   drawScreen
             ldy   exitOffset
             jsr   _RestoreBG0OpcodesLite
+
 :dirty_done
 
             ELSE
@@ -694,38 +769,6 @@ RenderScreen
 
             ldy   exitOffset              ; offset to patch
             jsr   _RestoreBG0OpcodesLite
-            FIN
-
-            DO    SHOW_DEBUG_VARS
-; Show the current frames per second
-            lda   framesPerSecond
-            ldx   #0
-            ldy   #$FFFF
-            jsr   DrawByte
-
-; Show the current player one input byte
-            lda   InputPlayer1
-            ldx   #8*160
-            ldy   #$FFFF
-            jsr   DrawWord
-
-; Show the number of dirty and full frames rendered
-            lda   dirtyCount
-            ldx   #16*160
-            ldy   #$EEEE
-            jsr   DrawWord
-
-            lda   fullCount
-            ldx   #24*160
-            ldy   #$8888
-            jsr   DrawWord
-
-; Move the frameTick to the next position
-            lda   frameTick
-            inc
-            inc
-            and   #$00FE
-            sta   frameTick
             FIN
 
             stz   DirtyBits
@@ -752,3 +795,6 @@ frameReady      dw  0
 
 ; Set to abort from the VBL interrupt handler.  Effectively stops the execution of the ROM game code
 skipInterruptHandling dw 0
+
+; Flag to say if we're in pause/single-step mode
+inSingleStep   dw 0

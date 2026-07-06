@@ -29,7 +29,7 @@ REM %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\bf\BalloonFgtGS
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\wumpus\WumpusGS
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\iceclimber\IceClimberGS
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\excitebike\ExciteBikeGS
-REM %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\dk\DonkeyKongGS
+%CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\dk\DonkeyKongGS
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\mb\MarioBrosGS
 
 %CADIUS% CREATEFOLDER %IMAGE% %FOLDER%Icons
