@@ -187,58 +187,6 @@ PPUADDR_WRITE ENT
         plp
         rtl
 
-
-; 2007 - PPUDATA (Read/Write)
-;
-; If reading from the $0000 - $3EFF range, the value from vram_buff is returned and the actual data is loaded
-; post-fetch.
-        mx    %11
-PPUDATA_READ0 ENT
-        php
-        phb
-        phk
-        plb
-        phx
-
-        rep  #$30       ; do a 16-bit update of the address
-        ldx  ppuaddr
-        txa
-
-        clc
-        adc  ppuincr
-        and  #$3FFF
-        sta  ppuaddr
-        sep  #$20       ; back to 8-bit acc for the read itself
-
-        cpx  #$3F00     ; check which range of memory we are accessing?
-        bcc  :buff_read
-
-        ldal PPU_MEM,x
-        bra  :out
-
-:buff_read
-        lda  vram_buff  ; read from the buffer
-        pha
-        ldal PPU_MEM,x  ; put the data in the buffer for the next read
-        sta  vram_buff
-        pla             ; pop the return value
-
-; Alternate, does mixed 8/16 bit operations, somight have a side-effect
-;        ldal PPU_MEM,x
-;        ldx  vram_buff
-;        sta  vram_buff
-;        txa
-
-:out
-        sep #$10
-        plx
-        plb
-        plp
-
-        pha
-        pla
-        rtl
-
         mx    %11
 PPUDATA_READ ENT
         php
@@ -285,15 +233,12 @@ PPUDATA_READ ENT
         tax
 
 :not_in_nt
-        sep  #$20       ; keep index as 16-bit
-        lda  vram_buff  ; read from the buffer
-        pha
-
         ldal PPU_MEM,x  ; put the data in the buffer for the next read
-        sta  vram_buff
-        pla             ; pop the return value
-
         sep #$30
+        tax
+        lda  vram_buff
+        stx  vram_buff
+
         plx
         plb
         plp
