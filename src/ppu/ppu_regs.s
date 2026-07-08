@@ -164,53 +164,40 @@ PPUSCROLL_WRITE ENT
         mx    %11
 PPUADDR_WRITE ENT
         php
-        phb
-        phk
-        plb
         phx
         pha
 
-        ldx  w_bit
-        sta  ppuaddr,x
-
-        txa
+        ldal w_bit
+        tax
         eor  #$01
-        sta  w_bit
-
-        lda  ppuaddr+1             ; Stay within the mirrored memory space
-        and  #$3F
-        sta  ppuaddr+1
+        stal w_bit
 
         pla
+        stal ppuaddr,x
+
         plx
-        plb
         plp
         rtl
 
         mx    %11
 PPUDATA_READ ENT
-        php
-        phb
-        phk
-        plb
+        pha             ; space for return result
         phx
 
         rep  #$31
-        lda  ppuaddr    ; Load and update the ppu address (guaranteed to be in the range $0000 - $3FFF)
+        ldal ppuaddr    ; Load and update the ppu address (guaranteed to be in the range $0000 - $3FFF)
         tax
-        adc  ppuincr
-        sta  ppuaddr
+        adcl ppuincr
+        stal ppuaddr
 
         cpx  #$3F00     ; If we're reading palette RAM, return the value immediately
         bcc  :buff_read
 
         ldal PPU_MEM,x  ; do a 16-bit read, but we'll ignore the top byte
+        sta  2,s
 
         sep  #$30
         plx
-        plb
-        plp
-        pha
         pla
         rtl
 
@@ -233,17 +220,17 @@ PPUDATA_READ ENT
         tax
 
 :not_in_nt
-        ldal PPU_MEM,x  ; put the data in the buffer for the next read
-        sep #$30
-        tax
-        lda  vram_buff
-        stx  vram_buff
+        sep  #$20       ; 8-bit acc/16-bit regs
+        ldal vram_buff
+        sta  2,s
+        ldal PPU_MEM,x
+        stal vram_buff
+        sep  #$30
 
         plx
-        plb
-        plp
-
-        pha
+;        plb
+;        plp
+;        pha
         pla
         rtl
 

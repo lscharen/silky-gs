@@ -166,8 +166,8 @@ NES_EvtLoop
 ; driven manually
 
             DO    NO_INTERRUPTS
-            jsr   NES_ReadInput
             jsr   NES_TriggerNMI
+            jsr   NES_ReadInput           ; .fm2 docs imply that the controller input is latched following the NMI
             ELSE
 
 ; Wait for a frame to become available.  This almost never waits, unless
@@ -191,7 +191,7 @@ NES_EvtLoop
 ; since BENCH_MODE's NES_ReadInput never sets LastRead and the check
 ; below would just loop back to NES_EvtLoop forever.
             DO    BENCH_MODE
-            lda   BenchInputIndex
+            ldal  BenchInputIndex
             cmp   #BENCH_MODE_LEN-1
             bcc   :bench_not_done
             lda   #'q'             ; make it a quit

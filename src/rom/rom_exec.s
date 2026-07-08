@@ -170,7 +170,9 @@ NES_TriggerNMI
 ; canned input index advances (see BENCH_MODE / BenchInputData in the
 ; game's Main.s, and src/rom/rom_input.s).
             DO    BENCH_MODE
-            inc   BenchInputIndex
+            ldal  BenchInputIndex
+            inc
+            stal  BenchInputIndex
             FIN
 
 ; If the audio engine is not running off of its own ESQ interrups at 240Hz or 120Hz, then it must be manually drive

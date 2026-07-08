@@ -20,12 +20,18 @@ NES_ReadInput
 ; advanced here -- only src/rom/rom_exec.s::NES_TriggerNMI (one call per
 ; virtual NMI) advances it, so every read within that frame returns the
 ; same value.
+            ldal  BenchInputIndex
+            tax
             sep   #$20
-            ldx   BenchInputIndex
-            lda   BenchInputData,x
+            ldal  BenchInputData,x
             sta   native_joy
             stz   native_joy+1           ; player 2: no input
             rep   #$20
+            and   #$00FF
+            xba
+            sta   LastRead
+            sta   InputPlayer1
+            stz   InputPlayer2
             rts
             ELSE
             jsr   _ReadControl

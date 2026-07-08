@@ -78,7 +78,7 @@ ROM_DRIVER_MODE   equ 0
 ;     rom_input.s, so it must always default to 0 there too)
 ; 1 = bench harness build
 BENCH_MODE        equ 1
-BENCH_MODE_LEN    equ 600
+BENCH_MODE_LEN    equ 3600
 
 ; Flag whether the backend should use the OAMDMA to get the sprite information,
 ; or if it can scan the NES RAM area directly
@@ -119,7 +119,7 @@ AUTOMATIC_PALETTE_MAPPING equ 0
 SHOW_ROM_EXECUTION_TIME equ 0
 
 ; Turn on some off-screen information
-SHOW_DEBUG_VARS equ 1
+SHOW_DEBUG_VARS equ 0
 
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 1

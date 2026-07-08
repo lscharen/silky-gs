@@ -60,10 +60,10 @@ _BltRangeLite
                 rts
 
 :normal
-;                lda   ControlBits 
-;                bit   #CTRL_BKGND_ENABLE
-;                bne   *+5
-;                brl   :no_background
+                lda   ControlBits 
+                bit   #CTRL_BKGND_ENABLE
+                bne   *+5
+                brl   :no_background
 
                 clc
                 dey

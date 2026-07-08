@@ -185,8 +185,8 @@ PAD_DOWN               equ   $0400
 PAD_UP                 equ   $0800
 PAD_START              equ   $1000
 PAD_SELECT             equ   $2000
-PAD_BUTTON_A           equ   $4000
-PAD_BUTTON_B           equ   $8000
+PAD_BUTTON_B           equ   $4000
+PAD_BUTTON_A           equ   $8000
 
 ; Rendering Control Bits
 CTRL_SPRITE_ENABLE     equ   $0001
