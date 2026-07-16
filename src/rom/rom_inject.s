@@ -70,7 +70,9 @@ apu_write_tbl
 ; These function are expected to be called in 8-bit mode from the ROM code
             mx    %11
 
-; MMC1 Supportmmc1_reg0   ds    1
+; Note: In multi-bank ROMs, this code is replicated.  But(!), the data bank register will always be set to the ROMBase
+; bank.  So, essentially these are really just used as labelsfor the code to be compiled in each bank.
+; MMC1 Support
 mmc1_reg0   ds    1
 mmc1_reg1   ds    1
 mmc1_reg2   ds    1
@@ -133,12 +135,13 @@ STA_MMC1_REG3
             and   #$07
             clc
             adc   #^ROMBase
-            stal  mapper_bank
+            stal  mapper_bank  ; this is in the Engine data bank, not the NES data bank
 
 ; Trampoline magic -- the rom_inject file is replicated across all of the NES ROM banks that are mapped
 ;                     across the IIgs 64kb banks, so we long jump to the new mapper_bank and that will
 ;                     magically hit the code below an the RTS will return to the address in the new bank
-            sta   :patch+3
+
+            stal  :patch+3     ; needs to actually write to the executing bank (K), not the NES data bank.
 
             lda   #$10         ; reset the shift register automatically (as documented)
             sta   mmc1_reg3
