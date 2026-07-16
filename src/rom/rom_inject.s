@@ -43,6 +43,10 @@ APU_STATUS_READ         EXT
 ; yield at a later point with all registers intact.
 yield EXT
 
+; Byte that holds the currently selceted mapper bank
+ROMBase     EXT
+mapper_bank EXT
+
 ; Table of routines used when reading from the APU registers ($4000 - $4017).
 ; Assumed reading in the accumulator
 ;apu_read_tbl
@@ -65,6 +69,86 @@ apu_write_tbl
 
 ; These function are expected to be called in 8-bit mode from the ROM code
             mx    %11
+
+; MMC1 Supportmmc1_reg0   ds    1
+mmc1_reg0   ds    1
+mmc1_reg1   ds    1
+mmc1_reg2   ds    1
+mmc1_reg3   ds    1
+
+STA_MMC1_REG0
+            php
+            pha
+            bit   #$80         ; high-bit set --> register reset
+            beq   :shft
+            lda   #$10
+            sta   mmc1_reg0    ; "reset" == set the detection bit in bit 4
+            pla
+            plp
+            rts
+:shft
+            and   #$01         ; isolate the bottom bit
+            beq   :zero
+            lda   #$20         ; inject bit
+            tsb   mmc1_reg0
+
+:zero       lsr   mmc1_reg0    ; serial shift
+            bcc  :done         ; not done yet
+
+            lda   #$10         ; reset the shift register automatically (as documented)
+            sta   mmc1_reg0
+
+; Commit changes -- what we care about here are bit 0-1 to select mirroring mode:2 = veritcal, 3 = horizontal
+
+:done       pla
+            plp
+            rts
+
+STA_MMC1_REG1
+STA_MMC1_REG2
+            rts
+
+STA_MMC1_REG3
+            php
+            pha
+            bit   #$80         ; high-bit set --> register reset
+            beq   :shft
+            lda   #$10
+            sta   mmc1_reg3    ; "reset" == set the detection bit in bit 4
+            pla
+            plp
+            rts
+:shft
+            and   #$01         ; isolate the bottom bit
+            beq   :zero
+            lda   #$20         ; inject bit
+            tsb   mmc1_reg3
+
+:zero       lsr   mmc1_reg3    ; serial shift
+            bcc  :done         ; not done yet
+
+; Commit changes -- what we care about here are bits 0 - 3 to select the bank
+
+            lda   mmc1_reg3
+            and   #$07
+            clc
+            adc   #^ROMBase
+            stal  mapper_bank
+
+; Trampoline magic -- the rom_inject file is replicated across all of the NES ROM banks that are mapped
+;                     across the IIgs 64kb banks, so we long jump to the new mapper_bank and that will
+;                     magically hit the code below an the RTS will return to the address in the new bank
+            sta   :patch+3
+
+            lda   #$10         ; reset the shift register automatically (as documented)
+            sta   mmc1_reg3
+
+:patch      jml   :done
+
+:done       pla
+            plp
+            rts
+
 
 APU_PULSE1  EXT
 ORA_4000    oral APU_PULSE1+0
@@ -509,6 +593,26 @@ aay_patch   adc  #0
             rts
             <<<
 
+; abs,X (unlike abs,Y) is a valid native dp,X addressing mode, so these don't
+; need the register-shuffle trick the _ABS_Y macros use -- they just need to
+; run from a JSR'd helper because a Zelda-style multi-bank port can't inline
+; a plain "LDA Symbol,X" and have it correctly reach the shared NES zero-page
+; bank from every program bank. See project_zelda_conversion memory notes.
+LDA_ABS_X   mac
+            lda  ]1,x
+            rts
+            <<<
+
+STA_ABS_X   mac
+            sta  ]1,x
+            rts
+            <<<
+
+LDY_ABS_X   mac
+            ldy  ]1,x
+            rts
+            <<<
+
 JMP_ABS_IND mac
             php
             pha
@@ -559,19 +663,19 @@ zp          phx
             <<<
 
 ; Enter via a JML. A = target address, X = Stack and Direct page set up properly ahead of time. B = ROM bank. Called in 16-bit native mode
-            mx    %00
+;            mx    %00
 
-ExtRtn      EXT
-ExtIn       ENT
-            phk             ; set the bank (will change for MMC1 support)
-            plb
+;ExtRtn      EXT
+;ExtIn       ENT
+;            phk             ; set the bank (will change for MMC1 support)
+;            plb
 
-;            txa
-            txs
-            sta  :patch+1
-            sep  #$30
-:patch      jsr  $0000
-            rep  #$30
-            jml  ExtRtn
+;;            txa
+;            txs
+;            sta  :patch+1
+;            sep  #$30
+;:patch      jsr  $0000
+;            rep  #$30
+;            jml  ExtRtn
 
-            mx   %11
+;            mx   %11

@@ -41,10 +41,9 @@ LevelNumberTransferBuf  EXT
 TriforceRow0TransferBuf  EXT
 
             mx    %11
-            ORG   $5000
+            ds    $5000-*
 
-ROMBase  EXT
-            put   rom_inject_no_extin.s
+            put   ../../../rom/rom_inject.s
 
             use   BeginEndVars.inc
             use   CaveVars.inc
@@ -54,7 +53,7 @@ ROMBase  EXT
 
 SetMirrorMode  EXT
 
-            ORG   $8000
+            ds    $8000-*
 
 ; a:sym,Y / a:sym,X helper subroutines (NES zero page lives in a different bank)
 Hlp_STA_ObjStatep13_Y  STA_ABS_Y ObjState+13

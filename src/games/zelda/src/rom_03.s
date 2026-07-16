@@ -1,8 +1,7 @@
             mx    %11
-            ORG   $5000
+            ds    $5000-*
 
-ROMBase  EXT
-            put   rom_inject_no_extin.s
+            put   ../../../rom/rom_inject.s
 
             use   BeginEndVars.inc
             use   CaveVars.inc
@@ -12,7 +11,7 @@ ROMBase  EXT
 
 SetMirrorMode  EXT
 
-            ORG   $8000
+            ds    $8000-*
 
 ; .INCLUDE "Variables.inc" (hoisted to file header)
 

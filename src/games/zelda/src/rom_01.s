@@ -15,10 +15,11 @@ SwitchBank_Local5  EXT
 MenuPalettesTransferBuf  EXT
 
             mx    %11
-            ORG   $5000
 
-ROMBase  EXT
-            put   rom_inject_no_extin.s
+; Pad up to $5000
+            ds    $5000-*
+
+            put   ../../../rom/rom_inject.s
 
             use   BeginEndVars.inc
             use   CaveVars.inc
@@ -28,7 +29,8 @@ ROMBase  EXT
 
 SetMirrorMode  EXT
 
-            ORG   $8000
+; Pad up to $8000
+            ds    $8000-*
 
 ; a:sym,Y / a:sym,X helper subroutines (NES zero page lives in a different bank)
 Hlp_LDA_ObjDir_Y  LDA_ABS_Y ObjDir

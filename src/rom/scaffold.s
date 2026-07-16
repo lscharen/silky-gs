@@ -41,6 +41,12 @@ NES_StartUp
 
             sta   yield_s                 ; Set the high byte of the stack address
 
+; Default bank for MMC1 games
+
+            lda   #^ROMBase
+            and   #$00FF
+            sta   mapper_bank
+
 ; Initialize some application variables
 
             ldal  OneSecondCounter
@@ -76,6 +82,14 @@ NES_StartUp
             bcc   *+5
             jmp   Fail
 
+; PPUStartUp (via StartUp's InitMemory/_InitRenderMode chain, above) already
+; set DP MirrorMask for the compile-time NAMETABLE_MIRRORING default. Seed
+; the long-addressable copy ppu_regs.s uses from it, so games that never
+; call SetMirrorMode still get correct address masking from the start.
+
+            lda   MirrorMask
+            stal  MirrorMaskLong
+
 ; Initialize the sound hardware for APU emulation
 
             DO    NO_INTERRUPTS
@@ -90,10 +104,24 @@ NES_StartUp
             jsr   _ClearToColor
             jsr   InitPlayfield
 
-; Convert the CHR ROM from the cart into blittable tiles
+; Convert the CHR ROM from the cart into blittable tiles. CHR-RAM games don't
+; have a fixed image to pre-convert -- mark every tile dirty instead, so
+; DrawPPUTile/CheckSprTileDirty lazily compile each tile the first time it's
+; actually drawn (once the game has uploaded real data for it).
 
+            DO    HAS_CHR_RAM
+            ldx   #0
+            lda   #$FFFF
+:mtloop     sta   BgTileDirty,x
+            sta   SprTileDirty,x
+            inx
+            inx
+            cpx   #256
+            bcc   :mtloop
+            ELSE
             jsr   ROM_LoadBackgroundTiles
             jsr   ROM_LoadSpriteTiles
+            FIN
 
 ; Now the core of the runtime has been initialized
             rts
@@ -327,6 +355,21 @@ DPSave            dw  0
 DP_OAM            dw  0
 DP_NES            dw  0
 BorderColor       dw  0            ; save/restore border color
+
+; Runtime nametable-mirroring mask, set by SetMirrorMode (ControlBits.s).
+; Duplicates the DP MirrorMask (Defs.s) for use from contexts where the
+; engine's own direct page isn't active (e.g. ppu_regs.s's PPU write
+; handlers, entered from NES ROM code with the NES's own direct page) --
+; those sites access this copy with long addressing (andl MirrorMaskLong)
+; instead.
+MirrorMaskLong    dw  0
+
+; 0 = no mirroring-mode change pending; else HORIZONTAL_MIRRORING/
+; VERTICAL_MIRRORING, the target mode ApplyMirrorMode should switch to at
+; the next render (see core/ControlBits.s SetMirrorMode/ApplyMirrorMode).
+; Absolute, not DP, for the same reason as MirrorMaskLong above --
+; SetMirrorMode writes it via long addressing from NES ROM code.
+PendingMirrorMode dw  0
 
 ; Built-in user key actions
 

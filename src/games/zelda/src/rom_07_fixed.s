@@ -311,11 +311,11 @@ PlayAreaColumnAddrs ENT
             db    $40, $67, $56, $67, $6C, $67, $82, $67
             db    $98, $67, $AE, $67, $C4, $67, $DA, $67
 
-Z07Int_RunGame
+RunGame
     LDA #$00
     STA InitializedGame
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR InitSaveRam
     JSR ClearRam
     JSR Z07Int_ClearAllAudioAndVideo
@@ -325,7 +325,11 @@ Z07Int_RunGame
     STA CurPpuControl_2000
 
 Z07Int_LoopForever
-    JMP Z07Int_LoopForever
+;    JMP Z07Int_LoopForever
+    rtl                         ; IIgs - an infinite loop with no work need no more attention
+    nop
+    nop
+
 
 Z07Int_ClearAllAudioAndVideo
     LDA #$00
@@ -351,7 +355,7 @@ Z07Int_ClearNameTableWithHiAddr
     LDY #$00
     JMP Z07Int_ClearNameTable
 
-Z07Int_IsrNmi
+IsrNmi
     LDA CurPpuControl_2000
     LDX SwitchNameTablesReq
     BEQ :Z07Int_Anon0001                      ; If need to switch name tables,
@@ -390,7 +394,7 @@ Z07Int_IsrNmi
             JSR   STA_2005
             JSR   STA_2005
     LDA #$06
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR TransferCurTileBuf
 
     ; Reset PPUADDR.
@@ -414,7 +418,7 @@ Z07Int_IsrNmi
     LDA IsSprite0CheckActive
     BEQ :Z07Int_CheckScroll
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR WaitAndScrollToSplitBottom
 
 :Z07Int_CheckScroll
@@ -496,7 +500,7 @@ Z07Int_IsrNmi
     DEY
     BNE :Z07Int_LoopRandom
     LDA #$00
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR DriveAudio
     INC FrameCounter
     LDA IsUpdatingMode
@@ -508,12 +512,13 @@ Z07Int_IsrNmi
     JSR Z07Int_UpdateMode
 
 :Z07Int_EnableNMI
-            JSR   LDA_2002
+    JSR   LDA_2002
     LDA CurPpuControl_2000
     ORA #$80
             JSR   STA_2000
     STA CurPpuControl_2000
-    RTI
+;    RTI
+    rtl                          ; IIgs - use RTL to return from simulated interrupts
 
 Z07Int_ResetPpuRegisters
     LDA #$00
@@ -705,7 +710,7 @@ UpdateTriforcePositionMarker ENT
     LDA CurLevel
     BEQ Z07Int_Exit                    ; If in OW, then return.
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR HasCompass
     BEQ Z07Int_Exit                    ; If player hasn't gotten the compass, then return.
     LDA LevelInfo_TriforceRoomId
@@ -720,7 +725,7 @@ CalculateNextRoom ENT
     LDA ObjDir
     STA $02
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR FindDoorTypeByDoorBit
     LDY $01                     ; The same as [02].
 
@@ -973,7 +978,7 @@ Z07Int_DrawStatusBarItemB
     LDA #$7C
     STA $00
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR DrawItemInInventoryWithX
     JMP Z07Int_DrawStatusBarSword      ; Go handle the sword.
 
@@ -1001,7 +1006,7 @@ Z07Int_EnsureSelectedItem
     TXA                         ; Not found. Search for an occupied slot.
     TAY
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     LDA #$02                    ; Go backwards from current slot.
     JSR FindAndSelectOccupiedItemSlot
 
@@ -1015,7 +1020,7 @@ Z07Int_DrawStatusBarSword
     LDA #$94
     STA $00
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP DrawItemInInventoryWithX
 
 Z07Int_CheckMissingItem
@@ -1182,7 +1187,7 @@ ChangeTileObjTiles ENT
     PLA                         ; Restore object index.
     TAX
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
 
     ; Change the tiles in the play area map.
     JSR ChangePlayMapSquareOW
@@ -1191,7 +1196,7 @@ ChangeTileObjTiles ENT
     LDA ReturnToBank4
     BEQ :Z07Int_Anon0006
     LDA #$04
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
 :Z07Int_Anon0006
     LDA #$00
     STA ReturnToBank4
@@ -1202,7 +1207,7 @@ ChangeTileObjTiles ENT
 ;
 FillTileMap ENT
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR FetchTileMapAddr
     LDY #$00
 
@@ -1225,10 +1230,10 @@ Z07Int_InitializeGameOrMode
     LDA InitializedGame
     BNE Z07Int_InitMode
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR CopyCommonCodeToRam
     LDA #$06
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR CopyCommonDataToRam
     LDA #$5A                    ; Mark Save RAM initialized, so we can check after reset.
     STA SaveRamBegin
@@ -1239,7 +1244,7 @@ Z07Int_InitializeGameOrMode
 
 Z07Int_InitMode
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     LDA GameMode
     JSR TableJump
 
@@ -1270,23 +1275,23 @@ Z07Int_InitMode0
     CMP #$5A
     BEQ :Z07Int_Anon0007
     LDA #$02
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP TransferCommonPatterns
 :Z07Int_Anon0007
     LDA TransferredDemoPatterns
     CMP #$A5
     BEQ :Z07Int_Anon0008
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP TransferDemoPatterns
 :Z07Int_Anon0008
     LDA #$02
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP InitDemo_RunTasks
 
 Z07Int_InitMode1
     LDA #$02
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP InitMode1_Full
 
 Z07Int_InitMode2
@@ -1306,20 +1311,20 @@ Z07Int_InitMode2
     DEY
     BPL :Z07Int_ClearCounts
     LDA #$03
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR TransferLevelPatternBlocks
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR CopyCommonCodeToRam
 
 :Z07Int_InitSubmodes
     LDA #$06
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP InitMode2_Submodes
 
 Z07Int_InitMode7
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR InitMode7Submodes
     LDA IsSprite0CheckActive
     BEQ :Z07Int_Exit                   ; If not checking sprite 0, return.
@@ -1342,27 +1347,27 @@ Z07Int_InitMode7
     LDA #$0E                    ; vertical mirroring
 
 :Z07Int_SetMirroring
-    JSR Z07Int_SetMMC1Control
+    JSR SetMMC1Control
 
 :Z07Int_Exit
     RTS
 
 Z07Int_InitModeEandF
     LDA #$02
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP InitModeEandF_Full
 
 Z07Int_InitMode13
     ; Make sure horizontal mirroring is on.
     LDA #$0F
-    JSR Z07Int_SetMMC1Control
+    JSR SetMMC1Control
     LDA #$02
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP InitMode13_Full
 
 Z07Int_InitMode3
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR TurnOffAllVideo
     LDA GameSubmode
     JSR TableJump
@@ -1445,7 +1450,7 @@ DrawSpritesBetweenRooms ENT
     JSR UpdatePlayerPositionMarker
     JSR UpdateTriforcePositionMarker
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR DrawLinkBetweenRooms
     JMP DrawStatusBarItemsAndEnsureItemSelected
 
@@ -1548,7 +1553,7 @@ Z07Int_InitMode5Play
 RunCrossRoomTasksAndBeginUpdateMode_PlayModesNoCellar ENT
     ; Called in modes 5, $B, $C.
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR SetupObjRoomBounds
 
 RunCrossRoomTasksAndBeginUpdateMode_EnterPlayModes ENT
@@ -1561,7 +1566,7 @@ RunCrossRoomTasksAndBeginUpdateMode_EnterPlayModes ENT
 RunCrossRoomTasksAndBeginUpdateMode ENT
     ; Called in modes 4, 5, 6, 9, $B, $C.
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR CreateRoomObjects
 
     ; Look for the current room in room history.
@@ -1599,7 +1604,7 @@ RunCrossRoomTasksAndBeginUpdateMode ENT
     LDA CurLevel
     BEQ :Z07Int_CheckWhirlwind
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR CheckBossSoundEffectUW
 
 :Z07Int_BeginUpdate
@@ -1607,7 +1612,7 @@ RunCrossRoomTasksAndBeginUpdateMode ENT
 
 :Z07Int_CheckWhirlwind
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP CheckInitWhirlwindAndBeginUpdate
 
 ; Unknown block
@@ -1615,7 +1620,7 @@ RunCrossRoomTasksAndBeginUpdateMode ENT
 
 Z07Int_UpdateMode
     LDA #$02
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     LDA GameMode
     JSR TableJump
 
@@ -1643,41 +1648,41 @@ Z07Int_UpdateMode_JumpTable
 
 Z07Int_UpdateMode7Scroll
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR UpdateMode7SubmodeAndDrawLink
     LDA IsSprite0CheckActive
     BNE :Z07Int_Exit                   ; If still checking sprite 0, return.
     STA _Unknown_F3             ; TODO: Reset [$F3].
     LDA #$0F                    ; Set horizontal mirroring and our normal PRG ROM bank mode.
-    JSR Z07Int_SetMMC1Control
+    JSR SetMMC1Control
 
 :Z07Int_Exit
     RTS
 
 Z07Int_UpdateMode8ContinueQuestion
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP UpdateMode8ContinueQuestion_Full
 
 Z07Int_UpdateMode10Stairs
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP UpdateMode10Stairs_Full
 
 Z07Int_UpdateMode11Death
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP UpdateMode11Death_Full
 
 Z07Int_UpdateMode12EndLevel
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP UpdateMode12EndLevel_Full
 
 Z07Int_UpdateMode2Load
     JSR TurnOffAllVideo
     LDA #$06
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR UpdateMode2Load_Full
 
 ; Returns:
@@ -1703,7 +1708,7 @@ Z07Int_UpdateMode3Unfurl
     LDA ObjX+12
     BNE Z07Int_L1EBF8_Exit             ; If the left column hasn't reached the left edge, then return.
     LDA #$0F                    ; Set horizontal mirroring.
-    JSR Z07Int_SetMMC1Control
+    JSR SetMMC1Control
     LDA UndergroundExitType
     BEQ :Z07Int_Anon0010                      ; If underground exit type <> 0, then in OW and ...
     JMP Z07Int_GoToNextModeResetGridOffset    ; go to next mode, and reset Link's relative position.
@@ -1760,7 +1765,7 @@ Z07Int_StepOutside
 
     ; We're entering the OW room from a cave or dungeon.
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR AnimateAndDrawLinkBehindBackground
 
     ; Every 4 frames, move Link up 1 pixel.
@@ -1784,7 +1789,7 @@ Z07Int_UpdateMode5Play
     LDA BrighteningRoom
     BEQ :Z07Int_CheckMenuAndPause
     LDA #$04
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP UpdateCandle
 
 :Z07Int_CheckMenuAndPause
@@ -1813,7 +1818,7 @@ Z07Int_UpdateMode5Play
     LDA Paused
     BEQ :Z07Int_CheckMenu              ; If not paused, go update the submenu or world.
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR MaskCurPpuMaskGrayscale
     JMP UpdateHeartsAndRupees
 
@@ -1828,7 +1833,7 @@ Z07Int_UpdateMode5Play
 
     ; In submenu.
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR MaskCurPpuMaskGrayscale
     JMP UpdateMenuAndMeters
 
@@ -1977,16 +1982,16 @@ Z07Int_BeginUpdateWorld
     LDA CurLevel
     BEQ :Z07Int_CheckOW
     LDA #$04
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR UpdateStatues           ; Update statues.
     JSR UpdateTriforcePositionMarker
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR CheckUnderworldSecrets
     JSR CheckShutters
     JSR UpdateDoors
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR CheckPowerTriforceFanfare    ; Check triforce fanfare.
     JMP :Z07Int_TransferStatusBarMap
 
@@ -2008,7 +2013,7 @@ Z07Int_BeginUpdateWorld
 :Z07Int_CheckZora
     ; In OW, make a zora, if applicable.
     LDA #$04
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR CheckZora               ; Check zora.
 
 :Z07Int_TransferStatusBarMap
@@ -2035,7 +2040,7 @@ Z07Int_BeginUpdateWorld
 
 UpdateHeartsAndRupees ENT
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR World_FillHearts
     JMP World_ChangeRupees
 
@@ -2065,7 +2070,7 @@ UpdatePlayer ENT
     STA ObjInputDir
 :Z07Int_Anon0012
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR Link_HandleInput
     JSR Walker_Move
 
@@ -2550,10 +2555,10 @@ WieldFlute ENT
 :Z07Int_SummonWhirlwind
     ; Summon the whirlwind.
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR SummonWhirlwind
     LDA #$05                    ; Restore the bank at the beginning of the routine.
-    JMP Z07Int_SwitchBank
+    JMP SwitchBank
 
 :Z07Int_FlagFluteUsed
     ; Flag that we used the flute.
@@ -2649,7 +2654,7 @@ Walker_Move ENT
 
     ; Check if tile objects block the player.
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR CheckTileObjectsBlocking
 
     ; Check whether a person blocks the player.
@@ -2680,7 +2685,7 @@ Walker_Move ENT
 
 :Z07Int_InSubroom
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR CheckSubroom
 
     ; If game mode = 9, or in OW, or in a doorway, then skip
@@ -2713,7 +2718,7 @@ Walker_Move ENT
     CMP #$09
     BEQ :Z07Int_CheckTiles
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR CheckDoorway
     LDX #$00                    ; Restore Link's object index.
 
@@ -2725,7 +2730,7 @@ Walker_Move ENT
     CPX #$00
     BNE MoveObject
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR CheckLadder             ; CheckLadder
 
 ; Params:
@@ -2925,7 +2930,7 @@ Z07Int_PlayerUnwalkable
     LDA CurLevel
     BNE :Z07Int_StopMoving
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR CheckPassiveTileObjects
 
 :Z07Int_StopMoving
@@ -3145,13 +3150,13 @@ Z07Int_LadderRoomsOW
 Link_EndMoveAndAnimate_Bank4 ENT
     JSR Link_EndMoveAndAnimate
     LDA #$04
-    JMP Z07Int_SwitchBank
+    JMP SwitchBank
 
 Link_EndMoveAndDraw_Bank1 ENT
     JSR Link_EndMoveAndDraw
 :Z07Int_Anon0021
     LDA #$01
-    JMP Z07Int_SwitchBank
+    JMP SwitchBank
 
 Link_EndMoveAndAnimate_Bank1 ENT
     JSR Link_EndMoveAndAnimate
@@ -3160,7 +3165,7 @@ Link_EndMoveAndAnimate_Bank1 ENT
 Link_EndMoveAndDraw_Bank4 ENT
     JSR Link_EndMoveAndDraw
     LDA #$04
-    JMP Z07Int_SwitchBank
+    JMP SwitchBank
 
 ; Description:
 ; Draw Link without animating by keeping the animation counter fixed.
@@ -3317,7 +3322,7 @@ Link_EndMoveAndAnimate ENT
     LDA ObjCollidedTile         ; Save the last collided tile.
     PHA
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR CheckWarps
     LDX #$00                    ; Set X to 0 to refer to Link object.
     PLA
@@ -4669,7 +4674,7 @@ Z07Int_UpdateFire
     TXA
     PHA
     LDA #$04
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR UpdateCandle
     PLA
     TAX
@@ -4857,7 +4862,7 @@ Z07Int_Bomb_CheckState4
 
     ; If it's not a bombable wall, go draw.
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR FindDoorTypeByDoorBit
     CMP #$04
     BNE Z07Int_DrawBomb
@@ -5233,7 +5238,7 @@ Z07Int_ObjectTypeToHpPairs
 Z07Int_UpdateObject
     PHA
     LDA #$04
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     PLA
 
     ; If the object was initialized, go update it.
@@ -5278,7 +5283,7 @@ Z07Int_UpdateObject
     CMP #$6A
     BCC :Z07Int_NormalObject
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP UpdateCavePerson
 
 :Z07Int_NormalObject
@@ -5496,7 +5501,7 @@ Z07Int_InitObject
 :Z07Int_InitMonsterFromEdge
     LDX CurObjIndex
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR FindNextEdgeSpawnCell
 
     ; Extract and set the monster's location.
@@ -5529,7 +5534,7 @@ Z07Int_InitObject
     ; go flag the monster uninitialized again, so we can
     ; try to spawn it again next time.
     LDA #$05
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JSR IsDistanceSafeToSpawn
     BCS :Z07Int_UninitMonsterFromEdge
 
@@ -5540,7 +5545,7 @@ Z07Int_InitObject
 
 :Z07Int_NormalSpawn
     LDA #$04
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
 
     ; For monsters that spawn in a cloud, set their start time to
     ; the same value as the object slot; so that they all start
@@ -5577,7 +5582,7 @@ Z07Int_InitObject
     CMP #$6A                    ; Cave 1
     BCC :Z07Int_CheckTileObj
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP InitCave                ; Init cave
 
 :Z07Int_CheckTileObj
@@ -5690,57 +5695,57 @@ Z07Int_InitObject_JumpTable
 
 Z07Int_UpdateWhirlwind
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP UpdateWhirlwind_Full
 
 Z07Int_InitRupeeStash
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP InitRupeeStash_Full
 
 Z07Int_UpdateRupeeStash
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP UpdateRupeeStash_Full
 
 Z07Int_InitTrap
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP InitTrap_Full
 
 Z07Int_UpdateTrap
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP UpdateTrap_Full
 
 Z07Int_InitUnderworldPerson
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP InitUnderworldPerson_Full
 
 Z07Int_InitUnderworldPersonLifeOrMoney
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP InitUnderworldPersonLifeOrMoney_Full
 
 Z07Int_InitGrumble
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP InitGrumble_Full
 
 Z07Int_UpdateUnderworldPerson
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP UpdateUnderworldPerson_Full
 
 Z07Int_UpdateUnderworldPersonLifeOrMoney
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP UpdateUnderworldPersonLifeOrMoney_Full
 
 Z07Int_UpdateGrumble
     LDA #$01
-    JSR Z07Int_SwitchBank
+    JSR SwitchBank
     JMP UpdateGrumble_Full
 
 ; Params:
@@ -5911,9 +5916,11 @@ AnimatePond ENT
 
 ; .SEGMENT "BANK_07_ISR"
 
+; Pad to $FF50
+    ds   $FF50-*
 
+; On reset, bank 3 (rom_02.s) is selected in for $8000-$BFFF
 
-    ORG  $FF50
 IsrReset ENT
 ;    SEI                         ; Disable interrupts.
     nop                         ; IIgs cannot have interrupts disabled
@@ -6007,15 +6014,14 @@ SwitchBank
     RTS
 
 ; .SEGMENT "BANK_07_VEC"
+; Pad to $FFFB
+    ds   $FFEB-*
 
-
-
-    ORG  $FFEB
 ; Unknown block
             db    $5A, $45, $4C, $44, $41, $D7, $C8, $00
             db    $00, $38, $04, $01, $04, $01, $BE
 
 IsrVector
-            dw    Z07Int_IsrNmi
+            dw    IsrNmi
             dw    IsrReset
             dw    $FFF0

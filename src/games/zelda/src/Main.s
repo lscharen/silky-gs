@@ -85,7 +85,7 @@ BG_TILES_AS_SPRITES equ 1
 ;
 ; 0 = Reset code drops into an infinite loop
 ; 1 = Reset code is the game code
-ROM_DRIVER_MODE   equ 1
+ROM_DRIVER_MODE   equ 0
 
 ; MAME cycle-count benchmark harness flag (scripts/run-bench.js) -- see
 ; src/games/smb/Main.s for details. Always 0 here; rom_input.s is shared
@@ -116,7 +116,7 @@ NO_VERTICAL_CLIP  equ 1
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 0
+NO_INTERRUPTS     equ 1
 
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 1

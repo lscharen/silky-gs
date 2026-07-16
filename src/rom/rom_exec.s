@@ -8,9 +8,23 @@
 ; the registers can be any value.
 ;
 ; X = ROM Address
+;
+; The code sets up the NES environment such that
+;
+; S = stack address from the last yield or ExtRtn
+; D = NES direct page location
+; K = mapper_bank
+;
+; All of the registers are left because, since this simulated an interrupt, the
+; interrupt handler could be called with arbitrary values in the registers.
+;
+; See the resume function for the control where the ROM code voluntarily returns
+; control via the yield entry point
+
 ; Interrupts must be disabled
             mx  %00
-romxfer     tsc
+romxfer                 
+            tsc
             sta   StkSave                   ; Save the current stack in the main program
 
             lda   DP_NES
@@ -24,12 +38,27 @@ romxfer     tsc
 
 ;            ldal   yield_s
 ;            tcs
-            txa                             ; Put address in A
-            ldx   yield_s                   ; Put 16-bit stack addr in X to protect against NES code using TXS
+            stx   :disp+1                   ; Save the target address
 
-            jml   ExtIn
+;            txa                            ; Put address in A
+
+            ldx   yield_s                   ; Put 16-bit stack addr in X to protect against NES code using TXS
+            txs
+
+            sep   #$30
+
+            lda   mapper_bank
+            sta   :disp+3                   ; Target the current mapper bank
+
+            lda   #^ROMBase                 ; Set the data bank to the first ROM bank
+            pha
+            plb
+
+:disp       jsl   $000000                   ; breaking change; ROM code needs rti->rtl, not rti->rts like it was
+
             mx  %00
-ExtRtn      ENT
+;ExtRtn      ENT
+            rep   #$30                      ; Back to 16-bit mode
 
             tsx                             ; Copy the stack address returned by the emulator
             ldal  StkSave
@@ -45,7 +74,7 @@ ExtRtn      ENT
             rts
 
 ; Miscellaneous data fields
-singleStepMode dw  0                        ; If non-zero, the runtime will waut for a user keypress between frames
+singleStepMode dw  0                        ; If non-zero, the runtime will wait for a user keypress between frames
 
 ; Location to save the 16-bit stack from the native IIgs execution context
 StkSave     dw    0
@@ -59,13 +88,17 @@ yield_y     ds    1
 yield_p     ds    1
 yield_s     ds    2                         ; 2 bytes so we can load/save the full 16-bit stack pointer
 
+; mapper state
+mapper_bank ENT
+            ds    2                         ; 64kb IIgs bank that holds the current active 16kb NES bank. 2 bytes for convenience.
+
             mx    %11
 yield       ENT
 
 ; First, preserve the state from the ROM code
 
             phk
-            plb                             ; Reset the bank register.  NES ROM is always B=01, so no need to save
+            plb                             ; Reset the bank register.
 
             php
             sta   yield_a                   ; Save all of the volatile registers
@@ -84,6 +117,9 @@ yield       ENT
             rts
 
 ; resume - return control to the NES rom
+;
+; No consideration of the mapper_bank because this is a suspend/resume
+; sequence so the RTL will return to the bank that invoked the yield.
             mx    %00
 resume
             tsc
@@ -101,7 +137,7 @@ resume
             ldx   yield_x
             lda   yield_p
             pha
-            lda   #^ExtIn                   ; Set the bank to the ROM
+            lda   #^ROMBase                ; Set the data bank to the first ROM bank
             pha
             lda   yield_a
             plb

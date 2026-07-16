@@ -1,7 +1,10 @@
             mx    %11
-            ORG   $5000
-
+SetMirrorMode  EXT
 ROMBase ENT
+
+; Pad up to $5000
+            ds    $5000-*
+
             put   ../../../rom/rom_inject.s
 
             use   BeginEndVars.inc
@@ -10,9 +13,10 @@ ROMBase ENT
             use   ObjVars.inc
             use   Variables.inc
 
-SetMirrorMode  EXT
+; Pad up to $8000
+            ds    $8000-*
 
-            ORG   $8000
+;            ORG   $8000
 
 ; .INCLUDE "Variables.inc" (hoisted to file header)
 
@@ -1240,9 +1244,6 @@ NoteLengthTable4
             db    $8D, $00, $E0, $4A, $8D, $00, $E0, $60
 
 ; .SEGMENT "BANK_00_VEC"
-
-
-
 
 ; Unknown block
             db    $84, $E4, $50, $BF, $F0, $BF
