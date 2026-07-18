@@ -4,12 +4,18 @@
             put   ../../../rom/rom_inject.s
             put   helpers.s
 
+            ds \,$00
+
             use   BeginEndVars.inc
             use   CaveVars.inc
             use   CommonVars.inc
             use   ObjVars.inc
             use   Variables.inc
 
+; Do not encroach on WRAM (battery-backed space)
+            ds    $6000-*
+
+; Pad up to $8000
             ds    $8000-*
 
 ; Technically, there should be a copy of the rom_07_fixed.s file in the

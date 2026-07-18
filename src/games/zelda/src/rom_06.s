@@ -1,8 +1,13 @@
+SetMirrorMode  EXT
+
             mx    %11
+
             ds    $5000-*
 
             put   ../../../rom/rom_inject.s
             put   helpers.s
+
+            ds \,$00
 
             use   BeginEndVars.inc
             use   CaveVars.inc
@@ -10,8 +15,10 @@
             use   ObjVars.inc
             use   Variables.inc
 
-SetMirrorMode  EXT
+; Do not encroach on WRAM (battery-backed space)
+            ds    $6000-*
 
+; Pad up to $8000
             ds    $8000-*
 
 ; .INCLUDE "Variables.inc" (hoisted to file header)
@@ -882,6 +889,7 @@ GameTitleTransferBuf
 ; Pad up to $C000 (matching the original NES fixed-bank boundary) before
 ; embedding Bank07's fixed content, so it starts at the same offset in
 ; every bank -- see the ORG $8000 comment above.
+
             ds    $C000-*
 
 ; Embedded copy of Bank07's fixed $C000-$FFFF code, so JSR/JMP into

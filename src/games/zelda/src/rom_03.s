@@ -1,8 +1,12 @@
+SetMirrorMode  EXT
+
             mx    %11
             ds    $5000-*
 
             put   ../../../rom/rom_inject.s
             put   helpers.s
+
+            ds \,$00
 
             use   BeginEndVars.inc
             use   CaveVars.inc
@@ -10,7 +14,8 @@
             use   ObjVars.inc
             use   Variables.inc
 
-SetMirrorMode  EXT
+; Do not encroach on WRAM (battery-backed space)
+            ds    $6000-*
 
             ds    $8000-*
 

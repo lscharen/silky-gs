@@ -18,6 +18,8 @@ SilenceAllSound  EXT
 UpdateWorldCurtainEffect_Bank2  EXT
 MenuPalettesTransferBuf  EXT
 
+SetMirrorMode  EXT
+
             mx    %11
 
             ds    $5000-*
@@ -25,14 +27,18 @@ MenuPalettesTransferBuf  EXT
             put   ../../../rom/rom_inject.s
             put   helpers.s
 
+            ds \,$00
+
             use   BeginEndVars.inc
             use   CaveVars.inc
             use   CommonVars.inc
             use   ObjVars.inc
             use   Variables.inc
 
-SetMirrorMode  EXT
+; Do not encroach on WRAM (battery-backed space)
+            ds    $6000-*
 
+; Pad up to $8000
             ds    $8000-*
 
 ; .INCLUDE "Variables.inc" (hoisted to file header)

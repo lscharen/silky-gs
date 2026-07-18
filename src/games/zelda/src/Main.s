@@ -124,7 +124,7 @@ NO_CONFIG         equ 1
 ; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
 ; set the background color.
-PPU_PALETTE_DISPATCH equ PALETTE_DISPATCH
+PPU_PALETTE_DISPATCH equ ZELDA_PALETTE_DISPATCH
 AUTOMATIC_PALETTE_MAPPING equ 0
 
 ; Turn on code that visualizes the CPU time used by the ROM code
@@ -233,9 +233,84 @@ SetDefaultPalette
             lda   SwizzleTables+2
             ldx   SwizzleTables
             jsr   NES_SetPaletteMap
+
+            lda   #0                     ; IIgs palette zero
+            ldx   #TitlePalette
+            jsr   NES_SetPalette
             rts
 
-SwizzleTables adrl L1_T0
+; Color index 5 (07) is the color cycling color
+TitlePalette  db   $36,$0f,$00,$10,$17,$07,$08,$1a,$28,$30,$3b,$22,$16,$27
+SwizzleTables adrl AT1_T0
+
+ZELDA_PALETTE_DISPATCH
+        dw   ppu_3F00, Z_3F01,   Z_3F02,   Z_3F03
+        dw   ppu_3F04, Z_3F05,   Z_3F06,   ppu_3F07
+        dw   ppu_3F08, Z_3F09,   Z_3F0A,   Z_3F0B
+        dw   ppu_3F0C, Z_3F0D,   Z_3F0E,   Z_3F0F
+        dw   ppu_3F10, ppu_3F11, ppu_3F12, Z_3F13
+        dw   ppu_3F14, ppu_3F15, Z_3F16,   ppu_3F17
+        dw   ppu_3F18, ppu_3F19, ppu_3F1A, ppu_3F1B
+        dw   ppu_3F1C, ppu_3F1D, ppu_3F1E, ppu_3F1F
+
+Z_3F01  jsr  NES_ColorToIIgs
+        stal $E19E02
+        rts
+
+Z_3F02  jsr  NES_ColorToIIgs
+        stal $E19E04
+        rts
+
+Z_3F03  jsr  NES_ColorToIIgs
+        stal $E19E06
+        rts
+
+Z_3F05  jsr  NES_ColorToIIgs
+        stal $E19E08
+        rts
+
+Z_3F06  jsr  NES_ColorToIIgs
+        stal $E19E0A
+        rts
+
+Z_3F09  jsr  NES_ColorToIIgs
+        stal $E19E0C
+        rts
+
+Z_3F0A  jsr  NES_ColorToIIgs
+        stal $E19E0E
+        rts
+
+Z_3F0B  jsr  NES_ColorToIIgs
+        stal $E19E10
+        rts
+
+Z_3F0D  jsr  NES_ColorToIIgs
+        stal $E19E12
+        rts
+
+Z_3F0E  jsr  NES_ColorToIIgs
+        stal $E19E14
+        rts
+
+Z_3F0F  jsr  NES_ColorToIIgs
+        stal $E19E16
+        rts
+
+Z_3F13  jsr  NES_ColorToIIgs
+        stal $E19E18
+        rts
+
+Z_3F16  jsr  NES_ColorToIIgs
+        stal $E19E1A
+        rts
+
+
+; Sprite Palette 0, color 1
+SMB_3F11    ldal PPU_MEM+$3F11
+            jsr  NES_ColorToIIgs
+            stal $E19E00+28
+            rts
 
 ; ApplyConfig
 ;
