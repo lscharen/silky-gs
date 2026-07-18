@@ -376,3 +376,15 @@ ScreenAddr        ENT
 ; the physical screen and will be double the length of the ScreenHeight, up to a maximum of 200 lines
 RTable            ds    400
                   ds    400
+
+; CHR-RAM support: one dirty flag per tile, set by PPUDATA_WRITE
+; when the game writes into CHR-RAM ($0000-$1FFF) and checked at draw time
+; (DrawPPUTile / CheckSprTileDirty) to recompile just that tile on demand.
+; Only used by games with HAS_CHR_RAM equ 1, but reserved unconditionally
+; (512 bytes) since MarkTileDirty (ppu_regs.s)
+;
+; This array is just a block of 512 bytes.  There are direct page pointers
+; to access the background vs sprite ranges since those are configurable at
+; runtime.
+ChrRamDirty       ENT
+                  ds    512

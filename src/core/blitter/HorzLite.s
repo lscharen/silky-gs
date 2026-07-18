@@ -1,8 +1,33 @@
-                  DO    NAMETABLE_MIRRORING&HORIZONTAL_MIRRORING
-_Apply            equ   _ApplyHorzMirroring
-                  ELSE
-_Apply            equ   _ApplyVertMirroring
-                  FIN
+; Runtime dispatch to the horizontal- or vertical-mirroring variant of the
+; line-iteration helper below, based on the current DP MirrorMask (set by
+; SetMirrorMode, core/ControlBits.s). Used to be a compile-time NAMETABLE_
+; MIRRORING alias; now a real tail-call dispatcher so BlitterLite.s's calls
+; (which run every frame) reflect the current runtime mode. A/X/Y (the
+; caller's real parameters -- see the doc comment below) and the caller's
+; register widths are fully preserved across the dispatch.
+                  mx    %00
+_Apply
+                  php
+                  rep   #$20      ; force 16-bit A for a clean push/pop pair below
+                  pha
+                  phx
+                  phy
+
+                  lda   MirrorMask
+                  cmp   #$3BFF
+                  beq   :horz
+
+                  ply
+                  plx
+                  pla
+                  plp
+                  jmp   _ApplyVertMirroring
+:horz
+                  ply
+                  plx
+                  pla
+                  plp
+                  jmp   _ApplyHorzMirroring
 
 ; Helper function that takes care of the bookkeeping of iterating over a range of virtual
 ; lines while taking into consideration the fact that the blitter code spans multiple

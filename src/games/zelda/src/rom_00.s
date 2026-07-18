@@ -6,12 +6,35 @@ ROMBase ENT
             ds    $5000-*
 
             put   ../../../rom/rom_inject.s
+            put   helpers.s
+
+; These tables are not replicated.  They should remain in the ROMBase bank. They *MUST* come after the
+; rom_inject and helpers files and be page-aligned.
+;
+; These tables are in NES RAM space for efficiency.  This specifically is to allow the use of the
+; 65816 ldx abs,y and ldy abs,x instructions.  The core loop that scans the sprite OAM data is
+; implemented as
+;
+; ldy    ROMBase+DIRECT_OAM_READ,x
+; ldx    y_exclude,y
+            ds \,$00
+
+y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
+            ds 24,$01
+            ds 200,$00
+            ds 32,$01
+
+tile_exclude ENT                  ; Tble of excluded tiles
+            ds 256,$00
 
             use   BeginEndVars.inc
             use   CaveVars.inc
             use   CommonVars.inc
             use   ObjVars.inc
             use   Variables.inc
+
+; Do not encroach on WRAM (battery-backed space)
+            ds    $6000-*
 
 ; Pad up to $8000
             ds    $8000-*
@@ -1259,4 +1282,3 @@ NoteLengthTable4
 ; skip (this bank's own group, since it's defined locally here).
 Z07_EMBED_BANK equ 0
             put   rom_07_fixed.s
-

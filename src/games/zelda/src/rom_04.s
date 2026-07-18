@@ -47,6 +47,7 @@ WriteBlankPrioritySprites  EXT
             ds    $5000-*
 
             put   ../../../rom/rom_inject.s
+            put   helpers.s
 
             use   BeginEndVars.inc
             use   CaveVars.inc
@@ -57,33 +58,6 @@ WriteBlankPrioritySprites  EXT
 SetMirrorMode  EXT
 
             ds    $8000-*
-
-; a:sym,Y / a:sym,X helper subroutines (NES zero page lives in a different bank)
-Hlp_LDA_ObjDir_Y  LDA_ABS_Y ObjDir
-Hlp_LDA_ObjDirp2_Y  LDA_ABS_Y ObjDir+2
-Hlp_LDA_ObjShoveDir_X  LDA_ABS_X ObjShoveDir
-Hlp_LDA_ObjState_X  LDA_ABS_X ObjState
-Hlp_LDA_ObjState_Y  LDA_ABS_Y ObjState
-Hlp_LDA_ObjTimer_Y  LDA_ABS_Y ObjTimer
-Hlp_LDA_ObjX_Y  LDA_ABS_Y ObjX
-Hlp_LDA_ObjXp1_Y  LDA_ABS_Y ObjX+1
-Hlp_LDA_ObjY_Y  LDA_ABS_Y ObjY
-Hlp_LDA_ObjYp1_Y  LDA_ABS_Y ObjY+1
-Hlp_LDA_Random_Y  LDA_ABS_Y Random
-Hlp_LDY_ObjStunTimer_X  LDY_ABS_X ObjStunTimer
-Hlp_STA_ObjDir_Y  STA_ABS_Y ObjDir
-Hlp_STA_ObjDirp1_Y  STA_ABS_Y ObjDir+1
-Hlp_STA_ObjDirp2_Y  STA_ABS_Y ObjDir+2
-Hlp_STA_ObjState_Y  STA_ABS_Y ObjState
-Hlp_STA_ObjStunTimer_X  STA_ABS_X ObjStunTimer
-Hlp_STA_ObjTimer_Y  STA_ABS_Y ObjTimer
-Hlp_STA_ObjTimerp1_Y  STA_ABS_Y ObjTimer+1
-Hlp_STA_ObjX_Y  STA_ABS_Y ObjX
-Hlp_STA_ObjXp1_Y  STA_ABS_Y ObjX+1
-Hlp_STA_ObjXp2_Y  STA_ABS_Y ObjX+2
-Hlp_STA_ObjY_Y  STA_ABS_Y ObjY
-Hlp_STA_ObjYp1_Y  STA_ABS_Y ObjY+1
-Hlp_STA_ObjYp2_Y  STA_ABS_Y ObjY+2
 
 ; .INCLUDE "Variables.inc" (hoisted to file header)
 ; .INCLUDE "CommonVars.inc" (hoisted to file header)
@@ -96,8 +70,6 @@ Hlp_STA_ObjYp2_Y  STA_ABS_Y ObjY+2
 
 
 ; Imports from program bank 07
-
-
 
 
 PlayBossHitCryIfNeeded
@@ -445,11 +417,13 @@ UpdateGoriya ENT
     ; If the distance chosen < $51, then
     ; set the "wants to shoot" flag to 1,
     ; and face in the chosen direction.
-    LDA $0000, Y
+;    LDA $0000, Y
+    jsr LDA_0000_Y
     CMP #$51
     BCS L_Walker_SetInputDirAndTryShootingBoomerang
     INC ObjWantsToShoot, X
-    LDA $0002, Y
+;    LDA $0002, Y
+    jsr  LDA_0002_Y
     STA ObjDir, X
 
 L_Walker_SetInputDirAndTryShootingBoomerang
@@ -516,7 +490,7 @@ L_Walker_SetInputDirAndTryShootingBoomerang
 
     ; Set the shot's state to $10, which is the flying state for them.
     LDA #$10
-            JSR   Hlp_STA_ObjState_Y
+            JSR   STA_ObjState_Y
 
     ; Fly at q-speed $A0 (2.5 pixels a frame).
     LDA #$A0
@@ -732,9 +706,9 @@ ShootFireball
     LDA ObjX, X
     CLC
     ADC #$04
-            JSR   Hlp_STA_ObjX_Y
+            JSR   STA_ObjX_Y
     LDA ObjY, X
-            JSR   Hlp_STA_ObjY_Y
+            JSR   STA_ObjY_Y
 :Anon0019
     RTS
 
@@ -1206,14 +1180,14 @@ UpdateZolState2_Split
     BCS :Anon0027
     LDA #$08
 :Anon0027
-            JSR   Hlp_STA_ObjDir_Y
+            JSR   STA_ObjDir_Y
     PHA                         ; Save the direction of the first gel.
     JSR CreateChildGel
     PLA                         ; Restore the direction of the first gel.
 
     ; Set the second child gel's direction to the opposite of the first one's.
     LSR
-            JSR   Hlp_STA_ObjDir_Y
+            JSR   STA_ObjDir_Y
     RTS
 
 CreateChildGel
@@ -1225,7 +1199,7 @@ CreateChildGel
 
     ; Shots start in state $10. But Child Gel needs to start in state 0.
     LDA #$00
-            JSR   Hlp_STA_ObjState_Y
+            JSR   STA_ObjState_Y
 
     ; Give the child the same grid offset as the parent.
     LDA ObjGridOffset, X
@@ -1634,9 +1608,11 @@ UpdateStatues ENT
     LDY #$01
 
 :LoopAxis
-    LDA $0000, Y
+;    LDA $0000, Y
+    jsr LDA_0000_Y
     SEC
-    SBC $0002, Y
+;    SBC $0002, Y
+    jsr SBC_0002_Y
     CMP #$18
     BPL :Anon0033
     CMP #$E8
@@ -1700,7 +1676,7 @@ CheckZora ENT
     ; Turn the random value at this index into a $10 pixel aligned X coordinate.
     ; If it = 0 or $F0, go loop again.
     LDY $0D
-            JSR   Hlp_LDA_Random_Y
+            JSR   LDA_Random_Y
     AND #$F0
     STA ObjX, X
     BEQ :NextLoopTileCandidate
@@ -1709,7 +1685,7 @@ CheckZora ENT
 
     ; Turn the random value into a $10 pixel aligned Y coordinate.
     ; If it < $50 or >= $E0, go loop again.
-            JSR   Hlp_LDA_Random_Y
+            JSR   LDA_Random_Y
     ASL
     ASL
     ASL
@@ -2025,7 +2001,7 @@ UpdateMonsterArrow ENT
     BNE :CheckShooter
 
     ; If the arrow is sparking, then go update the base arrow.
-            JSR   Hlp_LDA_ObjState_X
+            JSR   LDA_ObjState_X
     AND #$F0
     CMP #$20
     BEQ :UpdateBase
@@ -2062,7 +2038,7 @@ UpdateMonsterArrow ENT
 
     ; If the arrow is no longer flying, then
     ; go handle it sparking or bouncing.
-            JSR   Hlp_LDA_ObjState_X
+            JSR   LDA_ObjState_X
     AND #$F0
     CMP #$10
     BNE :CheckBounce
@@ -3641,11 +3617,11 @@ UpdateRockWall ENT
     ; If there is no detonating bomb (state $13) in slots $10 and $11,
     ; then return.
     LDY #$10
-            JSR   Hlp_LDA_ObjState_Y
+            JSR   LDA_ObjState_Y
     CMP #$13
     BEQ :FoundBomb
     INY                         ; Point to slot $11.
-            JSR   Hlp_LDA_ObjState_Y
+            JSR   LDA_ObjState_Y
     CMP #$13
     BNE :Exit
 
@@ -3671,11 +3647,11 @@ UpdateTree ENT
     ; If there is no standing fire (state $22) in slots $10 and $11,
     ; then return.
     LDY #$10
-            JSR   Hlp_LDA_ObjState_Y
+            JSR   LDA_ObjState_Y
     CMP #$22
     BEQ :FoundFire
     INY
-            JSR   Hlp_LDA_ObjState_Y
+            JSR   LDA_ObjState_Y
     CMP #$22
     BNE L10F3E_Exit
 
@@ -3684,7 +3660,7 @@ UpdateTree ENT
     STY $00
 
     ; If the standing fire's timer >= 2, return.
-            JSR   Hlp_LDA_ObjTimer_Y
+            JSR   LDA_ObjTimer_Y
     CMP #$02
     BCS L10F3E_Exit
 
@@ -3724,11 +3700,11 @@ L10F3E_Exit
 ; Put the midpoint coordinate of the weapon in [04] and [05].
 ;
 CheckTileObjWeaponCollision
-            JSR   Hlp_LDA_ObjX_Y
+            JSR   LDA_ObjX_Y
     CLC
     ADC #$08
     STA $04
-            JSR   Hlp_LDA_ObjY_Y
+            JSR   LDA_ObjY_Y
     CLC
     ADC #$08
     STA $05
@@ -4695,14 +4671,14 @@ InitMoldorm ENT
 :LoopSegment
     ; Start at position ($80, $70).
     LDA #$80
-            JSR   Hlp_STA_ObjXp1_Y
+            JSR   STA_ObjXp1_Y
     LDA #$70
-            JSR   Hlp_STA_ObjYp1_Y
+            JSR   STA_ObjYp1_Y
 
     ; Start with no direction, no deferred bounce direction,
     ; and ready to update.
     LDA #$00
-            JSR   Hlp_STA_ObjDirp1_Y
+            JSR   STA_ObjDirp1_Y
     STA Moldorm_ObjBounceDir+1, Y
     STA ObjMetastate+1, Y
     STA ObjUninitialized+1, Y
@@ -4890,16 +4866,16 @@ UpdateMoldorm ENT
     ; below, its metastate will become $10 -- dying/dead. From
     ; there, the object timer is set to 6.
     LDA #$11
-            JSR   Hlp_STA_ObjTimerp1_Y
+            JSR   STA_ObjTimerp1_Y
 
     ; Copy the invincibility timer, X, and Y from the original dead
     ; segment to the tail segment.
     LDA ObjInvincibilityTimer, X
     STA ObjInvincibilityTimer+1, Y
     LDA ObjX, X
-            JSR   Hlp_STA_ObjXp1_Y
+            JSR   STA_ObjXp1_Y
     LDA ObjY, X
-            JSR   Hlp_STA_ObjYp1_Y
+            JSR   STA_ObjYp1_Y
 
     ; If the tail segment found is also a head, then
     ; the last segment has died. Return.
@@ -5036,7 +5012,7 @@ Moldorm_PropagateDirs
     ; and to the lower one's facing direction.
     LDA Moldorm_ObjOldDir+2, Y
     STA Moldorm_ObjOldDir+1, Y
-            JSR   Hlp_STA_ObjDirp1_Y
+            JSR   STA_ObjDirp1_Y
 
     ; Bottom of the loop.
     ; Increment segment index.
@@ -5841,12 +5817,12 @@ UpdateDodongoState2_Stunned
     ; 0:     set stun timer to $20 
     ; 1:     go back to state 0
     ; other: return
-            JSR   Hlp_LDY_ObjStunTimer_X
+            JSR   LDY_ObjStunTimer_X
     DEY
     BEQ UpdateDodongoState1_Bloated_Sub_End
     BPL :Anon0091
     LDA #$20
-            JSR   Hlp_STA_ObjStunTimer_X
+            JSR   STA_ObjStunTimer_X
 :Anon0091
     RTS
 
@@ -5883,7 +5859,7 @@ UpdateDodongoState1_Bloated_Sub_Wait
     ; Deactivate the bomb in the first bomb slot ($10).
     LDY #$10
     LDA #$00
-            JSR   Hlp_STA_ObjState_Y
+            JSR   STA_ObjState_Y
 
     ; Increment the number of bomb hits.
     LDA Dodongo_ObjBombHits, X
@@ -6027,17 +6003,17 @@ Dodongo_CheckBombHit
     ;
     ; Store the bomb's (X + 8) in [02].
     LDY #$10
-            JSR   Hlp_LDA_ObjX_Y
+            JSR   LDA_ObjX_Y
     ADC #$08
     STA $02
 
     ; Store the bomb's (Y + 8) in [03].
-            JSR   Hlp_LDA_ObjY_Y
+            JSR   LDA_ObjY_Y
     ADC #$08
     STA $03
 
     ; But, if there's no bomb, then return.
-            JSR   Hlp_LDA_ObjState_Y
+            JSR   LDA_ObjState_Y
     BEQ :Exit
 
     ; If the bomb has not exploded (state $12), then
@@ -6120,7 +6096,7 @@ Dodongo_TryEatBomb
     ; Deactivate the bomb, and reset the bloated substate.
     LDY #$10
     LDA #$00
-            JSR   Hlp_STA_ObjState_Y
+            JSR   STA_ObjState_Y
     STA Dodongo_ObjBloatedSubstate, X
 
 :Exit
@@ -6164,9 +6140,11 @@ Dodongo_IsBombInRange
 :LoopAxis
     ; Subtract the bomb's coordinate from the boss's,
     ; The loop index determines the coordinate.
-    LDA $0000, Y
+;    LDA $0000, Y
+    jsr LDA_0000_Y
     SEC
-    SBC $0002, Y
+;    SBC $0002, Y
+    jsr  SBC_0002_Y
 
     ; If the distance >= positive offset, or < negative offset;
     ; then loop again.
@@ -6179,7 +6157,8 @@ Dodongo_IsBombInRange
     ;
     ; Store the distance in this axis in [05] or [04],
     ; depending on the loop index.
-    STA $0004, Y
+;    STA $0004, Y
+    jsr STA_0004_Y
 
     ; Shift [08] right, because we're in range in this axis.
     LSR $08
@@ -7671,7 +7650,7 @@ InitManhandla ENT
 :Anon0110
     ; Copy the direction from the base segment.
     LDA ObjDir+1
-            JSR   Hlp_STA_ObjDirp1_Y
+            JSR   STA_ObjDirp1_Y
 
     ; All segments are considered Manhandla.
     LDA #$3C
@@ -7707,11 +7686,11 @@ InitManhandla ENT
     LDA ObjX+5
     CLC
     ADC ManhandlaSegmentOffsetsX, Y
-            JSR   Hlp_STA_ObjXp1_Y
+            JSR   STA_ObjXp1_Y
     LDA ObjY+5
     CLC
     ADC ManhandlaSegmentOffsetsY, Y
-            JSR   Hlp_STA_ObjYp1_Y
+            JSR   STA_ObjYp1_Y
 
     ; Set low speed byte $80.
     LDA #$80
@@ -7978,7 +7957,7 @@ Manhandla_CheckCollisions
 Manhandla_SetAllSegmentsDirection
     LDY #$04
 :Anon0116
-            JSR   Hlp_STA_ObjDirp1_Y
+            JSR   STA_ObjDirp1_Y
     DEY
     BPL :Anon0116
     RTS
@@ -8387,7 +8366,7 @@ Gohma_HandleWeaponCollision ENT
     CPY #$12
     BNE :CheckHitEye
     LDA #$28
-            JSR   Hlp_STA_ObjState_Y
+            JSR   STA_ObjState_Y
     LDA #$04
     STA ObjAnimCounter, Y
 
@@ -8406,7 +8385,7 @@ Gohma_HandleWeaponCollision ENT
     BNE :PlayParryTune
 
     ; If the direction of the arrow is not up, then go parry.
-            JSR   Hlp_LDA_ObjDir_Y
+            JSR   LDA_ObjDir_Y
     CMP #$08
     BNE :PlayParryTune
     LDA #$02                    ; Boss hit sound effect
@@ -8526,9 +8505,9 @@ UpdateGleeok ENT
     ; - load coordinates into object slots 6 to 1
     ; - load miscellany into an array at [0413]
     LDA ($00), Y
-            JSR   Hlp_STA_ObjXp1_Y
+            JSR   STA_ObjXp1_Y
     LDA ($02), Y
-            JSR   Hlp_STA_ObjYp1_Y
+            JSR   STA_ObjYp1_Y
     LDA ($04), Y
     STA Gleeok_ObjHeadInfo, Y
     DEY
@@ -8565,9 +8544,9 @@ UpdateGleeok ENT
     JSR Gleeok_FetchNeckAddrs
 
 :SaveNeckBytes
-            JSR   Hlp_LDA_ObjXp1_Y
+            JSR   LDA_ObjXp1_Y
     STA ($00), Y
-            JSR   Hlp_LDA_ObjYp1_Y
+            JSR   LDA_ObjYp1_Y
     STA ($02), Y
     LDA Gleeok_ObjHeadInfo, Y
     STA ($04), Y
@@ -9033,7 +9012,7 @@ Gleeok_CheckCollisions
 
     ; If this segment was harmed, then set the writhing counter,
     ; and the animation counter to its lower value.
-            JSR   Hlp_LDA_ObjShoveDir_X
+            JSR   LDA_ObjShoveDir_X
     BEQ :Anon0143
     LDA #$06
     STA GleeokAnimationTimer
@@ -9403,11 +9382,11 @@ InitLamnola ENT
 :Anon0148
     ; Starting location is ($40, $8D) and direction is 0.
     LDA #$40
-            JSR   Hlp_STA_ObjXp1_Y
+            JSR   STA_ObjXp1_Y
     LDA #$8D
-            JSR   Hlp_STA_ObjYp1_Y
+            JSR   STA_ObjYp1_Y
     LDA #$00
-            JSR   Hlp_STA_ObjDirp1_Y
+            JSR   STA_ObjDirp1_Y
 
     ; Each segment is flagged initialized and ready to update.
     STA ObjMetastate+1, Y
@@ -9671,16 +9650,16 @@ UpdateLamnola ENT
 
     ; Set the timer for the dead dummy object that will replace the tail.
     LDA #$11
-            JSR   Hlp_STA_ObjTimerp1_Y
+            JSR   STA_ObjTimerp1_Y
 
     ; Copy the current dead segment's invincibility timer, X, and Y
     ; to the tail segment.
     LDA ObjInvincibilityTimer, X
     STA ObjInvincibilityTimer+1, Y
     LDA ObjX, X
-            JSR   Hlp_STA_ObjXp1_Y
+            JSR   STA_ObjXp1_Y
     LDA ObjY, X
-            JSR   Hlp_STA_ObjYp1_Y
+            JSR   STA_ObjYp1_Y
 
     ; If the tail segment found is a head, then the whole lamnola died.
     ; So, return and leave it dead.
@@ -9726,8 +9705,8 @@ Lamnola_UpdateHead
 :PropagateDirs
     ; Loop over every segment under the head, starting from the tail.
     ; Copy the next segment's direction to the current one in this loop.
-            JSR   Hlp_LDA_ObjDirp2_Y
-            JSR   Hlp_STA_ObjDirp1_Y
+            JSR   LDA_ObjDirp2_Y
+            JSR   STA_ObjDirp1_Y
     INY
     DEC $00
     BNE :PropagateDirs
@@ -10484,14 +10463,14 @@ Ganon_SetUpBurstRays
     LDA ObjX, X
     CLC
     ADC #$04
-            JSR   Hlp_STA_ObjXp2_Y
+            JSR   STA_ObjXp2_Y
     LDA ObjY, X
     ADC #$04
-            JSR   Hlp_STA_ObjYp2_Y
+            JSR   STA_ObjYp2_Y
 
     ; Set the direction.
     LDA GanonBurstDirs, Y
-            JSR   Hlp_STA_ObjDirp2_Y
+            JSR   STA_ObjDirp2_Y
     DEY
     BPL :LoopRay
     RTS
@@ -10805,7 +10784,7 @@ Ganon_CheckCollisions
 
     ; If there's no arrow in flight, then return.
     LDY #$12
-            JSR   Hlp_LDA_ObjState_Y
+            JSR   LDA_ObjState_Y
     CMP #$10
     BNE :Exit
 
@@ -11290,17 +11269,17 @@ Shoot
     LDY EmptyMonsterSlot
     LDX CurObjIndex
     LDA #$10
-            JSR   Hlp_STA_ObjState_Y
+            JSR   STA_ObjState_Y
     LDA #$00
-            JSR   Hlp_STA_ObjTimer_Y
+            JSR   STA_ObjTimer_Y
 
     ; Set the shot's direction and coordinates the same as the thrower's.
     LDA ObjDir, X
-            JSR   Hlp_STA_ObjDir_Y
+            JSR   STA_ObjDir_Y
     LDA ObjX, X
-            JSR   Hlp_STA_ObjX_Y
+            JSR   STA_ObjX_Y
     LDA ObjY, X
-            JSR   Hlp_STA_ObjY_Y
+            JSR   STA_ObjY_Y
 
     ; Return C=1.
     SEC

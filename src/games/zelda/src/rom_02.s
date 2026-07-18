@@ -23,6 +23,7 @@ MenuPalettesTransferBuf  EXT
             ds    $5000-*
 
             put   ../../../rom/rom_inject.s
+            put   helpers.s
 
             use   BeginEndVars.inc
             use   CaveVars.inc
@@ -47,8 +48,6 @@ SetMirrorMode  EXT
 
 
 ; Imports from program bank 07
-
-
 
 
 CommonPatternBlockAddrs

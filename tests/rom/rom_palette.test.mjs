@@ -1,7 +1,7 @@
 /**
  * tests/rom/rom_palette.test.mjs
  *
- * Unit tests for _ClearBlock, _UpdateBlock, and _UpdateDiagonalBlock in
+ * Unit tests for _clearSwizzleTable, _UpdateBlock, and _UpdateDiagonalBlock in
  * src/rom/rom_palette.s.
  *
  * Swizzle table encoding:
@@ -28,12 +28,6 @@ import { cpu65816 }               from 'iigs-unit';
 
 const SRC_ROOT    = process.env.SRC_ROOT;
 const ROM_PALETTE = join(SRC_ROOT, 'rom/rom_palette.s');
-
-// Constants the source file depends on via {N*ROW_WIDTH} / {N*COL_WIDTH} expressions.
-const CONSTANTS = `\
-ROW_WIDTH   equ  2
-COL_WIDTH   equ  32
-`;
 
 // Stubs for symbols defined in rom_helpers.s that rom_palette.s references.
 // These only need to exist (correct sizes/layout); their values don't affect
@@ -92,8 +86,8 @@ function expectedEntry(w, y, z, x) {
 const { sequence } = cpu65816({
   includes:  [ROM_PALETTE],
   assembler: 'merlin32',
+  keepArtifacts: true,
   inline: [
-    { src: CONSTANTS, placement: 'before' },
     { src: STUBS,     placement: 'after'  },
     { src: PAL_TABLES, placement: 'after' },
   ],
@@ -116,7 +110,7 @@ describe('_ClearBlock', () => {
             bpl  :loop`, { mx: 0 })
       // Call _ClearBlock with X = block base offset (0)
       .inline('            ldx  #block', { mx: 0 })
-      .jsr('_ClearBlock', { mx: 0 })
+      .jsr('_clearSwizzleTable', { mx: 0 })
       .captureMemory({ label: 'block', count: 52, as: 'word' })
       .run();
 
@@ -139,7 +133,7 @@ async function runUpdateBlock(w, y) {
     allocMemory: [{ label: 'block', as: 'word', count: 52 }],
   })
     .inline('            ldx  #block', { mx: 0 })
-    .jsr('_ClearBlock', { mx: 0 })
+    .jsr('_clearSwizzleTable', { mx: 0 })
     .inline(`            lda  #${A_val}`, { mx: 0 })
     .inline('            ldx  #block', { mx: 0 })
     .jsr('_UpdateBlock', { mx: 0 })
@@ -300,7 +294,7 @@ async function runUpdateDiagonalBlock(wy) {
     allocMemory: [{ label: 'block', as: 'word', count: 52 }],
   })
     .inline('            ldx  #block', { mx: 0 })
-    .jsr('_ClearBlock', { mx: 0 })
+    .jsr('_clearSwizzleTable', { mx: 0 })
     .inline(`            lda  #${A_val}`, { mx: 0 })
     .inline('            ldx  #block', { mx: 0 })
     .jsr('_UpdateDiagonalBlock', { mx: 0 })

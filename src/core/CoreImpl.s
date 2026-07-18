@@ -202,17 +202,7 @@ EngineReset
                   stz       ScreenX0
                   stz       ScreenX1
 
-;                  lda       #25
-;                  sta       ScreenTileHeight
-;                  lda       #32
-;                  sta       ScreenTileWidth
-
-;                  stz       StartX
-;                  stz       OldStartX
                   stz       StartXMod256
-
-;                  stz       StartY
-;                  stz       OldStartY
                   stz       StartYMod240
 
                   lda       #$FFFF                 ; Mark as needing a full update
@@ -295,13 +285,6 @@ _InitRenderMode
                   beq       :no_even
                   jmp       _InitPEAFieldEven
 :no_even
-;          jmp       _InitPEAFieldAll
-                  DO    NAMETABLE_MIRRORING&HORIZONTAL_MIRRORING
-                  jsr   _InitHorizontalMirroring
-                  ELSE
-                  jsr   _InitVerticalMirroring
-                  FIN
-
                   rts
 
 ; Insert jumps to the interrupt enable code every 16 lines. There are 120 lines in each bank, so
@@ -397,8 +380,9 @@ _InitHorizontalMirroring
                   sta       MirrorMaskX
                   lda       #$01FF
                   sta       MirrorMaskY
-                  lda       #$3BFF
+                  lda       #HORIZONTAL_MIRROR_MASK
                   sta       MirrorMask           ; 0011_1011_1111_1111 -> $2400 -> $2000
+                  sta       MirrorMaskLong
                   lda       #480
                   sta       MaxY
                   lda       #256
@@ -494,8 +478,9 @@ _InitVerticalMirroring
                   sta       MirrorMaskX
                   lda       #$00FF
                   sta       MirrorMaskY
-                  lda       #$37FF    
+                  lda       #VERTICAL_MIRROR_MASK    
                   sta       MirrorMask         ; 0011_0111_1111_111 -> $2800 -> $2000
+                  sta       MirrorMaskLong
                   lda       #240
                   sta       MaxY
                   lda       #512

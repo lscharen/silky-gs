@@ -46,6 +46,8 @@ yield EXT
 ; Byte that holds the currently selceted mapper bank
 ROMBase     EXT
 mapper_bank EXT
+mmc1_shft   EXT
+mmc1_regs   EXT
 
 ; Table of routines used when reading from the APU registers ($4000 - $4017).
 ; Assumed reading in the accumulator
@@ -67,91 +69,113 @@ apu_write_tbl
             dw   STA_4010, STA_4011, STA_4012, STA_4013
             dw   NO_OP,    STA_4015, NO_OP,    STA_4017
 
-; These function are expected to be called in 8-bit mode from the ROM code
+; These functions are expected to be called in 8-bit mode from the ROM code
             mx    %11
 
-; Note: In multi-bank ROMs, this code is replicated.  But(!), the data bank register will always be set to the ROMBase
-; bank.  So, essentially these are really just used as labelsfor the code to be compiled in each bank.
-; MMC1 Support
-mmc1_reg0   ds    1
-mmc1_reg1   ds    1
-mmc1_reg2   ds    1
-mmc1_reg3   ds    1
-
-STA_MMC1_REG0
+MMC1_SHIFT  mac
             php
             pha
             bit   #$80         ; high-bit set --> register reset
-            beq   :shft
+            beq   shft
             lda   #$10
-            sta   mmc1_reg0    ; "reset" == set the detection bit in bit 4
+            stal  mmc1_shft    ; "reset" == set the detection bit in bit 4
             pla
             plp
             rts
-:shft
+shft
             and   #$01         ; isolate the bottom bit
-            beq   :zero
+            beq   zero
             lda   #$20         ; inject bit
-            tsb   mmc1_reg0
+            oral  mmc1_shft
+            stal  mmc1_shft
 
-:zero       lsr   mmc1_reg0    ; serial shift
-            bcc  :done         ; not done yet
+zero
+            ldal  mmc1_shft    ; serial shift
+            lsr
+            stal  mmc1_shft
+            bcs   done         ; is the shift register full?
 
-            lda   #$10         ; reset the shift register automatically (as documented)
-            sta   mmc1_reg0
-
-; Commit changes -- what we care about here are bit 0-1 to select mirroring mode:2 = veritcal, 3 = horizontal
-
-:done       pla
+            pla                ; no, return
             plp
             rts
+
+done
+            <<<
+
+MMC1_RTN    mac
+            lda   #$10         ; reset the shift register automatically (as documented)
+            stal  mmc1_shft
+
+            pla
+            plp
+            rts
+            <<<
+
+STA_MMC1_REG0
+            MMC1_SHIFT
+            MMC1_RTN
 
 STA_MMC1_REG1
 STA_MMC1_REG2
-            rts
+            MMC1_SHIFT
+            MMC1_RTN
 
 STA_MMC1_REG3
-            php
-            pha
-            bit   #$80         ; high-bit set --> register reset
-            beq   :shft
-            lda   #$10
-            sta   mmc1_reg3    ; "reset" == set the detection bit in bit 4
-            pla
-            plp
-            rts
-:shft
-            and   #$01         ; isolate the bottom bit
-            beq   :zero
-            lda   #$20         ; inject bit
-            tsb   mmc1_reg3
-
-:zero       lsr   mmc1_reg3    ; serial shift
-            bcc  :done         ; not done yet
+            MMC1_SHIFT
 
 ; Commit changes -- what we care about here are bits 0 - 3 to select the bank
 
-            lda   mmc1_reg3
             and   #$07
             clc
             adc   #^ROMBase
-            stal  mapper_bank  ; this is in the Engine data bank, not the NES data bank
+            cmpl  mapper_bank
+            beq   :done        ; avoid extra work if we are not actually changing banks
+
+            pha                ; save the target bank; DBR is currently set to *this* bank
+            stal  mapper_bank
 
 ; Trampoline magic -- the rom_inject file is replicated across all of the NES ROM banks that are mapped
 ;                     across the IIgs 64kb banks, so we long jump to the new mapper_bank and that will
 ;                     magically hit the code below an the RTS will return to the address in the new bank
 
-            stal  :patch+3     ; needs to actually write to the executing bank (K), not the NES data bank.
+            sta   :patch+3     ; writes to code in *this* bank
+            sta   :t1+3
+            sta   :t2+3
+            sta   :t3+3
+            sta   :t4+3
 
-            lda   #$10         ; reset the shift register automatically (as documented)
-            sta   mmc1_reg3
+; Now comes pain. The code in a ROM bank will likely need to access data tables in the bank it runs within.
+; That means that the data bank register *must* track the current mapper_bank.  However, the consequence of
+; this is that there is no longer a single representation of the NES RAM from $000 - $7FF.  So, when the
+; bank switches, we will copy the RAM from $200 to $7FF in the current bank to the new bank.
+;
+; We can ignore page $00 and $01 since those are the stack and direct page and exist in Bank 00.
+
+            phx
+            rep   #$30
+            ldx   #$5F8
+:loop
+            lda   $0200,x
+:t1         stal  $000200,x
+            lda   $0202,x
+:t2         stal  $000202,x
+            lda   $0204,x
+:t3         stal  $000204,x
+            lda   $0206,x
+:t4         stal  $000206,x
+            txa
+            sec
+            sbc   #8
+            tax
+            bpl   :loop
+
+            sep   #$30
+            plx
+            plb                ; change the data bank to the new memory bank
 
 :patch      jml   :done
-
-:done       pla
-            plp
-            rts
-
+:done
+            MMC1_RTN
 
 APU_PULSE1  EXT
 ORA_4000    oral APU_PULSE1+0
@@ -531,16 +555,19 @@ STX_4017
 
 ; Include a bunch of routines to patch out the use of abs,y addressing modes and convert to load
 ; from the actual direct page
+;
+; For multi-bank, the patches have to be sone using long addressing
 
 LDA_ABS_Y   mac
             php
             phx
             tyx
             lda  ]1,x
-            sta  lay_patch+1
+            stal lay_patch+1
             plx
             plp
 lay_patch   lda  #0
+            pla
             rts
             <<<
 
@@ -551,6 +578,20 @@ STA_ABS_Y   mac
             sta  ]1,x
             plx
             plp
+            rts
+            <<<
+
+ORA_ABS_Y   mac
+            php
+            pha
+            phx
+            tyx
+            lda  ]1,x
+            stal oay_patch+1
+            plx
+            pla
+            plp
+oay_patch   ora  #0
             rts
             <<<
 
@@ -574,7 +615,7 @@ SBC_ABS_Y   mac
             phx
             tyx
             lda  ]1,x
-            sta  say_patch+1
+            stal say_patch+1
             plx
             pla
             plp
@@ -588,7 +629,7 @@ ADC_ABS_Y   mac
             phx
             tyx
             lda  ]1,x
-            sta  aay_patch+1
+            stal aay_patch+1
             plx
             pla
             plp
@@ -620,9 +661,9 @@ JMP_ABS_IND mac
             php
             pha
             lda  ]1
-            sta  jai_patch+1
+            stal jai_patch+1
             lda  ]1+1
-            sta  jai_patch+2
+            stal jai_patch+2
             pla
             plp
 jai_patch   jmp  $0000
@@ -664,21 +705,3 @@ zp          phx
             plp
             rts
             <<<
-
-; Enter via a JML. A = target address, X = Stack and Direct page set up properly ahead of time. B = ROM bank. Called in 16-bit native mode
-;            mx    %00
-
-;ExtRtn      EXT
-;ExtIn       ENT
-;            phk             ; set the bank (will change for MMC1 support)
-;            plb
-
-;;            txa
-;            txs
-;            sta  :patch+1
-;            sep  #$30
-;:patch      jsr  $0000
-;            rep  #$30
-;            jml  ExtRtn
-
-;            mx   %11

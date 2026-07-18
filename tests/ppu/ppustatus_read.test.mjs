@@ -20,49 +20,8 @@
  */
 
 import { describe, test, expect } from 'vitest';
-import { join }                   from 'node:path';
 import { cpu65816 }               from 'iigs-unit';
-
-const SRC_ROOT   = process.env.SRC_ROOT;
-const PPU_MACROS = join(SRC_ROOT, 'ppu/ppu_macros.s');
-const PPU_REGS   = join(SRC_ROOT, 'ppu/ppu_regs.s');
-
-const CONSTANTS = `\
-NAMETABLE_MIRRORING   equ 0
-HORIZONTAL_MIRRORING  equ 1
-DIRECT_OAM_READ       equ 1
-TILE_VERSION0         equ $4000
-`;
-
-const STUBS = `\
-PPU_MEM              ds    $8000
-curr_at_list_end     ds    2
-curr_nt_list_end     ds    2
-at_list              ds    512
-nt_list              ds    512
-`;
-
-const PAL_DISPATCH = `\
-pal_stub             rts
-PPU_PALETTE_DISPATCH dw    pal_stub,pal_stub,pal_stub,pal_stub
-                     dw    pal_stub,pal_stub,pal_stub,pal_stub
-                     dw    pal_stub,pal_stub,pal_stub,pal_stub
-                     dw    pal_stub,pal_stub,pal_stub,pal_stub
-                     dw    pal_stub,pal_stub,pal_stub,pal_stub
-                     dw    pal_stub,pal_stub,pal_stub,pal_stub
-                     dw    pal_stub,pal_stub,pal_stub,pal_stub
-                     dw    pal_stub,pal_stub,pal_stub,pal_stub
-`;
-
-const sharedConfig = {
-  includes:  [PPU_MACROS, PPU_REGS],
-  assembler: 'merlin32',
-  inline: [
-    { src: CONSTANTS,    placement: 'before' },
-    { src: STUBS,        placement: 'after'  },
-    { src: PAL_DISPATCH, placement: 'after'  },
-  ],
-};
+import sharedConfig               from './ppu_config';
 
 /**
  * Return [src, opts] for an inline block that writes ppustatusVal into

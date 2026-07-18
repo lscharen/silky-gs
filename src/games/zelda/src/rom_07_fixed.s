@@ -258,11 +258,6 @@ LevelPaletteRow7TransferBuf EXT
 MenuPalettesTransferBuf EXT
             FIN
 
-Z07Int_Hlp_LDA_ObjDir_Y  LDA_ABS_Y ObjDir
-Z07Int_Hlp_LDA_ObjX_Y  LDA_ABS_Y ObjX
-Z07Int_Hlp_LDA_ObjY_Y  LDA_ABS_Y ObjY
-Z07Int_Hlp_STA_ObjState_Y  STA_ABS_Y ObjState
-Z07Int_Hlp_STA_ObjTimer_Y  STA_ABS_Y ObjTimer
 ; .INCLUDE "Variables.inc" (hoisted to file header)
 ; .INCLUDE "CommonVars.inc" (hoisted to file header)
 
@@ -294,7 +289,6 @@ Z07Int_Hlp_STA_ObjTimer_Y  STA_ABS_Y ObjTimer
 
 
 ; Imports from RAM code bank 06
-
 
 
 
@@ -599,12 +593,13 @@ TableJump ENT
     PLA
     STA $01
     INY
-    LDA ($00), Y
+    LDA ($00),Y
     STA $02
     INY
-    LDA ($00), Y
+    LDA ($00),Y
     STA $03
-    JMP ($0002)
+;    JMP ($0002)
+    jmp   JMP_IND_02
 
 HideAllSprites ENT
     LDY #$00
@@ -3560,11 +3555,11 @@ HandleShotBlocked ENT
 
     ; Copy the shot's position and direction to the fire.
     LDY #$0E
-            JSR   Z07Int_Hlp_LDA_ObjX_Y
+            JSR   LDA_ObjX_Y
     STA ObjX, X
-            JSR   Z07Int_Hlp_LDA_ObjY_Y
+            JSR   LDA_ObjY_Y
     STA ObjY, X
-            JSR   Z07Int_Hlp_LDA_ObjDir_Y
+            JSR   LDA_ObjDir_Y
     STA ObjDir, X
 
     ; The fire lasts $4F frames.
@@ -3703,11 +3698,13 @@ Z07Int_SpreadShot
     BNE :Z07Int_Anon0026                      ; But for loop index 1,
     LDY #$03                    ; make the offset 3 to negate the Y offset.
 :Z07Int_Anon0026
-    LDA $0000, Y
+;    LDA $0000, Y
+    jsr  LDA_0000_Y
     EOR #$FF
     CLC
     ADC #$01
-    STA $0000, Y
+;    STA $0000, Y
+    jsr  STA_0000_Y
 
     ; Restore the loop index, decrement it, and loop again if >= 0.
     PLA
@@ -4160,7 +4157,7 @@ Z07Int_CheckState30
     ; Deactivate the boomerang.
     LDY #$0F
     LDA #$00
-            JSR   Z07Int_Hlp_STA_ObjState_Y
+            JSR   STA_ObjState_Y
     RTS
 
 :Z07Int_CatchBoomerang
@@ -4182,12 +4179,12 @@ Z07Int_CheckState30
 :Z07Int_SetThrowerTimer
     TYA
     LDY ObjRefId, X
-            JSR   Z07Int_Hlp_STA_ObjTimer_Y
+            JSR   STA_ObjTimer_Y
 
     ; Reset the thrower's state to make it idle or restart its state machine.
     ; Destroy the monster's boomerang.
     LDA #$00
-            JSR   Z07Int_Hlp_STA_ObjState_Y
+            JSR   STA_ObjState_Y
     JMP DestroyCountedMonsterShot
 
 :Z07Int_MoveTowardThrower
@@ -4743,11 +4740,13 @@ Z07Int_GetWideObjectMiddle
     LDA ObjX, X
     CLC
     ADC #$08
-    STA $0002, Y
+;    STA $0002, Y
+    jsr STA_0002_Y
     LDA ObjY, X
     CLC
     ADC #$08
-    STA $0003, Y
+;    STA $0003, Y
+    jsr STA_0003_Y
 
 Z07Int_L1F91D_Exit
     RTS

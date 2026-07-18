@@ -44,6 +44,7 @@ TriforceRow0TransferBuf  EXT
             ds    $5000-*
 
             put   ../../../rom/rom_inject.s
+            put   helpers.s
 
             use   BeginEndVars.inc
             use   CaveVars.inc
@@ -54,9 +55,6 @@ TriforceRow0TransferBuf  EXT
 SetMirrorMode  EXT
 
             ds    $8000-*
-
-; a:sym,Y / a:sym,X helper subroutines (NES zero page lives in a different bank)
-Hlp_STA_ObjStatep13_Y  STA_ABS_Y ObjState+13
 
 ; .INCLUDE "Variables.inc" (hoisted to file header)
 ; .INCLUDE "CommonVars.inc" (hoisted to file header)
@@ -6448,7 +6446,7 @@ ResetInvObjState ENT
     ; Reset ObjState of all weapons.
     LDY #$05
 :Anon0159
-            JSR   Hlp_STA_ObjStatep13_Y
+            JSR   STA_ObjStatep13_Y
     DEY
     BPL :Anon0159
     RTS
@@ -7375,7 +7373,8 @@ ClearRam ENT
     STA _Unknown_F3
     LDY #$EF
 :Anon0193
-    STA $0000, Y                ; Clear RAM from 0 to $EF.
+;    STA $0000, Y                ; Clear RAM from 0 to $EF.
+    jsr STA_0000_Y
     DEY
     CPY #$FF
     BNE :Anon0193

@@ -65,6 +65,8 @@ DrawPPUAttribute
         sta  :mt_base64
         adc  #$0002
         sta  :mt_base66
+
+        lda  #$0000                 ; Clear accumulator so the high byte is zero in 8-bit mode for tay/tax
         sep  #$20
 
         lda  :attr_diff
@@ -165,7 +167,43 @@ RefreshPPUTiles
 ; A = 8 bit, X/Y = 16bit on entry
         mx    %10
 DrawPPUTile
-        sta   patch0+2                ; Put the tile ID into the page byte of the address
+
+        sta   patch0+2                ; Put the tile ID into the page byte of the address first
+
+        DO    HAS_CHR_RAM
+; CHR-RAM support: if this tile ID was marked dirty by a PPUDATA write since
+; it was last drawn, recompile it now (ConvertROMTile3) before using the
+; (possibly stale) compiled code below. A = tile ID, X = PPU address (both
+; must be preserved for the rest of the routine).
+        sta   :p1+1               ; A is 8-bit, but need a 16-bit load.  Can't risk copying a stale high word ffrom A into Y.
+        sta   :p2+2               ; This is intentionally going into the high byte (multiply by 256)
+:p1     ldy   #$0000
+        lda   [TileChrMem],y
+        beq   :bgt_clean
+        lda   #0
+        sta   [TileChrMem],y
+
+        phx
+        rep   #$30
+
+        tya
+        asl   a
+        asl   a
+        asl   a
+        asl   a                       ; A = tile ID * 16
+;        clc                          ; High bits are zero, so carry will be cleared
+        adc   #PPU_BG_TILE_ADDR
+        tax                           ; X = CHR-RAM source address
+
+        lda   #TileBuff
+:p2     ldy   #$0000
+        jsr   ConvertROMTile3
+
+        sep   #$20
+        plx
+
+:bgt_clean
+        FIN
 
         clc
         ldal  PPU_MEM+ATTR_SHADOW,x   ; Load the palette select byte from shadow memory
@@ -231,6 +269,8 @@ RenderPPUAttr
         sta  :mt_base64
         adc  #$0002
         sta  :mt_base66
+
+        lda  #$0000                 ; clear the high byte of the accumulator
         sep  #$20
 
 ; Check to see if we're on the bottom of the screen (rows 30 and 31 are invalid).  This row only has the top two metatiles.

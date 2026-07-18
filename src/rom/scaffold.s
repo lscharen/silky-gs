@@ -4,7 +4,8 @@
 
 ; Scaffold init
 ;
-; Should be called immediately afte the application gets control from GS/OS
+; Should be called immediately after the application gets control from GS/OS and
+; only called once.
             mx    %00
 NES_StartUp
             sta   UserId                  ; GS/OS passes the memory manager user ID for the application into the program
@@ -43,9 +44,23 @@ NES_StartUp
 
 ; Default bank for MMC1 games
 
-            lda   #^ROMBase
+            lda   #^ROMBase               ; Start off in Bank 0 of the ROM
             and   #$00FF
             sta   mapper_bank
+
+            lda   #HORIZONTAL_MIRRORING
+            sta   PendingMirrorMode
+
+; Set the pointers to the CHR memory dirty bytes for CHR-RAM games
+
+            lda   #ChrRamDirty
+            sta   TileChrMem
+            clc
+            adc   #$100
+            sta   SprChrMem
+            lda   #^ChrRamDirty
+            sta   TileChrMem+2
+            sta   SprChrMem+2
 
 ; Initialize some application variables
 
@@ -82,14 +97,6 @@ NES_StartUp
             bcc   *+5
             jmp   Fail
 
-; PPUStartUp (via StartUp's InitMemory/_InitRenderMode chain, above) already
-; set DP MirrorMask for the compile-time NAMETABLE_MIRRORING default. Seed
-; the long-addressable copy ppu_regs.s uses from it, so games that never
-; call SetMirrorMode still get correct address masking from the start.
-
-            lda   MirrorMask
-            stal  MirrorMaskLong
-
 ; Initialize the sound hardware for APU emulation
 
             DO    NO_INTERRUPTS
@@ -112,11 +119,10 @@ NES_StartUp
             DO    HAS_CHR_RAM
             ldx   #0
             lda   #$FFFF
-:mtloop     sta   BgTileDirty,x
-            sta   SprTileDirty,x
+:mtloop     sta   ChrRamDirty,x
             inx
             inx
-            cpx   #256
+            cpx   #512
             bcc   :mtloop
             ELSE
             jsr   ROM_LoadBackgroundTiles
@@ -133,7 +139,6 @@ Fail        brk   $FE
 ; Perform any initialization actions
             mx  %00
 StartUp
-            jsr   PPUResetQueues
             lda   UserId
             jmp   _CoreStartUp
 

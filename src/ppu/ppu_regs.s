@@ -46,6 +46,15 @@ PPU_VERSION ds 2   ; Something to track a version counter
 ; Value to mask with ppumask to allow the runtime to override some bits
 ppumask_override dw $FFFF
 
+; MMC1 registers
+mmc1_shft   ENT
+            ds    1
+mmc1_regs   ENT
+mmc1_reg0   ds    1
+mmc1_reg1   ds    1
+mmc1_reg2   ds    1
+mmc1_reg3   ds    1
+
 ; ntbase    db $20,$24,$28,$2c
 
 
@@ -212,11 +221,7 @@ PPUDATA_READ ENT
 ; VMIRROR_ADDR = PPU_ADDR & $FDFF
 
         txa
-        DO   NAMETABLE_MIRRORING&HORIZONTAL_MIRRORING
-        and  #$3BFF     ; 0011_1011_1111_1111 -> $2400 -> $2000
-        ELSE
-        and  #$37FF     ; 0011_0111_1111_111 -> $2800 -> $2000
-        FIN
+        andl MirrorMaskLong   ; runtime nametable-mirroring mask (see SetMirrorMode, ControlBits.s)
         tax
 
 :not_in_nt
@@ -254,7 +259,34 @@ PPUDATA_WRITE ENT
 ; 3. In the range $3F00-$3FFF -- this is the palette range and executes a callback function to take a game-specific action
 
         cpx  #$2000
+        DO   HAS_CHR_RAM
+        bcs  :not_chr
+
+; Write into CHR-RAM ($0000-$1FFF). Store the byte where the tile-conversion
+; routines will read it from (mirrors the nametable-write pattern below),
+; then mark the affected tile ID dirty for on-demand recompilation at draw
+; time (DrawPPUTile / CheckSprTileDirty), instead of pre-compiling everything
+; up front like a fixed CHR-ROM game does.
+
+        sep  #$20
+        lda  2,s
+        stal PPU_MEM,x
+
+        rep  #$30
+        txa                    ; X is in the range $0000 - $1FFF
+        lsr                    ; Convert to tile index
+        lsr
+        lsr
+        lsr
+        tax
+        sep  #$20
+        lda  #$FF
+        stal ChrRamDirty,x
+        bra  :done
+:not_chr
+        ELSE
         bcc  :done
+        FIN
 
         cpx  #$3000
         bcc  :in_nt                  ; If the high byte is $20 or $30, then we are in the nametable space
@@ -271,11 +303,7 @@ PPUDATA_WRITE ENT
 :in_nt
 
         txa
-        DO   NAMETABLE_MIRRORING&HORIZONTAL_MIRRORING
-        and  #$3BFF     ; 0011_1011_1111_1111 -> $2400 -> $2000
-        ELSE
-        and  #$37FF     ; 0011_0111_1111_1111 -> $2800 -> $2000
-        FIN
+        andl MirrorMaskLong   ; runtime nametable-mirroring mask (see SetMirrorMode, ControlBits.s)
         tax
 
 ; Switch to 8-bit accumulator with 16-bit registers to compare the accumulator value that was passed
@@ -370,7 +398,7 @@ PPUDATA_WRITE ENT
         rtl
 
         mx   %11
-* ; Trigger a copy from a page of memory to OAM.  Since this is a DMA operation, we can cheat a little and do a 16-bit copy
+; Trigger a copy from a page of memory to OAM.  Since this is a DMA operation, we can cheat a little and do a 16-bit copy
 PPU_OAM equ 0                       ; direct page base address
 
         mx    %11

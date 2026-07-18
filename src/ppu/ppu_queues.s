@@ -149,7 +149,7 @@ PPUFlushQueuesAlt
 ; This byte is being processed
 
         phy
-        ldal PPU_MEM+ATTR_SHADOW,x      ; Load the temporary attribute byte
+        ldal PPU_MEM+ATTR_SHADOW,x        ; Load the temporary attribute byte
         jsr  RenderPPUAttr
         ply
 

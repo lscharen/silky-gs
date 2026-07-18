@@ -264,8 +264,8 @@ sprTmp1      equ pputmp+2
 sprTmp2      equ pputmp+4
 sprTmp3      equ pputmp+6
 sprTmp4      equ pputmp+8
-sprAddrMin   equ unused50
-sprAddrMax   equ unused52
+sprAddrMin   equ unused132
+sprAddrMax   equ unused134
 
         mx   %00
 drawSprites
@@ -500,6 +500,14 @@ drawSprites
 ; A = OAM[1] and OAM[2], also in sprTmp2
 :drawSprite8x8
 
+; CHR-RAM support: recompile this sprite tile now if it was marked dirty by a
+; PPUDATA write since it was last drawn. HAS_CHR_RAM games always take the
+; bitmap (as_bitmap/as_bitmap_clip) path below, never the compiled-sprite
+; path above, so this one call covers both.
+        DO   HAS_CHR_RAM
+        jsr  CheckSprTileDirty
+        FIN
+
 ; This is the point to check if there is a compiled version of this sprite
 
         ldx  sprTmp4        ; Test if this sprite needs clipping (first test)
@@ -580,6 +588,68 @@ as_bitmap_clip
         and  #$FF00
         lsr                           ; Each tile is 128 bytes of data -- this clears the carry flag
         jmp  (drawProcsClipped,x)
+
+; CHR-RAM support: recompile one sprite tile (ConvertROMTile2, no
+; CompileSprite -- HAS_CHR_RAM games don't support compiled sprites) if its
+; dirty flag is set. Input: sprTmp2 low byte = tile ID (OAM[1]). 16-bit
+; A/X/Y required and preserved.
+        DO    HAS_CHR_RAM
+        mx    %00
+CheckSprTileDirty
+        lda   sprTmp2
+        and   #$00FF
+        pha
+        tay
+        sep   #$20                    ; 8-bit A for the byte-table check/clear
+        lda   [SprChrMem],y
+        beq   :sprclean_narrow
+        lda   #0
+        sta   [SprChrMem],y           ; STZ has no abs,Y addressing mode
+        rep   #$20
+        bra   :sprdirty
+
+:sprclean_narrow
+        rep   #$20
+        bra   :sprclean
+
+:sprdirty
+        tya
+        asl   a
+        asl   a
+        asl   a
+        asl   a                       ; A = tile ID * 16
+        clc
+        adc   #PPU_SPR_TILE_ADDR
+        tax                           ; X = CHR-RAM source address
+
+        lda   #TileBuff
+        jsr   ConvertROMTile2
+
+        pla
+        pha
+        asl   a
+        asl   a
+        asl   a
+        asl   a
+        asl   a
+        asl   a
+        asl   a                       ; A = tile ID * 128 (tiledata offset)
+        tax
+        ldy   #0
+:sprcploop
+        lda   TileBuff,y
+        stal  tiledata,x
+        iny
+        iny
+        inx
+        inx
+        cpy   #128
+        bcc   :sprcploop
+
+:sprclean
+        pla
+        rts
+        FIN
 
 drawProcs
         dw drawTileToScreen,drawTileToScreenP,drawTileToScreenH,drawTileToScreenPH

@@ -63,15 +63,10 @@ ActivePtr              equ   38          ; Work pointer to point at the active s
 CurrShadowBitmap       equ   46          ; These are 16-bit pointers
 PrevShadowBitmap       equ   48
 
-unused50               equ   50
-unused51               equ   51
-unused52               equ   52
-unused53               equ   53
-unused54               equ   54
-unused55               equ   55
-unused56               equ   56
-unused57               equ   57
-unused58               equ   58
+; Pointers to which block of CHR memory is for tiles vs sprites
+TileChrMem             equ   50
+SprChrMem              equ   54
+
 unused59               equ   59
 
 pputmp                 equ   60          ; 16 bytes of temporary storage for the ppu subsystem
@@ -274,3 +269,6 @@ NES_PPUCTRL_SPRSIZE equ $20
 ; NES Nametable Mirroring
 HORIZONTAL_MIRRORING equ $01
 VERTICAL_MIRRORING   equ $02
+
+HORIZONTAL_MIRROR_MASK equ $3BFF
+VERTICAL_MIRROR_MASK equ $37FF

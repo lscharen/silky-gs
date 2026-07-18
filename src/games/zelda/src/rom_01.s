@@ -20,6 +20,7 @@ MenuPalettesTransferBuf  EXT
             ds    $5000-*
 
             put   ../../../rom/rom_inject.s
+            put   helpers.s
 
             use   BeginEndVars.inc
             use   CaveVars.inc
@@ -31,13 +32,6 @@ SetMirrorMode  EXT
 
 ; Pad up to $8000
             ds    $8000-*
-
-; a:sym,Y / a:sym,X helper subroutines (NES zero page lives in a different bank)
-Hlp_LDA_ObjDir_Y  LDA_ABS_Y ObjDir
-Hlp_LDA_ObjState_Y  LDA_ABS_Y ObjState
-Hlp_LDA_ObjX_Y  LDA_ABS_Y ObjX
-Hlp_LDA_ObjY_Y  LDA_ABS_Y ObjY
-Hlp_STA_ObjState_Y  STA_ABS_Y ObjState
 
 ; .INCLUDE "Variables.inc" (hoisted to file header)
 ; .INCLUDE "CommonVars.inc" (hoisted to file header)
@@ -1511,7 +1505,7 @@ UpdateGrumble_Full_JumpTable
 UpdateGrumble1
     ; If there's no food in object slot $F, then return.
     LDY #$0F
-            JSR   Hlp_LDA_ObjState_Y
+            JSR   LDA_ObjState_Y
     ASL
     BCC InitUnderworldPerson_DoNothing
 
@@ -1544,7 +1538,7 @@ UpdateGrumble3
 
     ; Deactivate the food object in slot $F.
     LDY #$0F
-            JSR   Hlp_STA_ObjState_Y
+            JSR   STA_ObjState_Y
 
     ; Get rid of the food from the inventory.
     STA InvFood
@@ -2333,10 +2327,10 @@ CheckPassiveTileObjects ENT
 :FindObjAtLocation
     CPY $03
     BEQ :NextObjAtLocation      ; Skip the empty slot we found. So go decrement index [03].
-            JSR   Hlp_LDA_ObjX_Y
+            JSR   LDA_ObjX_Y
     CMP ObjX, X
     BNE :NextObjAtLocation      ; If there's no other object at this X, go try another.
-            JSR   Hlp_LDA_ObjY_Y
+            JSR   LDA_ObjY_Y
     CMP ObjY, X
     BNE :NextObjAtLocation      ; If there's no other object at this Y, go try another.
     LDA ObjType, Y
@@ -2815,7 +2809,8 @@ CopyTripletToTextBuf
     LDY #$02
     LDX $00
 :Anon0033
-    LDA $0001, Y
+;    LDA $0001, Y
+    jsr LDA_0001_Y
     STA DynTileBuf, X
     DEX
     DEY
@@ -3575,7 +3570,7 @@ GetDirectionsAndDistancesToTarget ENT
     TAY
     LDA #$02
     STA $0A
-            JSR   Hlp_LDA_ObjX_Y
+            JSR   LDA_ObjX_Y
     LDY ObjX, X
     JSR GetOneDirectionAndDistanceToTarget
     STA $03
@@ -3587,7 +3582,7 @@ GetDirectionsAndDistancesToTarget ENT
     TAY
     LDA #$08
     STA $0A
-            JSR   Hlp_LDA_ObjY_Y
+            JSR   LDA_ObjY_Y
     LDY ObjY, X
     JSR GetOneDirectionAndDistanceToTarget
     STA $04
@@ -3766,7 +3761,7 @@ WieldBomb ENT
     TXA
     EOR #$01
     TAY
-            JSR   Hlp_LDA_ObjState_Y
+            JSR   LDA_ObjState_Y
     BEQ :Activate
     CMP #$13
     BCC L69AB_Exit
@@ -3862,7 +3857,8 @@ ChooseOffsetForDirectionH
     INY                         ; Direction is left. Increment index to 2.
 
 :GetValue
-    LDA $0000, Y                ; Load the offset for the calculated index.
+;    LDA $0000, Y                ; Load the offset for the calculated index.
+    jsr LDA_0000_Y
     CLC                         ; Clear carry in preparation for adding offset to another value.
 
 L69BE_Exit
@@ -5088,13 +5084,17 @@ Anim_WriteSpritePair
     ; For both left and right sprites, indexed by Y register:
     LDY #$01
 :Anon0079
-    LDA $0004, Y                ; Toss out the palette bits of the sprite attributes.
+;    LDA $0004, Y                ; Toss out the palette bits of the sprite attributes.
+    jsr LDA_0004_Y
     AND #$FC
-    STA $0004, Y
+;    STA $0004, Y
+    jsr STA_0004_Y
     LDA ObjInvincibilityTimer, X    ; Patch the bottom 2 bits of the invincibility timer.
     AND #$03
-    ORA $0004, Y
-    STA $0004, Y                ; This gives us the flashing effect.
+;    ORA $0004, Y
+    jsr ORA_0004_Y
+;    STA $0004, Y                ; This gives us the flashing effect.
+    jsr STA_0004_Y
     DEY
     BPL :Anon0079
 
@@ -5103,7 +5103,8 @@ Anim_WriteSpritePairNotFlashing ENT
     LDY #$00
 
 :LoopSprite
-    LDA $0002, Y                ; Write the sprite tile.
+;    LDA $0002, Y                ; Write the sprite tile.
+    jsr LDA_0002_Y
     STA Sprites+1, X
     LDA $01                     ; Write the sprite Y.
     STA Sprites, X
@@ -5112,7 +5113,8 @@ Anim_WriteSpritePairNotFlashing ENT
     CLC                         ; Separate the second sprite appropriately from the first.
     ADC $0A
     STA $00
-    LDA $0004, Y                ; Write the sprite attributes.
+;    LDA $0004, Y                ; Write the sprite attributes.
+    jsr LDA_0004_Y
     STA Sprites+2, X
     LDX RightSpriteOffset       ; Now point to the other sprite.
     LDA $08                     ; Cycle the current sprite index, if needed.
@@ -5719,7 +5721,7 @@ Link_BeHarmed ENT
 ;
 CheckMonsterBoomerangOrFoodCollision
     ; If the weapon slot holds food (high bit of state is set), then return.
-            JSR   Hlp_LDA_ObjState_Y
+            JSR   LDA_ObjState_Y
     ASL
     BCS :Anon0089
     STY $00                     ; [00] holds the weapon slot
@@ -5734,13 +5736,13 @@ CheckMonsterBoomerangOrFoodCollision
     STA $0E
 
     ; The boomerang's middle X is 4 pixels to the right. Store in [04].
-            JSR   Hlp_LDA_ObjX_Y
+            JSR   LDA_ObjX_Y
     CLC
     ADC #$04
     STA $04
 
     ; The boomerang's middle Y is 8 pixels down. Store in [05].
-            JSR   Hlp_LDA_ObjY_Y
+            JSR   LDA_ObjY_Y
     CLC
     ADC #$08
 
@@ -5769,7 +5771,7 @@ CheckMonsterWeaponCollision
 
     ; If the weapon's not active (state = 0), then return.
     LDY $00
-            JSR   Hlp_LDA_ObjState_Y
+            JSR   LDA_ObjState_Y
     BEQ L74D8_Exit
 
     ; If the objects do not collide, then return.
@@ -5789,7 +5791,7 @@ CheckMonsterWeaponCollision
 :Anon0090
     ; Set the boomerang state to return fast to the thrower.
     LDA #$50
-            JSR   Hlp_STA_ObjState_Y
+            JSR   STA_ObjState_Y
 
     ; If the monster is invincible to the boomerang, then return.
     LDA ObjInvincibilityMask, X
@@ -5832,7 +5834,7 @@ HandleMonsterWeaponCollision
 :Anon0092
     CPY #$0F
     BEQ DealDamage
-            JSR   Hlp_LDA_ObjDir_Y
+            JSR   LDA_ObjDir_Y
     STA ObjDir, X
     JMP DealDamage
 
@@ -5844,7 +5846,7 @@ HandleMonsterWeaponCollision
     CMP #$0C
     BNE DealDamage
 :Anon0093
-            JSR   Hlp_LDA_ObjDir_Y
+            JSR   LDA_ObjDir_Y
     ORA ObjDir, X
     CMP #$0C
     BEQ L_PlayParrySoundForDamageType
@@ -5929,7 +5931,7 @@ CheckMonsterSwordShotOrMagicShotCollision ENT
     STA $09
 
     ; If the shot is a sword shot that's spreading out, then return.
-            JSR   Hlp_LDA_ObjState_Y
+            JSR   LDA_ObjState_Y
     LSR
     BCS :Exit
 
@@ -5938,7 +5940,7 @@ CheckMonsterSwordShotOrMagicShotCollision ENT
     STA $0D
 
     ; If the weapon is a magic shot, go use $20 damage points.
-            JSR   Hlp_LDA_ObjState_Y
+            JSR   LDA_ObjState_Y
     LDY #$20
     ASL
     BCS :CheckCollision
@@ -6003,7 +6005,7 @@ CheckMonsterBombOrFireCollision ENT
 
     ; If the weapon is a fire, then go set the hotspot/midpoint.
     ; But if the bomb is not detonating, then return.
-            JSR   Hlp_LDA_ObjState_Y
+            JSR   LDA_ObjState_Y
     CMP #$20
     BCS :SetHotspot
     CMP #$13
@@ -6020,11 +6022,11 @@ CheckMonsterBombOrFireCollision ENT
 :SetHotspot
     ; The weapon's midpoint/hotspot is at (X + 8, Y + 8).
     ; Pass it in [04] and [05].
-            JSR   Hlp_LDA_ObjX_Y
+            JSR   LDA_ObjX_Y
     CLC
     ADC #$08
     STA $04
-            JSR   Hlp_LDA_ObjY_Y
+            JSR   LDA_ObjY_Y
     CLC
     ADC #$08
     STA $05
@@ -6065,7 +6067,7 @@ CheckMonsterSwordCollision ENT
     STA $09
 
     ; If the sword is not fully extended, then return.
-            JSR   Hlp_LDA_ObjState_Y
+            JSR   LDA_ObjState_Y
     CMP #$02
     BNE L7595_Exit
 
@@ -6126,7 +6128,7 @@ CheckMonsterStabbingCollision
 ;
 CheckMonsterArrowOrRodCollision ENT
     STY $00                     ; [00] holds the weapon slot
-            JSR   Hlp_LDA_ObjState_Y
+            JSR   LDA_ObjState_Y
 
     ; If the weapon is a rod, then
     ; go check a stabbing collision using rod parameters.
@@ -6191,7 +6193,7 @@ CheckMonsterShotCollision
 :Anon0097
     ; If the weapon is an arrow, set its state to spark ($20).
     LDA #$20
-            JSR   Hlp_STA_ObjState_Y
+            JSR   STA_ObjState_Y
     LDA #$03
     STA ObjAnimCounter, Y
 
@@ -6206,7 +6208,7 @@ ParryOrShove
     CMP #$0C                    ; Blue Darknut
     BNE :Anon0099
 :Anon0098
-            JSR   Hlp_LDA_ObjDir_Y
+            JSR   LDA_ObjDir_Y
     ORA ObjDir, X
     CMP #$0C
     BEQ PlayParryTune
@@ -6266,11 +6268,11 @@ CheckMonsterSlenderWeaponCollision2
     LDA ObjDir
     AND #$0C
     BEQ :CheckHorizontal
-            JSR   Hlp_LDA_ObjX_Y
+            JSR   LDA_ObjX_Y
     CLC
     ADC #$06
     STA $04
-            JSR   Hlp_LDA_ObjY_Y
+            JSR   LDA_ObjY_Y
     CLC
     ADC #$08
     JMP :Anon0100
@@ -6281,11 +6283,11 @@ CheckMonsterSlenderWeaponCollision2
     ; A    := (weapon Y + 6)
     ;
     ; Shouldn't it be based on the weapon's direction?
-            JSR   Hlp_LDA_ObjX_Y
+            JSR   LDA_ObjX_Y
     CLC
     ADC #$08
     STA $04
-            JSR   Hlp_LDA_ObjY_Y
+            JSR   LDA_ObjY_Y
     CLC
     ADC #$06
 :Anon0100
@@ -6414,7 +6416,7 @@ BeginShove ENT
     STA $08
     LDA ObjY, X
     STA $04
-            JSR   Hlp_LDA_ObjY_Y
+            JSR   LDA_ObjY_Y
     STA $05
 
     ; If the defender is Link and his grid offset <> 0 then
@@ -6449,7 +6451,7 @@ BeginShove ENT
     STA $08
     LDA ObjX, X
     STA $04
-            JSR   Hlp_LDA_ObjX_Y
+            JSR   LDA_ObjX_Y
     STA $05
 
 :CheckVertical
@@ -6520,7 +6522,7 @@ BeginShove ENT
     ;
     ; Set the shove direction to the weapon's direction,
     ; instead of the direction passed in [0B].
-            JSR   Hlp_LDA_ObjDir_Y
+            JSR   LDA_ObjDir_Y
     STA $08
 
     ; If the monster's attribute "reverse after hit Link" is set, then

@@ -30,17 +30,7 @@ romxfer
             lda   DP_NES
             tcd
 
-;            sep   #$20
-;            lda   #^ExtIn                   ; Set the bank to the ROM
-;            pha
-;            plb
-;            rep   #$20
-
-;            ldal   yield_s
-;            tcs
             stx   :disp+1                   ; Save the target address
-
-;            txa                            ; Put address in A
 
             ldx   yield_s                   ; Put 16-bit stack addr in X to protect against NES code using TXS
             txs
@@ -49,18 +39,19 @@ romxfer
 
             lda   mapper_bank
             sta   :disp+3                   ; Target the current mapper bank
-
-            lda   #^ROMBase                 ; Set the data bank to the first ROM bank
             pha
             plb
 
 :disp       jsl   $000000                   ; breaking change; ROM code needs rti->rtl, not rti->rts like it was
 
+; We do not need to save the databank register.  The MMC1 shims are responsible for updating mapper_bank
+; when they are called from the ROM code.
+
             mx  %00
-;ExtRtn      ENT
             rep   #$30                      ; Back to 16-bit mode
 
             tsx                             ; Copy the stack address returned by the emulator
+            
             ldal  StkSave
             tcs
 
@@ -137,7 +128,7 @@ resume
             ldx   yield_x
             lda   yield_p
             pha
-            lda   #^ROMBase                ; Set the data bank to the first ROM bank
+            lda   mapper_bank              ; Set the data bank
             pha
             lda   yield_a
             plb

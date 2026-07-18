@@ -131,12 +131,24 @@ RefreshMetatile                            ; Alternate entry point is not settin
 
         ldal  PPU_MEM+TILE_SHADOW+$00,x
         sta   patch1+2
+        DO    HAS_CHR_RAM
+        jsr   CheckBgTileDirty
+        FIN
         ldal  PPU_MEM+TILE_SHADOW+$01,x
         sta   patch2+2
+        DO    HAS_CHR_RAM
+        jsr   CheckBgTileDirty
+        FIN
         ldal  PPU_MEM+TILE_SHADOW+$20,x
         sta   patch3+2
+        DO    HAS_CHR_RAM
+        jsr   CheckBgTileDirty
+        FIN
         ldal  PPU_MEM+TILE_SHADOW+$21,x
         sta   patch4+2
+        DO    HAS_CHR_RAM
+        jsr   CheckBgTileDirty
+        FIN
 
         ldal  PPU_MEM+TILE_BANK,x     ; The tiles in the same row will have the same bank
         beq   bad_row2                ; The bottom metatile row is not defined
@@ -193,6 +205,50 @@ patch4  jsl   $000000
         sep   #$20
 bad_row2
         rts
+
+; CHR-RAM support: recompile one background tile (ConvertROMTile3) if its
+; dirty flag is set, before RefreshMetatile dispatches through the compiled
+; tile code. Without this, a metatile whose attribute byte changes before
+; DrawPPUTile has ever compiled the referenced tile would jsl into a stale
+; or uninitialized compiled-code address and crash.
+;
+; A = tile ID (8-bit), P = 8-bit A / 16-bit XY (mx %10)
+; X (metatile PPU address) is preserved for the caller
+        DO    HAS_CHR_RAM
+        mx    %10
+CheckBgTileDirty
+        pha
+        phx
+        tay                           ; Y = tile ID (zero-extended)
+        lda   [TileChrMem],y
+        beq   :bgclean
+        lda   #0
+        sta   [TileChrMem],y
+        
+        rep   #$30                    ; 16-bit A/X/Y for the recompile
+        tya
+        pha
+        asl   a
+        asl   a
+        asl   a
+        asl   a                       ; A = tile ID * 16
+        clc
+        adc   #PPU_BG_TILE_ADDR
+        tax                           ; X = CHR-RAM source address
+
+        pla
+        xba                           ; A = tile ID << 8 (compiled-code dest page)
+        tay
+
+        lda   #TileBuff
+        jsr   ConvertROMTile3
+
+        sep   #$20
+:bgclean
+        plx
+        pla
+        rts
+        FIN
 
 ; offset from a nametable ($2000, $2400, $2800, $2C00) to the top-left tile of each metatile
 metatile_corner
