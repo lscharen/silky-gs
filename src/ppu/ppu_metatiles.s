@@ -219,6 +219,12 @@ bad_row2
 CheckBgTileDirty
         pha
         phx
+        phy
+
+        xba                           ; defensive clear of high accumulator byte
+        lda   #0
+        xba
+
         tay                           ; Y = tile ID (zero-extended)
         lda   [TileChrMem],y
         beq   :bgclean
@@ -245,6 +251,7 @@ CheckBgTileDirty
 
         sep   #$20
 :bgclean
+        ply
         plx
         pla
         rts

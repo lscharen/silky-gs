@@ -44,9 +44,7 @@ tile_exclude ENT                  ; Tble of excluded tiles
 ; .INCLUDE "Variables.inc" (hoisted to file header)
 
 ; .SEGMENT "BANK_00_00"
-
-
-
+            ds    $8D60-*     ; From Z.cfg :: Segments :: BANK_00_00
 
 SongTable
             db    $7D, $B5, $6E, $67, $7D, $AD, $64, $64

@@ -291,7 +291,7 @@ MenuPalettesTransferBuf EXT
 ; Imports from RAM code bank 06
 
 
-
+            ds    $E400-*
 Z07Int_PcmSamples
             putbin dat/Z07Int_PcmSamples.dat
 
@@ -6013,7 +6013,7 @@ SwitchBank
     RTS
 
 ; .SEGMENT "BANK_07_VEC"
-; Pad to $FFFB
+; Pad to $FFEB
     ds   $FFEB-*
 
 ; Unknown block

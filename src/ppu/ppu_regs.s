@@ -203,9 +203,9 @@ PPUDATA_READ ENT
         bcc  :buff_read
 
         ldal PPU_MEM,x  ; do a 16-bit read, but we'll ignore the top byte
+        sep  #$30
         sta  2,s
 
-        sep  #$30
         plx
         pla
         rtl
