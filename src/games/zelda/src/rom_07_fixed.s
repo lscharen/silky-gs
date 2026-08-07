@@ -405,7 +405,9 @@ IsrNmi
     ; then wait for it to be cleared by the ending of VBLANK.
             JSR   LDA_2002
     AND #$40
-    BNE :Z07Int_WaitVBlankEnd
+;    BNE :Z07Int_WaitVBlankEnd
+    nop                             ; IIgs -- do not busy wait for rendering.
+    nop
             JSR   LDA_2002
 
     ; Wait for Sprite 0 hit, if needed.
@@ -675,14 +677,23 @@ Z07Int_ReadOneController
             JSR   STA_4016
     LDY #$08
 
+native_joy EXT
 :Z07Int_Read
-    LDA Ctrl1_4016, X
-    LSR
-    ROL ButtonsPressed, X       ; Roll the button bits in. Here ButtonsPressed means "down now".
-    LSR
-    ROL $00                     ; The expansion port reading will be in [$00].
-    DEY
-    BNE :Z07Int_Read
+;    LDA Ctrl1_4016, X
+;    LSR
+;    ROL ButtonsPressed, X       ; Roll the button bits in. Here ButtonsPressed means "down now".
+;    LSR
+;    ROL $00                     ; The expansion port reading will be in [$00].
+;    DEY
+;    BNE :Z07Int_Read            ; IIgs -- 12 bytes
+
+    ldal  native_joy,x
+    sta   ButtonsPressed,x
+    lda   #0
+    sta   $00
+    nop
+    nop
+
     LDA ButtonsPressed, X
     CMP $02
     BNE Z07Int_ReadOneController       ; If we didn't get the same reading, then try again.
@@ -5914,8 +5925,6 @@ AnimatePond ENT
     JMP Z07Int_CueTransferPondPaletteRow
 
 ; .SEGMENT "BANK_07_ISR"
-
-; Pad to $FF50
     ds   $FF50-*
 
 ; On reset, bank 3 (rom_02.s) is selected in for $8000-$BFFF

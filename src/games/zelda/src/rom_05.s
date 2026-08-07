@@ -8215,6 +8215,8 @@ CreateRoomObjects ENT
     RTS
 
 ; .SEGMENT "BANK_05_ISR"
+            ds    $BF50-*
+
 
 
 
@@ -8231,27 +8233,37 @@ CreateRoomObjects ENT
             db    $A9, $07, $20, $AC, $BF, $4C, $40, $E4
 
 SetMMC1Control_Local5 ENT
-    STA $8000
+;    STA $8000
+    jsr  STA_MMC1_REG0
     LSR
-    STA $8000
+;    STA $8000
+    jsr  STA_MMC1_REG0
     LSR
-    STA $8000
+;    STA $8000
+    jsr  STA_MMC1_REG0
     LSR
-    STA $8000
+;    STA $8000
+    jsr  STA_MMC1_REG0
     LSR
-    STA $8000
+;    STA $8000
+    jsr  STA_MMC1_REG0
     RTS
 
 SwitchBank_Local5 ENT
-    STA $E000
+;    STA $E000
+    jsr  STA_MMC1_REG3
     LSR
-    STA $E000
+;    STA $E000
+    jsr  STA_MMC1_REG3
     LSR
-    STA $E000
+;    STA $E000
+    jsr  STA_MMC1_REG3
     LSR
-    STA $E000
+;    STA $E000
+    jsr  STA_MMC1_REG3
     LSR
-    STA $E000
+;    STA $E000
+    jsr  STA_MMC1_REG3
     RTS
 
 ; .SEGMENT "BANK_05_VEC"

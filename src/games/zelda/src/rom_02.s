@@ -4079,7 +4079,7 @@ SwitchProfileToSecondQuest
     RTS
 
 ; .SEGMENT "BANK_02_ISR"
-
+            ds    $BF50-*
 
 
 
@@ -4098,15 +4098,20 @@ SwitchProfileToSecondQuest
             db    $8D, $00, $80, $60
 
 SwitchBank_Local2 ENT
-    STA $E000
+;    STA $E000
+    jsr  STA_MMC1_REG3
     LSR
-    STA $E000
+;    STA $E000
+    jsr  STA_MMC1_REG3
     LSR
-    STA $E000
+;    STA $E000
+    jsr  STA_MMC1_REG3
     LSR
-    STA $E000
+;    STA $E000
+    jsr  STA_MMC1_REG3
     LSR
-    STA $E000
+;    STA $E000
+    jsr  STA_MMC1_REG3
     RTS
 
 ; .SEGMENT "BANK_02_VEC"

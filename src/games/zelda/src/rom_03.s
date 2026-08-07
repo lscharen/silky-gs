@@ -254,7 +254,7 @@ PatternBlockUWSPBoss9
             putbin dat/PatternBlockUWSPBoss9.dat
 
 ; .SEGMENT "BANK_03_ISR"
-
+            ds    $BF50-*
 
 
 

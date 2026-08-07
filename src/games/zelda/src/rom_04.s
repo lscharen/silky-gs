@@ -11943,6 +11943,8 @@ DecreaseObjectAngle
     RTS
 
 ; .SEGMENT "BANK_04_ISR"
+            ds    $BF50-*
+
 
 
 

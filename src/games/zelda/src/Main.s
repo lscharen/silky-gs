@@ -116,7 +116,7 @@ NO_VERTICAL_CLIP  equ 1
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 0
+NO_INTERRUPTS     equ 1
 
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 1
@@ -244,14 +244,19 @@ TitlePalette  db   $36,$0f,$00,$10,$17,$07,$08,$1a,$28,$30,$3b,$22,$16,$27
 SwizzleTables adrl AT1_T0
 
 ZELDA_PALETTE_DISPATCH
-        dw   ppu_3F00, Z_3F01,   Z_3F02,   Z_3F03
+        dw   Z_3F00, Z_3F01,   Z_3F02,   Z_3F03
         dw   ppu_3F04, Z_3F05,   Z_3F06,   ppu_3F07
         dw   ppu_3F08, Z_3F09,   Z_3F0A,   Z_3F0B
         dw   ppu_3F0C, Z_3F0D,   Z_3F0E,   Z_3F0F
-        dw   ppu_3F10, ppu_3F11, ppu_3F12, Z_3F13
+        dw   Z_3F10, ppu_3F11, ppu_3F12, Z_3F13
         dw   ppu_3F14, ppu_3F15, Z_3F16,   ppu_3F17
         dw   ppu_3F18, ppu_3F19, ppu_3F1A, ppu_3F1B
         dw   ppu_3F1C, ppu_3F1D, ppu_3F1E, ppu_3F1F
+
+Z_3F00
+Z_3F10  jsr  NES_ColorToIIgs
+        stal $E19E00
+        rts
 
 Z_3F01  jsr  NES_ColorToIIgs
         stal $E19E02

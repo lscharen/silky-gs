@@ -618,7 +618,7 @@ CheckSprTileDirty
         asl   a
         asl   a
         asl   a                       ; A = tile ID * 16
-        clc
+;        clc
         adc   #PPU_SPR_TILE_ADDR
         tax                           ; X = CHR-RAM source address
 

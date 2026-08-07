@@ -453,9 +453,7 @@ LevelInfoUW9
 CommonDataBlock_Bank6
 
 ; .SEGMENT "BANK_06_DATA"
-
-
-
+            org  $67F0
 
 MenuPalettesTransferBuf ENT
             db    $3F, $00, $20, $0F, $30, $00, $12, $0F
@@ -497,6 +495,8 @@ TriforceTextTransferBuf
             db    $1B, $0C, $0E
 
 ; .SEGMENT "BANK_06_DLIST"
+            org
+            ds    $A000-*
 
 
 
@@ -858,6 +858,7 @@ GameTitleTransferBuf
             putbin dat/GameTitleTransferBuf.dat
 
 ; .SEGMENT "BANK_06_ISR"
+            ds    $BF50-*
 
 
 

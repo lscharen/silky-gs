@@ -2691,7 +2691,7 @@ CommonCodeBlock_Bank1
 ; Imports from program bank 07
 
 
-
+        org  $6C90                  ; IIgs -- this is where it will run
 
 ; Returns:
 ; A: 0
@@ -6586,9 +6586,8 @@ Filler_7751
             db    $FF, $FF, $FF, $FF, $FF, $FF, $FF
 
 ; .SEGMENT "BANK_01_ISR"
-
-
-
+            org
+            ds    $BF50-*
 
 ; Unknown block
             db    $78, $D8, $A9, $00, $8D, $00, $20, $A2
@@ -6605,15 +6604,20 @@ Filler_7751
             db    $8D, $00, $80, $60
 
 SwitchBank_Local1
-    STA $E000
+;    STA $E000
+    jsr  STA_MMC1_REG3
     LSR
-    STA $E000
+;    STA $E000
+    jsr  STA_MMC1_REG3
     LSR
-    STA $E000
+;    STA $E000
+    jsr  STA_MMC1_REG3
     LSR
-    STA $E000
+;    STA $E000
+    jsr  STA_MMC1_REG3
     LSR
-    STA $E000
+;    STA $E000
+    jsr  STA_MMC1_REG3
     RTS
 
 ; .SEGMENT "BANK_01_VEC"

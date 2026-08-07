@@ -47,6 +47,10 @@
             KND   #$1100
             SNA   CHRDATA
 
+            ASM   rom_active.s
+            KND   #$1100
+            SNA   ZROMXX
+
 ; Segment #5 -- ROM banks 00-07 (switchable NES $8000-$BFFF window).
 ; ROMBase is ENT'd only in rom_00.s; every other bank imports it EXT to
 ; compute its own bank-dispatch target.
@@ -83,7 +87,7 @@
             KND   #$1100
             SNA   ZROM07
 
-; Segment #6 -- PPU memory and PPU shadow storage
+; Segment #7 -- PPU memory and PPU shadow storage
 
             ASM   PPU.s
             KND   #$1100

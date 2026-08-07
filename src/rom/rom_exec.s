@@ -37,12 +37,14 @@ romxfer
 
             sep   #$30
 
-            lda   mapper_bank
-            sta   :disp+3                   ; Target the current mapper bank
+;            lda   mapper_bank
+;            sta   :disp+3                   ; Target the current mapper bank
+            lda   #^ROMBase
             pha
             plb
 
-:disp       jsl   $000000                   ; breaking change; ROM code needs rti->rtl, not rti->rts like it was
+; :disp       jsl   $000000                   ; breaking change; ROM code needs rti->rtl, not rti->rts like it was
+:disp       jsl   ROMBase
 
 ; We do not need to save the databank register.  The MMC1 shims are responsible for updating mapper_bank
 ; when they are called from the ROM code.
@@ -128,7 +130,8 @@ resume
             ldx   yield_x
             lda   yield_p
             pha
-            lda   mapper_bank              ; Set the data bank
+;            lda   mapper_bank              ; Set the data bank
+            lda   #^ROMBase
             pha
             lda   yield_a
             plb

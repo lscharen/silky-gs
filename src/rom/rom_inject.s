@@ -128,17 +128,18 @@ STA_MMC1_REG3
             and   #$07
             clc
             adc   #^ROMBase
+            inc                 ; ROMBase is the working ROM bank.  The cart ROM banks are stored in the next banks
             cmpl  mapper_bank
-            beq   :done        ; avoid extra work if we are not actually changing banks
+            beq   :done         ; avoid extra work if we are not actually changing banks
 
-            pha                ; save the target bank; DBR is currently set to *this* bank
+;            pha                ; save the target bank; DBR is currently set to *this* bank
             stal  mapper_bank
 
 ; Trampoline magic -- the rom_inject file is replicated across all of the NES ROM banks that are mapped
 ;                     across the IIgs 64kb banks, so we long jump to the new mapper_bank and that will
 ;                     magically hit the code below an the RTS will return to the address in the new bank
 
-            sta   :patch+3     ; writes to code in *this* bank
+;            sta   :patch+3     ; writes to code in *this* bank
             sta   :t1+3
             sta   :t2+3
             sta   :t3+3
@@ -151,18 +152,26 @@ STA_MMC1_REG3
 ;
 ; We can ignore page $00 and $01 since those are the stack and direct page and exist in Bank 00.
 
+; Copy 16kb bank ($8000 - $BFFF) = 98,304 cycles
+; Copy 8kb WRAM + 2kb RAM = 61,440 cycles
+;
+; We now copy the 16kb data back into the common bank.  In the end, we can optimize this by preprocessing
+; the bank code into a set of `LDA #data; STA abs` and coalesce duplicate writes, which should move the
+; average speed between 6 and 9 cycles per word -- which can get as low as ~50,000 which is actually faster
+; than the WRAM + RAM copy.
+
             phx
             rep   #$30
-            ldx   #$5F8
+            ldx   #$3FF8
 :loop
-            lda   $0200,x
-:t1         stal  $000200,x
-            lda   $0202,x
-:t2         stal  $000202,x
-            lda   $0204,x
-:t3         stal  $000204,x
-            lda   $0206,x
-:t4         stal  $000206,x
+:t1         ldal  $008000,x
+            sta   $8000,x
+:t2         ldal  $008002,x
+            sta   $8002,x
+:t3         ldal  $008004,x
+            sta   $8004,x
+:t4         ldal  $008006,x
+            sta   $8006,x
             txa
             sec
             sbc   #8
@@ -171,9 +180,8 @@ STA_MMC1_REG3
 
             sep   #$30
             plx
-            plb                ; change the data bank to the new memory bank
+;            plb                ; change the data bank to the new memory bank
 
-:patch      jml   :done
 :done
             MMC1_RTN
 
