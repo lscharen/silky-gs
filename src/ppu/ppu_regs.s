@@ -32,9 +32,9 @@ w_bit     dw 1     ; currently writing to high or low to the address latch
 vram_buff dw 0     ; latched data when reading VRAM ($0000 - $3EFF)
 
 ppuincr   dw 1     ; 1 or 32 depending on bit 2 of PPUCTRL
-spadr     dw $0000 ; Sprite pattern table ($0000 or $1000) depending on bit 3 of PPUCTRL
+spadr     dw PPU_SPR_TILE_ADDR ; Sprite pattern table ($0000 or $1000) depending on bit 3 of PPUCTRL
 ntaddr    dw $2000 ; Base nametable address ($2000, $2400, $2800, $2C00), bits 0 and 1 of PPUCTRL
-bgadr     dw $0000 ; Background pattern table address
+bgadr     dw PPU_BG_TILE_ADDR ; Background pattern table address
 ppuctrl   dw 0     ; Copy of the ppu ctrl byte
 ppumask   dw 0     ; Copy of the ppu mask byte
 ppustatus dw 0
@@ -54,6 +54,13 @@ mmc1_reg0   ds    1
 mmc1_reg1   ds    1
 mmc1_reg2   ds    1
 mmc1_reg3   ds    1
+
+; Currently-selected CHR bank. Stub for future MMC1 CHR-bank-switching
+; support -- always zero today and not yet read anywhere. 16-bit so it can
+; be loaded in either 8- or 16-bit mode by future code without a width
+; mismatch.
+chr_bank    ENT
+            ds    2
 
 ; ntbase    db $20,$24,$28,$2c
 
@@ -280,7 +287,7 @@ PPUDATA_WRITE ENT
         lsr
         tax
         sep  #$20
-        lda  #$FF
+        lda  #$80              ; neither BG nor sprite form ready (see ChrRamDirty tri-state, ppu_regs.s PPUCTRL_WRITE)
         stal ChrRamDirty,x
         bra  :done
 :not_chr

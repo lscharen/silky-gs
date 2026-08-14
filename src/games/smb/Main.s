@@ -56,6 +56,10 @@ PPU_SPR_TILE_ADDR equ $0000
 
 ; What kind of Nametable mirroring for this game
 NAMETABLE_MIRRORING equ VERTICAL_MIRRORING
+; Flag whether this game uploads its own CHR data at runtime (CHR-RAM) rather
+; than using a fixed CHR-ROM image loaded once at startup
+HAS_CHR_RAM equ 0
+
 
 ; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
 ; in addition to the compiled representation (usually yes, since this is used for the config
@@ -171,7 +175,19 @@ x_offset    equ   16                      ; number of bytes from the left edge
             phk
             plb
 
+; Initialize the NES runtime
+
             jsr   NES_StartUp
+
+; This an NROM game, so all of the sprite and background tiles are static.  They have
+; been statically converted into the runtime's internal representation and are loaded
+; into the 
+
+            jsr   ROM_CompileBackgroundTiles    ; Convert the background tiles (PPU:$1000) to compiled format
+            jsr   ROM_CompileSpriteTiles        ; Convert a bunch (100) of the sprite tiles to compiled format for speed
+
+; Now, initialize the game-specific functionality that this wrapper needs in order to
+; run the game in an effective manner.
 
             stz   LastAreaType            ; Check if the palettes need to be updated
             stz   LastAreaStyle
@@ -966,6 +982,7 @@ MushroomPalette dw  $22, $00, $27, $16, $0F, $36, $17, $30, $21, $27, $1A, $16, 
 ; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
             put    ../../rom/scaffold.s
             put    ../../rom/rom_color.s
+            put    ../../rom/rom_tiles.s
             put    ../../rom/rom_helpers.s
             put    ../../rom/rom_input.s
             put    ../../rom/rom_exec.s

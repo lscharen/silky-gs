@@ -52,6 +52,8 @@ NES_StartUp
             lda   #HORIZONTAL_MIRRORING
             sta   PendingMirrorMode
 
+            stz   chr_bank                 ; Stub for future MMC1 CHR-bank switching
+
 ; Set the pointers to the CHR memory dirty bytes for CHR-RAM games
 
             lda   #ChrRamDirty
@@ -119,15 +121,15 @@ NES_StartUp
 
             DO    HAS_CHR_RAM
             ldx   #0
-            lda   #$FFFF
+            lda   #$8080          ; both bytes = $80 (neither BG nor sprite form ready)
 :mtloop     sta   ChrRamDirty,x
             inx
             inx
             cpx   #512
             bcc   :mtloop
             ELSE
-            jsr   ROM_LoadBackgroundTiles
-            jsr   ROM_LoadSpriteTiles
+;            jsr   ROM_LoadBackgroundTiles
+;            jsr   ROM_LoadSpriteTiles
             FIN
 
 ; Now the core of the runtime has been initialized

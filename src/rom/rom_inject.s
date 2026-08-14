@@ -564,19 +564,15 @@ STX_4017
 ; Include a bunch of routines to patch out the use of abs,y addressing modes and convert to load
 ; from the actual direct page
 ;
-; For multi-bank, the patches have to be sone using long addressing
+; For multi-bank, the patches have to be done using long addressing
 
 LDA_ABS_Y   mac
-            php
             phx
             tyx
             lda  ]1,x
-            stal lay_patch+1
             plx
-            plp
-lay_patch   lda  #0
-            pla
-            rts
+            pha
+            pla              ; required reload to make sure Z,N flags are set correctly.
             <<<
 
 STA_ABS_Y   mac
@@ -590,7 +586,7 @@ STA_ABS_Y   mac
             <<<
 
 ORA_ABS_Y   mac
-            php
+;            php
             pha
             phx
             tyx
@@ -598,13 +594,13 @@ ORA_ABS_Y   mac
             stal oay_patch+1
             plx
             pla
-            plp
+;            plp
 oay_patch   ora  #0
             rts
             <<<
 
 CMP_ABS_Y   mac
-            php
+;            php
             pha
             phx
             tyx
@@ -612,13 +608,13 @@ CMP_ABS_Y   mac
             stal cay_patch+1
             plx
             pla
-            plp
+;            plp
 cay_patch   cmp  #0
             rts
             <<<
 
 SBC_ABS_Y   mac
-            php
+;            php
             pha                ; make sure none of these instructions disturbs the carry flag
             phx
             tyx
@@ -626,13 +622,13 @@ SBC_ABS_Y   mac
             stal say_patch+1
             plx
             pla
-            plp
+;            plp
 say_patch   sbc  #0
             rts
             <<<
 
 ADC_ABS_Y   mac
-            php
+;            php
             pha                ; make sure none of these instructions disturbs the carry flag
             phx
             tyx
@@ -640,7 +636,7 @@ ADC_ABS_Y   mac
             stal aay_patch+1
             plx
             pla
-            plp
+;            plp
 aay_patch   adc  #0
             rts
             <<<

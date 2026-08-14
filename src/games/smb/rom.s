@@ -670,7 +670,7 @@ GameOverModeValue     = 3
 ;       .org $8000
 
 ROMBase  ENT
-         ds    $7600
+         ds    $6000-*
 
 y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
         ds 24,$01
@@ -739,7 +739,8 @@ GteInitMem
 
             plp
             rts
-         ds   \,$00
+            
+            ds   $8000-*
 
 ;-------------------------------------------------------------------------------------
              mx    %11
@@ -783,7 +784,7 @@ ColdBoot     jsr InitializeMemory         ;clear memory using pointer in Y
              ora #%10000000               ;enable NMIs
              jsr WritePPUReg1
 ;EndlessLoop jmp EndlessLoop              ;endless loop, need I say more?
-InternalRts  rts
+InternalRts  rtl
 ;-------------------------------------------------------------------------------------
 ;$00 - vram buffer address table low, also used for pseudorandom bit
 ;$01 - vram buffer address table high
@@ -923,7 +924,7 @@ SkipMainOper   jsr LDA_2002            ;reset flip-flop
                ora #%10000000            ;reactivate NMIs
                jsr STA_2000
 ;               rti                       ;we are done until the next frame!
-               rts
+               rtl
 
 ;-------------------------------------------------------------------------------------
 
@@ -16667,8 +16668,7 @@ BrickShatterEnvData
 
 ;-------------------------------------------------------------------------------------
 ; IIgs -- fill in some space to put the vectors in the right spot
-      ds   \,$00
-      ds   $3FA
+      ds   $FFFA-*
 
 ;INTERRUPT VECTORS
 

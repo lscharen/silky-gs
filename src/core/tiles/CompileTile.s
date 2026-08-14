@@ -94,6 +94,7 @@ CompileTile
         inx                   ; Advance to the next word
         cpx  #32
         bcc  :loop
+
 :exit
         lda  #$006B           ; return instruction
         sta  [CompileBank0],y
