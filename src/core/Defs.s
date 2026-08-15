@@ -136,7 +136,11 @@ BANK_VALUES            equ   172         ; Room for two right here
 PPU_CLEAR_ADDR         equ   174         ; Current address for a rolling clear of PPU shadow memory
 CMPL_BANK              equ   176         ; ^tiledata << 8 | $01 (Bank $01 in low byte)
 
-; Free space from 176 to 192
+; Temporary storage for 8x16 sprite drawing in drawSprites
+sprTmp5Hi              equ   178
+sprTmp6Lo              equ   180
+
+; Free space from 182 to 192
 
 blttmp                 equ   192         ; 32 bytes of local cache/scratch space for blitter
 

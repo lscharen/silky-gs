@@ -266,6 +266,8 @@ sprTmp3      equ pputmp+6
 sprTmp4      equ pputmp+8
 sprAddrMin   equ unused132
 sprAddrMax   equ unused134
+sprTmp5      equ sprTmp5Hi          ; tiledata bank offset for the tile to draw: $0000 or $8000
+sprTmp6      equ sprTmp6Lo          ; same selection in $0000/$0100 form (merges with tile ID like spadr_lo)
 
         mx   %00
 drawSprites
@@ -345,29 +347,10 @@ drawSprites
 
         jsr   :setupSprite16
 
-; Copy bytes 1 and 2 into temp space
-;  (only support the first nametable at the moment)
+; Draw both halves of the 8x16 sprite (pattern table select comes from bit 0
+; of the tile ID, not from spadr/PPUCTRL -- see :drawSprite16)
 
-        ldal  OAM_COPY+1,x
-        and   #$FFFE           ; mask low bit
-        sta   sprTmp2
-
-; Draw the top tile
-
-        jsr   :drawSprite8x8
-
-        lda   sprTmp1          ; Advance the address on screen
-        clc
-        adc   #8*160
-        sta   sprTmp1
-
-        lda   sprTmp2          ; Advance to the next tile index
-        inc
-        sta   sprTmp2          ; Value needs to be in accumulator and sprTmp2 for drawSprite8x8
-
-; Draw the bottom tile
-
-        jsr   :drawSprite8x8
+        jsr   :drawSprite16
 
         plx
         inx
@@ -494,11 +477,91 @@ drawSprites
 ;  sprTmp0 used for temporary data
 ;  ActivePtr set to sprite palette
 
+; Draw a single 8x16 sprite (both halves)
+;
+; X = OAM index (0, 4, 8, ..., 248, 252)
+; sprTmp1/sprTmp3/sprTmp4 already set by :setupSprite16 for the top-left position
+;
+; Unlike 8x8 mode, the NES ignores PPUCTRL/spadr for 8x16 sprites: bit 0 of the OAM
+; tile ID selects the pattern table, and bits 7-1 select the tile pair within it
+; (top tile = tile_id & $FE, bottom tile = top tile + 1, both from the same table).
+        mx    %00
+:drawSprite16
+        ldal  OAM_COPY+1,x
+        sta   sprTmp2                  ; {attribute, tile_id}
+
+        and   #$0001                   ; isolate the pattern-table select bit
+        beq   :spr16_tbl0
+        lda   #$8000
+        sta   sprTmp5
+        lda   #$0100
+        sta   sprTmp6
+        bra   :spr16_tbl_done
+:spr16_tbl0
+        stz   sprTmp5
+        stz   sprTmp6
+:spr16_tbl_done
+
+        lda   sprTmp2
+        and   #$FFFE                   ; top-half tile id (pattern-table bit cleared), attribute preserved
+        sta   sprTmp2
+
+        bit   #$8000                   ; test the vertical-flip attribute bit
+        bne   :spr16_vflip
+
+; Normal order: low tile (tile_id & $FE) on top, low+1 tile on bottom
+        lda   sprTmp2
+        jsr   :blitResolvedSprite
+
+        lda   sprTmp1
+        clc
+        adc   #8*160
+        sta   sprTmp1
+
+        inc   sprTmp2
+        lda   sprTmp2
+        jsr   :blitResolvedSprite
+        rts
+
+:spr16_vflip
+; Flipped order: low+1 tile on top, low tile on bottom -- each half's own
+; vertical-flip rendering is already selected by the (unchanged) attribute byte
+        inc   sprTmp2
+        lda   sprTmp2
+        jsr   :blitResolvedSprite
+
+        lda   sprTmp1
+        clc
+        adc   #8*160
+        sta   sprTmp1
+
+        dec   sprTmp2
+        lda   sprTmp2
+        jsr   :blitResolvedSprite
+        rts
+
 ; Draw a single 8x8 sprite
 ;
 ; X = OAM index (0, 4, 8, ..., 248, 252)
 ; A = OAM[1] and OAM[2], also in sprTmp2
 :drawSprite8x8
+
+; 8x8 mode: the pattern table is whatever PPUCTRL/spadr currently selects for
+; all sprites (unlike 8x16 mode, where each sprite's own tile ID picks the table)
+
+        lda  spadr_hi
+        sta  sprTmp5
+        lda  spadr_lo
+        sta  sprTmp6
+        lda  sprTmp2
+
+; :blitResolvedSprite is the shared draw tail used by both 8x8 sprites (falling
+; through from above, with sprTmp5/sprTmp6 = the current global sprite table)
+; and 8x16 sprites (entered directly by :drawSprite16, with sprTmp5/sprTmp6 set
+; per-sprite from the OAM tile ID's own pattern-table bit). Requires sprTmp2
+; (tile id + attribute) already loaded into A, and sprTmp1/sprTmp3/sprTmp4
+; (screen address / clip amount) already set up by :setupSprite.
+:blitResolvedSprite
 
 ; CHR-RAM support: recompile this sprite tile now if it was marked dirty by a
 ; PPUDATA write sinkce it was last drawn. HAS_CHR_RAM games always take the
@@ -518,6 +581,7 @@ drawSprites
         bne  as_bitmap
 
         and  #$00FF
+        ora  sprTmp6         ; fold in the pattern-table select (0 or $0100) -> full 0-511 index
         asl
         tax
         ldal spr_comp_tbl,x
@@ -568,6 +632,7 @@ as_bitmap
         lda  sprTmp2-1
         and  #$FF00
         lsr                           ; Each tile is 128 bytes of data -- this clears the carry flag
+        ora  sprTmp5                  ; fold in the pattern-table offset ($0000 or $8000)
         DO   SHOW_DEBUG_VARS
         jsr  (drawProcs,x)            ; Executes an RTS to return directly to caller
         ldx  sprTmp1
@@ -588,6 +653,7 @@ as_bitmap_clip
         lda  sprTmp2-1
         and  #$FF00
         lsr                           ; Each tile is 128 bytes of data -- this clears the carry flag
+        ora  sprTmp5                  ; fold in the pattern-table offset ($0000 or $8000)
         jmp  (drawProcsClipped,x)
 
 ; CHR-RAM support: recompile one sprite tile (FastROMMaskedTileToLookup,
@@ -598,7 +664,7 @@ as_bitmap_clip
         mx    %00
 CheckSprTileDirty
         and   #$00FF
-        oral  spadr_lo                ; are we within the first or second set of tiles?
+        ora   sprTmp6                 ; are we within the first or second set of tiles?
         tax
 
 ; The ChrRamDirty array is indexed 0-511, spanning *both* CHR-RAM pattern
@@ -639,7 +705,12 @@ drawProcsClipped
 
 ; Array of dispatch addresses.  There is a special address of $0000 in the table that immediately returns
 ; from the compiled sprite code bank for sprites that do not have a compiled representation.
-spr_comp_tbl ds 512,$00
+;
+; 512 word entries (1024 bytes): the low 256 entries are tile ids 0-255 in pattern
+; table 0, the high 256 entries (index 256-511, i.e. byte offset 512-1023) are tile
+; ids 0-255 in pattern table 1 -- indexed via (tile_id | sprTmp6) above, matching the
+; ChrRamDirty/spadr_lo convention.
+spr_comp_tbl ds 1024,$00
 
         mx    %00
 _blitTileNoMask
