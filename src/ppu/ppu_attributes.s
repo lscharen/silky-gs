@@ -286,13 +286,13 @@ RenderPPUAttr
 
 ; Check to see if we're on the bottom of the screen (rows 30 and 31 are invalid).  This row only has the top two metatiles.
 
+        lda  :attr_diff
         cpy  #$38*2
         bcs  :skip_bot
 
 ; First, check the metatile bits in the attribute byte to see if a given metatile has changed its value
 ; from what is currently in the PPU Nametable RAM and what was last rendered into the PEA field.
 
-        lda  :attr_diff
         bit  #$30
         beq  :not_bot_left
 

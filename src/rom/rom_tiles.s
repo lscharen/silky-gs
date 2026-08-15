@@ -293,11 +293,17 @@ ROMTileToLookup
             rts
 
 ; FastROMMaskedTileToLookup -- direct CHR_ROM -> tiledata conversion for one tile
-;                              plus masks and 
+;                              plus masks.
+;
+; Only called from 
             mx    %00
 FastROMMaskedTileToLookup
+
+            phb                        ; save the current bank (defensive)
+
+            phk
+            plb
             jsr   FastROMTileToLookup  ; build the data tile in tiledata memory
-            phb
 
             pea   #^tiledata           ; work fully within the tiledata bank
             plb
