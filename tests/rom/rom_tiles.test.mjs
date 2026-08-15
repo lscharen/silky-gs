@@ -35,6 +35,14 @@ import nesTileConvert             from '../../scripts/lib/nesTileConvert.js';
 
 const { romTileToLookup, romTileToBitmap, convertRomTile2 } = nesTileConvert;
 
+// Extra tile fixtures for FastROMMaskedTileToLookup, chosen so every 2-bit
+// pixel field within a row (and therefore every combined byte the row-based
+// swap logic exercises) sees both zero and non-zero values across the tile.
+const TILE_STAGGERED = [
+  0x55, 0xAA, 0x33, 0xCC, 0x0F, 0xF0, 0x69, 0x96,
+  0x0F, 0xF0, 0x55, 0xAA, 0x96, 0x69, 0xCC, 0x33,
+];
+
 const SRC_ROOT   = process.env.SRC_ROOT;
 const ROM_TILES  = join(SRC_ROOT, 'rom/rom_tiles.s');
 
@@ -62,6 +70,18 @@ const { jsr } = cpu65816({
   allocMemory: [
     { label: 'tiledata', length: 32 },
   ],
+});
+
+// Separate cpu65816 instance for FastROMMaskedTileToLookup: that suite needs
+// to declare 'tiledata' itself (via inline, with page-alignment padding in
+// front of it -- see its describe block), which would collide with the
+// shared 32-byte 'tiledata' allocMemory default above (both declare the same
+// label, and merlin32 doesn't reliably fail loudly on the duplicate -- it
+// just silently produces a harness that never reaches AUnit_WriteResults).
+const { jsr: jsrMasked } = cpu65816({
+  includes: [ROM_TILES],
+  assembler: 'merlin32',
+  inline: [STUBS],
 });
 
 // ─── sample tiles ──────────────────────────────────────────────────────────
@@ -280,5 +300,91 @@ describe('ConvertROMTile2', () => {
     });
 
     expect(Array.from(r.memory.dest).slice(64, 128)).toEqual(Array.from(expected).slice(64, 128));
+  });
+});
+
+// ─── FastROMMaskedTileToLookup ──────────────────────────────────────────────
+//
+// Sprite-tile conversion that writes straight into the tiledata bank (no
+// TileBuff, no DBR dependency -- see INPROGRESS.md). Like FastROMTileToLookup,
+// A = destination *offset within* tiledata (must be 32-byte aligned -- real
+// callers always pass tileID*128) and X = CHR-ROM offset. Unlike
+// FastROMTileToLookup, it produces the full 128-byte ConvertROMTile2 layout
+// (bitmap/mask, normal + h-flipped) via the TILE_MASK/TILE_REVERSE tables,
+// so it's checked against convertRomTile2() directly, the same ground truth
+// ConvertROMTile2 itself is checked against above.
+//
+// The loop's termination check (`tya / and #$001F / bne`) only ever reaches
+// zero if the *starting* Y (== the destination address the caller passed in
+// A) is itself 32-byte aligned -- true for every real caller (tileID*128),
+// but not guaranteed for a label the assembler places automatically after
+// the generated harness code. So 'tiledata' is declared here (not via
+// allocMemory) with an explicit `ds \,$00` page-boundary pad in front of it,
+// and read back via captureMemory instead of the usual allocMemory
+// auto-capture.
+const TILEDATA_STUB = `
+            ds    \\,$00
+tiledata    ds    128
+`;
+
+describe('FastROMMaskedTileToLookup', () => {
+  const TILES = { ...SAMPLE_TILES, staggered: TILE_STAGGERED };
+
+  for (const [name, tile] of Object.entries(TILES)) {
+    test(`tile "${name}" matches the JS reference model (full 128-byte layout)`, async () => {
+      const expected = Array.from(convertRomTile2(tile, 0));
+
+      const r = await jsrMasked('FastROMMaskedTileToLookup', {
+        A: 'tiledata',
+        X: 0,
+        mx: 0,
+        inline: [TILEDATA_STUB],
+        allocMemory: [
+          { label: 'CHR_ROM', data: tile },
+        ],
+        captureMemory: [
+          { label: 'tiledata', length: 128 },
+        ],
+      });
+
+      expect(Array.from(r.memory.tiledata)).toEqual(expected);
+    });
+  }
+
+  test('honors a non-zero tile offset (X) into CHR_ROM', async () => {
+    const chr = [...TILE_ZERO, ...TILE_STAGGERED]; // tile 1 starts at offset 16
+    const expected = Array.from(convertRomTile2(chr, 16));
+
+    const r = await jsrMasked('FastROMMaskedTileToLookup', {
+      A: 'tiledata',
+      X: 16,
+      mx: 0,
+      inline: [TILEDATA_STUB],
+      allocMemory: [
+        { label: 'CHR_ROM', data: chr },
+      ],
+      captureMemory: [
+        { label: 'tiledata', length: 128 },
+      ],
+    });
+
+    expect(Array.from(r.memory.tiledata)).toEqual(expected);
+  });
+
+  test('leaves CHR_ROM untouched (read-only source)', async () => {
+    const r = await jsrMasked('FastROMMaskedTileToLookup', {
+      A: 'tiledata',
+      X: 0,
+      mx: 0,
+      inline: [TILEDATA_STUB],
+      allocMemory: [
+        { label: 'CHR_ROM', data: TILE_MIXED },
+      ],
+      captureMemory: [
+        { label: 'tiledata', length: 128 },
+      ],
+    });
+
+    expect(Array.from(r.memory.CHR_ROM)).toEqual(TILE_MIXED);
   });
 });

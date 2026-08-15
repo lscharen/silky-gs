@@ -551,6 +551,7 @@ INPUT_ITEM_5 dw   KEYMAP
 ; Core code
             put   ../../../rom/scaffold.s
             put   ../../../rom/rom_color.s
+            put   ../../../rom/rom_tiles.s
             put   ../../../rom/rom_helpers.s
             put   ../../../rom/rom_input.s
             put   ../../../rom/rom_exec.s

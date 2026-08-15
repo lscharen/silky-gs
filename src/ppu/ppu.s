@@ -501,11 +501,12 @@ drawSprites
 :drawSprite8x8
 
 ; CHR-RAM support: recompile this sprite tile now if it was marked dirty by a
-; PPUDATA write since it was last drawn. HAS_CHR_RAM games always take the
+; PPUDATA write sinkce it was last drawn. HAS_CHR_RAM games always take the
 ; bitmap (as_bitmap/as_bitmap_clip) path below, never the compiled-sprite
 ; path above, so this one call covers both.
         DO   HAS_CHR_RAM
         jsr  CheckSprTileDirty
+        lda  sprTmp2              ; restore
         FIN
 
 ; This is the point to check if there is a compiled version of this sprite
@@ -589,65 +590,42 @@ as_bitmap_clip
         lsr                           ; Each tile is 128 bytes of data -- this clears the carry flag
         jmp  (drawProcsClipped,x)
 
-; CHR-RAM support: recompile one sprite tile (ConvertROMTile2, no
-; CompileSprite -- HAS_CHR_RAM games don't support compiled sprites) if its
-; dirty flag is set. Input: sprTmp2 low byte = tile ID (OAM[1]). 16-bit
+; CHR-RAM support: recompile one sprite tile (FastROMMaskedTileToLookup,
+; no CompileSprite -- HAS_CHR_RAM games don't support compiled sprites) if
+; its dirty flag is set. Input: sprTmp2 low byte = tile ID (OAM[1]). 16-bit
 ; A/X/Y required and preserved.
         DO    HAS_CHR_RAM
         mx    %00
 CheckSprTileDirty
-        lda   sprTmp2
         and   #$00FF
-        pha
-        tay
+        oral  spadr_lo                ; are we within the first or second set of tiles?
+        tax
+
+; The ChrRamDirty array is indexed 0-511, spanning *both* CHR-RAM pattern
+; tables
+
         sep   #$20                    ; 8-bit A for the byte-table check/clear
-        lda   [SprChrMem],y
-        beq   :sprclean_narrow
+        ldal  ChrRamDirty,x
+        beq   :sprclean
         lda   #0
-        sta   [SprChrMem],y           ; STZ has no abs,Y addressing mode
+        stal  ChrRamDirty,x           ; STZ has no long,x addressing mode
         rep   #$20
-        bra   :sprdirty
 
-:sprclean_narrow
-        rep   #$20
-        bra   :sprclean
+        txa                           ; get back the value $0 - $1FF
+        asl   a
+        asl   a
+        asl   a
+        asl   a
+        tax                           ; X = CHR-RAM source address (tile ID * 16)
 
-:sprdirty
-        tya
-        asl   a
-        asl   a
-        asl   a
-        asl   a                       ; A = tile ID * 16
-;        clc
-        adc   #PPU_SPR_TILE_ADDR
-        tax                           ; X = CHR-RAM source address
-
-        lda   #TileBuff
-        jsr   ConvertROMTile2
-
-        pla
-        pha
-        asl   a
-        asl   a
-        asl   a
-        asl   a
         asl   a
         asl   a
         asl   a                       ; A = tile ID * 128 (tiledata offset)
-        tax
-        ldy   #0
-:sprcploop
-        lda   TileBuff,y
-        stal  tiledata,x
-        iny
-        iny
-        inx
-        inx
-        cpy   #128
-        bcc   :sprcploop
+
+        jmp   FastROMMaskedTileToLookup
 
 :sprclean
-        pla
+        rep   #$20
         rts
         FIN
 

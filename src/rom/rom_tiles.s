@@ -7,8 +7,10 @@
 ; compilation machinery in that file -- see tests/rom/rom_tiles.test.mjs.
 ;
 ; Exports: ConvertROMTile3, ROMTileToBitmap, ConvertROMTile2, ROMTileToLookup,
-;          reverse2, reverse4, TileBuff, DLUT2, DLUT2_shft, DLUT4, MLUT4,
-;          FastROMTileToLookup, RLUT0_HI, RLUT0_LO, RLUT1_HI, RLUT1_LO
+;          reverse2, reverse4, TileBuff, DLUT2, DLUT2_shft, MLUT4,
+;          FastROMTileToLookup, RLUT0_HI, RLUT0_LO, RLUT1_HI, RLUT1_LO,
+;          FastROMMaskedTileToLookup, TILE_MASK, TILE_REVERSE
+;          (DLUT4 is commented out -- unused, see INPROGRESS.md)
 ;
             mx %00
 
@@ -290,6 +292,139 @@ ROMTileToLookup
             pla
             rts
 
+; FastROMMaskedTileToLookup -- direct CHR_ROM -> tiledata conversion for one tile
+;                              plus masks and 
+            mx    %00
+FastROMMaskedTileToLookup
+            jsr   FastROMTileToLookup  ; build the data tile in tiledata memory
+            phb
+
+            pea   #^tiledata           ; work fully within the tiledata bank
+            plb
+
+
+            ldy   TileDataPtr          ; load the base address of the tile data
+:loop
+            ldx:  0,y                  ; load the data word (0000_000w_wxxy_yzz0). LSB is always zero.
+            ldal  TILE_MASK,x          ; load the mask for this word (512 byte lookup table)
+            sta:  32,y
+            ldal  TILE_REVERSE,x       ; load the reversed value
+            sta:  66,y
+            tax
+            ldal  TILE_MASK,x
+            sta:  98,y
+
+            ldx:  2,y           ; load the data word (0000_000w_wxxy_yzz0). LSB is always zero.
+            ldal  TILE_MASK,x          ; load the mask for this word (512 byte lookup table)
+            sta:  34,y
+            ldal  TILE_REVERSE,x       ; load the reversed value
+            sta:  64,y
+            tax
+            ldal  TILE_MASK,x
+            sta:  96,y
+
+            tya
+            clc
+            adc   #4
+            tay
+            and   #$001F
+            bne   :loop
+
+            plb                 ; pop the extra byte we pushed to get into the tiledata bank
+            plb
+            rts
+
+; TILE_MASK / TILE_REVERSE -- lookup tables for FastROMMaskedTileToLookup,
+; indexed directly by a tiledata pixel word (the pre-shifted "0000000w
+; wxxyyzz0" format FastROMTileToLookup writes, i.e. word = combined << 1,
+; always even, 0..510). Since the loop above reads them with a 16-bit `ldal
+; TABLE,x`, each table is laid out as a flat 512-byte array where TABLE[word]
+; and TABLE[word+1] hold the little-endian 16-bit result for index `word` --
+; not 512 independently-addressable word entries.
+;
+; TILE_MASK[word]: expand each of the word's four 2-bit pixel fields into a
+; 4-bit mask nibble ($F if that pixel's value is 0 i.e. transparent, $0
+; otherwise), matching the two MLUT4 lookups ConvertROMTile2 stores at
+; buf[32+y]/buf[32+y+1] for the same word, packed into one 16-bit value.
+;
+; TILE_REVERSE[word]: reverse the order of the word's four 2-bit pixel
+; fields (0000000w wxxyyzz0 -> 0000000z zyyxxww0), i.e. reverse2() of the
+; word's pre-shift "combined" byte, re-shifted -- the per-word half of
+; ConvertROMTile2's horizontal-flip step (the caller is responsible for
+; swapping which of the row's two words each result lands in).
+;
+; Both derived and verified against scripts/lib/nesTileConvert.js's
+; convertRomTile2() -- 20,000/20,000 random tiles plus zero/solid edge cases
+; matched byte-for-byte when combined with FastROMMaskedTileToLookup's
+; row-at-a-time loop (including the TILE_MASK[TILE_REVERSE[w]] ==
+; reverse4(TILE_MASK[w]) identity the loop relies on for the h-flip mask).
+
+TILE_MASK   db    $FF,$FF,$FF,$F0,$FF,$F0,$FF,$F0,$FF,$0F,$FF,$00,$FF,$00,$FF,$00
+            db    $FF,$0F,$FF,$00,$FF,$00,$FF,$00,$FF,$0F,$FF,$00,$FF,$00,$FF,$00
+            db    $F0,$FF,$F0,$F0,$F0,$F0,$F0,$F0,$F0,$0F,$F0,$00,$F0,$00,$F0,$00
+            db    $F0,$0F,$F0,$00,$F0,$00,$F0,$00,$F0,$0F,$F0,$00,$F0,$00,$F0,$00
+            db    $F0,$FF,$F0,$F0,$F0,$F0,$F0,$F0,$F0,$0F,$F0,$00,$F0,$00,$F0,$00
+            db    $F0,$0F,$F0,$00,$F0,$00,$F0,$00,$F0,$0F,$F0,$00,$F0,$00,$F0,$00
+            db    $F0,$FF,$F0,$F0,$F0,$F0,$F0,$F0,$F0,$0F,$F0,$00,$F0,$00,$F0,$00
+            db    $F0,$0F,$F0,$00,$F0,$00,$F0,$00,$F0,$0F,$F0,$00,$F0,$00,$F0,$00
+            db    $0F,$FF,$0F,$F0,$0F,$F0,$0F,$F0,$0F,$0F,$0F,$00,$0F,$00,$0F,$00
+            db    $0F,$0F,$0F,$00,$0F,$00,$0F,$00,$0F,$0F,$0F,$00,$0F,$00,$0F,$00
+            db    $00,$FF,$00,$F0,$00,$F0,$00,$F0,$00,$0F,$00,$00,$00,$00,$00,$00
+            db    $00,$0F,$00,$00,$00,$00,$00,$00,$00,$0F,$00,$00,$00,$00,$00,$00
+            db    $00,$FF,$00,$F0,$00,$F0,$00,$F0,$00,$0F,$00,$00,$00,$00,$00,$00
+            db    $00,$0F,$00,$00,$00,$00,$00,$00,$00,$0F,$00,$00,$00,$00,$00,$00
+            db    $00,$FF,$00,$F0,$00,$F0,$00,$F0,$00,$0F,$00,$00,$00,$00,$00,$00
+            db    $00,$0F,$00,$00,$00,$00,$00,$00,$00,$0F,$00,$00,$00,$00,$00,$00
+            db    $0F,$FF,$0F,$F0,$0F,$F0,$0F,$F0,$0F,$0F,$0F,$00,$0F,$00,$0F,$00
+            db    $0F,$0F,$0F,$00,$0F,$00,$0F,$00,$0F,$0F,$0F,$00,$0F,$00,$0F,$00
+            db    $00,$FF,$00,$F0,$00,$F0,$00,$F0,$00,$0F,$00,$00,$00,$00,$00,$00
+            db    $00,$0F,$00,$00,$00,$00,$00,$00,$00,$0F,$00,$00,$00,$00,$00,$00
+            db    $00,$FF,$00,$F0,$00,$F0,$00,$F0,$00,$0F,$00,$00,$00,$00,$00,$00
+            db    $00,$0F,$00,$00,$00,$00,$00,$00,$00,$0F,$00,$00,$00,$00,$00,$00
+            db    $00,$FF,$00,$F0,$00,$F0,$00,$F0,$00,$0F,$00,$00,$00,$00,$00,$00
+            db    $00,$0F,$00,$00,$00,$00,$00,$00,$00,$0F,$00,$00,$00,$00,$00,$00
+            db    $0F,$FF,$0F,$F0,$0F,$F0,$0F,$F0,$0F,$0F,$0F,$00,$0F,$00,$0F,$00
+            db    $0F,$0F,$0F,$00,$0F,$00,$0F,$00,$0F,$0F,$0F,$00,$0F,$00,$0F,$00
+            db    $00,$FF,$00,$F0,$00,$F0,$00,$F0,$00,$0F,$00,$00,$00,$00,$00,$00
+            db    $00,$0F,$00,$00,$00,$00,$00,$00,$00,$0F,$00,$00,$00,$00,$00,$00
+            db    $00,$FF,$00,$F0,$00,$F0,$00,$F0,$00,$0F,$00,$00,$00,$00,$00,$00
+            db    $00,$0F,$00,$00,$00,$00,$00,$00,$00,$0F,$00,$00,$00,$00,$00,$00
+            db    $00,$FF,$00,$F0,$00,$F0,$00,$F0,$00,$0F,$00,$00,$00,$00,$00,$00
+            db    $00,$0F,$00,$00,$00,$00,$00,$00,$00,$0F,$00,$00,$00,$00,$00,$00
+
+TILE_REVERSE db   $00,$00,$80,$00,$00,$01,$80,$01,$20,$00,$A0,$00,$20,$01,$A0,$01
+            db    $40,$00,$C0,$00,$40,$01,$C0,$01,$60,$00,$E0,$00,$60,$01,$E0,$01
+            db    $08,$00,$88,$00,$08,$01,$88,$01,$28,$00,$A8,$00,$28,$01,$A8,$01
+            db    $48,$00,$C8,$00,$48,$01,$C8,$01,$68,$00,$E8,$00,$68,$01,$E8,$01
+            db    $10,$00,$90,$00,$10,$01,$90,$01,$30,$00,$B0,$00,$30,$01,$B0,$01
+            db    $50,$00,$D0,$00,$50,$01,$D0,$01,$70,$00,$F0,$00,$70,$01,$F0,$01
+            db    $18,$00,$98,$00,$18,$01,$98,$01,$38,$00,$B8,$00,$38,$01,$B8,$01
+            db    $58,$00,$D8,$00,$58,$01,$D8,$01,$78,$00,$F8,$00,$78,$01,$F8,$01
+            db    $02,$00,$82,$00,$02,$01,$82,$01,$22,$00,$A2,$00,$22,$01,$A2,$01
+            db    $42,$00,$C2,$00,$42,$01,$C2,$01,$62,$00,$E2,$00,$62,$01,$E2,$01
+            db    $0A,$00,$8A,$00,$0A,$01,$8A,$01,$2A,$00,$AA,$00,$2A,$01,$AA,$01
+            db    $4A,$00,$CA,$00,$4A,$01,$CA,$01,$6A,$00,$EA,$00,$6A,$01,$EA,$01
+            db    $12,$00,$92,$00,$12,$01,$92,$01,$32,$00,$B2,$00,$32,$01,$B2,$01
+            db    $52,$00,$D2,$00,$52,$01,$D2,$01,$72,$00,$F2,$00,$72,$01,$F2,$01
+            db    $1A,$00,$9A,$00,$1A,$01,$9A,$01,$3A,$00,$BA,$00,$3A,$01,$BA,$01
+            db    $5A,$00,$DA,$00,$5A,$01,$DA,$01,$7A,$00,$FA,$00,$7A,$01,$FA,$01
+            db    $04,$00,$84,$00,$04,$01,$84,$01,$24,$00,$A4,$00,$24,$01,$A4,$01
+            db    $44,$00,$C4,$00,$44,$01,$C4,$01,$64,$00,$E4,$00,$64,$01,$E4,$01
+            db    $0C,$00,$8C,$00,$0C,$01,$8C,$01,$2C,$00,$AC,$00,$2C,$01,$AC,$01
+            db    $4C,$00,$CC,$00,$4C,$01,$CC,$01,$6C,$00,$EC,$00,$6C,$01,$EC,$01
+            db    $14,$00,$94,$00,$14,$01,$94,$01,$34,$00,$B4,$00,$34,$01,$B4,$01
+            db    $54,$00,$D4,$00,$54,$01,$D4,$01,$74,$00,$F4,$00,$74,$01,$F4,$01
+            db    $1C,$00,$9C,$00,$1C,$01,$9C,$01,$3C,$00,$BC,$00,$3C,$01,$BC,$01
+            db    $5C,$00,$DC,$00,$5C,$01,$DC,$01,$7C,$00,$FC,$00,$7C,$01,$FC,$01
+            db    $06,$00,$86,$00,$06,$01,$86,$01,$26,$00,$A6,$00,$26,$01,$A6,$01
+            db    $46,$00,$C6,$00,$46,$01,$C6,$01,$66,$00,$E6,$00,$66,$01,$E6,$01
+            db    $0E,$00,$8E,$00,$0E,$01,$8E,$01,$2E,$00,$AE,$00,$2E,$01,$AE,$01
+            db    $4E,$00,$CE,$00,$4E,$01,$CE,$01,$6E,$00,$EE,$00,$6E,$01,$EE,$01
+            db    $16,$00,$96,$00,$16,$01,$96,$01,$36,$00,$B6,$00,$36,$01,$B6,$01
+            db    $56,$00,$D6,$00,$56,$01,$D6,$01,$76,$00,$F6,$00,$76,$01,$F6,$01
+            db    $1E,$00,$9E,$00,$1E,$01,$9E,$01,$3E,$00,$BE,$00,$3E,$01,$BE,$01
+            db    $5E,$00,$DE,$00,$5E,$01,$DE,$01,$7E,$00,$FE,$00,$7E,$01,$FE,$01
+
 ; FastROMTileToLookup -- direct CHR_ROM -> tiledata conversion for one tile
 ;
 ; Unlike ROMTileToLookup (which builds a 32-byte intermediate lookup-index
@@ -315,8 +450,9 @@ ROMTileToLookup
 ; for each CHR-ROM byte (a value 0-255, unrelated to the write offset) --
 ; phy/ply bracket that reuse so the write offset survives.
 ;
-; A = destination in the tiledata bank
+; A = destination in the tiledata bank (assumes it is within the allocated range)
 ; X = address in the CHR-ROM bank
+
             mx    %00
 FastROMTileToLookup
 TileDataPtr equ   tmp0
@@ -457,10 +593,12 @@ DLUT2_shft  db    $00,$10,$40,$50    ; CHR_ROM[0] = xy, CHR_ROM[8] = 00 -> 0x0y
             db    $A0,$B0,$E0,$F0    ; CHR_ROM[0] = xy, CHR_ROM[8] = 11
 
 ; Look up the 4-bit indexes for the data words
-DLUT4       db    $00,$01,$10,$11    ; CHR_ROM[0] = xx, CHR_ROM[8] = 00
-            db    $02,$03,$12,$13    ; CHR_ROM[0] = xx, CHR_ROM[8] = 01
-            db    $20,$21,$30,$31    ; CHR_ROM[0] = xx, CHR_ROM[8] = 10
-            db    $22,$23,$32,$33    ; CHR_ROM[0] = xx, CHR_ROM[8] = 11
+; Unused -- no remaining call site references DLUT4. Commented out rather
+; than deleted (see INPROGRESS.md legacy-helper removal assessment).
+;DLUT4       db    $00,$01,$10,$11    ; CHR_ROM[0] = xx, CHR_ROM[8] = 00
+;            db    $02,$03,$12,$13    ; CHR_ROM[0] = xx, CHR_ROM[8] = 01
+;            db    $20,$21,$30,$31    ; CHR_ROM[0] = xx, CHR_ROM[8] = 10
+;            db    $22,$23,$32,$33    ; CHR_ROM[0] = xx, CHR_ROM[8] = 11
 
 MLUT4       db    $FF,$F0,$0F,$00
             db    $F0,$F0,$00,$00

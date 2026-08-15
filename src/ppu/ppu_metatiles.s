@@ -221,33 +221,50 @@ CheckBgTileDirty
         phx
         phy
 
-        xba                           ; defensive clear of high accumulator byte
-        lda   #0
-        xba
+; ChrRamDirty is indexed 0-511, spanning *both* CHR-RAM pattern tables (see
+; PPUDATA_WRITE, ppu_regs.s); merge in bgadr_lo (0 or $0100) so this checks
+; the table the background is actually reading from right now.
 
-        tay                           ; Y = tile ID (zero-extended)
-        lda   [TileChrMem],y
+        rep   #$20                    ; go to 16-bit mode
+        and   #$00FF                  ; isolate the tile index
+        oral  bgadr_lo
+        tax
+
+        sep   #$20                    ; 8-bit A for the byte-table check/clear
+        ldal  ChrRamDirty,x
         beq   :bgclean
         lda   #0
-        sta   [TileChrMem],y
-        
+        stal  ChrRamDirty,x           ; STZ has no long,x addressing mode
+
         rep   #$30                    ; 16-bit A/X/Y for the recompile
-        tya
-        pha
-        asl   a
-        asl   a
-        asl   a
-        asl   a                       ; A = tile ID * 16
-        clc
-        adc   #PPU_BG_TILE_ADDR
-        tax                           ; X = CHR-RAM source address
 
-        pla
-        xba                           ; A = tile ID << 8 (compiled-code dest page)
-        tay
+; Both the CHR-RAM source address and the tiledata destination stay
+; table-aware -- background respects bgadr the same way sprites respect
+; spadr in CheckSprTileDirty (ppu.s), so the combined (tile ID | bgadr_lo)
+; index is kept all the way through, not just for the source address.
 
-        lda   #TileBuff
-        jsr   ConvertROMTile3
+        txa                           ; A = combined index (tile ID | bgadr_lo)
+        asl   a
+        asl   a
+        asl   a
+        asl   a                       ; A = tile ID * 16 + bgadr (CHR-RAM source address)
+        tax                           ; X = CHR-RAM source address (FastROMTileToLookup's X arg)
+
+        asl   a
+        asl   a
+        asl   a                       ; A = combined index * 128 (tiledata destination)
+        pha                           ; save it -- also needed as CompileTile's bitmap-source address,
+
+        jsr   FastROMTileToLookup     ; A = tiledata destination, X = CHR-RAM source address -- writes the
+                                       ; 32-byte bitmap directly into tiledata; trashes A/X/Y
+
+        lda   1,s                     ; reload the tiledata destination of combined index * 128
+        asl   a                       ; one more shift spills the high bit and leaves just the tile ID * 256
+        tay                           ; Y = compiled-code destination page (CompileTile's Y arg)
+
+        pla                           ; A = tiledata destination again (CompileTile's "low address of bitmap" arg)
+        ldx   #^tiledata              ; X = bank of the bitmap source (CompileTile's "high address" arg)
+        jsr   CompileTile             ; A = bitmap source addr, X = bitmap source bank, Y = dest page
 
         sep   #$20
 :bgclean

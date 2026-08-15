@@ -178,6 +178,19 @@ DrawPPUTile
         sta   :p1+1               ; A is 8-bit, but need a 16-bit load.  Can't risk copying a stale high word ffrom A into Y.
         sta   :p2+2               ; This is intentionally going into the high byte (multiply by 256)
 :p1     ldy   #$0000
+
+; ChrRamDirty is indexed 0-511, spanning *both* CHR-RAM pattern tables (see
+; PPUDATA_WRITE, ppu_regs.s), so merge in bgadr_lo (0 or $0100) to check the
+; table the background is actually reading from right now -- otherwise this
+; only ever sees pattern table 0's dirty flags and stale tiles never get
+; recompiled whenever bgadr is $1000. The same combined value is reused
+; below to derive the CHR-RAM source address (same technique as
+; CheckSprTileDirty, ppu.s -- see INPROGRESS.md).
+        rep   #$20                    ; 16-bit A for the table-offset merge
+        tya
+        oral  bgadr_lo
+        tay                           ; Y = dirty-array index (0-511)
+        sep   #$20                    ; back to 8-bit A for the byte-table check/clear
         lda   [TileChrMem],y
         beq   :bgt_clean
         lda   #0
@@ -186,13 +199,11 @@ DrawPPUTile
         phx
         rep   #$30
 
-        tya
+        tya                           ; A = combined index (tile ID | bgadr_lo)
         asl   a
         asl   a
         asl   a
-        asl   a                       ; A = tile ID * 16
-;        clc                          ; High bits are zero, so carry will be cleared
-        adc   #PPU_BG_TILE_ADDR
+        asl   a                       ; A = tile ID * 16 + bgadr (CHR-RAM source address)
         tax                           ; X = CHR-RAM source address
 
         lda   #TileBuff
