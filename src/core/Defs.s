@@ -111,21 +111,26 @@ ROMStk                 equ   144
 OldOneSec              equ   146
 NesTop                 equ   148
 
-unused150              equ   150
-unused151              equ   151
+; RenderPPUAttr (ppu_attributes.s) locals. These must survive a nested
+; `jsr SyncPPUMetatile` call (which, for HAS_CHR_RAM games, can go many
+; frames deep into CheckBgTileDirty/CompileTile/FastROMTileToLookup), so
+; they are NOT allowed to live in the generic tmp0-15 scratch pool -- those
+; are documented as leaf-routine-only, freely reused by any callee, and
+; using them here caused a real bug: CompileTile (core/tiles/CompileTile.s)
+; uses tmp4/tmp5/tmp7/tmp8 as its own scratch, silently aliasing
+; RenderPPUAttr's tmp5 (:attr_diff) and tmp7 (:mt_base2) whenever a dirty
+; CHR-RAM tile got recompiled mid-attribute-update, corrupting the
+; not-yet-consumed quadrant diff/address values.
+RenderAttrDiff         equ   150
+RenderAttrCopy         equ   154
+RenderMtBase2          equ   158
 
 ScreenRows             equ   152
-
-unused154              equ   154
-unused155              equ   155
 
 NesBottom              equ   156
 ;ScreenBase             equ   158
 
-unused158              equ   158
-unused159              equ   159
-
-; Free space from 160 to 192
+; Free space from 160 to 182
 STATE_REG_R0W0         equ   160         ; R0W0
 STATE_REG_BLIT         equ   162         ; Value used for blit (could be R0W0 or R0W1)
 STK_SAVE               equ   164         ; Only used by the lite renderer
@@ -140,7 +145,12 @@ CMPL_BANK              equ   176         ; ^tiledata << 8 | $01 (Bank $01 in low
 sprTmp5Hi              equ   178
 sprTmp6Lo              equ   180
 
-; Free space from 182 to 192
+; RenderPPUAttr locals, continued from above (same rationale)
+RenderMtBase64         equ   182
+RenderMtBase66         equ   184
+RenderMtBase           equ   186
+
+; Free space from 188 to 192
 
 blttmp                 equ   192         ; 32 bytes of local cache/scratch space for blitter
 

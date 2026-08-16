@@ -172,12 +172,10 @@ DrawPPUTile
 
         DO    HAS_CHR_RAM
 ; CHR-RAM support: if this tile ID was marked dirty by a PPUDATA write since
-; it was last drawn, recompile it now (ConvertROMTile3) before using the
+; it was last drawn, recompile it now (FastROMTileToLookup + CompileTile,
+; same technique as CheckBgTileDirty in ppu_metatiles.s) before using the
 ; (possibly stale) compiled code below. A = tile ID, X = PPU address (both
 ; must be preserved for the rest of the routine).
-        sta   :p1+1               ; A is 8-bit, but need a 16-bit load.  Can't risk copying a stale high word ffrom A into Y.
-        sta   :p2+2               ; This is intentionally going into the high byte (multiply by 256)
-:p1     ldy   #$0000
 
 ; ChrRamDirty is indexed 0-511, spanning *both* CHR-RAM pattern tables (see
 ; PPUDATA_WRITE, ppu_regs.s), so merge in bgadr_lo (0 or $0100) to check the
@@ -185,35 +183,52 @@ DrawPPUTile
 ; only ever sees pattern table 0's dirty flags and stale tiles never get
 ; recompiled whenever bgadr is $1000. The same combined value is reused
 ; below to derive the CHR-RAM source address (same technique as
-; CheckSprTileDirty, ppu.s -- see INPROGRESS.md).
-        rep   #$20                    ; 16-bit A for the table-offset merge
-        tya
-        oral  bgadr_lo
-        tay                           ; Y = dirty-array index (0-511)
-        sep   #$20                    ; back to 8-bit A for the byte-table check/clear
-        lda   [TileChrMem],y
-        beq   :bgt_clean
-        lda   #0
-        sta   [TileChrMem],y
+; CheckSprTileDirty, ppu.s / CheckBgTileDirty, ppu_metatiles.s).
 
         phx
-        rep   #$30
+        rep   #$20                    ; 16-bit A for the table-offset merge
+        and   #$00FF                  ; isolate the tile index
+        oral  bgadr_lo
+        tax                           ; X = dirty-array index (0-511)
 
-        tya                           ; A = combined index (tile ID | bgadr_lo)
+        sep   #$20                    ; back to 8-bit A for the byte-table check/clear
+        ldal  ChrRamDirty,x
+        beq   :bgt_clean
+        lda   #0
+        stal  ChrRamDirty,x           ; STZ has no long,x addressing mode
+
+        rep   #$30                    ; 16-bit A/X/Y for the recompile
+
+; Both the CHR-RAM source address and the tiledata destination stay
+; table-aware -- the combined (tile ID | bgadr_lo) index is kept all the way
+; through, matching CheckBgTileDirty/CheckSprTileDirty.
+
+        txa                           ; A = combined index (tile ID | bgadr_lo)
         asl   a
         asl   a
         asl   a
         asl   a                       ; A = tile ID * 16 + bgadr (CHR-RAM source address)
-        tax                           ; X = CHR-RAM source address
+        tax                           ; X = CHR-RAM source address (FastROMTileToLookup's X arg)
 
-        lda   #TileBuff
-:p2     ldy   #$0000
-        jsr   ConvertROMTile3
+        asl   a
+        asl   a
+        asl   a                       ; A = combined index * 128 (tiledata destination)
+        pha                           ; save it -- also needed as CompileTile's bitmap-source address
+
+        jsr   FastROMTileToLookup     ; A = tiledata destination, X = CHR-RAM source address -- writes the
+                                       ; 32-byte bitmap directly into tiledata; trashes A/X/Y
+
+        lda   1,s                     ; reload the tiledata destination of combined index * 128
+        asl   a                       ; one more shift spills the high bit and leaves just the tile ID * 256
+        tay                           ; Y = compiled-code destination page (CompileTile's Y arg)
+
+        pla                           ; A = tiledata destination again (CompileTile's "low address of bitmap" arg)
+        ldx   #^tiledata              ; X = bank of the bitmap source (CompileTile's "high address" arg)
+        jsr   CompileTile             ; A = bitmap source addr, X = bitmap source bank, Y = dest page
 
         sep   #$20
-        plx
-
 :bgt_clean
+        plx
         FIN
 
         clc
@@ -245,12 +260,16 @@ bad_tile
 
         mx    %10
 RenderPPUAttr
-:attr_diff equ tmp5
-:attr_copy equ tmp6
-:mt_base2  equ tmp7              ; metatile base PPU address
-:mt_base64 equ tmp10
-:mt_base66 equ tmp11
-:mt_base   equ tmp12
+; These locals must survive a nested `jsr SyncPPUMetatile` call (which can
+; recurse into CheckBgTileDirty/CompileTile/FastROMTileToLookup for
+; HAS_CHR_RAM games), so they live in dedicated DP slots (Defs.s) rather
+; than the generic tmp0-15 scratch pool -- see the comment there for why.
+:attr_diff equ RenderAttrDiff
+:attr_copy equ RenderAttrCopy
+:mt_base2  equ RenderMtBase2     ; metatile base PPU address
+:mt_base64 equ RenderMtBase64
+:mt_base66 equ RenderMtBase66
+:mt_base   equ RenderMtBase
 
         sta  :attr_copy             ; Keep a copy of the actual value
         eorl PPU_MEM+TILE_SHADOW,x  ; Get the bit difference from the previous applied value
