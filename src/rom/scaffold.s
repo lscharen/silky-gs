@@ -121,7 +121,7 @@ NES_StartUp
 
             DO    HAS_CHR_RAM
             ldx   #0
-            lda   #$8080          ; both bytes = $80 (neither BG nor sprite form ready)
+            lda   #$0303           ; both bytes = CHRRAM_BG_DIRTY+CHRRAM_SPR_DIRTY
 :mtloop     sta   ChrRamDirty,x
             inx
             inx

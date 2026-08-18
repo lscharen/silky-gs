@@ -320,7 +320,9 @@ PPUDATA_WRITE ENT
         lsr
         tax
         sep  #$20
-        lda  #$80              ; neither BG nor sprite form ready (see ChrRamDirty tri-state, ppu_regs.s PPUCTRL_WRITE)
+        lda  #{CHRRAM_BG_DIRTY+CHRRAM_SPR_DIRTY}  ; both forms need recompiling -- see CHRRAM_BG_DIRTY/
+                                                 ; CHRRAM_SPR_DIRTY (CoreData.s) for why these are two
+                                                 ; independent bits, not one shared flag
         stal ChrRamDirty,x
         bra  :done
 :not_chr

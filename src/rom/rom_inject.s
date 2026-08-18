@@ -573,6 +573,7 @@ LDA_ABS_Y   mac
             plx
             pha
             pla              ; required reload to make sure Z,N flags are set correctly.
+            rts
             <<<
 
 STA_ABS_Y   mac

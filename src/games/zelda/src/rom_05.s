@@ -37,6 +37,7 @@ WieldBomb  EXT
 WieldCandle  EXT
 WriteBlankPrioritySprites  EXT
 ColumnDirectoryOW  EXT
+ColumnDirectoryOW1 EXT
 LevelNumberTransferBuf  EXT
 TriforceRow0TransferBuf  EXT
 
@@ -1189,8 +1190,11 @@ CopyColumnOrRowToTileBuf
 
 WaitAndScrollToSplitBottom ENT
             JSR   LDA_2002
-    AND #$40
-    BEQ WaitAndScrollToSplitBottom
+;    AND #$40
+;    BEQ WaitAndScrollToSplitBottom
+    bra  :out                           ; IIgs -- no busy waiting
+    ds   2
+
             JSR   LDA_2002
 
     ; Wait cycles.
@@ -1214,6 +1218,7 @@ WaitAndScrollToSplitBottom ENT
     NOP
     NOP
     NOP
+:out                            ; IIgs -- skip all the wait states
     LDA GameMode
     CMP #$08
     BCS :Anon0036
@@ -5748,9 +5753,9 @@ LayoutRoomOrCaveOW
     TAX
 
     ; Load the column table address for this descriptor in [$04:05].
-    LDA ColumnDirectoryOW, X
+    LDA ColumnDirectoryOW,X
     STA $04
-    LDA ColumnDirectoryOW+1, X
+    LDA ColumnDirectoryOW1,X
     STA $05
     LDA ($02), Y                ; Get the column descriptor.
     AND #$0F                    ; Put column index in X.
@@ -5960,7 +5965,7 @@ PatchColumnDirectoryForCellar
     LDX #>ColumnHeapUWCellar
 :Anon0147
     STA ColumnDirectoryOW
-    STX ColumnDirectoryOW+1
+    STX ColumnDirectoryOW1
     RTS
 
 SubroomLayoutAddrs

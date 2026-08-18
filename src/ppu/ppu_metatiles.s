@@ -232,9 +232,10 @@ CheckBgTileDirty
 
         sep   #$20                    ; 8-bit A for the byte-table check/clear
         ldal  ChrRamDirty,x
+        bit   #CHRRAM_BG_DIRTY        ; test only the background-form-dirty bit
         beq   :bgclean
-        lda   #0
-        stal  ChrRamDirty,x           ; STZ has no long,x addressing mode
+        and   #CHRRAM_BG_DIRTY!$FF    ; clear only the BG bit, preserve the sprite bit
+        stal  ChrRamDirty,x
 
         rep   #$30                    ; 16-bit A/X/Y for the recompile
 

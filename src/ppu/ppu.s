@@ -672,9 +672,10 @@ CheckSprTileDirty
 
         sep   #$20                    ; 8-bit A for the byte-table check/clear
         ldal  ChrRamDirty,x
+        bit   #CHRRAM_SPR_DIRTY       ; test only the sprite-form-dirty bit
         beq   :sprclean
-        lda   #0
-        stal  ChrRamDirty,x           ; STZ has no long,x addressing mode
+        and   #CHRRAM_SPR_DIRTY!$FF   ; clear only the sprite bit, preserve the BG bit
+        stal  ChrRamDirty,x
         rep   #$20
 
         txa                           ; get back the value $0 - $1FF

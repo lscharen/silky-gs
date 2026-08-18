@@ -470,7 +470,9 @@ LevelNumberTransferBuf ENT
             db    $62, $00, $FF
 
 ColumnDirectoryOW ENT
-            db    $D8, $9B, $0D, $9C, $3E, $9C, $80, $9C
+            db    $D8
+ColumnDirectoryOW1 ENT
+            db    $9B, $0D, $9C, $3E, $9C, $80, $9C
             db    $C4, $9C, $F6, $9C, $32, $9D, $6D, $9D
             db    $A8, $9D, $E6, $9D, $27, $9E, $6C, $9E
             db    $A9, $9E, $DF, $9E, $21, $9F, $55, $9F
