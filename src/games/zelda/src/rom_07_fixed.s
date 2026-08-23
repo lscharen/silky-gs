@@ -255,7 +255,9 @@ InitMode2_Submodes EXT
 TransferCurTileBuf EXT
 UpdateMode2Load_Full EXT
 LevelPaletteRow7TransferBuf EXT
+LevelPaletteRow7Byte3 EXT
 MenuPalettesTransferBuf EXT
+MenuPalettesByte20 EXT
             FIN
 
 ; .INCLUDE "Variables.inc" (hoisted to file header)
@@ -1466,7 +1468,7 @@ PatchAndCueLevelPalettesTransferAndAdvanceSubmode ENT
     ; Get the color at byte 1 of row 4, 5, or 6 of menu palettes,
     ; according to save slot. This holds Link's color in that
     ; save slot.
-    LDA MenuPalettesTransferBuf+20, Y
+    LDA MenuPalettesByte20, Y
 
     ; Put the value in byte 1 of row 4 of level palettes that will
     ; be transferred.
@@ -1573,7 +1575,7 @@ Z07Int_InitMode5Play
 
 :Z07Int_PatchColors
     LDA LevelInfo_PalettesTransferBuf+31, Y
-    STA LevelPaletteRow7TransferBuf+3, Y
+    STA LevelPaletteRow7Byte3, Y
     DEY
     BPL :Z07Int_PatchColors
     LDX #$06

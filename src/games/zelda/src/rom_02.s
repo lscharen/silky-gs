@@ -17,6 +17,8 @@ ResetRoomTileObjInfo  EXT
 SilenceAllSound  EXT
 UpdateWorldCurtainEffect_Bank2  EXT
 MenuPalettesTransferBuf  EXT
+MenuPalettesByte20  EXT
+MenuPalettesByte32  EXT
 
 SetMirrorMode  EXT
 
@@ -1695,7 +1697,7 @@ InitModeEandF_Full ENT
 :Anon0006
     ; Replace byte 1 of row 3 of sprite palette in transfer buf
     ; TileBufSelector=$12.
-    STA MenuPalettesTransferBuf+32
+    STA MenuPalettesByte32
     LDA #$12
     BNE :SelectMenuBuf          ; Go cue transfer of menu palettes and advance submode.
 
@@ -2709,7 +2711,7 @@ InitMode1_Sub1
 
     ; Put the color in the byte 2 of row for current slot in
     ; sprite palette that will be transferred.
-    STA MenuPalettesTransferBuf+20, X
+    STA MenuPalettesByte20, X
     PLA                         ; Restore ring offset.
     CLC
     ADC #$28                    ; Point to the ring in the next save slot.

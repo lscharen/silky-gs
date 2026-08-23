@@ -39,7 +39,9 @@ WriteBlankPrioritySprites  EXT
 ColumnDirectoryOW  EXT
 ColumnDirectoryOW1 EXT
 LevelNumberTransferBuf  EXT
+LevelNumberByte9  EXT
 TriforceRow0TransferBuf  EXT
+TriforceRow0Content  EXT
 
 SetMirrorMode  EXT
 
@@ -488,7 +490,7 @@ UpdateMenuStartOW
     jsr LDXL_TriforceTransferBufOffsets_Y
 ;    LDA TriforceTransferBufTiles, Y
     jsr LDAL_TriforceTransferBufTiles_Y
-    STA TriforceRow0TransferBuf+4, X
+    STA TriforceRow0Content, X
     DEY
     BPL :Anon0007
 
@@ -529,7 +531,7 @@ UpdateMenuStartOW
     ;
     ; Else replace it with the one at the current triforce tile slot
     ; in the replacement list.
-    LDA TriforceRow0TransferBuf+4, X
+    LDA TriforceRow0Content, X
     CMP #$E5
     BEQ :ReplaceWithF5
     CMP #$E6
@@ -541,7 +543,7 @@ UpdateMenuStartOW
 :ReplaceWithF5
     LDA #$F5
 :Anon0008
-    STA TriforceRow0TransferBuf+4, X
+    STA TriforceRow0Content, X
 
 :NextLoopTile
     ; Bottom of the inner loop.
@@ -6512,7 +6514,7 @@ InitMode3_Sub6 ENT
 InitMode3_Sub7 ENT
     LDA LevelInfo_LevelNumber
     BEQ L1701A_Exit             ; If level is OW, then go to next submode.
-    STA LevelNumberTransferBuf+9    ; Patch the level number character in "LEVEL-X" transfer buf.
+    STA LevelNumberByte9    ; Patch the level number character in "LEVEL-X" transfer buf.
     LDA #$0C                    ; Cue transfer of "LEVEL-X" text and go to next submode.
     BNE SelectTransferBuf
 

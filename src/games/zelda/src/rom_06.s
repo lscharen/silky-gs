@@ -496,19 +496,32 @@ CommonDataBlock_Bank6
 ; .SEGMENT "BANK_06_DATA"
             org  $67F0
 
+; NOTE: OMF loader relocation drops the constant addend on an EXT symbol
+; used as "EXT_LABEL+N" (confirmed via debugger; the Merlin32 listing shows
+; the correct combined address, but the running program loads the bare
+; EXT_LABEL address instead). The following anchor labels give every
+; cross-file byte-patch offset into these buffers its own bare EXT/ENT pair
+; so no addition survives into the relocated reference.
 MenuPalettesTransferBuf ENT
             db    $3F, $00, $20, $0F, $30, $00, $12, $0F
             db    $16, $27, $36, $0F, $0C, $1C, $2C, $0F
-            db    $12, $1C, $2C, $0F, $29, $27, $07, $0F
+            db    $12, $1C, $2C, $0F
+MenuPalettesByte20 ENT              ; = MenuPalettesTransferBuf+20
+            db    $29, $27, $07, $0F
             db    $22, $27, $07, $0F, $26, $27, $07, $0F
+MenuPalettesByte32 ENT              ; = MenuPalettesTransferBuf+32
             db    $15, $27, $30, $FF
 
 LevelPaletteRow7TransferBuf ENT
-            db    $3F, $1C, $04, $0F, $0F, $0F, $0F, $FF
+            db    $3F, $1C, $04
+LevelPaletteRow7Byte3 ENT           ; = LevelPaletteRow7TransferBuf+3
+            db    $0F, $0F, $0F, $0F, $FF
 
 LevelNumberTransferBuf ENT
             db    $20, $42, $07, $15, $0E, $1F, $0E, $15
-            db    $62, $00, $FF
+            db    $62
+LevelNumberByte9 ENT                ; = LevelNumberTransferBuf+9
+            db    $00, $FF
 
 ColumnDirectoryOW ENT
             db    $D8
@@ -519,7 +532,9 @@ ColumnDirectoryOW1 ENT
             db    $A9, $9E, $DF, $9E, $21, $9F, $55, $9F
 
 TriforceRow0TransferBuf ENT
-            db    $2A, $EE, $04, $ED, $E9, $EA, $EE, $FF
+            db    $2A, $EE, $04, $ED
+TriforceRow0Content ENT             ; = TriforceRow0TransferBuf+4
+            db    $E9, $EA, $EE, $FF
 
 TriforceRow1TransferBuf
             db    $2B, $0D, $06, $ED, $E9, $24, $24, $EA

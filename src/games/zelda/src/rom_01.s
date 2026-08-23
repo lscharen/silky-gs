@@ -18,6 +18,7 @@ ResetInvObjState  EXT
 SetMMC1Control_Local5  EXT
 SwitchBank_Local5  EXT
 MenuPalettesTransferBuf  EXT
+MenuPalettesByte20  EXT
 
 SetMirrorMode  EXT
 
@@ -4702,7 +4703,7 @@ HandleClass2
     LDY InvRing                 ; Get ring in inventory.
     LDA LinkColors_CommonCode, Y    ; Get the color for this ring value.
     LDY SaveSlotToPaletteRowOffset, X    ; Get the offset of row 4, 5, or 6, depending on save slot.
-    STA MenuPalettesTransferBuf+20, Y    ; Patch the color into the menu palette.
+    STA MenuPalettesByte20, Y    ; Patch the color into the menu palette.
     JMP PatchAndCueLevelPalettesTransferAndAdvanceSubmode    ; Then patch the color into the level's palette.
 
 TakeOneRupee
@@ -4991,7 +4992,9 @@ ObjAnimAttrHeap
             db    $01, $01, $02, $03
 
 SpriteOffsets ENT
-            db    $60, $BC, $64, $B8, $68, $B4, $6C, $B0
+            db    $60
+SpriteOffsetsByte1 ENT              ; = SpriteOffsets+1 -- see rom_06.s NOTE on EXT+N relocation
+            db    $BC, $64, $B8, $68, $B4, $6C, $B0
             db    $70, $CC, $74, $C8, $78, $C4, $7C, $C0
             db    $80, $DC, $84, $D8, $88, $D4, $8C, $D0
             db    $90, $EC, $94, $E8, $98, $E4, $9C, $E0

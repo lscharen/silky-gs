@@ -39,6 +39,7 @@ PlaySample  EXT
 ResetShoveInfoAndInvincibilityTimer  EXT
 ShowLinkSpritesBehindHorizontalDoors  EXT
 SpriteOffsets  EXT
+SpriteOffsetsByte1  EXT
 SpriteRelativeExtents  EXT
 TryTakeItem  EXT
 WriteBlankPrioritySprites  EXT
@@ -4409,7 +4410,7 @@ L_Wallmaster_State1
     TAY
     LDA SpriteOffsets, Y
     STA $00
-    LDA SpriteOffsets+1, Y
+    LDA SpriteOffsetsByte1, Y
 
 :PatchSprites
     STA $01
