@@ -9,6 +9,27 @@ SetMirrorMode  EXT
 
             ds \,$00
 
+; Create stubs to handle converting self-references into long addressing so it works when the ROM code is
+; in another IIgs memory bank.  Our memory model keeps the PBR in a fixed bank so that any access to RAM
+; or high ROM ($C000 - $FFFF) always work.  Refrences to the lower ROM ($8000 - $BFFF) need to be translated
+; to the correct bank.  The stubs are used to convert the self-references into long addressing so that they work
+; properly.
+
+LDAL_LevelBlockAddrsQ1_X LDA_LONG_X LevelBlockAddrsQ1
+LDAL_LevelBlockAddrsQ2_X LDA_LONG_X LevelBlockAddrsQ2
+LDAL_LevelInfoAddrs_X LDA_LONG_X LevelInfoAddrs
+LDAL_CommonDataBlockAddr_Bank6_X LDA_LONG_X CommonDataBlockAddr_Bank6
+LDAL_LevelInfoUWQ2ReplacementAddrs_M2_Y LDA_LONG_Y LevelInfoUWQ2ReplacementAddrs-2
+LDAL_LevelInfoUWQ2ReplacementAddrs_M1_Y LDA_LONG_Y LevelInfoUWQ2ReplacementAddrs-1
+LDYL_LevelInfoUWQ2ReplacementSizes_M1_X LDY_LONG_X LevelInfoUWQ2ReplacementSizes-1
+LDXL_LevelBlockAttrsBQ2ReplacementOffsets_Y LDX_LONG_Y LevelBlockAttrsBQ2ReplacementOffsets
+LDAL_LevelBlockAttrsBQ2ReplacementValues_Y LDA_LONG_Y LevelBlockAttrsBQ2ReplacementValues
+LDAL_TransferBufAddrs_X LDA_LONG_X TransferBufAddrs
+LDAL_TransferBufAddrs_P1_X LDA_LONG_X TransferBufAddrs+1
+
+; MMC1 memory helper for indirect loads
+LDA_00_Y MMC1_LDA_IND_Y $00
+
             use   BeginEndVars.inc
             use   CaveVars.inc
             use   CommonVars.inc
@@ -17,6 +38,11 @@ SetMirrorMode  EXT
 
 ; Do not encroach on WRAM (battery-backed space)
             ds    $6000-*
+
+; Anchor label at $6C90, exported so rom_01.s's CopyCommonCodeToRam can replicate
+; the shared "Bank 1 common RAM code" block into this bank too (see BANK_01_CODE.md).
+            ds    $6C90-*
+ROM06CodeAnchor ENT
 
 ; Pad up to $8000
             ds    $8000-*
@@ -88,18 +114,22 @@ InitMode2_Sub0
     BNE :SecondQuest
 
     ; First quest.
-    LDA LevelBlockAddrsQ1, X
+;    LDA LevelBlockAddrsQ1, X
+    jsr LDAL_LevelBlockAddrsQ1_X
     STA $00
     INX
-    LDA LevelBlockAddrsQ1, X
+;    LDA LevelBlockAddrsQ1, X
+    jsr LDAL_LevelBlockAddrsQ1_X
     JMP :Copy
 
 :SecondQuest
     ; Second quest.
-    LDA LevelBlockAddrsQ2, X
+;    LDA LevelBlockAddrsQ2, X
+    jsr LDAL_LevelBlockAddrsQ2_X
     STA $00
     INX
-    LDA LevelBlockAddrsQ2, X
+;    LDA LevelBlockAddrsQ2, X
+    jsr LDAL_LevelBlockAddrsQ2_X
 
 :Copy
     STA $01
@@ -112,10 +142,12 @@ InitMode2_Sub1
     LDA CurLevel
     ASL
     TAX
-    LDA LevelInfoAddrs, X
+;    LDA LevelInfoAddrs, X
+    jsr LDAL_LevelInfoAddrs_X
     STA $00
     INX
-    LDA LevelInfoAddrs, X
+;    LDA LevelInfoAddrs, X
+    jsr LDAL_LevelInfoAddrs_X
     STA $01
     JSR FetchLevelInfoDestInfo
     JSR CopyBlock
@@ -126,10 +158,12 @@ InitMode2_Sub1
 
 CopyCommonDataToRam ENT
     LDX #$00                    ; Get the source address of common data block in ROM.
-    LDA CommonDataBlockAddr_Bank6, X
+;    LDA CommonDataBlockAddr_Bank6, X
+    jsr LDAL_CommonDataBlockAddr_Bank6_X
     STA $00
     INX
-    LDA CommonDataBlockAddr_Bank6, X
+;    LDA CommonDataBlockAddr_Bank6, X
+    jsr LDAL_CommonDataBlockAddr_Bank6_X
     STA $01
     JSR FetchDestAddrForCommonDataBlock
     JSR CopyBlock
@@ -191,7 +225,8 @@ CopyBlock
     LDY #$00
 
 :Loop
-    LDA ($00), Y
+;    LDA ($00), Y
+    jsr LDA_00_Y
     STA ($02), Y
     LDA $02
     CMP $04
@@ -235,19 +270,23 @@ UpdateMode2Load_Full ENT
     ;
     ; This address array doesn't access the OW element (0).
     ; So, it overlaps the last two bytes of LevelInfoUWQ2Replacements9.
-    LDA LevelInfoUWQ2ReplacementAddrs-2, Y
+;    LDA LevelInfoUWQ2ReplacementAddrs-2, Y
+    jsr LDAL_LevelInfoUWQ2ReplacementAddrs_M2_Y
     STA $00
-    LDA LevelInfoUWQ2ReplacementAddrs-1, Y
+;    LDA LevelInfoUWQ2ReplacementAddrs-1, Y
+    jsr LDAL_LevelInfoUWQ2ReplacementAddrs_M1_Y
     STA $01
 
     ; Get the number of replacement bytes for Q2 UW level info.
     ; This address array doesn't access the OW element (0).
-    LDY LevelInfoUWQ2ReplacementSizes-1, X
+;    LDY LevelInfoUWQ2ReplacementSizes-1, X
+    jsr LDYL_LevelInfoUWQ2ReplacementSizes_M1_X
 
 :ReplaceInfoBytes
     ; Copy bytes from Q2 replacement array to level info
     ; starting at offset $29 (shortcut position array).
-    LDA ($00), Y
+;    LDA ($00), Y
+    jsr LDA_00_Y
     STA LevelInfo_ShortcutOrItemPosArray, Y
     DEY
     BPL :ReplaceInfoBytes
@@ -260,8 +299,10 @@ UpdateMode2Load_Full ENT
     LDY #$07
 
 :ReplaceRoomBytes
-    LDX LevelBlockAttrsBQ2ReplacementOffsets, Y
-    LDA LevelBlockAttrsBQ2ReplacementValues, Y
+;    LDX LevelBlockAttrsBQ2ReplacementOffsets, Y
+    jsr LDXL_LevelBlockAttrsBQ2ReplacementOffsets_Y
+;    LDA LevelBlockAttrsBQ2ReplacementValues, Y
+    jsr LDAL_LevelBlockAttrsBQ2ReplacementValues_Y
     STA LevelBlockAttrsB, X
     DEY
     BPL :ReplaceRoomBytes
@@ -571,9 +612,11 @@ TransferBufAddrs
 
 TransferCurTileBuf ENT
     LDX TileBufSelector
-    LDA TransferBufAddrs, X
+;    LDA TransferBufAddrs, X
+    jsr LDAL_TransferBufAddrs_X
     STA $00
-    LDA TransferBufAddrs+1, X
+;    LDA TransferBufAddrs+1, X
+    jsr LDAL_TransferBufAddrs_P1_X
     STA $01
     JSR TransferTileBuf
 
@@ -597,10 +640,12 @@ ContinueTransferTileBuf
     PHA
             JSR   STA_2006
     INY
-    LDA ($00), Y                ; Read low byte of VRAM address.
+;    LDA ($00), Y                ; Read low byte of VRAM address.
+    jsr LDA_00_Y
             JSR   STA_2006
     INY
-    LDA ($00), Y                ; Read count and attribute byte.
+;    LDA ($00), Y                ; Read count and attribute byte.
+    jsr LDA_00_Y
     ASL
     PHA
     LDA CurPpuControl_2000
@@ -636,7 +681,8 @@ ContinueTransferTileBuf
     BCS :Anon0004                      ; If the original bit 6 is clear,
     INY                         ; then increment Y index (not repeating).
 :Anon0004
-    LDA ($00), Y
+;    LDA ($00), Y
+    jsr LDA_00_Y
             JSR   STA_2007
     DEX
     BNE :Loop
@@ -663,7 +709,8 @@ ContinueTransferTileBuf
 TransferTileBuf
             JSR   LDX_2002
     LDY #$00
-    LDA ($00), Y                ; Read high byte of VRAM address.
+;    LDA ($00), Y                ; Read high byte of VRAM address.
+    jsr LDA_00_Y
     BPL ContinueTransferTileBuf ; End when we read a negative VRAM address.
     RTS
 

@@ -124,63 +124,37 @@ STA_MMC1_REG3
             MMC1_SHIFT
 
 ; Commit changes -- what we care about here are bits 0 - 3 to select the bank
+;
+; The strategy for bank switching is built around the constraint that the IIgs memory
+; system does not provide any sort of mirroring support that could be used to match
+; the behavior of the NES mepper.
+;
+; Also, we simply do not have the CPU capacity to copy the NES RAM space (12kb) or the NES ROM
+; space (16kb) into a shared area when bank switching occurs, which happens several times per
+; frame.
+;
+; Instead, we opt for a hybrid approach where each bank of NES ROM lives in its own IIgs
+; memory bank and any absolute memory references to that banks ROM space ($8000 - $BFFF)
+; are manually patched out in the same manner as the PPU and APU register access.
+;
+; This is actually reasonable because the vast majority of reads and write are to NES RAM
+; space (which makes sense, since that's where game state is maintained), or into the common
+; routines in the shared Bank 7 ROM space.
+;
+; Since bank 0 can be put into the working bank, only Banks 1 through 7 need to be updated.
+; For Zelda, this is just under 350 instructions, which is a manageable number.
 
             and   #$07
             clc
             adc   #^ROMBase
-            inc                 ; ROMBase is the working ROM bank.  The cart ROM banks are stored in the next banks
-            cmpl  mapper_bank
-            beq   :done         ; avoid extra work if we are not actually changing banks
+            stal  mapper_bank       ; This is the IIgs memory bank, not the NES data bank
 
-;            pha                ; save the target bank; DBR is currently set to *this* bank
-            stal  mapper_bank
+; Trampoline to pass control to the other bank.  This rom_inject file must be replicated in
+; every bank at the same address so that a long jump into the new mapper_bank will still
+; hit the same code.
 
-; Trampoline magic -- the rom_inject file is replicated across all of the NES ROM banks that are mapped
-;                     across the IIgs 64kb banks, so we long jump to the new mapper_bank and that will
-;                     magically hit the code below an the RTS will return to the address in the new bank
-
-;            sta   :patch+3     ; writes to code in *this* bank
-            sta   :t1+3
-            sta   :t2+3
-            sta   :t3+3
-            sta   :t4+3
-
-; Now comes pain. The code in a ROM bank will likely need to access data tables in the bank it runs within.
-; That means that the data bank register *must* track the current mapper_bank.  However, the consequence of
-; this is that there is no longer a single representation of the NES RAM from $000 - $7FF.  So, when the
-; bank switches, we will copy the RAM from $200 to $7FF in the current bank to the new bank.
-;
-; We can ignore page $00 and $01 since those are the stack and direct page and exist in Bank 00.
-
-; Copy 16kb bank ($8000 - $BFFF) = 98,304 cycles
-; Copy 8kb WRAM + 2kb RAM = 61,440 cycles
-;
-; We now copy the 16kb data back into the common bank.  In the end, we can optimize this by preprocessing
-; the bank code into a set of `LDA #data; STA abs` and coalesce duplicate writes, which should move the
-; average speed between 6 and 9 cycles per word -- which can get as low as ~50,000 which is actually faster
-; than the WRAM + RAM copy.
-
-            phx
-            rep   #$30
-            ldx   #$3FF8
-:loop
-:t1         ldal  $008000,x
-            sta   $8000,x
-:t2         ldal  $008002,x
-            sta   $8002,x
-:t3         ldal  $008004,x
-            sta   $8004,x
-:t4         ldal  $008006,x
-            sta   $8006,x
-            txa
-            sec
-            sbc   #8
-            tax
-            bpl   :loop
-
-            sep   #$30
-            plx
-;            plb                ; change the data bank to the new memory bank
+            stal  :patch+3          ; needs to actually write to the executing bank (K), not the NES data bank.
+:patch      jml   :done
 
 :done
             MMC1_RTN
@@ -566,6 +540,111 @@ STX_4017
 ;
 ; For multi-bank, the patches have to be done using long addressing
 
+LDA_LONG_Y  mac
+            phx
+            tyx
+            ldal ]1,x
+            plx
+            pha
+            pla
+            rts
+            <<<
+
+ADC_LONG_Y  mac
+            pha
+            phx
+            tyx
+            ldal ]1,x
+            stal aly_patch+1
+            plx
+            pla
+aly_patch   adc  #0
+            rts
+            <<<
+
+CMP_LONG_Y  mac
+            pha
+            phx
+            tyx
+            ldal ]1,x
+            stal cly_patch+1
+            plx
+            pla
+cly_patch   cmp  #0
+            rts
+            <<<
+
+AND_LONG_Y  mac
+            phx
+            tyx
+            andl ]1,x
+            plx
+            pha
+            pla
+            rts
+            <<<
+
+LDX_LONG_Y  mac
+            pha
+            tyx
+            ldal ]1,x
+            tax
+            pla
+            phx
+            plx
+            rts
+            <<<
+
+LDY_LONG_X  mac
+            pha
+            ldal ]1,x
+            tay
+            pla
+            phy
+            ply
+            rts
+            <<<
+
+LDX_LONG    mac
+            pha
+            ldal ]1
+            tax
+            pla
+            phx
+            plx
+            rts
+            <<<
+
+LDA_LONG    mac
+            ldal ]1
+            rts
+            <<<
+CMP_LONG    mac
+            cmpl ]1
+            rts
+            <<<
+
+LDA_LONG_X  mac
+            ldal ]1,x
+            rts
+            <<<
+CMP_LONG_X  mac
+            cmpl ]1,x
+            rts
+            <<<
+AND_LONG_X  mac
+            andl ]1,x
+            rts
+            <<<
+ORA_LONG_X  mac
+            oral ]1,x
+            rts
+            <<<
+ADC_LONG_X  mac
+            adcl ]1,x
+            rts
+            <<<
+
 LDA_ABS_Y   mac
             phx
             tyx
@@ -710,3 +789,54 @@ zp          phx
             plp
             rts
             <<<
+
+; Special routine. This is a generic handler for lda (xx),y instructions that automatically does the
+; right thing, regardless of whether it is accessing zero page, the data bank, or the program bank
+; and is intended to support MMC1 code. NROM games should used the simpler macros
+;
+; Branch order is tuned for the common cases: nearly every real call site targets either the
+; switchable PRG window ($80-$BF, e.g. the per-byte TransferPatternBlock_Bank1 loop) or the
+; fixed PRG bank ($C0-$FF), but the code is set up to trap zero-page and PPU/APU register accesses
+; also.  Register traps are currently unimplemented until anactual use case is discovered.
+MMC1_LDA_IND_Y mac
+        php            ; preserve caller's flags (esp. carry) across our internal cmps -- a
+                       ; plain LDA (dp),Y never touches C, so callers may depend on it surviving
+        lda ]1+1       ; load the high address byte
+        bmi hi        ; HB >= $80 means we are in the upper half of memory, $8000 - $FFFF
+        cmp #$02       ; zero page AND the NES stack page ($0000-$01FF) are a special case
+        bcc zpage
+        cmp #$20       ; is it below the I.O space? If so, then the bank register is fine
+        bcc ok
+        cmp #$60       ; is it in the WRAM space? Is so, then the bank register is fine
+        bcc tail       ; if it's between $2000 and $5FFF, just ignore it for now and return the high byte which is like a floating bus read
+
+ok      lda  (]1),y   ; it's ok to just execute the instruction as-is
+tail    plp            ; restore caller's carry (and other flags)
+        pha            ; refresh N/Z to match the loaded byte in A (plp above may have
+        pla            ; clobbered them with the caller's pre-call flags)
+        rts
+
+hi      cmp #$C0
+        bcs ok        ; $C0-$FF: fixed ROM bank -- ok as-is
+
+        phb            ; $80-$BF: switchable ROM window
+        phk
+        plb
+        lda  (]1),y
+        plb            ; this affects flags, but tail's plp/pha/pla below fixes them up
+        bra  tail
+
+zpage
+        phx
+        rep  #$31      ; use 16-bit index registers for a quick add (and clear the carry)
+        tya
+        and  #$00FF    ; defensively clear the high byte
+        adc  ]1        ; add Y to the address
+        tax            ; X now indexes the NES zero page/stack pages ($0000-$01FF) together
+        lda  $00,x     ; the direct page and stack for the NES are in adjacent pages, so this is valid
+        and  #$00FF    ; clear the high byte before dropping back to 8-bit A (it's still garbage
+                       ; from the 16-bit load above, since A's low byte is the only part that's real)
+        sep  #$30      ; back to 8-bit
+        plx            ; restore x
+        bra  tail
+        <<<

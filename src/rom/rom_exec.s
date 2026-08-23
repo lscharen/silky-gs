@@ -37,23 +37,24 @@ romxfer
 
             sep   #$30
 
-;            lda   mapper_bank
-;            sta   :disp+3                   ; Target the current mapper bank
-            lda   #^ROMBase
+            lda   mapper_bank
+            sta   :disp+3                   ; Target the current mapper bank for the running code
+
+            lda   #^ROMBase                 ; But the base bank is *always* used for the data bank
             pha
             plb
 
-; :disp       jsl   $000000                   ; breaking change; ROM code needs rti->rtl, not rti->rts like it was
-:disp       jsl   ROMBase
+:disp       jsl   $000000                   ; breaking change; ROM code needs rti->rtl, not rti->rts like it was
+; :disp       jsl   ROMBase
 
-; We do not need to save the databank register.  The MMC1 shims are responsible for updating mapper_bank
+; We do not need to save the data bank register.  The MMC1 shims are responsible for updating mapper_bank
 ; when they are called from the ROM code.
 
             mx  %00
             rep   #$30                      ; Back to 16-bit mode
 
             tsx                             ; Copy the stack address returned by the emulator
-            
+
             ldal  StkSave
             tcs
 

@@ -8,6 +8,23 @@ SetMirrorMode  EXT
 
             ds \,$00
 
+; Create stubs to handle converting self-references into long addressing so it works when the ROM code is
+; in another IIgs memory bank.  Our memory model keeps the PBR in a fixed bank so that any access to RAM
+; or high ROM ($C000 - $FFFF) always work.  Refrences to the lower ROM ($8000 - $BFFF) need to be translated
+; to the correct bank.  The stubs are used to convert the self-references into long addressing so that they work
+; properly.
+
+LDAL_PatternBlockSrcAddrsUW_X LDA_LONG_X PatternBlockSrcAddrsUW
+LDAL_PatternBlockSrcAddrsOW_X LDA_LONG_X PatternBlockSrcAddrsOW
+LDAL_PatternBlockSizesOW_X LDA_LONG_X PatternBlockSizesOW
+LDAL_LevelPatternBlockSrcAddrs_X LDA_LONG_X LevelPatternBlockSrcAddrs
+LDAL_BossPatternBlockSrcAddrs_X LDA_LONG_X BossPatternBlockSrcAddrs
+LDAL_PatternBlockSizesUW_X LDA_LONG_X PatternBlockSizesUW
+LDAL_PatternBlockPpuAddrs_X LDA_LONG_X PatternBlockPpuAddrs
+
+; MMC1 memory helper for indirect loads
+LDA_00_Y MMC1_LDA_IND_Y $00
+
             use   BeginEndVars.inc
             use   CaveVars.inc
             use   CommonVars.inc
@@ -16,6 +33,11 @@ SetMirrorMode  EXT
 
 ; Do not encroach on WRAM (battery-backed space)
             ds    $6000-*
+
+; Anchor label at $6C90, exported so rom_01.s's CopyCommonCodeToRam can replicate
+; the shared "Bank 1 common RAM code" block into this bank too (see BANK_01_CODE.md).
+            ds    $6C90-*
+ROM03CodeAnchor ENT
 
             ds    $8000-*
 
@@ -118,10 +140,12 @@ FetchPatternBlockAddrUW
     LDA PatternBlockIndex
     ASL
     TAX
-    LDA PatternBlockSrcAddrsUW, X
+;    LDA PatternBlockSrcAddrsUW, X
+    jsr LDAL_PatternBlockSrcAddrsUW_X
     STA $00
     INX
-    LDA PatternBlockSrcAddrsUW, X
+;    LDA PatternBlockSrcAddrsUW, X
+    jsr LDAL_PatternBlockSrcAddrsUW_X
     STA $01
     RTS
 
@@ -133,14 +157,18 @@ FetchPatternBlockInfoOW
     LDA PatternBlockIndex
     ASL
     TAX
-    LDA PatternBlockSrcAddrsOW, X
+;    LDA PatternBlockSrcAddrsOW, X
+    jsr LDAL_PatternBlockSrcAddrsOW_X
     STA $00
-    LDA PatternBlockSizesOW, X
+;    LDA PatternBlockSizesOW, X
+    jsr LDAL_PatternBlockSizesOW_X
     STA $02
     INX
-    LDA PatternBlockSrcAddrsOW, X
+;    LDA PatternBlockSrcAddrsOW, X
+    jsr LDAL_PatternBlockSrcAddrsOW_X
     STA $01
-    LDA PatternBlockSizesOW, X
+;    LDA PatternBlockSizesOW, X
+    jsr LDAL_PatternBlockSizesOW_X
     STA $03
     RTS
 
@@ -148,10 +176,12 @@ FetchPatternBlockAddrUWSpecial
     LDA CurLevel
     ASL
     TAX
-    LDA LevelPatternBlockSrcAddrs, X
+;    LDA LevelPatternBlockSrcAddrs, X
+    jsr LDAL_LevelPatternBlockSrcAddrs_X
     STA $00
     INX
-    LDA LevelPatternBlockSrcAddrs, X
+;    LDA LevelPatternBlockSrcAddrs, X
+    jsr LDAL_LevelPatternBlockSrcAddrs_X
     STA $01
     RTS
 
@@ -159,10 +189,12 @@ FetchPatternBlockUWBoss
     LDA CurLevel
     ASL
     TAX
-    LDA BossPatternBlockSrcAddrs, X
+;    LDA BossPatternBlockSrcAddrs, X
+    jsr LDAL_BossPatternBlockSrcAddrs_X
     STA $00
     INX
-    LDA BossPatternBlockSrcAddrs, X
+;    LDA BossPatternBlockSrcAddrs, X
+    jsr LDAL_BossPatternBlockSrcAddrs_X
     STA $01
     RTS
 
@@ -170,10 +202,12 @@ FetchPatternBlockSizeUW
     LDA PatternBlockIndex
     ASL
     TAX
-    LDA PatternBlockSizesUW, X
+;    LDA PatternBlockSizesUW, X
+    jsr LDAL_PatternBlockSizesUW_X
     STA $02
     INX
-    LDA PatternBlockSizesUW, X
+;    LDA PatternBlockSizesUW, X
+    jsr LDAL_PatternBlockSizesUW_X
     STA $03
 
 ; Params:
@@ -186,15 +220,18 @@ TransferPatternBlock_Bank3
     LDA PatternBlockIndex
     ASL
     TAX
-    LDA PatternBlockPpuAddrs, X
+;    LDA PatternBlockPpuAddrs, X
+    jsr LDAL_PatternBlockPpuAddrs_X
             JSR   STA_2006
     INX
-    LDA PatternBlockPpuAddrs, X
+;    LDA PatternBlockPpuAddrs, X
+    jsr LDAL_PatternBlockPpuAddrs_X
             JSR   STA_2006
     LDY #$00                    ; Start copying.
 
 :LoopCopy
-    LDA ($00), Y                ; Transfer 1 byte from source pattern block in ROM to PPU.
+;    LDA ($00), Y                ; Transfer 1 byte from source pattern block in ROM to PPU.
+    jsr LDA_00_Y
             JSR   STA_2007
 
     ; Increment source address.

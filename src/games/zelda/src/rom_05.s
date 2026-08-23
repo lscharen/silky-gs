@@ -51,6 +51,81 @@ SetMirrorMode  EXT
 
             ds \,$00
 
+; Create stubs to handle converting self-references into long addressing so it works when the ROM code is
+; in another IIgs memory bank.  Our memory model keeps the PBR in a fixed bank so that any access to RAM
+; or high ROM ($C000 - $FFFF) always work.  Refrences to the lower ROM ($8000 - $BFFF) need to be translated
+; to the correct bank.  The stubs are used to convert the self-references into long addressing so that they work
+; properly.
+
+LDXL_TriforceTransferBufOffsets_Y LDX_LONG_Y TriforceTransferBufOffsets
+LDAL_TriforceTransferBufTiles_Y LDA_LONG_Y TriforceTransferBufTiles
+LDAL_TriforceTriforceBufReplacements_Y LDA_LONG_Y TriforceTriforceBufReplacements
+LDAL_Sprite0Descriptor_Y LDA_LONG_Y Sprite0Descriptor
+LDAL_RoomPaletteSelectorToNTAttr_X LDA_LONG_X RoomPaletteSelectorToNTAttr
+LDAL_EnteringRoomRelativePositions_Y LDA_LONG_Y EnteringRoomRelativePositions
+LDAL_ObjListAddrs_Y LDA_LONG_Y ObjListAddrs
+LDAL_SpawnPosListAddrsLo_Y LDA_LONG_Y SpawnPosListAddrsLo
+LDAL_SpawnPosListAddrsHi_Y LDA_LONG_Y SpawnPosListAddrsHi
+LDAL_CellarKeeseXs_X LDA_LONG_X CellarKeeseXs
+LDAL_CellarKeeseYs_Y LDA_LONG_Y CellarKeeseYs
+LDAL_Mode8BaseSpriteValues_Y LDA_LONG_Y Mode8BaseSpriteValues
+LDAL_Mode8SpriteYs_Y LDA_LONG_Y Mode8SpriteYs
+LDAL_Mode8FlashTransferRecord_Y LDA_LONG_Y Mode8FlashTransferRecord
+LDAL_Mode8FlashAttrsAddrLo_Y LDA_LONG_Y Mode8FlashAttrsAddrLo
+LDAL_Mode8SelectionToMode_Y LDA_LONG_Y Mode8SelectionToMode
+CMPL_BorderBounds_Y CMP_LONG_Y BorderBounds
+LDAL_BoomerangLimits_Y LDA_LONG_Y BoomerangLimits
+CMPL_DoorwayRequiredCoord_Y CMP_LONG_Y DoorwayRequiredCoord
+CMPL_DoorwayBoundsMinOver_Y CMP_LONG_Y DoorwayBoundsMinOver
+CMPL_DoorwayBoundsMaxOver_Y CMP_LONG_Y DoorwayBoundsMaxOver
+CMPL_DoorwayBoundsMinUnder_Y CMP_LONG_Y DoorwayBoundsMinUnder
+CMPL_DoorwayBoundsMaxUnder_Y CMP_LONG_Y DoorwayBoundsMaxUnder
+LDAL_BossSoundEffects_X LDA_LONG_X BossSoundEffects
+LDAL_HorizontalDoorFaceIndexesBaseOffsets_Y LDA_LONG_Y HorizontalDoorFaceIndexesBaseOffsets
+LDAL_HorizontalDoorFaceIndexes_Y LDA_LONG_Y HorizontalDoorFaceIndexes
+LDAL_DoorBits_X LDA_LONG_X DoorBits
+LDAL_DirIndexToDoorSecondHalfOffsets_X LDA_LONG_X DirIndexToDoorSecondHalfOffsets
+LDAL_DirIndexToDoorColumnCount_X LDA_LONG_X DirIndexToDoorColumnCount
+LDAL_DirIndexToDoorRowCountMinusOne_X LDA_LONG_X DirIndexToDoorRowCountMinusOne
+LDAL_NextDoorTileOffsets_X LDA_LONG_X NextDoorTileOffsets
+LDAL_DoorFaceTilesAddrsLo_X LDA_LONG_X DoorFaceTilesAddrsLo
+LDAL_DoorFaceTilesAddrsHi_X LDA_LONG_X DoorFaceTilesAddrsHi
+LDAL_PlayAreaDoorFaceAddrsLo_X LDA_LONG_X PlayAreaDoorFaceAddrsLo
+LDAL_PlayAreaDoorFaceAddrsHi_X LDA_LONG_X PlayAreaDoorFaceAddrsHi
+ADCL_DoorNextRoomIdOffsets_X ADC_LONG_X DoorNextRoomIdOffsets
+LDAL_DoorVramAddrsHi_X LDA_LONG_X DoorVramAddrsHi
+LDAL_DoorVramAddrsLo_X LDA_LONG_X DoorVramAddrsLo
+LDAL_ColumnDirectoryUW_X LDA_LONG_X ColumnDirectoryUW
+LDAL_ColumnDirectoryUW_P1_X LDA_LONG_X ColumnDirectoryUW+1
+LDAL_PrimarySquaresUW_X LDA_LONG_X PrimarySquaresUW
+LDAL_RoomLayoutsOWAddr LDA_LONG RoomLayoutsOWAddr
+LDAL_RoomLayoutsOWAddr_P1 LDA_LONG RoomLayoutsOWAddr+1
+LDAL_PrimarySquaresOW_X LDA_LONG_X PrimarySquaresOW
+LDAL_TileObjectPrimarySquaresOW_X LDA_LONG_X TileObjectPrimarySquaresOW
+LDAL_TileObjectTypes_X LDA_LONG_X TileObjectTypes
+LDAL_SecondarySquaresOW_X LDA_LONG_X SecondarySquaresOW
+LDAL_ColumnHeapOWAddr LDA_LONG ColumnHeapOWAddr
+LDXL_ColumnHeapOWAddr_P1 LDX_LONG ColumnHeapOWAddr+1
+LDAL_SubroomLayoutAddrs_X LDA_LONG_X SubroomLayoutAddrs
+LDAL_SubroomLayoutAddrs_P1_X LDA_LONG_X SubroomLayoutAddrs+1
+CMPL_PrimarySquaresOW_X CMP_LONG_X PrimarySquaresOW
+LDAL_ObjectRoomBoundsOW_Y LDA_LONG_Y ObjectRoomBoundsOW
+LDAL_LeavingRoomRelativePositions_Y LDA_LONG_Y LeavingRoomRelativePositions
+LDAL_CellarLadderXs_X LDA_LONG_X CellarLadderXs
+LDAL_SubmenuTransferBufSelectorsUW_Y LDA_LONG_Y SubmenuTransferBufSelectorsUW
+LDAL_SubmenuTransferBufSelectorsOW_Y LDA_LONG_Y SubmenuTransferBufSelectorsOW
+ANDL_AxisMasks_Y AND_LONG_Y AxisMasks
+LDAL_NextRoomIdOffsets_X LDA_LONG_X NextRoomIdOffsets
+ANDL_MapRowMasks_X AND_LONG_X MapRowMasks
+LDAL_SubmenuItemXs_X LDA_LONG_X SubmenuItemXs
+LDAL_SubmenuCursorXs_Y LDA_LONG_Y SubmenuCursorXs
+
+; MMC1 memory helpers for indirect loads
+LDA_00_Y MMC1_LDA_IND_Y $00
+LDA_02_Y MMC1_LDA_IND_Y $02
+LDA_04_Y MMC1_LDA_IND_Y $04
+LDA_06_Y MMC1_LDA_IND_Y $06
+
             use   BeginEndVars.inc
             use   CaveVars.inc
             use   CommonVars.inc
@@ -59,6 +134,11 @@ SetMirrorMode  EXT
 
 ; Do not encroach on WRAM (battery-backed space)
             ds    $6000-*
+
+; Anchor label at $6C90, exported so rom_01.s's CopyCommonCodeToRam can replicate
+; the shared "Bank 1 common RAM code" block into this bank too (see BANK_01_CODE.md).
+            ds    $6C90-*
+ROM05CodeAnchor ENT
 
 ; Pad up to $8000
             ds    $8000-*
@@ -404,8 +484,10 @@ UpdateMenuStartOW
     ; make it look completely empty, and no piece has been won.
     LDY #$17
 :Anon0007
-    LDX TriforceTransferBufOffsets, Y
-    LDA TriforceTransferBufTiles, Y
+;    LDX TriforceTransferBufOffsets, Y
+    jsr LDXL_TriforceTransferBufOffsets_Y
+;    LDA TriforceTransferBufTiles, Y
+    jsr LDAL_TriforceTransferBufTiles_Y
     STA TriforceRow0TransferBuf+4, X
     DEY
     BPL :Anon0007
@@ -429,7 +511,8 @@ UpdateMenuStartOW
 :LoopTile
     ; Get the offset into the submenu triforce transfer buffers of
     ; the current tile slot.
-    LDX TriforceTransferBufOffsets, Y
+;    LDX TriforceTransferBufOffsets, Y
+    jsr LDXL_TriforceTransferBufOffsets_Y
 
     ; If the level test bit is not in the triforce mask, then we don't
     ; have this piece. So, go loop again, and leave the tile in the
@@ -451,7 +534,8 @@ UpdateMenuStartOW
     BEQ :ReplaceWithF5
     CMP #$E6
     BEQ :ReplaceWithF5
-    LDA TriforceTriforceBufReplacements, Y
+;    LDA TriforceTriforceBufReplacements, Y
+    jsr LDAL_TriforceTriforceBufReplacements_Y
     JMP :Anon0008
 
 :ReplaceWithF5
@@ -891,7 +975,8 @@ WriteAndEnableSprite0
     STA IsSprite0CheckActive
     LDY #$03
 :Anon0024
-    LDA Sprite0Descriptor, Y
+;    LDA Sprite0Descriptor, Y
+    jsr LDAL_Sprite0Descriptor_Y
     STA Sprites, Y
     DEY
     BPL :Anon0024
@@ -921,7 +1006,8 @@ FillPlayAreaAttrs
     LDA LevelBlockAttrsA, Y
     AND #$03                    ; Get the outer palette selector from the byte.
     TAX
-    LDA RoomPaletteSelectorToNTAttr, X    ; Get the nametable attributes for the palette selector.
+;    LDA RoomPaletteSelectorToNTAttr, X    ; Get the nametable attributes for the palette selector.
+    jsr LDAL_RoomPaletteSelectorToNTAttr_X
     LDX #$2F                    ; Fill the play area NT attributes.
 :Anon0025
     STA PlayAreaAttrs, X
@@ -942,7 +1028,8 @@ FillPlayAreaAttrs
     BEQ :NextLoopRow
     CPY #$21                    ; For the bottom inner NT attribute row, go combine the inner and outer attributes.
     BCS :CombineInnerOuter
-    LDA RoomPaletteSelectorToNTAttr, X
+;    LDA RoomPaletteSelectorToNTAttr, X
+    jsr LDAL_RoomPaletteSelectorToNTAttr_X
     STA PlayAreaAttrs, Y
 
 :NextLoopRow
@@ -955,7 +1042,8 @@ FillPlayAreaAttrs
     ; Combine the NT attributes at current offset with the
     ; new ones we're filling; so that new (inner) attributes
     ; affect the top half of the row.
-    LDA RoomPaletteSelectorToNTAttr, X
+;    LDA RoomPaletteSelectorToNTAttr, X
+    jsr LDAL_RoomPaletteSelectorToNTAttr_X
     AND #$0F
     STA $00
     LDA PlayAreaAttrs, Y
@@ -1230,7 +1318,8 @@ WaitAndScrollToSplitBottom ENT
 
     ; Scrolling vertically, will set PPUADDR instead of PPUSCROLL.
     ; Wait about 666 cycles.
-    LDY #$5E
+;    LDY #$5E
+    bra :out2                   ; IIgs -- skip busy wait loops
 :Anon0033
     NOP
     DEY
@@ -1240,6 +1329,7 @@ WaitAndScrollToSplitBottom ENT
     NOP
     NOP
     NOP
+:out2
             JSR   LDA_2002
 
     ; Set PPUADDR mid-frame to 
@@ -1252,7 +1342,8 @@ WaitAndScrollToSplitBottom ENT
             JSR   LDA_2007
     RTS
 :Anon0034
-    LDY #$5E
+;    LDY #$5E
+    bra  :out3               ; IIgs - skip busy loops
 :Anon0035
     NOP
     DEY
@@ -1260,6 +1351,7 @@ WaitAndScrollToSplitBottom ENT
     NOP
     NOP
     NOP
+:out3
     LDA CurPpuControl_2000
     AND #$FE
     ORA OddBaseNameTableOverride
@@ -1601,7 +1693,8 @@ InitMode_EnterRoom ENT
     INY
     INY
 :Anon0046
-    LDA EnteringRoomRelativePositions, Y
+;    LDA EnteringRoomRelativePositions, Y
+    jsr LDAL_EnteringRoomRelativePositions_Y
 
 :PlaceObjects
     STA ObjGridOffset
@@ -1721,16 +1814,19 @@ InitMode_EnterRoom ENT
     ; Put the address of the list in [04:05].
     ASL
     TAY
-    LDA ObjListAddrs, Y
+;    LDA ObjListAddrs, Y
+    jsr LDAL_ObjListAddrs_Y
     STA $04
     INY
-    LDA ObjListAddrs, Y
+;    LDA ObjListAddrs, Y
+    jsr LDAL_ObjListAddrs_Y
     STA $05
 
     ; Copy elements from the list to ObjType up to object count [03].
     LDY #$00
 :Anon0052
-    LDA ($04), Y
+;    LDA ($04), Y
+    jsr LDA_04_Y
     STA ObjType+1, Y
     INY
     CPY $03
@@ -1838,9 +1934,11 @@ AssignObjSpawnPositions
     BCC :Anon0058
 
     ; Put the address of the spawn list for Link's direction in [06:07].
-    LDA SpawnPosListAddrsLo, Y
+;    LDA SpawnPosListAddrsLo, Y
+    jsr LDAL_SpawnPosListAddrsLo_Y
     STA $06
-    LDA SpawnPosListAddrsHi, Y
+;    LDA SpawnPosListAddrsHi, Y
+    jsr LDAL_SpawnPosListAddrsHi_Y
     STA $07
 
     ; Assign spawn coordinates to 9 object slots.
@@ -1848,7 +1946,8 @@ AssignObjSpawnPositions
     LDX #$01                    ; Starting at object 1.
 
 :LoopSpawnSpot
-    LDA ($06), Y                ; Get a spawn spot from the list.
+;    LDA ($06), Y                ; Get a spawn spot from the list.
+    jsr LDA_06_Y
     PHA
     ASL                         ; Turn the column component into an X coordinate.
     ASL
@@ -1881,9 +1980,11 @@ AssignObjSpawnPositions
 :Anon0061
     LDA #$1B                    ; Blue Keese
     STA ObjType+1, X
-    LDA CellarKeeseXs, X
+;    LDA CellarKeeseXs, X
+    jsr LDAL_CellarKeeseXs_X
     STA ObjX+1, X
-    LDA CellarKeeseYs, Y
+;    LDA CellarKeeseYs, Y
+    jsr LDAL_CellarKeeseYs_Y
     STA ObjY+1, X
     DEX
     BPL :Anon0061
@@ -2160,14 +2261,16 @@ UpdateMode8ContinueQuestion_Full ENT
 :DrawCursor
     LDY #$02                    ; Set tile, attributes, and X for selection sprite (0).
 :Anon0067
-    LDA Mode8BaseSpriteValues, Y
+;    LDA Mode8BaseSpriteValues, Y
+    jsr LDAL_Mode8BaseSpriteValues_Y
     STA Sprites+1, Y
     DEY
     BPL :Anon0067
 
     ; Set Y for selection sprite.
     LDY GameSubmode
-    LDA Mode8SpriteYs, Y
+;    LDA Mode8SpriteYs, Y
+    jsr LDAL_Mode8SpriteYs_Y
     STA Sprites
     RTS
 
@@ -2187,7 +2290,8 @@ UpdateMode8ContinueQuestion_Full ENT
     ; for flashing NT attributes.
     LDY #$04
 :Anon0068
-    LDA Mode8FlashTransferRecord, Y
+;    LDA Mode8FlashTransferRecord, Y
+    jsr LDAL_Mode8FlashTransferRecord_Y
     STA DynTileBuf, Y
     DEY
     BPL :Anon0068
@@ -2198,7 +2302,8 @@ UpdateMode8ContinueQuestion_Full ENT
     LDA GameSubmode
     AND #$03
     TAY
-    LDA Mode8FlashAttrsAddrLo, Y
+;    LDA Mode8FlashAttrsAddrLo, Y
+    jsr LDAL_Mode8FlashAttrsAddrLo_Y
     STA DynTileBuf+1
 
     ; Every 4 frames, depending on ObjTimer,
@@ -2223,7 +2328,8 @@ UpdateMode8ContinueQuestion_Full ENT
     ; D: Save
     ; 0: Retry
     LDY GameSubmode
-    LDA Mode8SelectionToMode, Y
+;    LDA Mode8SelectionToMode, Y
+    jsr LDAL_Mode8SelectionToMode_Y
     STA GameMode
     LDA HeartValues             ; Make the player start again with 3 full hearts.
     AND #$F0
@@ -2744,7 +2850,8 @@ MaskInputInBorder
     ; If the coordinate does not cross (<) the boundary, then
     ; go set mask $FF, so that no button is excluded.
     LDA $02
-    CMP BorderBounds, Y
+;    CMP BorderBounds, Y
+    jsr CMPL_BorderBounds_Y
     BCC :ExcludeNone
 
 :MaskButtons
@@ -2779,7 +2886,8 @@ MaskInputInBorder
     ; If the coordinate crosses (<) the boundary, then
     ; go mask buttons.
     LDA $02                     ; Get coordinate in [02].
-    CMP BorderBounds, Y
+;    CMP BorderBounds, Y
+    jsr CMPL_BorderBounds_Y
     BCC :MaskButtons
 
 :ExcludeNone
@@ -2856,7 +2964,8 @@ WieldBoomerang
     ; Set the farthest distance the boomerang can fly based on
     ; the type of boomerang.
     LDY InvMagicBoomerang
-    LDA BoomerangLimits, Y
+;    LDA BoomerangLimits, Y
+    jsr LDAL_BoomerangLimits_Y
     STA ObjMovingLimit, X
 
     ; Set up the boomerang.
@@ -3701,12 +3810,15 @@ CheckDoorway ENT
 
 :LoopOverflowBounds
     LDA $00                     ; [00] is Link's Y, if facing horizontally; else X.
-    CMP DoorwayRequiredCoord, Y
+;    CMP DoorwayRequiredCoord, Y
+    jsr CMPL_DoorwayRequiredCoord_Y
     BNE :Anon0096
     LDA $01                     ; [01] is Link's X, if facing horizontally; else Y.
-    CMP DoorwayBoundsMinOver, Y
+;    CMP DoorwayBoundsMinOver, Y
+    jsr CMPL_DoorwayBoundsMinOver_Y
     BCC :Anon0096
-    CMP DoorwayBoundsMaxOver, Y
+;    CMP DoorwayBoundsMaxOver, Y
+    jsr CMPL_DoorwayBoundsMaxOver_Y
     BCC :TestDoorwayDoor        ; If found a doorway, go see what it does when you touch it.
 :Anon0096
     DEY
@@ -3732,9 +3844,11 @@ CheckDoorway ENT
     ; instead of right doorway while DoorwayDir = left),
     ; and player is facing in DoorwayDir, then go repeat the
     ; original search used to enter the doorway.
-    CMP DoorwayBoundsMinOver, Y
+;    CMP DoorwayBoundsMinOver, Y
+    jsr CMPL_DoorwayBoundsMinOver_Y
     BCC :SearchUnderflowDoorway
-    CMP DoorwayBoundsMaxOver, Y
+;    CMP DoorwayBoundsMaxOver, Y
+    jsr CMPL_DoorwayBoundsMaxOver_Y
     BCS :SearchUnderflowDoorway
     LDA DoorwayDir
     CMP ObjDir
@@ -3752,12 +3866,15 @@ CheckDoorway ENT
 
 :LoopUnderflowDoorway
     LDA $00                     ; [00] is Link's Y, if facing horizontally; else X.
-    CMP DoorwayRequiredCoord, Y
+;    CMP DoorwayRequiredCoord, Y
+    jsr CMPL_DoorwayRequiredCoord_Y
     BNE :Anon0097
     LDA $01                     ; [01] is Link's X, if facing horizontally; else Y.
-    CMP DoorwayBoundsMinUnder, Y
+;    CMP DoorwayBoundsMinUnder, Y
+    jsr CMPL_DoorwayBoundsMinUnder_Y
     BCC :Anon0097
-    CMP DoorwayBoundsMaxUnder, Y
+;    CMP DoorwayBoundsMaxUnder, Y
+    jsr CMPL_DoorwayBoundsMaxUnder_Y
     BCC :TestDoorwayDoor
 :Anon0097
     DEY
@@ -4072,7 +4189,8 @@ CheckBossSoundEffectUW ENT
     ROL
     ROL
     TAX
-    LDA BossSoundEffects, X
+;    LDA BossSoundEffects, X
+    jsr LDAL_BossSoundEffects_X
     BEQ :Anon0106                      ; If the room has no boss sound effect, go turn off any that might be playing.
     ORA #$80                    ; Add the flag to repeat
     STA SampleRequest
@@ -4126,7 +4244,8 @@ WriteDoorFaceTileHorizontally
     ; set of 4 indexes in HorizontalDoorFaceIndexes that point to
     ; the door face tiles at [02:03].
     LDY $09
-    LDA HorizontalDoorFaceIndexesBaseOffsets, Y
+;    LDA HorizontalDoorFaceIndexesBaseOffsets, Y
+    jsr LDAL_HorizontalDoorFaceIndexesBaseOffsets_Y
 
     ; Add [07] to the base offset we got above. This yields one
     ; of four consecutive indexes into HorizontalDoorFaceIndexes.
@@ -4136,12 +4255,14 @@ WriteDoorFaceTileHorizontally
 
     ; With that index, look up the index to use with the door face
     ; list of tiles at [02:03].
-    LDA HorizontalDoorFaceIndexes, Y
+;    LDA HorizontalDoorFaceIndexes, Y
+    jsr LDAL_HorizontalDoorFaceIndexes_Y
     TAY
 
     ; Now we can read one of four tiles inside a door face tile map,
     ; and copy it to the dynamic transfer buf.
-    LDA ($02), Y
+;    LDA ($02), Y
+    jsr LDA_02_Y
     STA DynTileBuf, X
 
     ; Prepare for the next call:
@@ -4559,7 +4680,8 @@ FillWalls
     LDY #$00
 
 LoopWallTile
-    LDA ($00), Y                ; Get a tile from wall tile list.
+;    LDA ($00), Y                ; Get a tile from wall tile list.
+    jsr LDA_00_Y
     BEQ ReachedTopWallBottom
     STA ($02), Y                ; Set the tile at the top and bottom locations.
     STA ($04), Y
@@ -4707,7 +4829,8 @@ L_LayOutDoors_LoopHalves
     TXA
     PHA                         ; Save the current direction index (door index).
     STA $0B                     ; [0B] holds direction index.
-    LDA DoorBits, X
+;    LDA DoorBits, X
+    jsr LDAL_DoorBits_X
     STA $02                     ; [02] holds the direction (bit) for the current door.
     JSR FindDoorTypeByDoorBit
 
@@ -4853,7 +4976,8 @@ L_LayOutDoors_LoopHalves
     ; of the tiles.
     LDA $06
     BNE :Anon0115
-    LDA DirIndexToDoorSecondHalfOffsets, X    ; Advance destination tile address to the second half of door.
+;    LDA DirIndexToDoorSecondHalfOffsets, X    ; Advance destination tile address to the second half of door.
+    jsr LDAL_DirIndexToDoorSecondHalfOffsets_X
     JSR AddToInt16At0
     LDA #$06                    ; Advance source tile address to the second half of door.
     JSR AddToInt16At2
@@ -4861,7 +4985,8 @@ L_LayOutDoors_LoopHalves
     ; Fix Y at 0 for copying source tiles to destination.
     ; Pointers will be incremented instead of Y.
     LDY #$00
-    LDA DirIndexToDoorColumnCount, X
+;    LDA DirIndexToDoorColumnCount, X
+    jsr LDAL_DirIndexToDoorColumnCount_X
     STA $05                     ; [05] holds the column count.
 
 :LoopColumn
@@ -4872,14 +4997,17 @@ L_LayOutDoors_LoopHalves
 
     ; For each row (2 or 3) in the door, indexed by X,
     ; starting from highest index down to 0:
-    LDA DirIndexToDoorRowCountMinusOne, X
+;    LDA DirIndexToDoorRowCountMinusOne, X
+    jsr LDAL_DirIndexToDoorRowCountMinusOne_X
     TAX
 
 :LoopRowTile
-    LDA ($02), Y                ; Copy 1 door tile.
+;    LDA ($02), Y                ; Copy 1 door tile.
+    jsr LDA_02_Y
     STA ($00), Y
     JSR Add1ToInt16At2          ; Increment source tile address.
-    LDA NextDoorTileOffsets, X  ; Get the offset needed for the next play area tile.
+;    LDA NextDoorTileOffsets, X  ; Get the offset needed for the next play area tile.
+    jsr LDAL_NextDoorTileOffsets_X
     JSR AddToInt16At0
 
     ; If we're at the last row, and the direction is horizontal (< 2), then
@@ -4929,13 +5057,17 @@ L_LayOutDoors_LoopHalves
 ;
 FetchDoorAddrsFaceTilesSrcAndPlayAreaDst
     TAX
-    LDA DoorFaceTilesAddrsLo, X
+;    LDA DoorFaceTilesAddrsLo, X
+    jsr LDAL_DoorFaceTilesAddrsLo_X
     STA $02
-    LDA DoorFaceTilesAddrsHi, X
+;    LDA DoorFaceTilesAddrsHi, X
+    jsr LDAL_DoorFaceTilesAddrsHi_X
     STA $03
-    LDA PlayAreaDoorFaceAddrsLo, X
+;    LDA PlayAreaDoorFaceAddrsLo, X
+    jsr LDAL_PlayAreaDoorFaceAddrsLo_X
     STA $00
-    LDA PlayAreaDoorFaceAddrsHi, X
+;    LDA PlayAreaDoorFaceAddrsHi, X
+    jsr LDAL_PlayAreaDoorFaceAddrsHi_X
     STA $01
 :Anon0118
     DEY                         ; Add ($C * (face - 1)) to [$02:03].
@@ -5119,7 +5251,8 @@ L_ResetDoorCmdAndLayOutDoors
     ; Get the next room's ID.
     TYA
     CLC
-    ADC DoorNextRoomIdOffsets, X
+;    ADC DoorNextRoomIdOffsets, X
+    jsr ADCL_DoorNextRoomIdOffsets_X
     TAY
 
     ; Flip the door direction index.
@@ -5218,9 +5351,11 @@ PrepareWriteHorizontalDoorTransferRecords
 
     ; Return the address of the door in the nametable in [01:00].
     ; Note the order is reversed, as usual with VRAM addresses.
-    LDA DoorVramAddrsHi, X
+;    LDA DoorVramAddrsHi, X
+    jsr LDAL_DoorVramAddrsHi_X
     STA $00
-    LDA DoorVramAddrsLo, X
+;    LDA DoorVramAddrsLo, X
+    jsr LDAL_DoorVramAddrsLo_X
     STA $01
 
     ; Return the direction of the door in [09], and the dynamic
@@ -5278,23 +5413,28 @@ LayoutUWFloor
 
 :LoopColumnUW
     LDY $06
-    LDA ($02), Y                ; Get a column descriptor.
+;    LDA ($02), Y                ; Get a column descriptor.
+    jsr LDA_02_Y
     AND #$F0                    ; Put column table number * 2 in X.
     LSR
     LSR
     LSR
     TAX
-    LDA ColumnDirectoryUW, X    ; Load the column table address for this descriptor in [$04:05].
+;    LDA ColumnDirectoryUW, X    ; Load the column table address for this descriptor in [$04:05].
+    jsr LDAL_ColumnDirectoryUW_X
     STA $04
-    LDA ColumnDirectoryUW+1, X
+;    LDA ColumnDirectoryUW+1, X
+    jsr LDAL_ColumnDirectoryUW_P1_X
     STA $05
-    LDA ($02), Y                ; Get the column descriptor again.
+;    LDA ($02), Y                ; Get the column descriptor again.
+    jsr LDA_02_Y
     AND #$0F                    ; Put column index in X.
     TAX
     LDY #$00
 
 :FindSquare
-    LDA ($04), Y                ; Get a square descriptor.
+;    LDA ($04), Y                ; Get a square descriptor.
+    jsr LDA_04_Y
     BPL :Anon0130                      ; If high bit is set,
     DEX                         ; then we've found the beginning of a column;
     BMI :FoundColumn            ; If this is the column we want, then go handle it.
@@ -5313,16 +5453,19 @@ LayoutUWFloor
 :LoopSquareRow
     ; Write and repeat squares from the column.
     LDY #$00
-    LDA ($04), Y                ; Get the square descriptor.
+;    LDA ($04), Y                ; Get the square descriptor.
+    jsr LDA_04_Y
     AND #$07                    ; Get the square index from the descriptor.
     TAX
-    LDA PrimarySquaresUW, X
+;    LDA PrimarySquaresUW, X
+    jsr LDAL_PrimarySquaresUW_X
     LDY #$00
     JSR WriteSquareUW
     LDA #$02                    ; Point to next square in column in play area.
     JSR AddToInt16At0
     LDY #$00
-    LDA ($04), Y                ; Get the square descriptor.
+;    LDA ($04), Y                ; Get the square descriptor.
+    jsr LDA_04_Y
     AND #$70                    ; Isolate the count.
     LSR
     LSR
@@ -5703,9 +5846,11 @@ SecondarySquaresOW
 
 LayoutRoomOW
     ; Load the address of room column directory in [$02:03].
-    LDA RoomLayoutsOWAddr
+;    LDA RoomLayoutsOWAddr
+    jsr LDAL_RoomLayoutsOWAddr
     STA $02
-    LDA RoomLayoutsOWAddr+1
+;    LDA RoomLayoutsOWAddr+1
+    jsr LDAL_RoomLayoutsOWAddr_P1
     STA $03
     LDA #$00                    ; Reset [06] for use in multiplication below.
     STA $06
@@ -5745,7 +5890,8 @@ LayoutRoomOrCaveOW
 
 :LoopColumnOW
     LDY $06
-    LDA ($02), Y                ; Get a column descriptor.
+;    LDA ($02), Y                ; Get a column descriptor.
+    jsr LDA_02_Y
     AND #$F0                    ; Put column table number * 2 in X.
     LSR
     LSR
@@ -5753,18 +5899,29 @@ LayoutRoomOrCaveOW
     TAX
 
     ; Load the column table address for this descriptor in [$04:05].
+    ; ColumnDirectoryOW/OW1 are ENT'd in rom_06.s, but (unlike most cross-bank
+    ; tables) they live in rom_06.s's "BANK_06_DATA" block (see the `org $67F0`
+    ; right before CommonDataBlock_Bank6/ColumnDirectoryOW in rom_06.s) -- that
+    ; whole block is WRAM-resident, populated at $67F0+ by CopyCommonDataToRam via
+    ; CopyBlock, not switchable ROM. WRAM is reachable via DBR (pinned to ROMBase's
+    ; bank) from every bank alike, so plain absolute addressing here is correct as
+    ; long as CopyCommonDataToRam has run -- no long-addressing stub needed. (This
+    ; was previously miscategorized as a cross-bank ROM read and "fixed" with
+    ; LDAL_*_X stubs; reverted once the WRAM/org $67F0 layout was pointed out.)
     LDA ColumnDirectoryOW,X
     STA $04
     LDA ColumnDirectoryOW1,X
     STA $05
-    LDA ($02), Y                ; Get the column descriptor.
+;    LDA ($02), Y                ; Get the column descriptor.
+    jsr LDA_02_Y
     AND #$0F                    ; Put column index in X.
     TAX
     LDY #$FF
 :Anon0143
     ; Look for the beginning of a column.
     INY
-    LDA ($04), Y                ; Get a square descriptor.
+;    LDA ($04), Y                ; Get a square descriptor.
+    jsr LDA_04_Y
     BPL :Anon0143                      ; If high bit is clear, then go read the next square descriptor.
     DEX
     BPL :Anon0143                      ; If this isn't the column we want, then go keep looking.
@@ -5777,11 +5934,13 @@ LayoutRoomOrCaveOW
 
 :LoopSquareOW
     LDY #$00
-    LDA ($04), Y                ; Get the square descriptor.
+;    LDA ($04), Y                ; Get the square descriptor.
+    jsr LDA_04_Y
     AND #$3F                    ; Get square index and put it in [$0D] and X.
     STA $0D
     TAX
-    LDA PrimarySquaresOW, X
+;    LDA PrimarySquaresOW, X
+    jsr LDAL_PrimarySquaresOW_X
     PHA                         ; Save primary square.
     LDY RoomId                  ; Get room flags.
     LDA ($08), Y
@@ -5822,7 +5981,8 @@ LayoutRoomOrCaveOW
     LDA #$02                    ; Point to next square in column in play area.
     JSR AddToInt16At0
     LDY #$00
-    LDA ($04), Y                ; Get square descriptor.
+;    LDA ($04), Y                ; Get square descriptor.
+    jsr LDA_04_Y
     AND #$40
     BEQ :NextSquare             ; If we need to repeat this tile,
     EOR $0C                     ; then flip [$0C].
@@ -5870,9 +6030,11 @@ CheckTileObject
     BPL :Anon0145
     BMI L16AF0_Exit             ; If the primary isn't between $E5 to $EA, then return.
 :Anon0146
-    LDA TileObjectPrimarySquaresOW, X
+;    LDA TileObjectPrimarySquaresOW, X
+    jsr LDAL_TileObjectPrimarySquaresOW_X
     PHA                         ; Save primary square.
-    LDA TileObjectTypes, X
+;    LDA TileObjectTypes, X
+    jsr LDAL_TileObjectTypes_X
     STA RoomTileObjType
     LDA $06                     ; Get current column in play area where we'll put a square.
     ASL                         ; Store the X coordinate of tile object (column * $10).
@@ -5936,27 +6098,33 @@ WriteSquareOW
     ASL
     ASL
     TAX
-    LDA SecondarySquaresOW, X
+;    LDA SecondarySquaresOW, X
+    jsr LDAL_SecondarySquaresOW_X
     STA ($00), Y                ; Write tile+0 to (col, row).
     INY
     INX
-    LDA SecondarySquaresOW, X
+;    LDA SecondarySquaresOW, X
+    jsr LDAL_SecondarySquaresOW_X
     STA ($00), Y                ; Write tile+1 to (col, row+1).
     TYA
     CLC
     ADC #$15
     TAY
     INX
-    LDA SecondarySquaresOW, X
+;    LDA SecondarySquaresOW, X
+    jsr LDAL_SecondarySquaresOW_X
     STA ($00), Y                ; Write tile+2 to (col+1, row).
     INX
-    LDA SecondarySquaresOW, X
+;    LDA SecondarySquaresOW, X
+    jsr LDAL_SecondarySquaresOW_X
     JMP :WriteLastTile          ; Go write tile+3 to (col+1, row+1).
 
 PatchColumnDirectoryForCellar
     ; In OW, set first address of directory to start of OW column heap, as expected.
-    LDA ColumnHeapOWAddr
-    LDX ColumnHeapOWAddr+1
+;    LDA ColumnHeapOWAddr
+    jsr LDAL_ColumnHeapOWAddr
+;    LDX ColumnHeapOWAddr+1
+    jsr LDXL_ColumnHeapOWAddr_P1
     LDY CurLevel
     BEQ :Anon0147
 
@@ -5964,6 +6132,10 @@ PatchColumnDirectoryForCellar
     LDA #<ColumnHeapUWCellar
     LDX #>ColumnHeapUWCellar
 :Anon0147
+    ; ColumnDirectoryOW/OW1 live in rom_06.s's WRAM-resident "BANK_06_DATA" block
+    ; (org $67F0, populated by CopyCommonDataToRam) -- plain short STA/STX are
+    ; correct here, same as the reads above. (Also previously miscategorized and
+    ; "fixed" with STAL; reverted.)
     STA ColumnDirectoryOW
     STX ColumnDirectoryOW1
     RTS
@@ -5977,9 +6149,11 @@ SubroomLayoutAddrs
 LayoutCaveAndAvanceSubmode
     LDX #$00                    ; Usual cave
 :Anon0148
-    LDA SubroomLayoutAddrs, X
+;    LDA SubroomLayoutAddrs, X
+    jsr LDAL_SubroomLayoutAddrs_X
     STA $02
-    LDA SubroomLayoutAddrs+1, X
+;    LDA SubroomLayoutAddrs+1, X
+    jsr LDAL_SubroomLayoutAddrs_P1_X
     STA $03
     INC GameSubmode
     JMP LayoutRoomOrCaveOW
@@ -6125,7 +6299,8 @@ ChangePlayMapSquareOW ENT
 :Anon0149
     LDX #$0E
 :Anon0150
-    CMP PrimarySquaresOW, X
+;    CMP PrimarySquaresOW, X
+    jsr CMPL_PrimarySquaresOW_X
     BEQ :Write
     DEX
     BNE :Anon0150
@@ -6388,7 +6563,8 @@ SetupObjRoomBounds ENT
 :Anon0154
     LDX #$00
 :Anon0155
-    LDA ObjectRoomBoundsOW, Y
+;    LDA ObjectRoomBoundsOW, Y
+    jsr LDAL_ObjectRoomBoundsOW_Y
     STA RoomBoundLeft, X
     INY
     INX
@@ -6445,7 +6621,8 @@ InitMode6 ENT
 :SetWalkDistance0
     LDY #$02
 :Anon0158
-    LDA LeavingRoomRelativePositions, Y
+;    LDA LeavingRoomRelativePositions, Y
+    jsr LDAL_LeavingRoomRelativePositions_Y
     STA ObjGridOffset
     JSR RunCrossRoomTasksAndBeginUpdateMode
 
@@ -6659,7 +6836,8 @@ InitMode9_EnterCellar
     BEQ :Anon0166
     INX
 :Anon0166
-    LDA CellarLadderXs, X
+;    LDA CellarLadderXs, X
+    jsr LDAL_CellarLadderXs_X
     STA ObjX
 
     ; Link goes at Y=$41, and facing down.
@@ -6762,7 +6940,8 @@ Submenu_CueTransferRowUW
     ; buffer for this row.
     CMP #$0D
     BCS :Anon0168
-    LDA SubmenuTransferBufSelectorsUW, Y
+;    LDA SubmenuTransferBufSelectorsUW, Y
+    jsr LDAL_SubmenuTransferBufSelectorsUW_Y
 
 :SelectTransferBuf
     JMP SelectTransferBufAndDecCounter
@@ -6833,7 +7012,8 @@ Submenu_CueTransferRowOW
     ; transfer buffer for this row.
     CMP #$15
     BCS :Anon0171
-    LDA SubmenuTransferBufSelectorsOW, Y
+;    LDA SubmenuTransferBufSelectorsOW, Y
+    jsr LDAL_SubmenuTransferBufSelectorsOW_Y
 
 SelectTransferBufAndDecCounter
     STA TileBufSelector
@@ -7044,7 +7224,8 @@ HaveInput
     JSR GetOppositeDir          ; Do this to get reverse index of object direction.
     LDA ObjInputDir
     PHA                         ; Save input directions.
-    AND AxisMasks, Y            ; Mask input directions with the mask for the object's direction's axis.
+;    AND AxisMasks, Y            ; Mask input directions with the mask for the object's direction's axis.
+    jsr ANDL_AxisMasks_Y
     STA $0C
     PLA                         ; Restore input directions.
     EOR $0C
@@ -7442,7 +7623,8 @@ CalculateNextRoomForDoor ENT
     BEQ :Anon0194                     ; If they don't match, go try the next one.
     JSR GetUniqueRoomId
     STA $04E4                   ; UNKNOWN: [$04E4] holds room layout. But it's unused.
-    LDA NextRoomIdOffsets, X    ; Look up offset used to calculate next room ID from current one.
+;    LDA NextRoomIdOffsets, X    ; Look up offset used to calculate next room ID from current one.
+    jsr LDAL_NextRoomIdOffsets_X
     CLC
     ADC RoomId
     STA NextRoomId              ; Adding the offset to RoomId yields the room ID in the desired direction.
@@ -7488,7 +7670,8 @@ CalcNextRoomByDir
     DEX
     JMP :Anon0197                      ; Go check the next direction.
 :Anon0198
-    LDA NextRoomIdOffsets, X
+;    LDA NextRoomIdOffsets, X
+    jsr LDAL_NextRoomIdOffsets_X
     CLC                         ; Adding offset and room ID yields next room ID.
     ADC RoomId
     RTS
@@ -7579,7 +7762,8 @@ Submenu_WriteSheetMapRowTransferRecord
     ; If the current row is set in the submenu map mask,
     ; then replace the tile with $F5, a blank map tile.
     LDA LevelInfo_SubmenuMapMask, Y
-    AND MapRowMasks, X
+;    AND MapRowMasks, X
+    jsr ANDL_MapRowMasks_X
     BNE :Anon0202
     LDA #$F5
     STA DynTileBuf+3, Y
@@ -7831,7 +8015,8 @@ DrawSubmenuItems
     TAY                         ; Save item slot to Y register. Maybe this was in anticipation of calling E735?
 
     ; Look up and set the X coordinate of this item.
-    LDA SubmenuItemXs, X
+;    LDA SubmenuItemXs, X
+    jsr LDAL_SubmenuItemXs_X
     STA $00                     ; [00] X
 
     ; If the item goes in the first selectable row (item slot < 5),
@@ -7939,7 +8124,8 @@ UpdateSubmenuSelection
     ; Look up the X coordinate for the selected item slot.
     ; Set it for the left cursor sprite.
     ; Then add 8 to set the right cursor sprite's X.
-    LDA SubmenuCursorXs, Y
+;    LDA SubmenuCursorXs, Y
+    jsr LDAL_SubmenuCursorXs_Y
     STA Sprites+31
     CLC
     ADC #$08

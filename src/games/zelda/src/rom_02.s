@@ -29,6 +29,81 @@ SetMirrorMode  EXT
 
             ds \,$00
 
+; Create stubs to handle converting self-references into long addressing so it works when the ROM code is
+; in another IIgs memory bank.  Our memory model keeps the PBR in a fixed bank so that any access to RAM
+; or high ROM ($C000 - $FFFF) always work.  Refrences to the lower ROM ($8000 - $BFFF) need to be translated
+; to the correct bank.  The stubs are used to convert the self-references into long addressing so that they work
+; properly.
+
+LDAL_CommonPatternBlockAddrs_X LDA_LONG_X CommonPatternBlockAddrs
+LDAL_CommonPatternBlockSizes_X LDA_LONG_X CommonPatternBlockSizes
+LDAL_CommonPatternVramAddrs_X LDA_LONG_X CommonPatternVramAddrs
+LDAL_TitlePaletteTransferRecord_X LDA_LONG_X TitlePaletteTransferRecord
+LDAL_StoryPaletteTransferRecord_X LDA_LONG_X StoryPaletteTransferRecord
+LDAL_DemoLineAttrs_X LDA_LONG_X DemoLineAttrs
+LDAL_DemoLineTextAddrs_X LDA_LONG_X DemoLineTextAddrs
+LDAL_DemoLineTextAddrs_P1_X LDA_LONG_X DemoLineTextAddrs+1
+LDAL_DemoLineAttrs_Y LDA_LONG_Y DemoLineAttrs
+LDAL_DemoLeftItemIds_Y LDA_LONG_Y DemoLeftItemIds
+LDAL_DemoItemColumnX1 LDA_LONG DemoItemColumnX1
+LDAL_DemoRightItemIds_Y LDA_LONG_Y DemoRightItemIds
+LDAL_DemoItemColumnX2 LDA_LONG DemoItemColumnX2
+LDAL_DemoStoryFinalSpriteTiles_Y LDA_LONG_Y DemoStoryFinalSpriteTiles
+LDAL_DemoStoryFinalSpriteAttrs_Y LDA_LONG_Y DemoStoryFinalSpriteAttrs
+LDAL_InitialTitleSprites_M1_Y LDA_LONG_Y InitialTitleSprites-1
+LDAL_TriforcePaletteTransferRecord_Y LDA_LONG_Y TriforcePaletteTransferRecord
+LDAL_TriforceGlowingColors_Y LDA_LONG_Y TriforceGlowingColors
+LDYL_WaterfallWaveSpriteOffsets_X LDY_LONG_X WaterfallWaveSpriteOffsets
+LDAL_WaterfallWaveTiles_X LDA_LONG_X WaterfallWaveTiles
+LDAL_WaterfallSpriteXs_X LDA_LONG_X WaterfallSpriteXs
+ADCL_WaterfallCrestTiles_X ADC_LONG_X WaterfallCrestTiles
+LDAL_DemoPhase0Subphase1Delays_M1_Y LDA_LONG_Y DemoPhase0Subphase1Delays-1
+LDAL_SaveFileBAddressSets_Y LDA_LONG_Y SaveFileBAddressSets
+LDAL_ModeFTitleTransferBuf_X LDA_LONG_X ModeFTitleTransferBuf
+LDAL_ModeFTitlePatchRegister_Y LDA_LONG_Y ModeFTitlePatchRegister
+LDAL_ModeFSaveSlotTemplateTransferBuf_X LDA_LONG_X ModeFSaveSlotTemplateTransferBuf
+LDAL_ModeFSaveSlotTemplatePatchRegister_Y LDA_LONG_Y ModeFSaveSlotTemplatePatchRegister
+CMPL_ZeldaString_X CMP_LONG_X ZeldaString
+LDXL_SlotToBlankNameTransferBufEndOffset_Y LDX_LONG_Y SlotToBlankNameTransferBufEndOffset
+LDAL_DeletedSlotBlankNameTransferBuf_X LDA_LONG_X DeletedSlotBlankNameTransferBuf
+ADCL_ModeE_CharBoardYOffsetsAndBounds_X ADC_LONG_X ModeE_CharBoardYOffsetsAndBounds
+CMPL_ModeE_CharBoardYOffsetsAndBounds_X CMP_LONG_X ModeE_CharBoardYOffsetsAndBounds
+LDAL_ModeE_CharBoardYOffsetsAndBounds_X LDA_LONG_X ModeE_CharBoardYOffsetsAndBounds
+LDAL_SlotToNameOffset_Y LDA_LONG_Y SlotToNameOffset
+LDXL_SlotToInitialNameCharTransferHeaderEndOffsets_Y LDX_LONG_Y SlotToInitialNameCharTransferHeaderEndOffsets
+LDAL_SlotToInitialNameCharTransferHeaders_X LDA_LONG_X SlotToInitialNameCharTransferHeaders
+LDAL_ModeE_CharMap_Y LDA_LONG_Y ModeE_CharMap
+LDAL_ModeEandFCursorSprites_Y LDA_LONG_Y ModeEandFCursorSprites
+LDAL_ModeEandFSlotCursorYs_Y LDA_LONG_Y ModeEandFSlotCursorYs
+LDAL_LinkColors_Y LDA_LONG_Y LinkColors
+LDAL_Mode1SlotLineTransferBuf_Y LDA_LONG_Y Mode1SlotLineTransferBuf
+LDAL_Mode1DeathCountsTransferBuf_Y LDA_LONG_Y Mode1DeathCountsTransferBuf
+LDAL_Mode1CursorSpriteTriplet_Y LDA_LONG_Y Mode1CursorSpriteTriplet
+LDAL_Mode1CursorSpriteYs_Y LDA_LONG_Y Mode1CursorSpriteYs
+LDAL_ProfileNameAddrsLo_Y LDA_LONG_Y ProfileNameAddrsLo
+LDAL_ProfileNameAddrsHi_Y LDA_LONG_Y ProfileNameAddrsHi
+LDAL_SaveSlotHeartsAddrsLo_Y LDA_LONG_Y SaveSlotHeartsAddrsLo
+LDAL_SaveSlotHeartsAddrsHi_Y LDA_LONG_Y SaveSlotHeartsAddrsHi
+LDAL_PlayAreaAttr0TransferBuf_Y LDA_LONG_Y PlayAreaAttr0TransferBuf
+LDAL_ThanksTextboxCharTransferRecTemplate_Y LDA_LONG_Y ThanksTextboxCharTransferRecTemplate
+LDAL_ThanksTextboxLineAddrsLo_Y LDA_LONG_Y ThanksTextboxLineAddrsLo
+LDAL_EndingFlashColors_X LDA_LONG_X EndingFlashColors
+LDAL_PeaceTextboxCharTransferRecTemplate_Y LDA_LONG_Y PeaceTextboxCharTransferRecTemplate
+LDAL_PeaceText_Y LDA_LONG_Y PeaceText
+LDAL_PeaceTextboxCharAddrsLo_Y LDA_LONG_Y PeaceTextboxCharAddrsLo
+CMPL_CreditsLastScreenList_Y CMP_LONG_Y CreditsLastScreenList
+CMPL_CreditsLastVscrollList_Y CMP_LONG_Y CreditsLastVscrollList
+LDAL_CreditLineVramAddrsHi_X LDA_LONG_X CreditLineVramAddrsHi
+LDAL_CreditsPagesTextMasks_X LDA_LONG_X CreditsPagesTextMasks
+LDAL_CreditsTextAddrsLo_Y LDA_LONG_Y CreditsTextAddrsLo
+LDAL_CreditsTextAddrsHi_Y LDA_LONG_Y CreditsTextAddrsHi
+LDAL_CreditsAttrs_Y LDA_LONG_Y CreditsAttrs
+LDAL_WorldFlagBlockAddrs_X LDA_LONG_X WorldFlagBlockAddrs
+LDAL_WorldFlagBlockAddrs_P1_X LDA_LONG_X WorldFlagBlockAddrs+1
+
+; MMC1 memory helper for indirect loads
+LDA_00_Y MMC1_LDA_IND_Y $00
+
             use   BeginEndVars.inc
             use   CaveVars.inc
             use   CommonVars.inc
@@ -37,6 +112,11 @@ SetMirrorMode  EXT
 
 ; Do not encroach on WRAM (battery-backed space)
             ds    $6000-*
+
+; Anchor label at $6C90, exported so rom_01.s's CopyCommonCodeToRam can replicate
+; the shared "Bank 1 common RAM code" block into this bank too (see BANK_01_CODE.md).
+            ds    $6C90-*
+ROM02CodeAnchor ENT
 
 ; Pad up to $8000
             ds    $8000-*
@@ -83,18 +163,24 @@ TransferCommonPatterns ENT
     ; Put block address in [00:01] and size in [03:02].
     ; Load destination VRAM address and set it.
     ; The size and VRAM address have the high byte first.
-    LDA CommonPatternBlockAddrs, X
+;    LDA CommonPatternBlockAddrs, X
+    jsr LDAL_CommonPatternBlockAddrs_X
     STA $00
-    LDA CommonPatternBlockSizes, X
+;    LDA CommonPatternBlockSizes, X
+    jsr LDAL_CommonPatternBlockSizes_X
     STA $02
-    LDA CommonPatternVramAddrs, X
+;    LDA CommonPatternVramAddrs, X
+    jsr LDAL_CommonPatternVramAddrs_X
             JSR   STA_2006
     INX
-    LDA CommonPatternBlockAddrs, X
+;    LDA CommonPatternBlockAddrs, X
+    jsr LDAL_CommonPatternBlockAddrs_X
     STA $01
-    LDA CommonPatternBlockSizes, X
+;    LDA CommonPatternBlockSizes, X
+    jsr LDAL_CommonPatternBlockSizes_X
     STA $03
-    LDA CommonPatternVramAddrs, X
+;    LDA CommonPatternVramAddrs, X
+    jsr LDAL_CommonPatternVramAddrs_X
     JSR TransferPatternBlock_Bank2
 
     ; Loop until pattern block index = 3.
@@ -118,7 +204,8 @@ TransferPatternBlock_Bank2
 
 :Loop
     ; Load and transfer 1 byte to VRAM.
-    LDA ($00), Y
+;    LDA ($00), Y
+    jsr LDA_00_Y
             JSR   STA_2007
 
     ; Increment the 16-bit source address at [00:01].
@@ -463,7 +550,8 @@ InitDemoSubphaseTransferTitlePalette
     STX DynTileBufLen
 
 :CopyTitlePalette
-    LDA TitlePaletteTransferRecord, X
+;    LDA TitlePaletteTransferRecord, X
+    jsr LDAL_TitlePaletteTransferRecord_X
     STA DynTileBuf, X
     DEX
     BPL :CopyTitlePalette
@@ -509,7 +597,8 @@ InitDemoSubphaseTransferStoryPalette
     STX DynTileBufLen
 
 :CopyStoryPalette
-    LDA StoryPaletteTransferRecord, X
+;    LDA StoryPaletteTransferRecord, X
+    jsr LDAL_StoryPaletteTransferRecord_X
     STA DynTileBuf, X
     DEX
     BPL :CopyStoryPalette
@@ -698,18 +787,22 @@ AnimateDemoPhase1Subphase2
 :CheckText
     ; Check text and NT attributes.
     LDX DemoLineIndex
-    LDA DemoLineAttrs, X
+;    LDA DemoLineAttrs, X
+    jsr LDAL_DemoLineAttrs_X
     AND #$80
     BEQ :ProcessAttrs           ; If attribute $80 isn't set, then leave the line blank.
     LDA DemoLineTextIndex
     ASL
     TAX
     LDY #$00
-    LDA DemoLineTextAddrs, X    ; Get the address of the current text field.
+;    LDA DemoLineTextAddrs, X    ; Get the address of the current text field.
+    jsr LDAL_DemoLineTextAddrs_X
     STA $00
-    LDA DemoLineTextAddrs+1, X
+;    LDA DemoLineTextAddrs+1, X
+    jsr LDAL_DemoLineTextAddrs_P1_X
     STA $01
-    LDA ($00), Y                ; The first byte of text field is the offset into the line.
+;    LDA ($00), Y                ; The first byte of text field is the offset into the line.
+    jsr LDA_00_Y
     TAX
 
 :CopyLine
@@ -718,7 +811,8 @@ AnimateDemoPhase1Subphase2
     ;
     ; Get the next source tile.
     INY
-    LDA ($00), Y
+;    LDA ($00), Y
+    jsr LDA_00_Y
     CMP #$FF
     BEQ :EndLine                ; When you reach the end marker, quit.
     STA DynTileBuf+3, X         ; Copy to the tile buf.
@@ -736,7 +830,8 @@ AnimateDemoPhase1Subphase2
 
 ProcessDemoLineAttrs
     LDX DemoLineIndex
-    LDA DemoLineAttrs, X
+;    LDA DemoLineAttrs, X
+    jsr LDAL_DemoLineAttrs_X
     AND #$40
     BEQ :Exit                   ; If attribute $40 is missing, then return.
 
@@ -804,7 +899,8 @@ DisableFallenObjects
 
 ProcessDemoLineItems
     LDY DemoLineIndex
-    LDA DemoLineAttrs, Y
+;    LDA DemoLineAttrs, Y
+    jsr LDAL_DemoLineAttrs_Y
     AND #$20                    ; If attribute $20 is present, then instantiate a new object.
     BNE :MakeObject
     RTS
@@ -820,11 +916,13 @@ ProcessDemoLineItems
 
 :SetUpObject
     LDY DemoItemRow
-    LDA DemoLeftItemIds, Y      ; Allocate an object for the item on the left.
+;    LDA DemoLeftItemIds, Y      ; Allocate an object for the item on the left.
+    jsr LDAL_DemoLeftItemIds_Y
     STA DemoItemIds, X
     LDA #$EF                    ; Start at the bottom of the screen.
     STA ObjY, X
-    LDA DemoItemColumnX1
+;    LDA DemoItemColumnX1
+    jsr LDAL_DemoItemColumnX1
     STA ObjX, X
     LDA #$00
     STA ObjState, X
@@ -832,15 +930,18 @@ ProcessDemoLineItems
     CMP #$30                    ; Link gets a special item ID.
     BCS :CenterLink             ; Go center the object horizontally, if it is Link.
     DEX                         ; Allocate another object for the item on the right.
-    LDA DemoRightItemIds, Y
+;    LDA DemoRightItemIds, Y
+    jsr LDAL_DemoRightItemIds_Y
     STA DemoItemIds, X
     LDA #$EF
     STA ObjY, X
-    LDA DemoItemColumnX2
+;    LDA DemoItemColumnX2
+    jsr LDAL_DemoItemColumnX2
     STA ObjX, X
     LDA #$00
     STA ObjState, X
-    LDA DemoLeftItemIds, Y
+;    LDA DemoLeftItemIds, Y
+    jsr LDAL_DemoLeftItemIds_Y
     CMP #$1B
     BNE :IncRow
 
@@ -956,12 +1057,14 @@ AnimateDemoStoryFinalItems
     TAX                         ; X gets the offset to the sprite (index * 4).
 
 :LoopSprite
-    LDA DemoStoryFinalSpriteTiles, Y    ; From this table, get the tile.
+;    LDA DemoStoryFinalSpriteTiles, Y    ; From this table, get the tile.
+    jsr LDAL_DemoStoryFinalSpriteTiles_Y
     BEQ :SkipSprite             ; If it's zero, skip the sprite.
     STA Sprites+1, X
     LDA $00                     ; Write sprite Y.
     STA Sprites, X              ; From this table, get the attributes.
-    LDA DemoStoryFinalSpriteAttrs, Y
+;    LDA DemoStoryFinalSpriteAttrs, Y
+    jsr LDAL_DemoStoryFinalSpriteAttrs_Y
     STA Sprites+2, X
     LDA $01                     ; Write sprite X.
     STA Sprites+3, X
@@ -1016,7 +1119,8 @@ AnimateDemoPhase0Subphase0Artifacts
     LDY #$70
 
 :CopySprites
-    LDA InitialTitleSprites-1, Y
+;    LDA InitialTitleSprites-1, Y
+    jsr LDAL_InitialTitleSprites_M1_Y
     STA Sprites-1, Y
     DEY
     BNE :CopySprites
@@ -1029,7 +1133,8 @@ AnimateDemoPhase0Subphase0Artifacts
     LDY #$07
 
 :CopyTriforcePalette
-    LDA TriforcePaletteTransferRecord, Y
+;    LDA TriforcePaletteTransferRecord, Y
+    jsr LDAL_TriforcePaletteTransferRecord_Y
     STA DynTileBuf, Y
     DEY
     BPL :CopyTriforcePalette
@@ -1037,7 +1142,8 @@ AnimateDemoPhase0Subphase0Artifacts
     ; Patch the palette record with the color
     ; for the current point in the cycle.
     LDY TriforceGlowCycle
-    LDA TriforceGlowingColors, Y
+;    LDA TriforceGlowingColors, Y
+    jsr LDAL_TriforceGlowingColors_Y
     STA DynTileBuf+5
     LDA #$06                    ; Restart the glow timer.
     STA TriforceGlowTimer
@@ -1130,15 +1236,18 @@ UpdateSpritesForWaterfallWave
 :SetOffset
     STA $00
     STX $02                     ; Keep a copy of the wave index in [$02].
-    LDY WaterfallWaveSpriteOffsets, X    ; Y gets offset of first sprite in current wave.
+;    LDY WaterfallWaveSpriteOffsets, X    ; Y gets offset of first sprite in current wave.
+    jsr LDYL_WaterfallWaveSpriteOffsets_X
     LDX #$03                    ; For each sprite (4) in current wave, indexed by X:
 
 :LoopSprite
-    LDA WaterfallWaveTiles, X   ; Get base tile for current sprite.
+;    LDA WaterfallWaveTiles, X   ; Get base tile for current sprite.
+    jsr LDAL_WaterfallWaveTiles_X
     CLC
     ADC $00                     ; Modify the tile according to the current state of the wave.
     STA Sprites+1, Y
-    LDA WaterfallSpriteXs, X    ; Set sprite X to each part of wave in a row.
+;    LDA WaterfallSpriteXs, X    ; Set sprite X to each part of wave in a row.
+    jsr LDAL_WaterfallSpriteXs_X
     STA Sprites+3, Y
     LDA $05                     ; Set sprite Y to rolling value.
     STA Sprites, Y
@@ -1162,11 +1271,13 @@ UpdateSpritesForWaterfallCrest
     ; the two frames of animation.
     LDA FrameCounter
     AND #$08
-    ADC WaterfallCrestTiles, X
+;    ADC WaterfallCrestTiles, X
+    jsr ADCL_WaterfallCrestTiles_X
     STA Sprites+1, Y
     LDA #$A8                    ; The Y coordinate is fixed in place.
     STA Sprites, Y
-    LDA WaterfallSpriteXs, X    ; Set sprite X to each part of crest in a row.
+;    LDA WaterfallSpriteXs, X    ; Set sprite X to each part of crest in a row.
+    jsr LDAL_WaterfallSpriteXs_X
     STA Sprites+3, Y
     LDA #$00                    ; Set sprite attributes: normal with palette 4.
     STA Sprites+2, Y
@@ -1285,7 +1396,8 @@ AnimateDemoPhase0Subphase1
     STA DynTileBuf+4, Y
 
 :CopyPalette
-    LDA ($00), Y                ; Copy the chosen palette into the transfer record.
+;    LDA ($00), Y                ; Copy the chosen palette into the transfer record.
+    jsr LDA_00_Y
     STA DynTileBuf+3, Y
     DEY
     BPL :CopyPalette
@@ -1295,7 +1407,8 @@ AnimateDemoPhase0Subphase1
 
     ; Set the timer to the delay for the current point in the cycle.
     LDY DemoPhase0Subphase1Cycle
-    LDA DemoPhase0Subphase1Delays-1, Y
+;    LDA DemoPhase0Subphase1Delays-1, Y
+    jsr LDAL_DemoPhase0Subphase1Delays_M1_Y
     STA DemoPhase0Subphase1Timer
     CPY #$0E
     BCC :UpdateAnimation        ; If we reached the end of the cycle,
@@ -1390,7 +1503,8 @@ FetchFileBAddressSet
     LDX #$0D
 
 :CopyAddresses
-    LDA SaveFileBAddressSets, Y
+;    LDA SaveFileBAddressSets, Y
+    jsr LDAL_SaveFileBAddressSets_Y
     STA $C0, X
     DEY
     DEX
@@ -1480,7 +1594,8 @@ InitModeEandF_Full ENT
     LDX #$1C                    ; Copy the title tiles to the dynamic transfer buf.
 
 :CopyTiles
-    LDA ModeFTitleTransferBuf, X
+;    LDA ModeFTitleTransferBuf, X
+    jsr LDAL_ModeFTitleTransferBuf_X
     STA DynTileBuf, X
     DEX
     BPL :CopyTiles
@@ -1490,7 +1605,8 @@ InitModeEandF_Full ENT
     LDY #$00
 
 :OverwriteTitle
-    LDA ModeFTitlePatchRegister, Y
+;    LDA ModeFTitlePatchRegister, Y
+    jsr LDAL_ModeFTitlePatchRegister_Y
     STA DynTileBuf+7, Y
     INY
     CPY #$12
@@ -1514,7 +1630,8 @@ InitModeEandF_Full ENT
     LDX #$33
 
 :CopySlotTemplates
-    LDA ModeFSaveSlotTemplateTransferBuf, X
+;    LDA ModeFSaveSlotTemplateTransferBuf, X
+    jsr LDAL_ModeFSaveSlotTemplateTransferBuf_X
     STA DynTileBuf, X
     DEX
     BPL :CopySlotTemplates
@@ -1540,7 +1657,8 @@ InitModeEandF_Full ENT
     LDY #$00
 
 :OverwriteEndOption
-    LDA ModeFSaveSlotTemplatePatchRegister, Y
+;    LDA ModeFSaveSlotTemplatePatchRegister, Y
+    jsr LDAL_ModeFSaveSlotTemplatePatchRegister_Y
     STA DynTileBuf+3, X
     INX
     INY
@@ -1688,7 +1806,8 @@ UpdateModeERegister ENT
 
 :CompareToZelda
     LDA Names, Y
-    CMP ZeldaString, X
+;    CMP ZeldaString, X
+    jsr CMPL_ZeldaString_X
     BNE :FlagBReady             ; If there's any mismatch, then skip the rest.
     INY
     INX
@@ -1775,14 +1894,16 @@ DeleteSlot
     LDA #$08                    ; "Hurt" sound effect
     STA SampleRequest
     LDY CurSaveSlot
-    LDX SlotToBlankNameTransferBufEndOffset, Y
+;    LDX SlotToBlankNameTransferBufEndOffset, Y
+    jsr LDXL_SlotToBlankNameTransferBufEndOffset_Y
 
     ; Copy the appropriate transfer buf of a blank name for
     ; current slot to dynamic transfer buf.
     LDY #$04
 
 :CopyBlankBuf
-    LDA DeletedSlotBlankNameTransferBuf, X
+;    LDA DeletedSlotBlankNameTransferBuf, X
+    jsr LDAL_DeletedSlotBlankNameTransferBuf_X
     STA DynTileBuf, Y
     DEX
     DEY
@@ -1953,13 +2074,16 @@ CycleCharBoardCursorY
     LDY #$00
     LDA ObjY+1                  ; Move the char board cursor Y one spot in given direction.
     CLC
-    ADC ModeE_CharBoardYOffsetsAndBounds, X    ; Add $10 or -$10 ($F0), depending on X passed in (0 or 3).
+;    ADC ModeE_CharBoardYOffsetsAndBounds, X    ; Add $10 or -$10 ($F0), depending on X passed in (0 or 3).
+    jsr ADCL_ModeE_CharBoardYOffsetsAndBounds_X
     STA ObjY+1
     INX                         ; Look at boundaries.
-    CMP ModeE_CharBoardYOffsetsAndBounds, X
+;    CMP ModeE_CharBoardYOffsetsAndBounds, X
+    jsr CMPL_ModeE_CharBoardYOffsetsAndBounds_X
     BNE :ReturnValue            ; If we didn't reach the boundary, then return Y=0.
     INX                         ; Set cursor Y to wrapped around position.
-    LDA ModeE_CharBoardYOffsetsAndBounds, X
+;    LDA ModeE_CharBoardYOffsetsAndBounds, X
+    jsr LDAL_ModeE_CharBoardYOffsetsAndBounds_X
     STA ObjY+1
     INY                         ; Return ModeE_WrappedAroundBoardY [$042A]=1.
 
@@ -1981,16 +2105,19 @@ ModeE_HandleAOrB
 
     ; Set NameCharOffset [$0421] to the offset of first char
     ; in the current slot's name.
-    LDA SlotToNameOffset, Y
+;    LDA SlotToNameOffset, Y
+    jsr LDAL_SlotToNameOffset_Y
     STA NameCharOffset
 
     ; Get the offset of the end of the initial name character
     ; transfer record header for the current slot.
-    LDX SlotToInitialNameCharTransferHeaderEndOffsets, Y
+;    LDX SlotToInitialNameCharTransferHeaderEndOffsets, Y
+    jsr LDXL_SlotToInitialNameCharTransferHeaderEndOffsets_Y
     LDY #$02                    ; Each transfer record header is 3 bytes.
 
 :CopyHeaderTemplate
-    LDA SlotToInitialNameCharTransferHeaders, X
+;    LDA SlotToInitialNameCharTransferHeaders, X
+    jsr LDAL_SlotToInitialNameCharTransferHeaders_X
     STA NameInputCharBuf, Y     ; Copy a byte of transfer header for current slot to [$0422][Y].
     DEX
     DEY
@@ -2027,7 +2154,8 @@ ModeE_HandleAOrB
     STY DynTileBuf+4            ; Write the end marker to dynamic transfer buf.
     LDX NameCharOffset
     LDY CharBoardIndex          ; CharBoardIndex in [$041F] will index into character map.
-    LDA ModeE_CharMap, Y        ; Get the character that's highlighted.
+;    LDA ModeE_CharMap, Y        ; Get the character that's highlighted.
+    jsr LDAL_ModeE_CharMap_Y
     STA DynTileBuf+3            ; Write the chosen character to dynamic transfer buf.
     STA Names, X                ; Set the character in the name.
 
@@ -2068,7 +2196,8 @@ ModeE_HandleAOrB
     ; It also means that we went past the end of the save slot
     ; info name. Set the offset to the beginning of the name.
     LDY CurSaveSlot
-    LDA SlotToNameOffset, Y
+;    LDA SlotToNameOffset, Y
+    jsr LDAL_SlotToNameOffset_Y
     STA NameCharOffset
 
     ; If the name cursor has gone past the end of the field,
@@ -2089,12 +2218,14 @@ ModeEandF_SetUpCursorSprites
     LDY #$0A
 
 :CopySprites
-    LDA ModeEandFCursorSprites, Y
+;    LDA ModeEandFCursorSprites, Y
+    jsr LDAL_ModeEandFCursorSprites_Y
     STA Sprites+1, Y
     DEY
     BPL :CopySprites
     LDY CurSaveSlot             ; Set the Y of the slot cursor sprite (#0) according to current save slot.
-    LDA ModeEandFSlotCursorYs, Y
+;    LDA ModeEandFSlotCursorYs, Y
+    jsr LDAL_ModeEandFSlotCursorYs_Y
     STA ObjY
     STA Sprites
     LDA GameMode
@@ -2195,7 +2326,8 @@ UpdateModeEandF_Idle
     LDY #$00
     STY CurSaveSlot
 :Anon0016
-    LDA ModeEandFSlotCursorYs, Y    ; Set sprite Y for new selection.
+;    LDA ModeEandFSlotCursorYs, Y    ; Set sprite Y for new selection.
+    jsr LDAL_ModeEandFSlotCursorYs_Y
     STA Sprites
     LDA GameMode
     CMP #$0F
@@ -2572,7 +2704,8 @@ InitMode1_Sub1
     PHA
     LDA ($00), Y                ; Get the ring inventory value.
     TAY
-    LDA LinkColors, Y           ; Get the color for that ring level.
+;    LDA LinkColors, Y           ; Get the color for that ring level.
+    jsr LDAL_LinkColors_Y
 
     ; Put the color in the byte 2 of row for current slot in
     ; sprite palette that will be transferred.
@@ -2613,7 +2746,8 @@ InitMode1_FillAndTransferSlotTiles
     LDY #$1F
 
 :CopySlotLineTemplate
-    LDA Mode1SlotLineTransferBuf, Y
+;    LDA Mode1SlotLineTransferBuf, Y
+    jsr LDAL_Mode1SlotLineTransferBuf_Y
     STA DynTileBuf, Y
     DEY
     BPL :CopySlotLineTemplate
@@ -2674,7 +2808,8 @@ InitMode1_Sub6
     LDY #$12
 
 :CopyTemplate
-    LDA Mode1DeathCountsTransferBuf, Y
+;    LDA Mode1DeathCountsTransferBuf, Y
+    jsr LDAL_Mode1DeathCountsTransferBuf_Y
     STA DynTileBuf, Y
     DEY
     BPL :CopyTemplate
@@ -2779,12 +2914,14 @@ UpdateMode1Menu_Sub0
     LDY #$02                    ; Write the tile, attributes, and X for the sprite record.
 
 :WriteCursorSprite
-    LDA Mode1CursorSpriteTriplet, Y
+;    LDA Mode1CursorSpriteTriplet, Y
+    jsr LDAL_Mode1CursorSpriteTriplet_Y
     STA Sprites+1, Y
     DEY
     BPL :WriteCursorSprite
     LDY CurSaveSlot
-    LDA Mode1CursorSpriteYs, Y
+;    LDA Mode1CursorSpriteYs, Y
+    jsr LDAL_Mode1CursorSpriteYs_Y
     STA Sprites                 ; Set the sprite Y for current option.
     LDA #$58                    ; The base Y of Link sprites is $58.
     STA $01
@@ -3155,17 +3292,21 @@ UpdateModeDSave_Sub2
 ;
 FetchProfileNameAddress
     LDY CurSaveSlot
-    LDA ProfileNameAddrsLo, Y
+;    LDA ProfileNameAddrsLo, Y
+    jsr LDAL_ProfileNameAddrsLo_Y
     STA $0C
-    LDA ProfileNameAddrsHi, Y
+;    LDA ProfileNameAddrsHi, Y
+    jsr LDAL_ProfileNameAddrsHi_Y
     STA $0D
     RTS
 
 StoreSaveSlotHearts
     LDY CurSaveSlot
-    LDA SaveSlotHeartsAddrsLo, Y
+;    LDA SaveSlotHeartsAddrsLo, Y
+    jsr LDAL_SaveSlotHeartsAddrsLo_Y
     STA $0C
-    LDA SaveSlotHeartsAddrsHi, Y
+;    LDA SaveSlotHeartsAddrsHi, Y
+    jsr LDAL_SaveSlotHeartsAddrsHi_Y
     STA $0D
     LDY #$01                    ; Copy HeartsValue and HeartsPartial to set B.
 
@@ -3252,7 +3393,8 @@ PlayAreaAttr0TransferBuf
 InitMode13_Sub1
     LDY #$04
 :Anon0031
-    LDA PlayAreaAttr0TransferBuf, Y
+;    LDA PlayAreaAttr0TransferBuf, Y
+    jsr LDAL_PlayAreaAttr0TransferBuf_Y
     STA DynTileBuf, Y
     DEY
     BPL :Anon0031
@@ -3313,7 +3455,8 @@ UpdateZeldaTextbox
     ; to the dynamic transfer buf.
     LDY #$04
 :Anon0033
-    LDA ThanksTextboxCharTransferRecTemplate, Y
+;    LDA ThanksTextboxCharTransferRecTemplate, Y
+    jsr LDAL_ThanksTextboxCharTransferRecTemplate_Y
     STA DynTileBuf, Y
     DEY
     BPL :Anon0033
@@ -3338,7 +3481,8 @@ UpdateZeldaTextbox
     INC TextboxCharIndex
 
     ; Get the current character.
-    LDA ($00), Y
+;    LDA ($00), Y
+    jsr LDA_00_Y
 
     ; If the character is $25, then it's a special space. It will still
     ; take up space, but will not take time to show -- meaning that
@@ -3355,7 +3499,8 @@ UpdateZeldaTextbox
     STA Tune0Request
 
     ; If the high 2 bits of character element = 0, then return.
-    LDA ($00), Y
+;    LDA ($00), Y
+    jsr LDA_00_Y
     AND #$C0
     BEQ LA9F4_Exit
 
@@ -3376,7 +3521,8 @@ UpdateZeldaTextbox
     ;   0: $C4: front of the second line
     ;   1: $E4: front of the third line
     ;   2: $A4: front of the first line
-    LDA ThanksTextboxLineAddrsLo, Y
+;    LDA ThanksTextboxLineAddrsLo, Y
+    jsr LDAL_ThanksTextboxLineAddrsLo_Y
     STA TextboxCharPtr
 
     ; If index = 2, then we've reached the end of the text,
@@ -3450,7 +3596,8 @@ UpdateMode13WinGame_Sub0_Flash
 
     ; Change element 0 of palette 4 in buffer to change
     ; the background color.
-    LDA EndingFlashColors, X
+;    LDA EndingFlashColors, X
+    jsr LDAL_EndingFlashColors_X
     STA DynTileBuf+19
 
 :Exit
@@ -3588,7 +3735,8 @@ UpdatePeaceTextbox
     ; to the dynamic transfer buf.
     LDY #$04
 :Anon0037
-    LDA PeaceTextboxCharTransferRecTemplate, Y
+;    LDA PeaceTextboxCharTransferRecTemplate, Y
+    jsr LDAL_PeaceTextboxCharTransferRecTemplate_Y
     STA DynTileBuf, Y
     DEY
     BPL :Anon0037
@@ -3596,7 +3744,8 @@ UpdatePeaceTextbox
     ; Load a character from the string and copy it to
     ; the transfer record until we read character $FF.
     LDY PeaceCharIndex
-    LDA PeaceText, Y
+;    LDA PeaceText, Y
+    jsr LDAL_PeaceText_Y
     CMP #$FF
     BEQ :AdvanceSubmode
     STA DynTileBuf+3
@@ -3613,7 +3762,8 @@ UpdatePeaceTextbox
 
     ; Replace the low byte of the VRAM address with the one
     ; where the next character should be written.
-    LDA PeaceTextboxCharAddrsLo, Y
+;    LDA PeaceTextboxCharAddrsLo, Y
+    jsr LDAL_PeaceTextboxCharAddrsLo_Y
     STA DynTileBuf+1
 
     ; Once the low VRAM address rolls over,
@@ -3728,13 +3878,15 @@ UpdateMode13WinGame_Sub3
     ; If we're not showing the last screen, then return.
             LDA   VScrollAddrLo  ; TODO-VERIFY-DP: was forced-absolute (a:) in original
             NOP
-    CMP CreditsLastScreenList, Y
+;    CMP CreditsLastScreenList, Y
+    jsr CMPL_CreditsLastScreenList_Y
     BCC :Exit
 
     ; If we haven't scrolled the last amount in the last screen,
     ; then return.
     LDA CurVScroll
-    CMP CreditsLastVscrollList, Y
+;    CMP CreditsLastVscrollList, Y
+    jsr CMPL_CreditsLastVscrollList_Y
     BCC :Exit
 
     ; But if we have, then go to the next submode, and set a timer
@@ -3818,7 +3970,8 @@ DrawCredits
 
     ; Write the high byte of the current VRAM page.
     LDX CreditsVramPage
-    LDA CreditLineVramAddrsHi, X
+;    LDA CreditLineVramAddrsHi, X
+    jsr LDAL_CreditLineVramAddrsHi_X
     STA DynTileBuf
 
     ; The line number will be used to shift the task mask below.
@@ -3834,7 +3987,8 @@ DrawCredits
     STA DynTileBuf+1
 
     ; Get the mask for the current VRAM page.
-    LDA CreditsPagesTextMasks, X
+;    LDA CreditsPagesTextMasks, X
+    jsr LDAL_CreditsPagesTextMasks_X
 :Anon0045
     ; Shift left as many times as the current VRAM line number,
     ; to get the bit that indicates whether this line has text.
@@ -3866,26 +4020,31 @@ DrawCredits
     CPY #$10
     BCC :IncLine
 :Anon0047
-    LDA CreditsTextAddrsLo, Y
+;    LDA CreditsTextAddrsLo, Y
+    jsr LDAL_CreditsTextAddrsLo_Y
     STA $00
-    LDA CreditsTextAddrsHi, Y
+;    LDA CreditsTextAddrsHi, Y
+    jsr LDAL_CreditsTextAddrsHi_Y
     STA $01
 
     ; First read the length of the string.
     LDY #$00
-    LDA ($00), Y
+;    LDA ($00), Y
+    jsr LDA_00_Y
     STA $02                     ; The length of the string
 
     ; Second, read the offset where the first character goes
     ; in the line.
     INY
-    LDA ($00), Y
+;    LDA ($00), Y
+    jsr LDA_00_Y
     TAX
 
     ; Loop over each character in the rest of the credits source record.
     INY
 :Anon0048
-    LDA ($00), Y
+;    LDA ($00), Y
+    jsr LDA_00_Y
     STA DynTileBuf+3, X
     INY                         ; Increment the source pointer.
     INX                         ; Increment the destination pointer.
@@ -3985,7 +4144,8 @@ DrawCredits
     ; NT attribute block row. Look up the attribute byte to use
     ; for almost every block in this NT attribute block row.
     TAY
-    LDA CreditsAttrs, Y
+;    LDA CreditsAttrs, Y
+    jsr LDAL_CreditsAttrs_Y
 
     ; Fill a record with this byte, so the whole NT attribute block
     ; row is changed.
@@ -4046,9 +4206,11 @@ SwitchProfileToSecondQuest
     LDX #$04
 
 :ClearBlock
-    LDA WorldFlagBlockAddrs, X
+;    LDA WorldFlagBlockAddrs, X
+    jsr LDAL_WorldFlagBlockAddrs_X
     STA $00
-    LDA WorldFlagBlockAddrs+1, X
+;    LDA WorldFlagBlockAddrs+1, X
+    jsr LDAL_WorldFlagBlockAddrs_P1_X
     STA $01
     LDY #$7F
     LDA #$00

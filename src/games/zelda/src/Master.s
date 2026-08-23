@@ -47,9 +47,9 @@
             KND   #$1100
             SNA   CHRDATA
 
-            ASM   rom_active.s
-            KND   #$1100
-            SNA   ZROMXX
+;            ASM   rom_active.s
+;            KND   #$1100
+;            SNA   ZROMXX
 
 ; Segment #5 -- ROM banks 00-07 (switchable NES $8000-$BFFF window).
 ; ROMBase is ENT'd only in rom_00.s; every other bank imports it EXT to

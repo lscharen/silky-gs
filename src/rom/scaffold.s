@@ -46,7 +46,6 @@ NES_StartUp
 
             lda   #^ROMBase               ; Start off in Bank 0 of the ROM
             and   #$00FF
-            inc
             sta   mapper_bank
 
             lda   #HORIZONTAL_MIRRORING

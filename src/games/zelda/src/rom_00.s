@@ -1,11 +1,43 @@
+; This is the bank that is the "live" NES bank.
+
             mx    %11
 SetMirrorMode  EXT
+ROMBase ENT
 
 ; Pad up to $5000
             ds    $5000-*
 
             put   ../../../rom/rom_inject.s
             put   helpers.s
+
+; These tables are not replicated.  They should remain in the ROMBase bank. They *MUST* come after the
+; rom_inject and helpers files and be page-aligned.
+;
+; These tables are in NES RAM space for efficiency.  This specifically is to allow the use of the
+; 65816 ldx abs,y and ldy abs,x instructions.  The core loop that scans the sprite OAM data is
+; implemented as
+;
+; ldy    ROMBase+DIRECT_OAM_READ,x
+; ldx    y_exclude,y
+
+            ds \,$00              ; page-align the tables
+
+y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
+            ds 24,$01
+            ds 200,$00
+            ds 32,$01
+
+tile_exclude ENT                  ; Tble of excluded tiles
+            ds 256,$00
+
+; Create stubs to handle converting self-references into long addressing so it works when the ROM code is
+; in another IIgs memory bank.  Our memory model keeps the PBR in a fixed bank so that any access to RAM
+; or high ROM ($C000 - $FFFF) always work.  Refrences to the lower ROM ($8000 - $BFFF) need to be translated
+; to the correct bank.  The stubs are used to convert the self-references into long addressing so that they work
+; properly.
+;
+; Because this bank is in the "live" NES IIgs bank, these addresses do *not* need translation and can be used
+; as is.
 
             use   BeginEndVars.inc
             use   CaveVars.inc

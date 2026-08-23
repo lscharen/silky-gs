@@ -116,7 +116,7 @@ NO_VERTICAL_CLIP  equ 1
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 1
+NO_INTERRUPTS     equ 0
 
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 1
@@ -240,7 +240,30 @@ SetDefaultPalette
             rts
 
 ; Color index 5 (07) is the color cycling color
-TitlePalette  db   $36,$0f,$00,$10,$17,$07,$08,$1a,$28,$30,$3b,$22,$16,$27
+;                  BG0             BG1     BG2         BG3         SP0 SP1
+TitlePalette  db   $36,$0f,$00,$10,$17,$07,$08,$1a,$28,$30,$3b,$22,$16,$27 ; 14 colors :)
+
+; Palette showing back story and items
+;                  BG0     BG1 BG2 BG3         SP0         SP1     SP2     SP3
+IntroPalette  db   $0f,$30,$21,$16,$29,$1a,$09,$29,$37,$17,$02,$22,$16,$27,$0b,$1b,$2b   ; 17 colors :(
+
+; Palette at the select screen
+;                  BG0             BG1         BG2         SP0     SP3
+SelectPalette db   $0f,$30,$00,$12,$16,$27,$36,$0c,$1c,$2c,$29,$07,$15     ; 13 colors :)
+
+; Overworld palette
+;                  BG0             BG1         BG2     BG3 SP0 SP1     SP4
+WoldPalette   db   $0f,$30,$00,$12,$16,$27,$36,$1a,$37,$17,$29,$02,$22,$1c ; 14 colors :)
+
+; Merchant
+;                  BG0             BG1         BG3     SP0 SP1     SP4
+MerchPalette  db   $0f,$30,$00,$12,$16,$27,$36,$07,$17,$29,$02,$22,$1c ; 13 colors :)
+
+; Dungeon 1 (only changes BG3 and SP2 & 3 compared to overworld)
+;                  BG0             BG1         BG2         SP0     SP1     
+Dungeon1Pal   db   $0f,$30,$00,$12,$16,$27,$36,$0c,$1c,$2c,$29,$17,$02,$22 ; 14 colors :)
+
+
 SwizzleTables adrl AT1_T0
 
 ZELDA_PALETTE_DISPATCH

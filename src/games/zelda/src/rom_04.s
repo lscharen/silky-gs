@@ -53,6 +53,119 @@ SetMirrorMode  EXT
 
             ds \,$00
 
+; Create stubs to handle converting self-references into long addressing so it works when the ROM code is
+; in another IIgs memory bank.  Our memory model keeps the PBR in a fixed bank so that any access to RAM
+; or high ROM ($C000 - $FFFF) always work.  Refrences to the lower ROM ($8000 - $BFFF) need to be translated
+; to the correct bank.  The stubs are used to convert the self-references into long addressing so that they work
+; properly.
+
+CMPL_BlockPushDirections_Y CMP_LONG_Y BlockPushDirections
+ADCL_ShotBounceHeights_Y ADC_LONG_Y ShotBounceHeights
+ADCL_ShotBounceWidths_Y ADC_LONG_Y ShotBounceWidths
+LDAL_FireballQSpeedsX_Y LDA_LONG_Y FireballQSpeedsX
+LDAL_FireballQSpeedsY_Y LDA_LONG_Y FireballQSpeedsY
+LDAL_Directions8_Y LDA_LONG_Y Directions8
+LDAL_ZolGelDelays_Y LDA_LONG_Y ZolGelDelays
+CMPL_StatueRoomLayouts_Y CMP_LONG_Y StatueRoomLayouts
+LDXL_StatueFireballCounts_Y LDX_LONG_Y StatueFireballCounts
+LDAL_StatueFireballStartTimes_Y LDA_LONG_Y StatueFireballStartTimes
+ADCL_StatuePatternToBasePositionIndex_Y ADC_LONG_Y StatuePatternToBasePositionIndex
+LDAL_StatueXs_Y LDA_LONG_Y StatueXs
+LDAL_StatueYs_Y LDA_LONG_Y StatueYs
+LDAL_TektiteStartingDirs_Y LDA_LONG_Y TektiteStartingDirs
+ADCL_JumperYOffsets_Y ADC_LONG_Y JumperYOffsets
+LDAL_JumperStartSpeedsHi_Y LDA_LONG_Y JumperStartSpeedsHi
+LDAL_JumperYAccelerationBaseOffsets_Y LDA_LONG_Y JumperYAccelerationBaseOffsets
+LDAL_JumperYAccelerations_Y LDA_LONG_Y JumperYAccelerations
+LDAL_BlueLeeverStateQSpeeds_Y LDA_LONG_Y BlueLeeverStateQSpeeds
+LDAL_BlueLeeverStateTimes_Y LDA_LONG_Y BlueLeeverStateTimes
+LDAL_BlueLeeverStateAnimTimes_Y LDA_LONG_Y BlueLeeverStateAnimTimes
+LDAL_RedLeeverStateQSpeeds_Y LDA_LONG_Y RedLeeverStateQSpeeds
+LDAL_RedLeeverStateTimes_Y LDA_LONG_Y RedLeeverStateTimes
+LDAL_RedLeeverStateAnimTimes_Y LDA_LONG_Y RedLeeverStateAnimTimes
+CMPL_SecretArmosRoomIds_Y CMP_LONG_Y SecretArmosRoomIds
+CMPL_SecretArmosXs_Y CMP_LONG_Y SecretArmosXs
+CMPL_PondHeartStartAngles_Y CMP_LONG_Y PondHeartStartAngles
+CMPL_RockPushDirections_Y CMP_LONG_Y RockPushDirections
+LDAL_SecretQuestNumbers_Y LDA_LONG_Y SecretQuestNumbers
+LDAL_RaftDirections_M1_Y LDA_LONG_Y RaftDirections-1
+LDAL_WallmasterInitialXs_Y LDA_LONG_Y WallmasterInitialXs
+LDAL_WallmasterInitialYs_Y LDA_LONG_Y WallmasterInitialYs
+LDAL_WallmasterDirsAndAttrsLeft_Y LDA_LONG_Y WallmasterDirsAndAttrsLeft
+ADCL_DigdoggerCornerOffsetsX_Y ADC_LONG_Y DigdoggerCornerOffsetsX
+ADCL_DigdoggerCornerOffsetsY_Y ADC_LONG_Y DigdoggerCornerOffsetsY
+ADCL_DigdoggerSpriteOffsetsX_Y ADC_LONG_Y DigdoggerSpriteOffsetsX
+ADCL_DigdoggerSpriteOffsetsY_Y ADC_LONG_Y DigdoggerSpriteOffsetsY
+LDAL_DigdoggerSpriteAttrs_Y LDA_LONG_Y DigdoggerSpriteAttrs
+ADCL_AquamentusSpeeds_Y ADC_LONG_Y AquamentusSpeeds
+ADCL_AquamentusSpriteOffsetsX_Y ADC_LONG_Y AquamentusSpriteOffsetsX
+ADCL_AquamentusSpriteOffsetsY_Y ADC_LONG_Y AquamentusSpriteOffsetsY
+LDAL_AquamentusTiles_Y LDA_LONG_Y AquamentusTiles
+CMPL_AquamentusTiles CMP_LONG AquamentusTiles
+LDAL_DodongoBloatedWaitTimes_Y LDA_LONG_Y DodongoBloatedWaitTimes
+CMPL_DodongoMouthNegativeLimits0_Y CMP_LONG_Y DodongoMouthNegativeLimits0
+CMPL_DodongoMouthPositiveLimits0_Y CMP_LONG_Y DodongoMouthPositiveLimits0
+LDAL_DodongoBombPositiveLimits_Y LDA_LONG_Y DodongoBombPositiveLimits
+LDAL_DodongoBombNegativeLimits_Y LDA_LONG_Y DodongoBombNegativeLimits
+LDAL_DodongoFrameHFlips_Y LDA_LONG_Y DodongoFrameHFlips
+LDAL_DodongoFrameImages_Y LDA_LONG_Y DodongoFrameImages
+ADCL_PolsVoiceWalkSpeedsY_Y ADC_LONG_Y PolsVoiceWalkSpeedsY
+LDAL_PolsVoiceInitialJumpSpeeds_Y LDA_LONG_Y PolsVoiceInitialJumpSpeeds
+ADCL_PolsVoiceDestinationYOffsets_Y ADC_LONG_Y PolsVoiceDestinationYOffsets
+LDAL_PolsVoiceDirections_Y LDA_LONG_Y PolsVoiceDirections
+ADCL_PolsVoiceWalkSpeedsX_Y ADC_LONG_Y PolsVoiceWalkSpeedsX
+ADCL_VireJumpOffsets_Y ADC_LONG_Y VireJumpOffsets
+ADCL_BlueWizzrobeTeleportOffsetsX_Y ADC_LONG_Y BlueWizzrobeTeleportOffsetsX
+ADCL_BlueWizzrobeTeleportOffsetsY_Y ADC_LONG_Y BlueWizzrobeTeleportOffsetsY
+ADCL_BlueWizzrobeTeleportMaxOffsetsX_Y ADC_LONG_Y BlueWizzrobeTeleportMaxOffsetsX
+ADCL_BlueWizzrobeTeleportMaxOffsetsY_Y ADC_LONG_Y BlueWizzrobeTeleportMaxOffsetsY
+LDAL_BlueWizzrobeTeleportDirs_Y LDA_LONG_Y BlueWizzrobeTeleportDirs
+ADCL_WizzrobeCollisionOffsetsX_Y ADC_LONG_Y WizzrobeCollisionOffsetsX
+ADCL_WizzrobeCollisionOffsetsY_Y ADC_LONG_Y WizzrobeCollisionOffsetsY
+LDAL_RedWizzrobeDirections_Y LDA_LONG_Y RedWizzrobeDirections
+ADCL_RedWizzrobeOffsetsX_Y ADC_LONG_Y RedWizzrobeOffsetsX
+ADCL_RedWizzrobeOffsetsY_Y ADC_LONG_Y RedWizzrobeOffsetsY
+LDAL_GleeokSegmentYs_X LDA_LONG_X GleeokSegmentYs
+LDAL_ManhandlaBaseFrameImagesAndAttrs_Y LDA_LONG_Y ManhandlaBaseFrameImagesAndAttrs
+ADCL_ManhandlaSegmentOffsetsX_Y ADC_LONG_Y ManhandlaSegmentOffsetsX
+ADCL_ManhandlaSegmentOffsetsY_Y ADC_LONG_Y ManhandlaSegmentOffsetsY
+ADCL_GohmaLegOffsetsX_Y ADC_LONG_Y GohmaLegOffsetsX
+LDAL_GleeokNeckXAddrsLo_X LDA_LONG_X GleeokNeckXAddrsLo
+LDAL_GleeokNeckXAddrsHi_X LDA_LONG_X GleeokNeckXAddrsHi
+LDAL_GleeokNeckYAddrsLo_X LDA_LONG_X GleeokNeckYAddrsLo
+LDAL_GleeokNeckYAddrsHi_X LDA_LONG_X GleeokNeckYAddrsHi
+LDAL_GleeokNeckMiscAddrsLo_X LDA_LONG_X GleeokNeckMiscAddrsLo
+LDAL_GleeokNeckMiscAddrsHi_X LDA_LONG_X GleeokNeckMiscAddrsHi
+LDXL_GleeokBodyBaseTileOffsets_Y LDX_LONG_Y GleeokBodyBaseTileOffsets
+LDAL_GleeokBodyTiles0_X LDA_LONG_X GleeokBodyTiles0
+LDAL_GuardFireXs_M1_X LDA_LONG_X GuardFireXs-1
+LDAL_GuardFireYs_M1_X LDA_LONG_X GuardFireYs-1
+LDAL_PatraManeuverTimes_Y LDA_LONG_Y PatraManeuverTimes
+CMPL_PatraChildStartAngles_Y CMP_LONG_Y PatraChildStartAngles
+LDAL_PatraChild1RotationCosineBits_Y LDA_LONG_Y PatraChild1RotationCosineBits
+LDAL_PatraChild1RotationSineBits_Y LDA_LONG_Y PatraChild1RotationSineBits
+LDAL_PatraChild2RotationBits_Y LDA_LONG_Y PatraChild2RotationBits
+LDAL_GanonStartXs_Y LDA_LONG_Y GanonStartXs
+LDAL_GanonBurstDirs_Y LDA_LONG_Y GanonBurstDirs
+ORAL_GanonBurstSpriteAttrs_X ORA_LONG_X GanonBurstSpriteAttrs
+LDAL_GanonBurstTiles_X LDA_LONG_X GanonBurstTiles
+ADCL_GanonSpriteOffsetsX_Y ADC_LONG_Y GanonSpriteOffsetsX
+ADCL_GanonSpriteOffsetsY_Y ADC_LONG_Y GanonSpriteOffsetsY
+LDAL_GanonSpriteHFlips_Y LDA_LONG_Y GanonSpriteHFlips
+LDAL_GanonFrameImages_Y LDA_LONG_Y GanonFrameImages
+LDAL_GanonColorTransferRecord_Y LDA_LONG_Y GanonColorTransferRecord
+LDAL_GanonColorSets_Y LDA_LONG_Y GanonColorSets
+CMPL_NoDropMonsterTypes_Y CMP_LONG_Y NoDropMonsterTypes
+CMPL_DropItemMonsterTypes0_Y CMP_LONG_Y DropItemMonsterTypes0
+CMPL_DropItemMonsterTypes1_Y CMP_LONG_Y DropItemMonsterTypes1
+CMPL_DropItemMonsterTypes2_Y CMP_LONG_Y DropItemMonsterTypes2
+LDAL_DropItemSetBaseOffsets_Y LDA_LONG_Y DropItemSetBaseOffsets
+LDAL_DropItemTable_Y LDA_LONG_Y DropItemTable
+CMPL_DropItemRates_Y CMP_LONG_Y DropItemRates
+LDXL_ItemTakerObjSlots_M1_Y LDX_LONG_Y ItemTakerObjSlots-1
+CMPL_Directions8_Y CMP_LONG_Y Directions8
+LDAL_PatraSines_Y LDA_LONG_Y PatraSines
+
             use   BeginEndVars.inc
             use   CaveVars.inc
             use   CommonVars.inc
@@ -61,6 +174,11 @@ SetMirrorMode  EXT
 
 ; Do not encroach on WRAM (battery-backed space)
             ds    $6000-*
+
+; Anchor label at $6C90, exported so rom_01.s's CopyCommonCodeToRam can replicate
+; the shared "Bank 1 common RAM code" block into this bank too (see BANK_01_CODE.md).
+            ds    $6C90-*
+ROM04CodeAnchor ENT
 
 ; Pad up to $8000
             ds    $8000-*
@@ -590,7 +708,8 @@ UpdateBlock0Idle
     ; If the input direction is not the required direction based on
     ; Link's placement; then go reset the push timer and return.
     LDA ObjInputDir
-    CMP BlockPushDirections, Y
+;    CMP BlockPushDirections, Y
+    jsr CMPL_BlockPushDirections_Y
     BNE ResetPushTimer
 
     ; Link is truly pushing the block.
@@ -828,11 +947,13 @@ BounceShot
     ; the bounce direction.
     LDA ObjY, X
     CLC
-    ADC ShotBounceHeights, Y
+;    ADC ShotBounceHeights, Y
+    jsr ADCL_ShotBounceHeights_Y
     STA ObjY, X
     LDA ObjX, X
     CLC
-    ADC ShotBounceWidths, Y
+;    ADC ShotBounceWidths, Y
+    jsr ADCL_ShotBounceWidths_Y
     STA ObjX, X
 
     ; Add 2 to the bounce distance.
@@ -910,9 +1031,11 @@ UpdateFireball ENT
     JSR _CalcDiagonalSpeedIndex
 
     ; Look up and set the horizontal and vertical q-speeds.
-    LDA FireballQSpeedsX, Y
+;    LDA FireballQSpeedsX, Y
+    jsr LDAL_FireballQSpeedsX_Y
     STA Fireball_ObjQSpeedX, X
-    LDA FireballQSpeedsY, Y
+;    LDA FireballQSpeedsY, Y
+    jsr LDAL_FireballQSpeedsY_Y
     STA Fireball_ObjQSpeedY, X
 
     ; Set state to $10: monster shot active.
@@ -1001,7 +1124,8 @@ InitBlueKeese ENT
     LDA Random, X
     AND #$07
     TAY
-    LDA Directions8, Y
+;    LDA Directions8, Y
+    jsr LDAL_Directions8_Y
     STA ObjDir, X
     JSR ResetFlyerState
     LDA #$C0
@@ -1407,7 +1531,8 @@ UpdateNormalZolOrGel
 
 :SetDelay
     ; Set a delay at a tile edge for the next time to move.
-    LDA ZolGelDelays, Y
+;    LDA ZolGelDelays, Y
+    jsr LDAL_ZolGelDelays_Y
     STA ObjTimer, X
 
 :Exit
@@ -1503,7 +1628,8 @@ UpdateStatues ENT
     JSR GetUniqueRoomId
     LDY #$01
 :Anon0032
-    CMP StatueRoomLayouts, Y
+;    CMP StatueRoomLayouts, Y
+    jsr CMPL_StatueRoomLayouts_Y
     BEQ :Shoot
     DEY
     BPL :Anon0032
@@ -1544,7 +1670,8 @@ UpdateStatues ENT
 
     ; Look for the number of fireballs to make (minus 1) by pattern number.
     TAY
-    LDX StatueFireballCounts, Y
+;    LDX StatueFireballCounts, Y
+    jsr LDXL_StatueFireballCounts_Y
 
 :LoopFireball
     ; For each fireball to make, indexed by X, (1 or 3 down to 0):
@@ -1570,7 +1697,8 @@ UpdateStatues ENT
     ; the random value.
     AND #$03
     TAY
-    LDA StatueFireballStartTimes, Y
+;    LDA StatueFireballStartTimes, Y
+    jsr LDAL_StatueFireballStartTimes_Y
     STA Statue_ObjFireballTimer, X
 
     ; The coordinate lists are divided into sets for each pattern.
@@ -1581,7 +1709,8 @@ UpdateStatues ENT
     LDY $0B                     ; Pattern
     TXA
     CLC
-    ADC StatuePatternToBasePositionIndex, Y
+;    ADC StatuePatternToBasePositionIndex, Y
+    jsr ADCL_StatuePatternToBasePositionIndex_Y
     TAY
     TXA                         ; Save the fireball index.
     PHA
@@ -1595,13 +1724,15 @@ UpdateStatues ENT
 
     ; Look up and set the X coordinate for the fireball object.
     ; Also store it in [02].
-    LDA StatueXs, Y
+;    LDA StatueXs, Y
+    jsr LDAL_StatueXs_Y
     STA $02
     STA ObjX, X
 
     ; Look up and set the Y coordinate for the fireball object.
     ; Also store it in [03].
-    LDA StatueYs, Y
+;    LDA StatueYs, Y
+    jsr LDAL_StatueYs_Y
     STA $03
     STA ObjY, X
 
@@ -1742,7 +1873,8 @@ InitTektite ENT
     LDA Random+1, X
     AND #$03
     TAY
-    LDA TektiteStartingDirs, Y
+;    LDA TektiteStartingDirs, Y
+    jsr LDAL_TektiteStartingDirs_Y
     STA ObjDir, X
 
     ; Multiply the direction value by 4 to set the object timer.
@@ -2239,12 +2371,14 @@ UpdateTektiteOrBoulder ENT
     LDY ObjDir, X
     LDA ObjY, X
     CLC
-    ADC JumperYOffsets, Y
+;    ADC JumperYOffsets, Y
+    jsr ADCL_JumperYOffsets_Y
     STA Jumper_ObjTargetY, X
 
     ; Set the starting speed, depending on the object type.
     JSR Jumper_GetKind
-    LDA JumperStartSpeedsHi, Y
+;    LDA JumperStartSpeedsHi, Y
+    jsr LDAL_JumperStartSpeedsHi_Y
     STA Jumper_ObjSpeedWholeY, X
 
     ; Reset the vertical speed low byte.
@@ -2275,7 +2409,8 @@ UpdateTektiteOrBoulder ENT
 
     ; Get the base offset for the kind of jumper the object is.
     JSR Jumper_GetKind
-    LDA JumperYAccelerationBaseOffsets, Y
+;    LDA JumperYAccelerationBaseOffsets, Y
+    jsr LDAL_JumperYAccelerationBaseOffsets_Y
 
     ; Get the acceleration by indexing with (base offset + direction).
     ;
@@ -2288,7 +2423,8 @@ UpdateTektiteOrBoulder ENT
     CLC
     ADC ObjDir, X
     TAY
-    LDA JumperYAccelerations, Y
+;    LDA JumperYAccelerations, Y
+    jsr LDAL_JumperYAccelerations_Y
     LDY #$02                    ; Max speed 2 pixels going down
     JSR Jumper_MoveY
 
@@ -2544,16 +2680,19 @@ UpdateBurrower
 
     ; Look up and set the speed and timer for the current state.
     TAY
-    LDA BlueLeeverStateQSpeeds, Y
+;    LDA BlueLeeverStateQSpeeds, Y
+    jsr LDAL_BlueLeeverStateQSpeeds_Y
     STA ObjQSpeedFrac, X
-    LDA BlueLeeverStateTimes, Y
+;    LDA BlueLeeverStateTimes, Y
+    jsr LDAL_BlueLeeverStateTimes_Y
     STA ObjTimer, X
 
 :Animate
     ; Advance the animation counter; possibly setting a new
     ; value according to the new state.
     LDY ObjState, X
-    LDA BlueLeeverStateAnimTimes, Y
+;    LDA BlueLeeverStateAnimTimes, Y
+    jsr LDAL_BlueLeeverStateAnimTimes_Y
 
 ; Params:
 ; A: new value for animation counter, in case it rolls over
@@ -2854,14 +2993,17 @@ RedLeever_CycleStateDrawAndCheckCollisions
     ; Look up and set the speed, timer, and animation counter
     ; for the current state.
     TAY
-    LDA RedLeeverStateQSpeeds, Y
+;    LDA RedLeeverStateQSpeeds, Y
+    jsr LDAL_RedLeeverStateQSpeeds_Y
     STA ObjQSpeedFrac, X
-    LDA RedLeeverStateTimes, Y
+;    LDA RedLeeverStateTimes, Y
+    jsr LDAL_RedLeeverStateTimes_Y
     STA ObjTimer, X
 
 RedLeever_AnimateAndCheckCollisions
     LDY ObjState, X
-    LDA RedLeeverStateAnimTimes, Y
+;    LDA RedLeeverStateAnimTimes, Y
+    jsr LDAL_RedLeeverStateAnimTimes_Y
     JMP Burrower_AnimateDrawAndCheckCollisions
     ; Begin unverified code 10BFE
     RTS
@@ -3086,7 +3228,8 @@ InitArmosOrFlyingGhini ENT
     LDA RoomId
 
     ; If this element does not match the current room ID, go loop again.
-    CMP SecretArmosRoomIds, Y
+;    CMP SecretArmosRoomIds, Y
+    jsr CMPL_SecretArmosRoomIds_Y
     BNE :NextLoopArmosRoom
 
     ; The secret (usually stairs) is under one of the armoses.
@@ -3094,7 +3237,8 @@ InitArmosOrFlyingGhini ENT
     ; If the armos's X coordinate does not match the one needed
     ; for the current room in the list, then go loop again.
     LDA ObjX, X
-    CMP SecretArmosXs, Y
+;    CMP SecretArmosXs, Y
+    jsr CMPL_SecretArmosXs_Y
     BNE :NextLoopArmosRoom
 
     ; If the armos's Y coordinate <> $80, go loop again.
@@ -3402,7 +3546,8 @@ PondFairy_MoveHearts
     SBC #$03
     TAY
     LDA ObjAngleWhole+2
-    CMP PondHeartStartAngles, Y
+;    CMP PondHeartStartAngles, Y
+    jsr CMPL_PondHeartStartAngles_Y
     BNE :NextLoopHeart
 
 :SetUpHeart
@@ -3522,7 +3667,8 @@ UpdateRockOrGravestone ENT
 
     ; If this vertical input direction does not match the one needed
     ; to push the rock or gravestone, then return.
-    CMP RockPushDirections, Y
+;    CMP RockPushDirections, Y
+    jsr CMPL_RockPushDirections_Y
     BNE :Exit
 
     ; Set it to the object's direction. Go to the next state.
@@ -3742,7 +3888,8 @@ IsQuestSecretMismatch
 
     ; Look up a quest number (0 or 1) indexed by quest secret (0 or 1).
     TAY
-    LDA SecretQuestNumbers, Y
+;    LDA SecretQuestNumbers, Y
+    jsr LDAL_SecretQuestNumbers_Y
 
     ; If the save slot's quest number matches the room's
     ; secret quest number, then return C=0.
@@ -3813,7 +3960,8 @@ UpdateDock ENT
     STA ObjState
 
     ; Set Link's direction based on the raft's state.
-    LDA RaftDirections-1, Y
+;    LDA RaftDirections-1, Y
+    jsr LDAL_RaftDirections_M1_Y
     STA ObjDir
 
 :Exit
@@ -4095,7 +4243,8 @@ UpdateWallmaster ENT
     STA ObjY, X
 
     ; Look up and set X coordinate according to the index returned.
-    LDA WallmasterInitialXs, Y
+;    LDA WallmasterInitialXs, Y
+    jsr LDAL_WallmasterInitialXs_Y
     JMP :SetUpToEmerge
 
 :CheckTopAndBottom
@@ -4123,7 +4272,8 @@ UpdateWallmaster ENT
     JSR Wallmaster_CalcStartPosition
 
     ; Look up and set Y coordinate according to the index returned.
-    LDA WallmasterInitialYs, Y
+;    LDA WallmasterInitialYs, Y
+    jsr LDAL_WallmasterInitialYs_Y
     STA ObjY, X
 
     ; Set X coordinate to initial minor value returned.
@@ -4134,7 +4284,8 @@ UpdateWallmaster ENT
 
     ; Look up and set the facing direction for the first step.
     LDY Wallmaster_ObjStep, X
-    LDA WallmasterDirsAndAttrsLeft, Y
+;    LDA WallmasterDirsAndAttrsLeft, Y
+    jsr LDAL_WallmasterDirsAndAttrsLeft_Y
     AND #$0F
     STA ObjDir, X
 
@@ -4193,7 +4344,8 @@ L_Wallmaster_State1
 
     ; Set facing direction to the one for this new step.
     LDY Wallmaster_ObjStep, X
-    LDA WallmasterDirsAndAttrsLeft, Y
+;    LDA WallmasterDirsAndAttrsLeft, Y
+    jsr LDAL_WallmasterDirsAndAttrsLeft_Y
     AND #$0F
     STA ObjDir, X
 
@@ -4321,7 +4473,8 @@ Wallmaster_PrepareToDraw
 
     ; For the current step, look up the sprite flipping attributes.
     LDY Wallmaster_ObjStep, X
-    LDA WallmasterDirsAndAttrsLeft, Y
+;    LDA WallmasterDirsAndAttrsLeft, Y
+    jsr LDAL_WallmasterDirsAndAttrsLeft_Y
     AND #$F0
     ORA #$01                    ; Combine them with palette row 5 (blue)
     JSR Anim_SetSpriteDescriptorAttributes
@@ -4714,13 +4867,15 @@ InitMoldorm ENT
     LDA Random+5
     AND #$07
     TAY
-    LDA Directions8, Y
+;    LDA Directions8, Y
+    jsr LDAL_Directions8_Y
     STA ObjDir+5
     STA Moldorm_ObjOldDir+5     ; Also store the current direction as the old direction.
     LDA Random+10
     AND #$07
     TAY
-    LDA Directions8, Y
+;    LDA Directions8, Y
+    jsr LDAL_Directions8_Y
     STA ObjDir+10
     STA Moldorm_ObjOldDir+10    ; Also store the current direction as the old direction.
 
@@ -4762,7 +4917,8 @@ InitDigdogger1 ENT
     LDA Random, X
     AND #$07
     TAY
-    LDA Directions8, Y
+;    LDA Directions8, Y
+    jsr LDAL_Directions8_Y
     STA ObjDir, X
 
     ; Set low speed byte to $3F.
@@ -5225,11 +5381,13 @@ CheckBigDigdoggerCollisions
     ; Change the coordinates to one corner.
     LDA ObjX, X
     CLC
-    ADC DigdoggerCornerOffsetsX, Y
+;    ADC DigdoggerCornerOffsetsX, Y
+    jsr ADCL_DigdoggerCornerOffsetsX_Y
     STA ObjX, X
     LDA ObjY, X
     CLC
-    ADC DigdoggerCornerOffsetsY, Y
+;    ADC DigdoggerCornerOffsetsY, Y
+    jsr ADCL_DigdoggerCornerOffsetsY_Y
     STA ObjY, X
 
     ; Check the room boundary and object collisions in this temporary location.
@@ -5457,18 +5615,21 @@ Digdogger_Draw
     ; Store in [00] the X coordinate offset for the current corner.
     LDA ObjX, X
     CLC
-    ADC DigdoggerSpriteOffsetsX, Y
+;    ADC DigdoggerSpriteOffsetsX, Y
+    jsr ADCL_DigdoggerSpriteOffsetsX_Y
     STA $00
 
     ; Store in [01] the Y coordinate offset for the current corner.
     LDA ObjY, X
     CLC
-    ADC DigdoggerSpriteOffsetsY, Y
+;    ADC DigdoggerSpriteOffsetsY, Y
+    jsr ADCL_DigdoggerSpriteOffsetsY_Y
     STA $01
 
     ; Load and set the sprite attributes for this part.
     ; Vertical flipping is set appropriately here.
-    LDA DigdoggerSpriteAttrs, Y
+;    LDA DigdoggerSpriteAttrs, Y
+    jsr LDAL_DigdoggerSpriteAttrs_Y
     JSR Anim_SetSpriteDescriptorAttributes
     TYA                         ; Save the loop index.
     PHA
@@ -5573,7 +5734,8 @@ Aquamentus_Move
     ; Add the speed to the X coordinate.
     LDA ObjX, X
     CLC
-    ADC AquamentusSpeeds, Y
+;    ADC AquamentusSpeeds, Y
+    jsr ADCL_AquamentusSpeeds_Y
     STA ObjX, X
 
     ; Decrement the distance remaining.
@@ -5684,14 +5846,16 @@ Aquamentus_Draw
     ; Store it in [00].
     LDA ObjX, X
     CLC
-    ADC AquamentusSpriteOffsetsX, Y
+;    ADC AquamentusSpriteOffsetsX, Y
+    jsr ADCL_AquamentusSpriteOffsetsX_Y
     STA $00
 
     ; Add the current sprite's offset to the boss's Y coordinate.
     ; Store it in [01].
     LDA ObjY, X
     CLC
-    ADC AquamentusSpriteOffsetsY, Y
+;    ADC AquamentusSpriteOffsetsY, Y
+    jsr ADCL_AquamentusSpriteOffsetsY_Y
     STA $01
 
     ; Calculate sprite attributes:
@@ -5710,8 +5874,10 @@ Aquamentus_Draw
 
     ; Look up the tile for this sprite.
     ; If it's not the first one (face), then go write the sprite record.
-    LDA AquamentusTiles, Y
-    CMP AquamentusTiles
+;    LDA AquamentusTiles, Y
+    jsr LDAL_AquamentusTiles_Y
+;    CMP AquamentusTiles
+    jsr CMPL_AquamentusTiles
     BNE :WriteSprite
 
     ; Else it's the first one (the face tile).
@@ -5855,7 +6021,8 @@ UpdateDodongoState1_Bloated_Sub_Wait
 
     ; Set the bloated timer according to the substate.
     LDY Dodongo_ObjBloatedSubstate, X
-    LDA DodongoBloatedWaitTimes, Y
+;    LDA DodongoBloatedWaitTimes, Y
+    jsr LDAL_DodongoBloatedWaitTimes_Y
     STA Dodongo_ObjBloatedTimer, X
 
     ; If substate <> 0, go decrement bloated timer.
@@ -6076,9 +6243,11 @@ Dodongo_TryEatBomb
     ;
     ; Note that these are simple signed comparisons that work,
     ; because the operands are in a small range.
-    CMP DodongoMouthNegativeLimits0, Y
+;    CMP DodongoMouthNegativeLimits0, Y
+    jsr CMPL_DodongoMouthNegativeLimits0_Y
     BMI :Exit
-    CMP DodongoMouthPositiveLimits0, Y
+;    CMP DodongoMouthPositiveLimits0, Y
+    jsr CMPL_DodongoMouthPositiveLimits0_Y
     BPL :Exit
 
     ; Add $A to the index to look into the second set for vertical limits.
@@ -6130,9 +6299,11 @@ DodongoBombNegativeLimits
 ; Store the positive limit in [06], and the negative one in [07].
 ;
 Dodongo_IsBombInRange
-    LDA DodongoBombPositiveLimits, Y
+;    LDA DodongoBombPositiveLimits, Y
+    jsr LDAL_DodongoBombPositiveLimits_Y
     STA $06
-    LDA DodongoBombNegativeLimits, Y
+;    LDA DodongoBombNegativeLimits, Y
+    jsr LDAL_DodongoBombNegativeLimits_Y
     STA $07
 
     ; Set [08] to 3. It will be shifted right once for each axis that
@@ -6275,9 +6446,11 @@ Dodongo_Draw
     PHA
 
     ; Get the horizontal flipping and frame image number for this frame image.
-    LDA DodongoFrameHFlips, Y
+;    LDA DodongoFrameHFlips, Y
+    jsr LDAL_DodongoFrameHFlips_Y
     STA $0F                     ; [0F] horizontal flipping
-    LDA DodongoFrameImages, Y
+;    LDA DodongoFrameImages, Y
+    jsr LDAL_DodongoFrameImages_Y
 
     ; Frame image numbers 7 and 9 are vertical bloated frame images.
     ; They are drawn mirrored.
@@ -6328,7 +6501,8 @@ Dodongo_Draw
     ; (dodongo/walk/right/left half/anim frame 1). The horizontal
     ; flipping flag is unchanged. So, this left half frame is shown correctly
     ; on the right.
-    LDA DodongoFrameImages, Y
+;    LDA DodongoFrameImages, Y
+    jsr LDAL_DodongoFrameImages_Y
     EOR #$01
     JMP DrawObjectNotMirrored
 
@@ -6475,7 +6649,8 @@ UpdatePolsVoice ENT
     ; Add the Y offset for the current direction to the Y coordinate.
     LDA ObjY, X
     CLC
-    ADC PolsVoiceWalkSpeedsY, Y
+;    ADC PolsVoiceWalkSpeedsY, Y
+    jsr ADCL_PolsVoiceWalkSpeedsY_Y
     STA ObjY, X
 
 :CheckWalkability
@@ -6542,14 +6717,16 @@ UpdatePolsVoice ENT
     LDY #$07
 :Anon0099
     ; Set the vertical speed for the beginning of the jump.
-    LDA PolsVoiceInitialJumpSpeeds, Y
+;    LDA PolsVoiceInitialJumpSpeeds, Y
+    jsr LDAL_PolsVoiceInitialJumpSpeeds_Y
     STA PolsVoice_ObjSpeedWhole, X
 
     ; Look up the Y offset for the current direction.
     ; Add it to object Y to set the destination Y of the jump.
     LDA ObjY, X
     CLC
-    ADC PolsVoiceDestinationYOffsets, Y
+;    ADC PolsVoiceDestinationYOffsets, Y
+    jsr ADCL_PolsVoiceDestinationYOffsets_Y
     STA PolsVoice_ObjTargetY, X
 
     ; Turn the index into a direction again by adding 1.
@@ -6610,7 +6787,8 @@ UpdatePolsVoiceState1_Jumping
     LDA Random, X
     AND #$03
     TAY
-    LDA PolsVoiceDirections, Y
+;    LDA PolsVoiceDirections, Y
+    jsr LDAL_PolsVoiceDirections_Y
     STA ObjDir, X
 
     ; Randomly set distance-to-move to $30 or $70.
@@ -6713,7 +6891,8 @@ PolsVoice_MoveX
     DEY
     LDA ObjX, X
     CLC
-    ADC PolsVoiceWalkSpeedsX, Y
+;    ADC PolsVoiceWalkSpeedsX, Y
+    jsr ADCL_PolsVoiceWalkSpeedsX_Y
     STA ObjX, X
     RTS
 
@@ -6888,7 +7067,8 @@ UpdateVireState0
     ; it jumps.
     LDA ObjY, X
     CLC
-    ADC VireJumpOffsets, Y
+;    ADC VireJumpOffsets, Y
+    jsr ADCL_VireJumpOffsets_Y
     STA ObjY, X
 
 :Exit
@@ -7122,11 +7302,13 @@ BlueWizzrobe_Move
     LDY ObjDir, X
     LDA ObjX, X
     CLC
-    ADC BlueWizzrobeTeleportOffsetsX, Y
+;    ADC BlueWizzrobeTeleportOffsetsX, Y
+    jsr ADCL_BlueWizzrobeTeleportOffsetsX_Y
     STA ObjX, X
     LDA ObjY, X
     CLC
-    ADC BlueWizzrobeTeleportOffsetsY, Y
+;    ADC BlueWizzrobeTeleportOffsetsY, Y
+    jsr ADCL_BlueWizzrobeTeleportOffsetsY_Y
     STA ObjY, X
 
 L11EAF_Exit
@@ -7154,7 +7336,8 @@ BlueWizzrobe_ChooseTeleportTarget
     LDA ObjX, X
     PHA
     CLC
-    ADC BlueWizzrobeTeleportMaxOffsetsX, Y
+;    ADC BlueWizzrobeTeleportMaxOffsetsX, Y
+    jsr ADCL_BlueWizzrobeTeleportMaxOffsetsX_Y
     STA ObjX, X
 
     ; Save the original Y coordinate; and add to it the offset for
@@ -7162,13 +7345,15 @@ BlueWizzrobe_ChooseTeleportTarget
     LDA ObjY, X
     PHA
     CLC
-    ADC BlueWizzrobeTeleportMaxOffsetsY, Y
+;    ADC BlueWizzrobeTeleportMaxOffsetsY, Y
+    jsr ADCL_BlueWizzrobeTeleportMaxOffsetsY_Y
     STA ObjY, X
     TYA                         ; Save the random index.
     PHA
 
     ; Test the walkability in the random direction chosen.
-    LDA BlueWizzrobeTeleportDirs, Y
+;    LDA BlueWizzrobeTeleportDirs, Y
+    jsr LDAL_BlueWizzrobeTeleportDirs_Y
     TAY
     JSR Wizzrobe_GetCollidableTileForDir
     PLA                         ; Restore the random index.
@@ -7182,7 +7367,8 @@ BlueWizzrobe_ChooseTeleportTarget
     BCS BlueWizzrobe_AlignWithNearestSquareAndRandomizeTimer
 
     ; Set the random diagonal direction.
-    LDA BlueWizzrobeTeleportDirs, Y
+;    LDA BlueWizzrobeTeleportDirs, Y
+    jsr LDAL_BlueWizzrobeTeleportDirs_Y
     STA ObjDir, X
 
 BeginTeleporting
@@ -7265,14 +7451,16 @@ Wizzrobe_GetCollidableTileForDir
     LDA ObjX, X
     PHA                         ; Save the original X.
     CLC
-    ADC WizzrobeCollisionOffsetsX, Y
+;    ADC WizzrobeCollisionOffsetsX, Y
+    jsr ADCL_WizzrobeCollisionOffsetsX_Y
     STA ObjX, X
 
     ; Look up and add the collision offset to the monster's Y coordinate.
     LDA ObjY, X
     PHA                         ; Save the original Y.
     CLC
-    ADC WizzrobeCollisionOffsetsY, Y
+;    ADC WizzrobeCollisionOffsetsY, Y
+    jsr ADCL_WizzrobeCollisionOffsetsY_Y
     STA ObjY, X
     JSR Wizzrobe_GetBaseCollidableTile
     PLA                         ; Restore the original Y.
@@ -7443,7 +7631,8 @@ UpdateRedWizzrobe_3
     PHA                         ; Save the random value.
     AND #$03
     TAY
-    LDA RedWizzrobeDirections, Y
+;    LDA RedWizzrobeDirections, Y
+    jsr LDAL_RedWizzrobeDirections_Y
     STA ObjDir, X
     PLA                         ; Restore the random value.
 
@@ -7453,7 +7642,8 @@ UpdateRedWizzrobe_3
     LDA ObjX
 
     ; Add the X offset and Link's X to set the monster's position.
-    ADC RedWizzrobeOffsetsX, Y
+;    ADC RedWizzrobeOffsetsX, Y
+    jsr ADCL_RedWizzrobeOffsetsX_Y
     AND #$F0                    ; Align with a square.
     STA ObjX, X
 
@@ -7461,7 +7651,8 @@ UpdateRedWizzrobe_3
     LDA ObjY
     CLC
     ADC #$03                    ; Add 3 to help with the alignment calculation below.
-    ADC RedWizzrobeOffsetsY, Y
+;    ADC RedWizzrobeOffsetsY, Y
+    jsr ADCL_RedWizzrobeOffsetsY_Y
     JSR RedWizzrobe_AlignAndSetY
 
     ; If Y coordinate >= $5D and < $C4, then the monster
@@ -7558,7 +7749,8 @@ InitGleeok ENT
     STA ObjX+1, X               ; I don't think this one is needed.
 
     ; Look up and set the Y of the current segment of each neck.
-    LDA GleeokSegmentYs, X
+;    LDA GleeokSegmentYs, X
+    jsr LDAL_GleeokSegmentYs_X
     STA Gleeok_NeckYs0, X
     STA Gleeok_NeckYs1, X
     STA Gleeok_NeckYs2, X
@@ -7647,7 +7839,8 @@ InitManhandla ENT
     LDA Random, X
     AND #$07
     TAY
-    LDA Directions8, Y
+;    LDA Directions8, Y
+    jsr LDAL_Directions8_Y
     STA ObjDir, X
 
     ; For 5 segments, from 4 to 0, indexed by Y register:
@@ -7670,7 +7863,8 @@ InitManhandla ENT
     ;
     ; While updating, the low bit will be flipped on and off
     ; for each animation frame.
-    LDA ManhandlaBaseFrameImagesAndAttrs, Y
+;    LDA ManhandlaBaseFrameImagesAndAttrs, Y
+    jsr LDAL_ManhandlaBaseFrameImagesAndAttrs_Y
     STA Manhandla_ObjFrame+1, Y
 
     ; All segments start out autonomous, and can update immediately.
@@ -7691,11 +7885,13 @@ InitManhandla ENT
     ; Its base position is the spawn position.
     LDA ObjX+5
     CLC
-    ADC ManhandlaSegmentOffsetsX, Y
+;    ADC ManhandlaSegmentOffsetsX, Y
+    jsr ADCL_ManhandlaSegmentOffsetsX_Y
             JSR   STA_ObjXp1_Y
     LDA ObjY+5
     CLC
-    ADC ManhandlaSegmentOffsetsY, Y
+;    ADC ManhandlaSegmentOffsetsY, Y
+    jsr ADCL_ManhandlaSegmentOffsetsY_Y
             JSR   STA_ObjYp1_Y
 
     ; Set low speed byte $80.
@@ -8298,7 +8494,8 @@ Gohma_AnimateAndDraw
 Gohma_DrawLegsOneSide
     LDA ObjX, X
     CLC
-    ADC GohmaLegOffsetsX, Y
+;    ADC GohmaLegOffsetsX, Y
+    jsr ADCL_GohmaLegOffsetsX_Y
     STA $00
 
     ; The object's Y is the sprite's.
@@ -8575,17 +8772,23 @@ UpdateGleeok ENT
 ;
 Gleeok_FetchNeckAddrs
     LDX GleeokCurNeck
-    LDA GleeokNeckXAddrsLo, X
+;    LDA GleeokNeckXAddrsLo, X
+    jsr LDAL_GleeokNeckXAddrsLo_X
     STA $00
-    LDA GleeokNeckXAddrsHi, X
+;    LDA GleeokNeckXAddrsHi, X
+    jsr LDAL_GleeokNeckXAddrsHi_X
     STA $01
-    LDA GleeokNeckYAddrsLo, X
+;    LDA GleeokNeckYAddrsLo, X
+    jsr LDAL_GleeokNeckYAddrsLo_X
     STA $02
-    LDA GleeokNeckYAddrsHi, X
+;    LDA GleeokNeckYAddrsHi, X
+    jsr LDAL_GleeokNeckYAddrsHi_X
     STA $03
-    LDA GleeokNeckMiscAddrsLo, X
+;    LDA GleeokNeckMiscAddrsLo, X
+    jsr LDAL_GleeokNeckMiscAddrsLo_X
     STA $04
-    LDA GleeokNeckMiscAddrsHi, X
+;    LDA GleeokNeckMiscAddrsHi, X
+    jsr LDAL_GleeokNeckMiscAddrsHi_X
     STA $05
     LDY #$05                    ; Start loading data from segment 5.
     RTS
@@ -9285,7 +9488,8 @@ L_Gleeok_WriteSprites
 
     ; Get the base tile offset for the current animation frame.
     LDY GleeokBodyAnimationFrame
-    LDX GleeokBodyBaseTileOffsets, Y
+;    LDX GleeokBodyBaseTileOffsets, Y
+    jsr LDXL_GleeokBodyBaseTileOffsets_Y
 
 :LoopDrawRow
     ; For each column from 0 to 2, indexed by [07]:
@@ -9308,7 +9512,8 @@ L_Gleeok_WriteSprites
     STA Sprites, Y
 
     ; Look up and set the tile for this spot.
-    LDA GleeokBodyTiles0, X
+;    LDA GleeokBodyTiles0, X
+    jsr LDAL_GleeokBodyTiles0_X
     STA Sprites+1, Y
 
     ; If temporarily invincible, then set sprite attributes to
@@ -9368,9 +9573,11 @@ InitZelda ENT
     LDX #$05
 :Anon0147
     ; Look up and set the location of each object.
-    LDA GuardFireXs-1, X
+;    LDA GuardFireXs-1, X
+    jsr LDAL_GuardFireXs_M1_X
     STA ObjX, X
-    LDA GuardFireYs-1, X
+;    LDA GuardFireYs-1, X
+    jsr LDAL_GuardFireYs_M1_X
     STA ObjY, X
     LDA #$3F                    ; Guard fire object type
     STA ObjType, X
@@ -9982,7 +10189,8 @@ UpdatePatra ENT
 
     ; Y is only ever 0 at this point, even though there are two elements.
     ; Maybe the TYA instruction above was supposed to be a TAY.
-    LDA PatraManeuverTimes, Y
+;    LDA PatraManeuverTimes, Y
+    jsr LDAL_PatraManeuverTimes_Y
     STA ObjTimer+1, X
 
 :Exit
@@ -10061,7 +10269,8 @@ UpdatePatraChild ENT
     ; If the patra child in slot 2 has not reached the required angle,
     ; then return.
     LDA ObjAngleWhole+2
-    CMP PatraChildStartAngles, Y
+;    CMP PatraChildStartAngles, Y
+    jsr CMPL_PatraChildStartAngles_Y
     BNE :Exit
 
 :Ready
@@ -10143,9 +10352,11 @@ PatraChild_State1
     LDA ObjType, X
     CMP #$25
     BNE :UsePatraChild2Bits
-    LDA PatraChild1RotationCosineBits, Y
+;    LDA PatraChild1RotationCosineBits, Y
+    jsr LDAL_PatraChild1RotationCosineBits_Y
     PHA
-    LDA PatraChild1RotationSineBits, Y
+;    LDA PatraChild1RotationSineBits, Y
+    jsr LDAL_PatraChild1RotationSineBits_Y
     TAY
     PLA
     JMP :Rotate
@@ -10154,7 +10365,8 @@ PatraChild_State1
     ; Else it's Patra Child 2 ($26). Look up one value that will be used
     ; for both Y and X increment calculations in rotation. This leads to
     ; a small circle (5) and a large circle (6).
-    LDA PatraChild2RotationBits, Y
+;    LDA PatraChild2RotationBits, Y
+    jsr LDAL_PatraChild2RotationBits_Y
     TAY
 
 :Rotate
@@ -10323,7 +10535,8 @@ Ganon_RandomizeLocation
     LDA FrameCounter
     AND #$01
     TAY
-    LDA GanonStartXs, Y
+;    LDA GanonStartXs, Y
+    jsr LDAL_GanonStartXs_Y
     STA ObjX, X
     RTS
 
@@ -10475,7 +10688,8 @@ Ganon_SetUpBurstRays
             JSR   STA_ObjYp2_Y
 
     ; Set the direction.
-    LDA GanonBurstDirs, Y
+;    LDA GanonBurstDirs, Y
+    jsr LDAL_GanonBurstDirs_Y
             JSR   STA_ObjDirp2_Y
     DEY
     BPL :LoopRay
@@ -10584,9 +10798,11 @@ Ganon_DrawBurst
     ; Combine them into [03].
     LDA FrameCounter
     AND #$03
-    ORA GanonBurstSpriteAttrs, X
+;    ORA GanonBurstSpriteAttrs, X
+    jsr ORAL_GanonBurstSpriteAttrs_X
     STA $03
-    LDA GanonBurstTiles, X
+;    LDA GanonBurstTiles, X
+    jsr LDAL_GanonBurstTiles_X
     JSR Anim_WriteSprite
 
     ; Bottom of the loop.
@@ -10663,17 +10879,20 @@ Ganon_DrawBody
     ; Add an offset to Ganon's X, and store the result in [00] -- the sprite's X.
     LDA ObjX, X
     CLC
-    ADC GanonSpriteOffsetsX, Y
+;    ADC GanonSpriteOffsetsX, Y
+    jsr ADCL_GanonSpriteOffsetsX_Y
     STA $00
 
     ; Add an offset to Ganon's Y, and store the result in [01] -- the sprite's Y.
     LDA ObjY, X
     CLC
-    ADC GanonSpriteOffsetsY, Y
+;    ADC GanonSpriteOffsetsY, Y
+    jsr ADCL_GanonSpriteOffsetsY_Y
     STA $01
 
     ; Each part has a horizontal flipping flag.
-    LDA GanonSpriteHFlips, Y
+;    LDA GanonSpriteHFlips, Y
+    jsr LDAL_GanonSpriteHFlips_Y
     STA $0F
 
     ; Save and copy the loop index (the current part) to [07].
@@ -10693,7 +10912,8 @@ Ganon_DrawBody
     ; current image part of the current animation frame.
     ADC $07
     TAY
-    LDA GanonFrameImages, Y
+;    LDA GanonFrameImages, Y
+    jsr LDAL_GanonFrameImages_Y
     JSR DrawObjectNotMirrored
     PLA                         ; Restore the loop index.
 
@@ -10839,7 +11059,8 @@ Ganon_AppendPaletteRowTransferRecord_Triforce
     LDY #$00
 
 :CopyBytes
-    LDA GanonColorTransferRecord, Y
+;    LDA GanonColorTransferRecord, Y
+    jsr LDAL_GanonColorTransferRecord_Y
     STA DynTileBuf, X
     INX
     INY
@@ -10854,7 +11075,8 @@ Ganon_AppendPaletteRowTransferRecord_Triforce
     LDX #$02
 
 :OverwriteColors
-    LDA GanonColorSets, Y
+;    LDA GanonColorSets, Y
+    jsr LDAL_GanonColorSets_Y
     STA DynTileBuf+4, X
     DEY
     DEX
@@ -10982,7 +11204,8 @@ SetUpDroppedItem ENT
     LDY #$06
 
 :FindNoDropType
-    CMP NoDropMonsterTypes, Y
+;    CMP NoDropMonsterTypes, Y
+    jsr CMPL_NoDropMonsterTypes_Y
     BEQ :DestroyMonster         ; If found, go destroy the monster.
     DEY
     BPL :FindNoDropType
@@ -10991,7 +11214,8 @@ SetUpDroppedItem ENT
     LDY #$05
 
 :FindDrop0Type
-    CMP DropItemMonsterTypes0, Y
+;    CMP DropItemMonsterTypes0, Y
+    jsr CMPL_DropItemMonsterTypes0_Y
     BEQ :Found                  ; If found, use row 0.
     DEY
     BPL :FindDrop0Type
@@ -11003,7 +11227,8 @@ SetUpDroppedItem ENT
     LDY #$08
 
 :FindDrop1Type
-    CMP DropItemMonsterTypes1, Y
+;    CMP DropItemMonsterTypes1, Y
+    jsr CMPL_DropItemMonsterTypes1_Y
     BEQ :Found                  ; If found, use row 1.
     DEY
     BPL :FindDrop1Type
@@ -11015,7 +11240,8 @@ SetUpDroppedItem ENT
     LDY #$08
 
 :FindDrop2Type
-    CMP DropItemMonsterTypes2, Y
+;    CMP DropItemMonsterTypes2, Y
+    jsr CMPL_DropItemMonsterTypes2_Y
     BEQ :Found                  ; If found, use row 2.
     DEY
     BPL :FindDrop2Type
@@ -11039,11 +11265,13 @@ SetUpDroppedItem ENT
     ; Add it and WorldKillCycle to look up the dropped item for
     ; this object type and store it in [00].
     LDY $01
-    LDA DropItemSetBaseOffsets, Y
+;    LDA DropItemSetBaseOffsets, Y
+    jsr LDAL_DropItemSetBaseOffsets_Y
     CLC
     ADC WorldKillCycle
     TAY
-    LDA DropItemTable, Y
+;    LDA DropItemTable, Y
+    jsr LDAL_DropItemTable_Y
     STA $00                     ; [00] Dropped item ID
 
     ; If the global kill count = $10, set the dropped item to a fairy.
@@ -11082,7 +11310,8 @@ SetUpDroppedItem ENT
     ; then go destroy the monster.
     LDY $01
     LDA Random, X
-    CMP DropItemRates, Y
+;    CMP DropItemRates, Y
+    jsr CMPL_DropItemRates_Y
     BCS :DestroyMonster
 
 :Commit
@@ -11153,7 +11382,8 @@ UpdateItem ENT
 
     ; Set Link's location to this object's.
     LDY $0D
-    LDX ItemTakerObjSlots-1, Y
+;    LDX ItemTakerObjSlots-1, Y
+    jsr LDXL_ItemTakerObjSlots_M1_Y
     LDA ObjX, X
     STA ObjX
     LDA ObjY, X
@@ -11551,7 +11781,8 @@ ReverseObjDir8
     BEQ DeferBounce
 
     ; Apply the new direction.
-    LDA Directions8, Y
+;    LDA Directions8, Y
+    jsr LDAL_Directions8_Y
     STA ObjDir, X
 
 L132F8_Exit
@@ -11565,7 +11796,8 @@ DeferBounce
     CPX #$0A
     BNE L13307_Exit
 :Anon0175
-    LDA Directions8, Y
+;    LDA Directions8, Y
+    jsr LDAL_Directions8_Y
     STA Moldorm_ObjBounceDir, X
 
 L13307_Exit
@@ -11654,7 +11886,8 @@ TurnTowardsPlayer8
     TYA
     AND #$07                    ; Modulo 8 to roll over the index as needed.
     TAY
-    LDA Directions8, Y
+;    LDA Directions8, Y
+    jsr LDAL_Directions8_Y
     CMP $00
     BEQ L1336F_Exit             ; Return if it matches.
     DEY                         ; Turn left.
@@ -11676,7 +11909,8 @@ LoopRight
     TYA
     AND #$07                    ; Modulo 8 to roll over the index as needed.
     TAY
-    LDA Directions8, Y
+;    LDA Directions8, Y
+    jsr LDAL_Directions8_Y
     BIT $00
     BNE TestDir
 
@@ -11691,7 +11925,8 @@ NextLoopRight
 
 SetDir8ForIndex
     ; Apply the new direction.
-    LDA Directions8, Y
+;    LDA Directions8, Y
+    jsr LDAL_Directions8_Y
     STA ObjDir, X
 
 L1336F_Exit
@@ -11757,7 +11992,8 @@ GetObjDir8Index
     LDY #$07
 :Anon0179
     LDA ObjDir, X
-    CMP Directions8, Y
+;    CMP Directions8, Y
+    jsr CMPL_Directions8_Y
     BEQ L133AC_Exit
     DEY
     BPL :Anon0179
@@ -11791,7 +12027,8 @@ RotateObjectLocation
     LDA ObjAngleWhole, X
     AND #$0F
     TAY
-    LDA PatraSines, Y
+;    LDA PatraSines, Y
+    jsr LDAL_PatraSines_Y
     STA $00
 
     ; Mutliply q-speed by [00].
@@ -11844,7 +12081,8 @@ RotateObjectLocation
     ADC #$08
     AND #$0F
     TAY
-    LDA PatraSines, Y
+;    LDA PatraSines, Y
+    jsr LDAL_PatraSines_Y
     STA $00
 
     ; Multiply q-speed by [00].

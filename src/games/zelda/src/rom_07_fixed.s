@@ -290,6 +290,28 @@ MenuPalettesTransferBuf EXT
 
 ; Imports from RAM code bank 06
 
+; Use some space here for custom code
+_TableJump
+    ASL
+    TAY
+    PLA
+    STA $00
+    PLA
+    STA $01
+    INY
+
+    phb             ; Force memory loads from the executing bank
+    phk             ; Since Bank 7 is replicated across all banks,
+    plb             ; this is valid
+    
+    LDA ($00),Y
+    STA $02
+    INY
+    LDA ($00),Y
+    STA $03
+
+    plb
+    jmp   JMP_IND_02
 
             ds    $E400-*
 Z07Int_PcmSamples
@@ -587,10 +609,13 @@ Z07Int_ClearNameTable
     LDX $01
     RTS
 
+; IIgs - This can be called from any ROM locations and uses the stack address to load a table.  Thus it must be
+; aware of the tratment of different memory regions.
 TableJump ENT
-    ASL
-    TAY
-    PLA
+    jmp  _TableJump
+;    ASL                  ; comment out three bytes to make space
+;    TAY
+;    PLA
     STA $00
     PLA
     STA $01

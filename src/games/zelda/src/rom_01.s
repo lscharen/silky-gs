@@ -4,6 +4,12 @@ __BANK_01_CODE_RUN__  EQU   $6C90
 __BANK_01_CODE_RUN_END__  EQU   $7F00
 
 ; Cross-bank externals
+ROMBase  EXT
+ROM02CodeAnchor  EXT
+ROM03CodeAnchor  EXT
+ROM04CodeAnchor  EXT
+ROM05CodeAnchor  EXT
+ROM06CodeAnchor  EXT
 SwitchBank_Local2  EXT
 Gohma_HandleWeaponCollision  EXT
 CopyColumnToTileBuf  EXT
@@ -25,6 +31,48 @@ SetMirrorMode  EXT
 
             ds \,$00
 
+; Create stubs to handle converting self-references into long addressing so it works when the ROM code is
+; in another IIgs memory bank.  Our memory model keeps the PBR in a fixed bank so that any access to RAM
+; or high ROM ($C000 - $FFFF) always work.  Refrences to the lower ROM ($8000 - $BFFF) need to be translated
+; to the correct bank.  The stubs are used to convert the self-references into long addressing so that they work
+; properly.
+
+LDAL_OverworldPersonTextSelectors_Y LDA_LONG_Y OverworldPersonTextSelectors
+LDXL_MoneyGamePermutationEndIndexes_Y LDX_LONG_Y MoneyGamePermutationEndIndexes
+LDAL_MoneyGamePermutations_X LDA_LONG_X MoneyGamePermutations
+LDAL_MoneyGameLossAmounts_Y LDA_LONG_Y MoneyGameLossAmounts
+LDAL_TextboxLineAddrsLo LDA_LONG TextboxLineAddrsLo+2
+LDAL_CaveWareXs_X LDA_LONG_X CaveWareXs
+LDAL_PriceListTemplateTransferBuf_Y LDA_LONG_Y PriceListTemplateTransferBuf
+LDAL_TextboxCharTransferRecTemplate_Y LDA_LONG_Y TextboxCharTransferRecTemplate
+LDAL_PersonTextAddrs_Y LDA_LONG_Y PersonTextAddrs
+LDAL_TextboxLineAddrsLo_Y LDA_LONG_Y TextboxLineAddrsLo
+CMPL_CaveWareXs_X CMP_LONG_X CaveWareXs
+LDAL_HintCaveTextSelectors0_Y LDA_LONG_Y HintCaveTextSelectors0
+LDAL_UnderworldPersonTextSelectorsA_Y LDA_LONG_Y UnderworldPersonTextSelectorsA
+LDAL_UnderworldPersonTextSelectorsB_Y LDA_LONG_Y UnderworldPersonTextSelectorsB
+LDAL_UnderworldPersonTextSelectorsC_Y LDA_LONG_Y UnderworldPersonTextSelectorsC
+LDAL_LifeOrMoneyItemXs_X LDA_LONG_X LifeOrMoneyItemXs
+LDAL_LifeOrMoneyItemTypes_X LDA_LONG_X LifeOrMoneyItemTypes
+CMPL_LifeOrMoneyItemXs_X CMP_LONG_X LifeOrMoneyItemXs
+LDAL_DemoPatternBlockAddrs_X LDA_LONG_X DemoPatternBlockAddrs
+LDAL_DemoPatternBlockSizes_X LDA_LONG_X DemoPatternBlockSizes
+LDAL_DemoPatternVramAddrs_X LDA_LONG_X DemoPatternVramAddrs
+LDAL_WhirlwindPrevRoomIdList_Y LDA_LONG_Y WhirlwindPrevRoomIdList
+LDAL_TeleportYs_Y LDA_LONG_Y TeleportYs
+LDAL_PaletteRow7TransferRecord_Y LDA_LONG_Y PaletteRow7TransferRecord
+LDAL_GanonColorTriples_Y LDA_LONG_Y GanonColorTriples
+ADCL_LinkToSquareOffsetsX_Y ADC_LONG_Y LinkToSquareOffsetsX
+ADCL_LinkToSquareOffsetsY_Y ADC_LONG_Y LinkToSquareOffsetsY
+LDAL_RupeeStashXs_X LDA_LONG_X RupeeStashXs-1
+LDAL_RupeeStashYs_X LDA_LONG_X RupeeStashYs-1
+LDAL_TrapXs_Y LDA_LONG_Y TrapXs
+LDAL_TrapYs_Y LDA_LONG_Y TrapYs
+ANDL_TrapAllowedDirs_X AND_LONG_X TrapAllowedDirs-1
+
+; MMC1 memory helper for indirect loads
+LDA_00_Y MMC1_LDA_IND_Y $00
+
             use   BeginEndVars.inc
             use   CaveVars.inc
             use   CommonVars.inc
@@ -33,6 +81,15 @@ SetMirrorMode  EXT
 
 ; Do not encroach on WRAM (battery-backed space)
             ds    $6000-*
+
+; Anchor label at $6C90 -- CopyCommonCodeToRam's WRAM-copy destination for this
+; bank, same as every other bank's ROM0NCodeAnchor (see BANK_01_CODE.md). Bank 1
+; gets no static content here at assembly time (unlike the code's *source* copy,
+; CommonCodeBlock_Bank1 below, which lives in the normal $8000-$BFFF switchable
+; window) -- it only becomes valid once CopyCommonCodeToRam runs, exactly like
+; banks 0 and 2-6. Local to this file, so no ENT needed.
+            ds    $6C90-*
+ROM01CodeAnchor
 
 ; Pad up to $8000
             ds    $8000-*
@@ -112,7 +169,8 @@ InitCaveContinue
 
     ; Get the person text selector by looking up the text selector byte
     ; for this index, and masking it with $3F.
-    LDA OverworldPersonTextSelectors, Y
+;    LDA OverworldPersonTextSelectors, Y
+    jsr LDAL_OverworldPersonTextSelectors_Y
     PHA                         ; Save the text selector byte before masking.
     AND #$3F
     STA PersonTextSelector
@@ -209,13 +267,15 @@ InitCaveContinue
 
 :FoundPermutation
     ; The index chooses the last offset of a permutation of three indexes.
-    LDX MoneyGamePermutationEndIndexes, Y
+;    LDX MoneyGamePermutationEndIndexes, Y
+    jsr LDXL_MoneyGamePermutationEndIndexes_Y
 
     ; Copy the permutation of 3 indexes to [046C] to [046E].
     LDY #$02
 
 :CopyPermutation
-    LDA MoneyGamePermutations, X
+;    LDA MoneyGamePermutations, X
+    jsr LDAL_MoneyGamePermutations_X
     STA $046C, Y
     DEX
     DEY
@@ -226,7 +286,8 @@ InitCaveContinue
     LDA Random+2
     AND #$01
     TAY
-    LDA MoneyGameLossAmounts, Y
+;    LDA MoneyGameLossAmounts, Y
+    jsr LDAL_MoneyGameLossAmounts_Y
     STA $046F
 
     ; Put 10 in [0470]. This is a fixed amount to lose.
@@ -261,7 +322,8 @@ InitCaveContinue
     STA PersonTextIndex
 
     ; Point to the front of the first textbox line.
-    LDA TextboxLineAddrsLo+2
+;    LDA TextboxLineAddrsLo+2
+    jsr LDAL_TextboxLineAddrsLo
     STA PersonTextPtr
     RTS
 
@@ -403,7 +465,8 @@ DrawCaveItems
     LDX $0421
 
     ; Look up and set the X coordinate for the current item.
-    LDA CaveWareXs, X
+;    LDA CaveWareXs, X
+    jsr LDAL_CaveWareXs_X
     STA ObjX+19
 
     ; Set Y coordinate $98 for the item.
@@ -557,7 +620,8 @@ CopyPriceListTemplate
     ; Copy $11 bytes of the price list template text to the dynamic transfer buf.
     LDY #$10
 :Anon0007
-    LDA PriceListTemplateTransferBuf, Y
+;    LDA PriceListTemplateTransferBuf, Y
+    jsr LDAL_PriceListTemplateTransferBuf_Y
     STA DynTileBuf, Y
     DEY
     BPL :Anon0007
@@ -585,7 +649,8 @@ UpdatePersonState_Textbox
     ; to the dynamic transfer buf.
     LDY #$04
 :Anon0008
-    LDA TextboxCharTransferRecTemplate, Y
+;    LDA TextboxCharTransferRecTemplate, Y
+    jsr LDAL_TextboxCharTransferRecTemplate_Y
     STA DynTileBuf, Y
     DEY
     BPL :Anon0008
@@ -602,10 +667,12 @@ UpdatePersonState_Textbox
     ; Use the person text selector to look up the address of the
     ; text for the textbox. Store the address in [00:01].
     LDY PersonTextSelector
-    LDA PersonTextAddrs, Y
+;    LDA PersonTextAddrs, Y
+    jsr LDAL_PersonTextAddrs_Y
     STA $00
     INY
-    LDA PersonTextAddrs, Y
+;    LDA PersonTextAddrs, Y
+    jsr LDAL_PersonTextAddrs_Y
     STA $01
 
     ; Load the person text current character index.
@@ -616,7 +683,8 @@ UpdatePersonState_Textbox
     INC PersonTextIndex
 
     ; Get the current character.
-    LDA ($00), Y
+;    LDA ($00), Y
+    jsr LDA_00_Y
 
     ; If the character is $25, then it's a special space. It will still
     ; take up space, but will not take time to show -- meaning that
@@ -633,7 +701,8 @@ UpdatePersonState_Textbox
     STA Tune0Request
 
     ; If the high 2 bits of character element = 0, then return.
-    LDA ($00), Y
+;    LDA ($00), Y
+    jsr LDA_00_Y
     AND #$C0
     BEQ :Exit
 
@@ -657,7 +726,8 @@ UpdatePersonState_Textbox
     ;   2: $A4: front of the first line
     ;
     ; Look up the low VRAM address and store it.
-    LDA TextboxLineAddrsLo, Y
+;    LDA TextboxLineAddrsLo, Y
+    jsr LDAL_TextboxLineAddrsLo_Y
     STA PersonTextPtr
 
     ; If index = 2, then we've reached the end of the text,
@@ -723,7 +793,8 @@ UpdateCavePersonState_TalkOrShopOrDoorCharge
 
     ; If Link's X <> item's X, then loop again.
     LDA ObjX
-    CMP CaveWareXs, X
+;    CMP CaveWareXs, X
+    jsr CMPL_CaveWareXs_X
     BNE :NextWare
 
     ; If the vertical distance between Link and the item < 6, then
@@ -879,11 +950,13 @@ UpdateCavePersonState_HintOrMoneyGame
     TAY
 
     ; Look up text selector by the index calculated above.
-    LDA HintCaveTextSelectors0, Y
+;    LDA HintCaveTextSelectors0, Y
+    jsr LDAL_HintCaveTextSelectors0_Y
     STA PersonTextSelector
 
     ; Point to the front of the first line of the textbox.
-    LDA TextboxLineAddrsLo+2
+;    LDA TextboxLineAddrsLo+2
+    jsr LDAL_TextboxLineAddrsLo
     STA PersonTextPtr
 
     ; Reset the character index.
@@ -1006,7 +1079,8 @@ UpdatePersonState_CueTransferBlankPersonWares
 
 InitUnderworldPerson_Full ENT
     ; Point to the front of the first line in VRAM.
-    LDA TextboxLineAddrsLo+2
+;    LDA TextboxLineAddrsLo+2
+    jsr LDAL_TextboxLineAddrsLo
     STA PersonTextPtr
     LDA CurLevel
     JSR TableJump
@@ -1039,7 +1113,8 @@ InitUnderworldPersonA
     TAY
 
     ; Look up and store the text selector.
-    LDA UnderworldPersonTextSelectorsA, Y
+;    LDA UnderworldPersonTextSelectorsA, Y
+    jsr LDAL_UnderworldPersonTextSelectorsA_Y
     STA PersonTextSelector
 
     ; If this is the man that offers more bomb capacity, then
@@ -1060,7 +1135,8 @@ InitUnderworldPersonLifeOrMoney_Full ENT
     STA PersonTextSelector
 
     ; Point to the front of the first line in VRAM.
-    LDA TextboxLineAddrsLo+2
+;    LDA TextboxLineAddrsLo+2
+    jsr LDAL_TextboxLineAddrsLo
     STA PersonTextPtr
 
 UnderworldPerson_DestroyIfTaken
@@ -1090,7 +1166,8 @@ InitUnderworldPersonB
     TAY
 
     ; Look up and store the text selector.
-    LDA UnderworldPersonTextSelectorsB, Y
+;    LDA UnderworldPersonTextSelectorsB, Y
+    jsr LDAL_UnderworldPersonTextSelectorsB_Y
     STA PersonTextSelector
     JMP PlayCharacterSfx
 
@@ -1112,7 +1189,8 @@ InitUnderworldPersonC
     TAY
 
     ; Look up and store the text selector.
-    LDA UnderworldPersonTextSelectorsC, Y
+;    LDA UnderworldPersonTextSelectorsC, Y
+    jsr LDAL_UnderworldPersonTextSelectorsC_Y
     STA PersonTextSelector
     PLA                         ; Restore the object type.
 
@@ -1146,7 +1224,8 @@ InitGrumble_Full ENT
 
     ; Set the low VRAM address of the first character to transfer
     ; to the front of the first line in NT0. It's at index 2.
-    LDA TextboxLineAddrsLo+2
+;    LDA TextboxLineAddrsLo+2
+    jsr LDAL_TextboxLineAddrsLo
     STA PersonTextPtr
 
     ; If Grumble already got the food, then
@@ -1359,13 +1438,15 @@ DrawLifeOrMoneyItems
     PHA
 
     ; Look up and set the X coordinate of the item.
-    LDA LifeOrMoneyItemXs, X
+;    LDA LifeOrMoneyItemXs, X
+    jsr LDAL_LifeOrMoneyItemXs_X
     STA ObjX+19
 
     ; Set Y=$98, and look up the item type.
     LDA #$98
     STA ObjY+19
-    LDA LifeOrMoneyItemTypes, X
+;    LDA LifeOrMoneyItemTypes, X
+    jsr LDAL_LifeOrMoneyItemTypes_X
 
     ; Switch to the room item object slot.
     LDX #$13
@@ -1390,7 +1471,8 @@ UpdateUnderworldPersonLifeOrMoneyState_2
 :LoopWare
     ; If Link's X doesn't match the item's, then go loop again.
     LDA ObjX
-    CMP LifeOrMoneyItemXs, X
+;    CMP LifeOrMoneyItemXs, X
+    jsr CMPL_LifeOrMoneyItemXs_X
     BNE :NextWare
 
     ; If the vertical distance between the item and Link < 6, then
@@ -1562,43 +1644,49 @@ InitUnderworldPerson_DoNothing
             db    $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF
             db    $FF, $FF
 
+; Replicate the "Bank 1 common RAM code" block into the same $6C90 offset of every
+; one of the 7 switchable PRG banks (rom_00.s..rom_06.s), not just a single shared
+; copy. Every short JSR/JMP into this block (see BANK_01_CODE.md) assumes the target
+; lives at $6C90 in whatever bank happens to be current (K); replicating the bytes
+; into all 7 banks makes that assumption true instead of rewriting the ~331 call
+; sites individually. Long,X addressing is used on both sides (source and each of
+; the 7 destinations) since the source and target banks are all known at assemble
+; time -- no runtime pointer/indirection is needed.
+;
+; NOTE: each destination below deliberately references its own single external
+; anchor label (ROMBase / ROM0N CodeAnchor), rather than one shared external base
+; plus a per-bank "+$0N0000" displacement. Verified empirically (scratch Merlin32
+; test project) that this assembler's external-symbol relocation only carries a
+; 16-bit displacement -- an external symbol's *bank byte* always comes solely from
+; the symbol's own resolved value, so "ROMBase+$020000+addr,X" silently drops the
+; $020000 and collapses to plain "ROMBase+addr,X" (confirmed: all such STALs
+; disassembled to identical bytes). Each rom_0N.s (N=2..6) therefore exports its
+; own ROM0NCodeAnchor ENT'd exactly at $6C90 (see the "ds $6C90-*" pad added near
+; each file's WRAM-encroachment guard), so every store here is a single-external-
+; symbol-plus-,X reference, matching the pattern already proven to work correctly
+; elsewhere in this codebase (e.g. ppu_sprites.s's ROMBase+DIRECT_OAM_READ,X).
 CopyCommonCodeToRam ENT
-    LDA #<__BANK_01_CODE_LOAD__ ; Source address $A500.
-    STA $00
-    LDA #>__BANK_01_CODE_LOAD__
-    STA $01
-    LDA #<__BANK_01_CODE_RUN__  ; Destination address $6C90.
-    STA $02
-    LDA #>__BANK_01_CODE_RUN__
-    STA $03
-    LDY #$00
+            mx    %10                 ; A stays 8-bit; X becomes 16-bit (block is $1270 bytes)
+    REP   #$10
+    LDX   #$0000
 
 :Loop
-    LDA ($00), Y                ; Copy 1 byte.
-    STA ($02), Y
+    LDAL  __BANK_01_CODE_LOAD__,X       ; Read 1 byte from bank 1's real (load) copy.
 
-    ; Increment source address.
-    LDA $00
-    CLC
-    ADC #$01
-    STA $00
-    LDA $01
-    ADC #$00
-    STA $01
+    STAL  ROMBase+__BANK_01_CODE_RUN__,X ; rom_00.s
+    STAL  ROM01CodeAnchor,X              ; rom_01.s
+    STAL  ROM02CodeAnchor,X              ; rom_02.s
+    STAL  ROM03CodeAnchor,X              ; rom_03.s
+    STAL  ROM04CodeAnchor,X              ; rom_04.s
+    STAL  ROM05CodeAnchor,X              ; rom_05.s
+    STAL  ROM06CodeAnchor,X              ; rom_06.s
 
-    ; Increment destination address.
-    LDA $02
-    CLC
-    ADC #$01
-    STA $02
-    LDA $03
-    ADC #$00
-    STA $03
-    CMP #>__BANK_01_CODE_RUN_END__    ; Once you reach $7F00, you're done.
-    BNE :Loop
-    LDA $02
-    CMP #<__BANK_01_CODE_RUN_END__
-    BNE :Loop
+    INX
+    CPX   #__BANK_01_CODE_RUN_END__-__BANK_01_CODE_RUN__    ; Once X reaches $1270, you're done.
+    BNE   :Loop
+
+    SEP   #$10
+            mx    %11
     RTS
 
 DemoPatternBlockAddrs
@@ -1626,18 +1714,24 @@ TransferDemoPatterns ENT
     ; Put block address in [00:01] and size in [03:02].
     ; Load destination VRAM address and set it.
     ; The size and VRAM address have the high byte first.
-    LDA DemoPatternBlockAddrs, X
+;    LDA DemoPatternBlockAddrs, X
+    jsr LDAL_DemoPatternBlockAddrs_X
     STA $00
-    LDA DemoPatternBlockSizes, X
+;    LDA DemoPatternBlockSizes, X
+    jsr LDAL_DemoPatternBlockSizes_X
     STA $02
-    LDA DemoPatternVramAddrs, X
+;    LDA DemoPatternVramAddrs, X
+    jsr LDAL_DemoPatternVramAddrs_X
             JSR   STA_2006
     INX
-    LDA DemoPatternBlockAddrs, X
+;    LDA DemoPatternBlockAddrs, X
+    jsr LDAL_DemoPatternBlockAddrs_X
     STA $01
-    LDA DemoPatternBlockSizes, X
+;    LDA DemoPatternBlockSizes, X
+    jsr LDAL_DemoPatternBlockSizes_X
     STA $03
-    LDA DemoPatternVramAddrs, X
+;    LDA DemoPatternVramAddrs, X
+    jsr LDAL_DemoPatternVramAddrs_X
     JSR TransferPatternBlock_Bank1
 
     ; Loop until pattern block index = 2.
@@ -1661,7 +1755,8 @@ TransferPatternBlock_Bank1
 
 :Loop
     ; Load and transfer one byte to VRAM.
-    LDA ($00), Y
+;    LDA ($00), Y
+    jsr LDA_00_Y
             JSR   STA_2007
 
     ; Increment the 16-bit address at [00:01].
@@ -1840,7 +1935,8 @@ UpdateWhirlwind_Full ENT
     LDA TeleportingLevelIndex
     AND #$07
     TAY
-    LDA WhirlwindPrevRoomIdList, Y
+;    LDA WhirlwindPrevRoomIdList, Y
+    jsr LDAL_WhirlwindPrevRoomIdList_Y
     STA WhirlwindPrevRoomId
 
     ; Set teleporting state 1.
@@ -2000,7 +2096,8 @@ CheckInitWhirlwindAndBeginUpdate ENT
     LDA TeleportingLevelIndex   ; Get Y coordinate of whirlwind in this destination.
     AND #$07
     TAY
-    LDA TeleportYs, Y
+;    LDA TeleportYs, Y
+    jsr LDAL_TeleportYs_Y
     JSR InitWhirlwind
 :Anon0022
     JMP BeginUpdateMode
@@ -2149,7 +2246,8 @@ ReplaceAshesPaletteRow
     LDY #$00
 
 :CopyPaletteRecord
-    LDA PaletteRow7TransferRecord, Y
+;    LDA PaletteRow7TransferRecord, Y
+    jsr LDAL_PaletteRow7TransferRecord_Y
     STA DynTileBuf, X
     INX
     INY
@@ -2171,7 +2269,8 @@ ReplaceAshesPaletteRow
     LDX #$02
 
 :ReplaceColors
-    LDA GanonColorTriples, Y
+;    LDA GanonColorTriples, Y
+    jsr LDAL_GanonColorTriples_Y
     STA DynTileBuf+4, X
     DEY
     DEX
@@ -2304,11 +2403,13 @@ CheckPassiveTileObjects ENT
     JSR GetOppositeDir
     LDA $00
     CLC
-    ADC LinkToSquareOffsetsX, Y
+;    ADC LinkToSquareOffsetsX, Y
+    jsr ADCL_LinkToSquareOffsetsX_Y
     STA ObjX, X
     LDA $01
     CLC
-    ADC LinkToSquareOffsetsY, Y
+;    ADC LinkToSquareOffsetsY, Y
+    jsr ADCL_LinkToSquareOffsetsY_Y
     STA ObjY, X
 
     ; Return, if the empty slot we found indicates it was initialized.
@@ -2383,9 +2484,11 @@ InitRupeeStash_Full ENT
     JSR InitOneSimpleObject
 
     ; Look up and set the coordinates for one rupee stash/rupee.
-    LDA RupeeStashXs-1, X
+;    LDA RupeeStashXs-1, X
+    jsr LDAL_RupeeStashXs_X
     STA ObjX, X
-    LDA RupeeStashYs-1, X
+;    LDA RupeeStashYs-1, X
+    jsr LDAL_RupeeStashYs_X
     STA ObjY, X
     DEX
     BNE :LoopRupee
@@ -2439,9 +2542,11 @@ InitTrap_Full ENT
     TAX
 
     ; Look up and set the location for this iteration's individual trap.
-    LDA TrapXs, Y
+;    LDA TrapXs, Y
+    jsr LDAL_TrapXs_Y
     STA ObjX, X
-    LDA TrapYs, Y
+;    LDA TrapYs, Y
+    jsr LDAL_TrapYs_Y
     STA ObjY, X
     JSR InitOneSimpleObject
     DEX
@@ -2489,7 +2594,8 @@ UpdateTrap_Full ENT
 
     ; If the direction we determined is not allowed for this trap, then
     ; go draw and check collisions.
-    AND TrapAllowedDirs-1, X
+;    AND TrapAllowedDirs-1, X
+    jsr ANDL_TrapAllowedDirs_X
     BEQ :DrawAndCheckCollisions
 
     ; Advance to state 1 with q-speed $70 (1.75 pixels a frame) (fast).
