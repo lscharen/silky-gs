@@ -155,7 +155,7 @@ NO_TILE_EXCLUDE equ 1
 CUSTOM_RENDER_SCREEN equ 0
 
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
-y_offset_rows equ 2
+y_offset_rows equ 3
 y_height_rows equ 25
 y_ending_row  equ {y_offset_rows+y_height_rows}
 
