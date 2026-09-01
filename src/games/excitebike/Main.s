@@ -60,6 +60,10 @@ PPU_SPR_TILE_ADDR equ $0000
 
 ; What kind of Nametable mirroring for this game
 NAMETABLE_MIRRORING equ VERTICAL_MIRRORING
+; Flag whether this game uploads its own CHR data at runtime (CHR-RAM) rather
+; than using a fixed CHR-ROM image loaded once at startup
+HAS_CHR_RAM equ 0
+
 
 ; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
 ; in addition to the compiled representation (usually yes, since this is used for the config
@@ -719,6 +723,7 @@ INPUT_ITEM_5 dw   KEYMAP
 
 ; Core code
             put   ../../rom/scaffold.s
+            put   ../../rom/rom_tiles.s
             put   ../../rom/rom_helpers.s
             put   ../../rom/rom_input.s
             put   ../../rom/rom_exec.s
