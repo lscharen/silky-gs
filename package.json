@@ -8,7 +8,7 @@
     "cadius": "C:\\Programs\\IIgsXDev\\bin\\Cadius.exe",
     "gsport": "C:\\Programs\\gsport\\gsport_0.31\\GSPort.exe",
     "macros": "./macros",
-    "crossrunner": "\"C:\\Program Files\\Crossrunner\\Crossrunner.exe\"",
+    "crossrunner": "\"C:\\checkout\\Crossrunner\\Crossrunner.exe\"",
     "cyrene": "C:\\Programs\\IIgsXDev\\bin\\Cyrene-1.1.0.exe",
     "kegscyrene": "C:\\Programs\\IIgsXDev\\bin\\KegsCyrene-1.1.0.exe",
     "mame": "C:\\Programs\\MAME\\MAME-0.288\\mame.exe",
