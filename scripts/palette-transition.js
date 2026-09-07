@@ -455,4 +455,9 @@ function main() {
   }
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = {
+  parsePaletteFile, ALL_GROUPS, BG_GROUPS, SP_GROUPS, MAX_SLOTS,
+  optimize, buildReport,
+};

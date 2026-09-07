@@ -217,7 +217,7 @@ DrawPPUTile
         pha                           ; save it -- also needed as CompileTile's bitmap-source address
 
         jsr   FastROMTileToLookup     ; A = tiledata destination, X = CHR-RAM source address -- writes the
-                                       ; 32-byte bitmap directly into tiledata; trashes A/X/Y
+                                      ; 32-byte bitmap directly into tiledata; trashes A/X/Y
 
         lda   1,s                     ; reload the tiledata destination of combined index * 128
         asl   a                       ; one more shift spills the high bit and leaves just the tile ID * 256
