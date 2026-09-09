@@ -49,6 +49,12 @@ mapper_bank EXT
 mmc1_shft   EXT
 mmc1_regs   EXT
 
+; Mirror control variables
+PendingMirrorMode EXT
+MirrorMaskLong    EXT
+CIRAMRowMask      EXT
+CIRAMColMask      EXT
+
 ; Table of routines used when reading from the APU registers ($4000 - $4017).
 ; Assumed reading in the accumulator
 ;apu_read_tbl
@@ -113,6 +119,34 @@ MMC1_RTN    mac
 
 STA_MMC1_REG0
             MMC1_SHIFT
+
+; If the ROM changes the mirroring mode, then the MirrorMaskLong value that is used to convert a logical
+; PPU address to a physical CIRAM address in the PPUDATA_WRITE hook must be updated *immediately* so that
+; any PPU writes go to the correct RAM location.
+;
+; Defered work that can wait until the next frame is triggered by setting the PendingMirrorMode value
+
+            and  #$01                    ; Bit 0:1 select mirror mode; we only support H/V so just discriminate 2 vs 3.
+            beq  :vert
+            lda  #HORIZONTAL_MIRRORING
+            stal PendingMirrorMode       ; This is a wide 8-bit variable, so 8- or 16-bit writes are ok
+            lda  #$0B                    ; High byte of the $0BFF mask value
+            stal MirrorMaskLong+1
+            lda  #$07                    ; High byte of the $07E0 mask value
+            stal CIRAMRowMask+1
+            lda  #$00
+            stal CIRAMColMask+1          ; High byte of the $001F mask value
+
+            bra  :cont
+:vert       lda  #VERTICAL_MIRRORING
+            stal PendingMirrorMode
+            lda  #$07                    ; High byte of the $07FF mask value
+            stal MirrorMaskLong+1
+            lda  #$03                    ; High byte of the $03E0 mask value
+            stal CIRAMRowMask+1
+            lda  #$04
+            stal CIRAMColMask+1          ; High byte of the $041F mask value
+:cont
             MMC1_RTN
 
 STA_MMC1_REG1

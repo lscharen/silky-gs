@@ -31,8 +31,8 @@
 ; Queue data structures
 ; ---------------------------------------------------------------------------
 
-; Two arrays of nametable updates, split into attribute and tile addresses.
-; A lookup table is maintained in order to track which nametable addresses
+; Two arrays of CIRAM updates, split into attribute and tile addresses.
+; A lookup table is maintained in order to track which addresses
 ; have been updated over however many frames have elapsed since the last
 ; screen rendering, so there cannot be more than 1920 tile updates or 128
 ; attribute updates.
@@ -75,9 +75,9 @@ PPUFreezeNametableUpdates
         cpy  prev_at_list_end
         beq  :at_done
 :at_loop
-        ldx  at_list,y               ; get the address of the attribute byte
+        ldx  at_list,y               ; get the CIRAM address of the attribute byte
 
-        ldal PPU_MEM,x               ; load the current value
+        ldal PPU_CIRAM,x             ; load the current value
         stal PPU_MEM+ATTR_SHADOW,x   ; use the attribute memory area of this block to cache the value
 
         iny
@@ -92,7 +92,7 @@ PPUFreezeNametableUpdates
 :nt_loop
         ldx  nt_list,y
 
-        ldal PPU_MEM,x
+        ldal PPU_CIRAM,x
         stal PPU_MEM+TILE_SHADOW,x
 
         iny
@@ -168,20 +168,24 @@ PPUFlushQueuesAlt
 
 :nt_loop0
         ldx  nt_list,y
-
         phy
-        lda  #0                           ; Clear the high byte
-        xba
-        ldal PPU_MEM+TILE_ROW,x           ; Get the screen row for this tile (0, 8, 16, ..., 200, 208, 216)
 
+;        lda  #0                           ; Clear the high byte
+;        xba
+;        ldal PPU_MEM+TILE_ROW,x           ; Get the screen row for this tile (0, 8, 16, ..., 200, 208, 216)
+        rep  #$20
+        txa
+        ciram2row                          ; Get the screen row for this tile
         tay
+        sep  #$20
+
         lda  #$FF
-        sta  tileBitmap,y                 ; Mark these 8 lines as dirty
+        sta  tileBitmap,y                  ; Mark these 8 lines as dirty
 
         ldal PPU_MEM+TILE_SHADOW,x
         jsr  DrawPPUTile
-        ply
 
+        ply
         iny
         iny
         cpy  prev_nt_list_end
@@ -196,13 +200,17 @@ PPUFlushQueuesAlt
 
 :nt_loop
         ldx  nt_list,y
-
         phy
-        lda  #0                           ; Clear the high byte
-        xba
-        ldal PPU_MEM+TILE_ROW,x           ; Get the screen row for this tile (0, 8, 16, ..., 200, 208, 216)
 
+;        lda  #0                           ; Clear the high byte
+;        xba
+;        ldal PPU_MEM+TILE_ROW,x           ; Get the screen row for this tile (0, 8, 16, ..., 200, 208, 216)
+        rep  #$20
+        txa
+        ciram2row                         ; Get the screen row for this tile
         tay
+        sep  #$20
+
         lda  #$FF
         sta  tileBitmap,y                 ; Mark these 8 lines as dirty
 

@@ -46,6 +46,8 @@ WriteBlankPrioritySprites  EXT
 
 SetMirrorMode  EXT
 
+            put   ../../../core/Defs.s
+
             mx    %11
             ds    $5000-*
 

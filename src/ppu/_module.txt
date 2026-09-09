@@ -7,7 +7,8 @@ ppu_attributes.s
 ppu_tiles.s
 # ppu_dirty.s -- not ready yet
 ppu_metatiles.s
-ppu_nametable.s
+# ppu_nametable.s -- transitioning away from TILE_ROW and TILE_COL tables
+ppu_namestable2.s
 ppu_queues.s
 ppu_palette.s
 ppu_regs.s

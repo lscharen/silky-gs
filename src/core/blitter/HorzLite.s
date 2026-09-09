@@ -13,8 +13,8 @@ _Apply
                   phx
                   phy
 
-                  lda   MirrorMask
-                  cmp   #$3BFF
+                  ldal  MirrorMaskLong
+                  cmp   #$0BFF
                   beq   :horz
 
                   ply

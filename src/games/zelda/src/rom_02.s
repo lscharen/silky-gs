@@ -24,6 +24,8 @@ SetMirrorMode  EXT
 
             mx    %11
 
+            put   ../../../core/Defs.s
+
             ds    $5000-*
 
             put   ../../../rom/rom_inject.s

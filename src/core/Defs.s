@@ -37,7 +37,8 @@ ScreenY1               equ   6           ; End of playfield on the physical scre
 ScreenX0               equ   8           ; 100, then ScreenY1 = 120.
 ScreenX1               equ   10
 
-MirrorMask             equ   12          ; Address mask for nametable access
+unused12               equ   12
+unused13               equ   13
 MirrorMaskX            equ   14          ; Either $00FF or $01FF depending on mirroring mode
 MirrorMaskY            equ   16          ; Either $01FF or $00FF depending on mirroring mode
 
@@ -253,17 +254,28 @@ _CODE_TOP   equ  21                      ; number of bytes from the base address
 _LINES_PER_BANK equ 120
 
 ; Set up some symbols to reference the different shadow memory in the PPU static bank. All of these
-; shadow areas are meant to be accessed using indexed addressed with a Nametable address ($2000 - $2FFF)
-; e.g. lda TILE_SHADOW,x
-TILE_SHADOW   equ $2000          ; shadowed values of the nametable tiles
-ATTR_SHADOW   equ $3000          ; pre-calculated attribute values derived from the attribute bytes in $2nC0 PPU RAM
-TILE_BANK     equ $4000          ; pre-calculated data bank value for the location of the associated PEA field tile
-TILE_ADDR_LO  equ $5000          ; pre-calculated address (low byte) of the location of the PEA field tile
-TILE_ADDR_HI  equ $6000          ; pre-calculated address (high byte) of the location of the PEA field tile
-TILE_VERSION0 equ $7000          ; version count of nametable byte (incremented on each PPUDATA_WRITE)
-TILE_VERSION1 equ $8000          ; version count of nametable byte (incremented on each PPUDATA_WRITE)
-TILE_ROW      equ $9000          ; pre-calculated row of the PPU address
-TILE_COL      equ $A000          ; pre-calculated column of the PPU address
+; shadow areas are meant to be accessed using using an CIRAM address ($000 - $7FF)
+; e.g. ldal TILE_SHADOW,x
+;
+; Since moving to directly modeling CIRAM, the size of each buffer could be reduces to $800 bytes.  But we are leaving them
+; for now.  Justknow that only the first half od each region should have data.
+
+TILE_SHADOW   equ $4000          ; shadowed values of the nametable tiles
+ATTR_SHADOW   equ $5000          ; pre-calculated attribute values derived from the attribute bytes in $2nC0 PPU RAM
+
+; These three tables are static since the PEA fields are 1:1 to the CIRAM layout.
+TILE_BANK     equ $6000          ; pre-calculated data bank value for the location of the associated PEA field tile
+TILE_ADDR_LO  equ $7000          ; pre-calculated address (low byte) of the location of the PEA field tile
+TILE_ADDR_HI  equ $8000          ; pre-calculated address (high byte) of the location of the PEA field tile
+
+; These are bookkeeping tables that are used to avoid duplicate updates
+TILE_VERSION0 equ $9000          ; version count of nametable byte (incremented on each PPUDATA_WRITE)
+TILE_VERSION1 equ $A000          ; version count of nametable byte (incremented on each PPUDATA_WRITE)
+
+;TILE_ROW      equ $B000          ; pre-calculated row of the PPU address
+;TILE_COL      equ $C000          ; pre-calculated column of the PPU address
+
+
 
 ; Return codes from the Event Loop harness
 USER_SAYS_QUIT  equ 'q'
@@ -284,5 +296,5 @@ NES_PPUCTRL_SPRSIZE equ $20
 HORIZONTAL_MIRRORING equ $01
 VERTICAL_MIRRORING   equ $02
 
-HORIZONTAL_MIRROR_MASK equ $3BFF
-VERTICAL_MIRROR_MASK equ $37FF
+HORIZONTAL_MIRROR_MASK equ $0BFF
+VERTICAL_MIRROR_MASK equ $07FF

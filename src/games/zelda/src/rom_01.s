@@ -24,6 +24,8 @@ SetMirrorMode  EXT
 
             mx    %11
 
+            put   ../../../core/Defs.s
+
 ; Pad up to $5000
             ds    $5000-*
 

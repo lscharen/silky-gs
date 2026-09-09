@@ -381,8 +381,12 @@ _InitHorizontalMirroring
                   lda       #$01FF
                   sta       MirrorMaskY
                   lda       #HORIZONTAL_MIRROR_MASK
-                  sta       MirrorMask           ; 0011_1011_1111_1111 -> $2400 -> $2000
+;                  sta       MirrorMask
                   sta       MirrorMaskLong
+                  lda       #$07E0
+                  sta       CIRAMRowMask         ; V = 0x3E0, H = 0x7E0
+                  lda       #$001F
+                  sta       CIRAMColMask         ; V = $041F, H = $001F
                   lda       #480
                   sta       MaxY
                   lda       #256
@@ -479,9 +483,13 @@ _InitVerticalMirroring
                   lda       #$00FF
                   sta       MirrorMaskY
                   lda       #VERTICAL_MIRROR_MASK    
-                  sta       MirrorMask         ; 0011_0111_1111_111 -> $2800 -> $2000
+ ;                 sta       MirrorMask
                   sta       MirrorMaskLong
                   lda       #240
+                  lda       #$03E0
+                  sta       CIRAMRowMask         ; V = 0x3E0, H = 0x7E0
+                  lda       #$041F
+                  sta       CIRAMColMask         ; V = $041F, H = $001F
                   sta       MaxY
                   lda       #512
                   sta       MaxX

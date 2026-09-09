@@ -380,9 +380,7 @@ _SetupPEAFieldLinesDirty
                 lda   :exit_addr          ; Return the calculated exit address to be used for restore
                 rts
 
-
-
-; This is a rewrite of a routing that uses the NES scroll position + mirroring information to calculate
+; This is a rewrite of a routine that uses the NES scroll position + mirroring information to calculate
 ; the vertical and horizontal patch information to render the full screen.
 ;
 ; Changes from the old routine

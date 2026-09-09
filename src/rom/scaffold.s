@@ -369,14 +369,27 @@ BorderColor       dw  0            ; save/restore border color
 ; handlers, entered from NES ROM code with the NES's own direct page) --
 ; those sites access this copy with long addressing (andl MirrorMaskLong)
 ; instead.
-MirrorMaskLong    dw  0
+MirrorMaskLong ENT
+             dw  0
+
+; Corresponding mask for calculating the CIRAM location for a PPU
+; nametable address
+CIRAMRowMask ENT
+             dw  0
+CIRAMColMask ENT
+             dw  0
 
 ; 0 = no mirroring-mode change pending; else HORIZONTAL_MIRRORING/
 ; VERTICAL_MIRRORING, the target mode ApplyMirrorMode should switch to at
 ; the next render (see core/ControlBits.s SetMirrorMode/ApplyMirrorMode).
 ; Absolute, not DP, for the same reason as MirrorMaskLong above --
 ; SetMirrorMode writes it via long addressing from NES ROM code.
-PendingMirrorMode dw  0
+;
+; Note that the actual mask values have to be update dimmediately.  This
+; flag is purly for deferred work that needs to happen before the next
+; *render*
+PendingMirrorMode ENT
+            dw  0
 
 ; Built-in user key actions
 
@@ -399,8 +412,6 @@ ToggleAPUChannel
 ; Helper to perform the essential functions of rendering a frame
             mx  %00
 NES_RenderFrame
-;:nt_head    equ tmp3
-;:at_head    equ tmp4
 
 ; First, disable interrupts and perform the most essential functions to copy any critical NES data and
 ; registers into local memory so that the rendering is consistent and not affected if a VBL interrupt
@@ -505,25 +516,14 @@ NES_RenderFrame
             lda  #0
             ldx  PPU_CLEAR_ADDR
 
-            stal PPU_MEM+TILE_VERSION0+$2000+$000,x    ; always need to offset by $2000 because the PPU tiledata address is the index register value
-            stal PPU_MEM+TILE_VERSION0+$2000+$002,x
-            stal PPU_MEM+TILE_VERSION1+$2000+$000,x
-            stal PPU_MEM+TILE_VERSION1+$2000+$002,x
+            stal PPU_MEM+TILE_VERSION0+$000,x
+            stal PPU_MEM+TILE_VERSION1+$000,x
+            stal PPU_MEM+TILE_VERSION1+$002,x
 
-            stal PPU_MEM+TILE_VERSION0+$2000+$400,x
-            stal PPU_MEM+TILE_VERSION0+$2000+$402,x
-            stal PPU_MEM+TILE_VERSION1+$2000+$400,x
-            stal PPU_MEM+TILE_VERSION1+$2000+$402,x
-
-            stal PPU_MEM+TILE_VERSION0+$2000+$800,x
-            stal PPU_MEM+TILE_VERSION0+$2000+$802,x
-            stal PPU_MEM+TILE_VERSION1+$2000+$800,x
-            stal PPU_MEM+TILE_VERSION1+$2000+$802,x
-
-            stal PPU_MEM+TILE_VERSION0+$2000+$C00,x
-            stal PPU_MEM+TILE_VERSION0+$2000+$C02,x
-            stal PPU_MEM+TILE_VERSION1+$2000+$C00,x
-            stal PPU_MEM+TILE_VERSION1+$2000+$C02,x
+            stal PPU_MEM+TILE_VERSION0+$400,x
+            stal PPU_MEM+TILE_VERSION0+$402,x
+            stal PPU_MEM+TILE_VERSION1+$400,x
+            stal PPU_MEM+TILE_VERSION1+$402,x
 
             txa
             clc
@@ -639,8 +639,12 @@ _NametableToScreen
 
 ; First, find the IIgs on-screen offset for this nametable address.
 
-            ldal PPU_MEM+TILE_COL,x       ; Get the logical column of this address
-            and  #$00FF
+;            ldal PPU_MEM+TILE_COL,x       ; Get the logical column of this address
+;            and  #$00FF
+
+            txa
+            ciram2col
+
             asl
             asl                           ; Multiple by 4 to convert column to width in IIgs SHR bytes
             sec
@@ -656,11 +660,15 @@ _NametableToScreen
             rts
 
 :x_visible
-            ldal PPU_MEM+TILE_ROW,x       ; Get the logical row of this address
-            and  #$00FF
-            asl
-            asl
-            asl
+;            ldal PPU_MEM+TILE_ROW,x       ; Get the logical row of this address
+;            and  #$00FF
+;            asl
+;            asl
+;            asl
+            
+            txa
+            ciram2rowX8                   ; Get the logical row of this address and multiple by 8 to get a line
+
             sbc  _ppuscroll_y
             clc
             adc  MaxY                     ; Add in the height of the NES nametables,

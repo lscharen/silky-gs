@@ -43,7 +43,7 @@
 ;
 ; This impacts the emulation layer in two ways.  First, we do not have a 2kb shadow RAM for the PPU.  Instead,
 ; the PEA field that draws the graphics has two nametable's worth of memory and is reconfigured based on the
-; mirroring, so when a PPU address is written, it need to be mapped into the appropriate PEA table location.
+; mirroring, so when a PPU address is written, it needs to be mapped into the appropriate PEA table location.
 ; Second, the runtime maintains several shadow RAM areas that cover the full 4kb of memory to make it fast to
 ; look up data
 ;

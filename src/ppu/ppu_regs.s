@@ -255,27 +255,19 @@ PPUDATA_READ ENT
         cpx  #$2000
         bcc  :not_in_nt   ; If we are not in the nametable space, just read the PPU memory and return
 
-; apply mirroring
-;
-; HMIRROR_ADDR = PPU_ADDR & $FBFF
-; VMIRROR_ADDR = PPU_ADDR & $FDFF
-
         txa
-        andl MirrorMaskLong   ; runtime nametable-mirroring mask (see SetMirrorMode, ControlBits.s)
+        ppu2ciram             ; map address to CIRAM address range ($000 - $7FF)
         tax
 
 :not_in_nt
         sep  #$20       ; 8-bit acc/16-bit regs
         ldal vram_buff
         sta  2,s
-        ldal PPU_MEM,x
+        ldal PPU_CIRAM,x
         stal vram_buff
         sep  #$30
 
         plx
-;        plb
-;        plp
-;        pha
         pla
         rtl
 
@@ -321,8 +313,8 @@ PPUDATA_WRITE ENT
         tax
         sep  #$20
         lda  #{CHRRAM_BG_DIRTY+CHRRAM_SPR_DIRTY}  ; both forms need recompiling -- see CHRRAM_BG_DIRTY/
-                                                 ; CHRRAM_SPR_DIRTY (CoreData.s) for why these are two
-                                                 ; independent bits, not one shared flag
+                                                  ; CHRRAM_SPR_DIRTY (CoreData.s) for why these are two
+                                                  ; independent bits, not one shared flag
         stal ChrRamDirty,x
         bra  :done
 :not_chr
@@ -331,7 +323,7 @@ PPUDATA_WRITE ENT
         FIN
 
         cpx  #$3000
-        bcc  :in_nt                  ; If the high byte is $20 or $30, then we are in the nametable space
+        bcc  :in_nt                  ; If the high byte is $2x, then we are in the nametable space
 
         cpx  #$3F00
         bcs  :extra
@@ -342,10 +334,16 @@ PPUDATA_WRITE ENT
 ; of these pieces of memory since each attribute byte afftect 16 tiles, it's important to process the
 ; attribute changes first to avoid having to redraw tiles since the IIgs does not have enough colors
 ; to directly support the palette indexes and has to redraw tiles when their palette assignment changes.
+        mx  %00
 :in_nt
+; There are two 1kb physical pages of Console Internal RAM (CIRAM) that back the four nametables. We need
+; to convert the logical PPU address that's in the range $2000 - $2FFF into the internal RAM address.
+;
+; If VERTICAL mirroring, then CIRAM A10 == PPU A10:  ciram_addr = ppu_arr & 0x07FF
+; If HORIZONTAL mirroring, then CIRAM A10 = PPU A11: ciram_addr = ((ppu_addr & 0x0800) >> 1) | (ppu_addr & 0x03FF)
 
         txa
-        andl MirrorMaskLong   ; runtime nametable-mirroring mask (see SetMirrorMode, ControlBits.s)
+        ppu2ciram
         tax
 
 ; Switch to 8-bit accumulator with 16-bit registers to compare the accumulator value that was passed
@@ -353,16 +351,18 @@ PPUDATA_WRITE ENT
 
         sep  #$20
 
-; Check to see if the tile passed in is different that the one that is currently in the PPU memory. If
+; Check to see if the tile passed in is different that the one that is currently in the nametable memory. If
 ; there is no change, then no need to update the IIgs graphics.
 
         lda  2,s
-        cmpl PPU_MEM,x
+        cmpl PPU_CIRAM,x
         beq  :done
-        stal PPU_MEM,x
+        stal PPU_CIRAM,x
 
 ; Check if this location has already been marked for an update.  If it has, then do not add it to the update
-; list again.
+; list again.  It is likely unusual for a game to modify the same tile twice in a frame, but the engine will
+; accumulate changes over multiple frames, so it is more probably for there to be repeated updates when it's
+; time to render the frame.
 
         lda  PPU_VERSION              ; Get the current frame version
         cmpl PPU_MEM+TILE_VERSION0,x  ; Check if this location is marked for an update
@@ -415,7 +415,7 @@ PPUDATA_WRITE ENT
 :extra
         sep  #$20
         lda  2,s
-        cmpl PPU_MEM,x
+        cmpl PPU_MEM,x                  ; x is the logical PPU address here (>= $3F00)
         beq  :done                      ; Palette updates can be *very* expensive, so skip if no change
         stal PPU_MEM,x
         rep  #$20

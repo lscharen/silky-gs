@@ -99,7 +99,7 @@ lite_save          dfb   $F4,$00,$00                ; Storage for the patched PE
                    jmp   $0000                      ; Jump to the next line.  Not used for horizonal mirroring
                    ds    1                          ; Space for when the exit vector is a JML to cross a bank
 
-lite_exit_odd      lda:  $0000                      ; Load from the patch save location. A = 8-bit for odd, 16-bit for even, Y = 1 or odd, 0 for even
+lite_exit_odd      lda:  $0000                      ; Load from the patch save location. A = 8-bit for odd, 16-bit for even, Y = 1 for odd, 0 for even
                    pha
                    jmp   $0000
                    ds    1                          ; Space for when the exit vector is a JML to cross a bank

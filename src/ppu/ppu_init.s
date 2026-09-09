@@ -34,6 +34,11 @@ PPUStartUp
         lda   #NAMETABLE_MIRRORING
         jsr   PPUSetMirrorMode
 
+; Initialize the CIRAM-to-PEA_Field mappings. This is invarient to the choice of mirroring
+; but needs to happen after other tables are filled in.
+
+        jsr   _InitCIRAMTileMapping
+
         lda   #$FFFF                    ; Set initial palette values to out-of-range values
         ldx   #0
 :loop
@@ -58,7 +63,7 @@ PPUSetMirrorMode
 
         jsr   _InitHorizontalMirroring
         jsr   _InitLiteBlitterHorz
-        jmp   _InitPPUTileMappingHorz 
+;        jmp   _InitPPUTileMappingHorz 
 
 :not_horz
         bit  #VERTICAL_MIRRORING
@@ -66,7 +71,7 @@ PPUSetMirrorMode
 
         jsr   _InitVerticalMirroring
         jsr   _InitLiteBlitterVert
-        jmp   _InitPPUTileMappingVert 
+;        jmp   _InitPPUTileMappingVert 
 
 ; Some unsupported configuration.  Do nothing
 :not_vert

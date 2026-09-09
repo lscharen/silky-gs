@@ -113,7 +113,7 @@ ForceMetatileRefresh
 ; be skipped.  This is detected by storing a zero in the TILE_BANK shadow memory
 ; since the PEA fields will never be allocated in Bank 00.
 ;
-; X = PPU address of the top-left corner of the metatile
+; X = CIRAM address of the top-left corner of the metatile
 ; A = Palette select value for all tiles
 ; P = 8-bit A / 16-bit XY
         mx    %10

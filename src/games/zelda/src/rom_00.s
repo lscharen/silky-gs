@@ -4,6 +4,8 @@
 SetMirrorMode  EXT
 ROMBase ENT
 
+            put   ../../../core/Defs.s
+
 ; Pad up to $5000
             ds    $5000-*
 
@@ -27,8 +29,10 @@ y_exclude ENT                     ; Table of excluded scanlines -- kept in NES R
             ds 200,$00
             ds 32,$01
 
-tile_exclude ENT                  ; Tble of excluded tiles
-            ds 256,$00
+tile_exclude ENT                  ; Table of excluded tiles
+            ds $61,$00
+            db $01                ; Tile $61 - fake "bomb" used for sprite-0 hit detection when scrolling
+            ds $9E,$00
 
 ; Create stubs to handle converting self-references into long addressing so it works when the ROM code is
 ; in another IIgs memory bank.  Our memory model keeps the PBR in a fixed bank so that any access to RAM

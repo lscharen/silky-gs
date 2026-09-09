@@ -25,7 +25,7 @@ _DrawPPUAttribute
 
 ; Draw an attribute from the PPU into the code field by updating any changed metatiles
 ;
-; X = PPU attribute address
+; X = CIRAM attribute address
 ; A = Attribute value
 ; B = Attribute EOR value
 ;
