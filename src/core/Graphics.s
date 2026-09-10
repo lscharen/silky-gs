@@ -263,8 +263,10 @@ SetScreenRect      sty   ScreenHeight               ; Save the screen height and
                    lda   ScreenY0                   ; Calculate the address of the first byte
                    asl                              ; of the right side of the playfield
                    tax
-                   lda   ScreenAddr,x               ; This is the address for the edge of the physical screen
-                   clc
+;                   lda   ScreenAddr,x               ; This is the address for the edge of the physical screen
+;                   clc
+                   lda   Mul160Tbl,x
+                   adc   #$2000
                    adc   ScreenX1
                    dec
                    pha                              ; Save for second loop
@@ -294,8 +296,10 @@ SetScreenRect      sty   ScreenHeight               ; Save the screen height and
                    lda   ScreenY0                   ; Calculate the address of the first byte
                    asl                              ; of the right side of the playfield
                    tax
-                   lda   ScreenAddr,x               ; This is the address for the left edge of the physical screen
-                   clc
+;                   lda   ScreenAddr,x               ; This is the address for the left edge of the physical screen
+;                   clc
+                   lda   Mul160Tbl,x
+                   adc   #$2000
                    adc   ScreenX0
 
                    rts
@@ -316,8 +320,10 @@ FillScreen         cmp   #0
                    tya
                    asl   a
                    tax
-                   lda   ScreenAddr,x
-                   clc
+;                   lda   ScreenAddr,x
+;                   clc
+                   lda   Mul160Tbl,x
+                   adc   #$2000
                    adc   ScreenX0
                    tax
                    phy

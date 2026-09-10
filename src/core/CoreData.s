@@ -365,12 +365,12 @@ Col2CodeOffset
                  dw     {PER_TILE_SIZE*63}
 
 ; Table of address for the left edge of the 200 physical lines on the SHR graphics screen
-]step             equ   $2000
-ScreenAddr        ENT
-                  lup   200
-                  dw    ]step
-]step             =     ]step+160
-                  --^
+;]step             equ   $2000
+;ScreenAddr        ENT
+;                  lup   200
+;                  dw    ]step
+;]step             =     ]step+160
+;                  --^
 
 ; Table of addresses for the right edge of the current screen rectangle.  This is not the same size as
 ; the physical screen and will be double the length of the ScreenHeight, up to a maximum of 200 lines
