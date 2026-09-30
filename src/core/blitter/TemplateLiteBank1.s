@@ -53,9 +53,9 @@ lite_base_1        ENT
 ; The last row jumps to the first row of the other bank
 ]page              equ   $0100+{119*_LINE_SPAN}
                    LITE_P0
-                   jml   lite_bank_entry_2          ; $EF
-                   lda:  ]page+_SAVE_OFFSET+1       ; $F3
+                   jml   lite_bank_entry_2          ; $F2
+                   lda:  ]page+_SAVE_OFFSET+1       ; $F6
                    pha
-                   jml   lite_bank_entry_2          ; $F7
+                   jml   lite_bank_entry_2          ; $FA
                    ds    \,$00
                    LITE_P1

@@ -225,23 +225,29 @@ DIRTY_RENDERING_VISUALS equ 0
 ; page (P1) is at +$100 and uses the same offsets for its PEA run and exit jumps.
 _INT_OFFSET    equ  $00                   ; code to enable interrupts before the line
 _ENTRY_OFFSET  equ  $11                   ; normal entry point for each line
-_ENTRY_PATCH   equ  $1B                   ; BRL to the first PEA (operand at +1)
-_E_OUT_OFFSET  equ  $1E                   ; top jump to the even exit
-_O_OUT_OFFSET  equ  $21                   ; top jump to the odd exit
-_PEA_OFFSET    equ  $24                   ; first PEA instruction
-_LOOP_OFFSET   equ  $E4                   ; BVC / JMP pair after the PEA run
-_E_EXIT_OFFSET equ  $EC                   ; exit_even: saved PEA instruction (P1 has a JMP here)
-_SAVE_OFFSET   equ  $ED                   ; saved PEA operand
-_E_JMP_OFFSET  equ  $EF                   ; even exit JMP to the next line (operand at +1)
-_O_EXIT_OFFSET equ  $F3                   ; exit_odd (P1 has a JMP here)
-_O_JMP_OFFSET  equ  $F7                   ; odd exit JMP to the next line (operand at +1)
+_ALIGN_PATCH   equ  $15                   ; BRA (even) or LDA #imm (odd), patched per line
+_EDGE_PATCH    equ  $17                   ; LDX #imm with the offset of the odd right edge byte (operand at +1)
+_ENTRY_PATCH   equ  $1E                   ; BRL to the first PEA (operand at +1)
+_E_OUT_OFFSET  equ  $21                   ; top jump to the even exit
+_O_OUT_OFFSET  equ  $24                   ; top jump to the odd exit
+_PEA_OFFSET    equ  $27                   ; first PEA instruction
+_LOOP_OFFSET   equ  $E7                   ; BVC / JMP pair after the PEA run
+_E_EXIT_OFFSET equ  $EF                   ; exit_even: saved PEA instruction (P1 has a JMP here)
+_SAVE_OFFSET   equ  $F0                   ; saved PEA operand
+_E_JMP_OFFSET  equ  $F2                   ; even exit JMP to the next line (operand at +1)
+_O_EXIT_OFFSET equ  $F6                   ; exit_odd (P1 has a JMP here)
+_O_JMP_OFFSET  equ  $FA                   ; odd exit JMP to the next line (operand at +1)
 
 _LINE_SPAN  equ  512                     ; always 512 bytes between adjacent rows
 _LINES_PER_BANK equ 120
 
+; Values patched into _ALIGN_PATCH.  Even lines branch over the edge byte code to the BRL.  Odd lines
+; execute a harmless 8-bit LDA #imm and fall into the code that pushes the right edge byte.
+BLT_ALIGN_EVEN equ  $80+{{_ENTRY_PATCH-_ALIGN_PATCH-2}*256}
+BLT_ALIGN_ODD  equ  $00A9
+
 ; Processor status values used to enter the blitter.  M = 1, X = 0 and I = 1 always.
 BLT_P_BASE     equ  $24
-BLT_P_ODD      equ  $01                   ; C = 1 for odd-aligned blits
 BLT_P_HORZ     equ  $40                   ; V = 1 for horizontal mirroring
 
 ; Set up some symbols to reference the different shadow memory in the PPU static bank. All of these

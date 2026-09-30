@@ -5,10 +5,9 @@
 ; X = first line (inclusive), valid range of 0 to 199
 ; Y = last line  (exclusive), valid range >X up to 200
 ;
-; The screen is made up of one or more blocks of lines that were set up by _BltSetup/_BltSetupAlt,
-; each with its own scroll parameters.  A range that crosses a block boundary is blitted as separate
-; pieces, because the processor flags (C = odd-aligned, V = horizontal mirroring) and the Y register
-; (odd edge byte offset) are only set once when entering the code field.
+; Every line holds its own scroll alignment (patched by _BltSetup/_BltSetupAlt), so any range of lines
+; can be drawn, even when parts of the screen were set up with different horizontal scroll positions.
+; The only global state is the mirroring mode, which is passed to the code field in the V flag.
 
 ; This should only be called from _Render when it is determined to be safe
                 mx    %00
@@ -67,37 +66,8 @@ _BltRangeLite
                 bne   *+5
                 brl   :no_background
 
-                sty   BltRangeEnd
-
-; Find the block that contains the first line.  The last block covers any lines past its end.
-
-:next_piece
-                txa
-                ldy   #0
-:find           cpy   BltBlockLast
-                bcs   :found
-                cmp   BltBlockEnd,y
-                bcc   :found
-                iny
-                iny
-                bra   :find
-:found
-                sty   BltBlockIdx
-
-                lda   BltRangeEnd           ; This piece ends at the end of the range or the block
-                cpy   BltBlockLast
-                bcs   :piece_end
-                cmp   BltBlockEnd,y
-                bcc   :piece_end
-                lda   BltBlockEnd,y
-:piece_end      sta   BltPieceEnd
-
-                jsr   _BltPieceLite
-
-                ldx   BltPieceEnd
-                cpx   BltRangeEnd
-                bcc   :next_piece
-                rts
+                sty   tmp1                ; Save the last line for the exit point
+                jmp   _BltRangeLiteBody
 
 ; Special mode to use when the background is disabled.  Just slam a bunch of $0000 values
 ;
@@ -161,13 +131,14 @@ _BltRangeLite
 
                 rts
 
-; Blit the lines from X up to BltPieceEnd, all within block BltBlockIdx
-_BltPieceLite
+; Blit the lines from X up to tmp1 (exclusive)
+_BltRangeLiteBody
 :exit_ptr       equ   tmp0
+:last_line      equ   tmp1
 :jmp_low_save   equ   tmp2
 
                 clc
-                lda   BltPieceEnd
+                lda   :last_line
                 dec
                 adc   StartRow       ; Get the PEA row of the line that we want to return from
                 cmp   #240
@@ -215,15 +186,12 @@ _BltPieceLite
                 sta   blt_entry_lite+3
                 pha                       ; bank of the PEA field
 
-; Push the processor status for this block. C indicates if this is an even/odd blit and V indicates if this
-; is horizontal or vertical mirroring.  It also sets I = 1 (interrupts off), M = 1 and X = 0.  Nothing in the
-; code field changes these flags.
+; Push the processor status for the code field. V indicates if this is horizontal or vertical mirroring. It
+; also sets I = 1 (interrupts off), M = 1 and X = 0.  Nothing in the code field changes these flags.
 
-                ldy   BltBlockIdx
-                lda   BltBlockP,y
+                lda   BltMirrorP
+                ora   #BLT_P_BASE
                 pha
-                ldx   BltBlockY,y         ; Offset of the right edge byte for odd-aligned blits
-                txy
 
 ; Set the environment for the blitter and dispatch
 
@@ -258,17 +226,6 @@ blt_return_lite ENT
                 sta   [:exit_ptr],y
 
                 rts
-
-; The blocks of lines set up by _BltSetupAlt.  Each block is a range of screen lines that share
-; the same scroll parameters.  A block that starts at line zero resets the list.
-BLT_MAX_BLOCKS  equ   4
-BltBlockLast    dw    0                     ; 2 x (number of blocks - 1)
-BltBlockEnd     ds    2*BLT_MAX_BLOCKS      ; screen line after the last line of the block
-BltBlockP       dw    BLT_P_BASE,BLT_P_BASE,BLT_P_BASE,BLT_P_BASE   ; P register value (low byte)
-BltBlockY       ds    2*BLT_MAX_BLOCKS      ; Y register value
-BltBlockIdx     dw    0
-BltRangeEnd     dw    0
-BltPieceEnd     dw    0
 
 ; Helper routine that takes the horizontal and vertical scoll coordinates in the X and Y registers
 ; and sets up the appropriate engine values.
@@ -320,8 +277,8 @@ NES_SetScrollY
 
 :out            rts
 
-; Set up the code field to render a block of lines with a horizontal scroll offset.  This patches the
-; entry point, the stack address and the exit point of every line and records the block for _BltRangeLite.
+; Set up the code field to render a range of lines with a horizontal scroll offset.  This patches the
+; entry point, the even/odd alignment, the stack address and the exit point of every line.
 ;
 ; With horizontal mirroring, each line stays within the CIRAM page (even or odd page of the row) that
 ; it is entered in.  With vertical mirroring, a line covers both pages and the page of the entry and
@@ -343,7 +300,7 @@ _BltSetupAlt
 :exit_addr     equ tmp4
 :virt_start    equ tmp10
 
-               jsr   _BltSetupBlock
+               jsr   _BltSetupCommon
                sta   :virt_start
 
                ldx   :num_lines
@@ -369,7 +326,7 @@ _BltSetupDirtyAlt
 :num_lines     equ tmp3
 :exit_addr     equ tmp4
 
-               jsr   _BltSetupBlock
+               jsr   _BltSetupCommon
                ldx   :num_lines
                ldy   #_SetupPEAFieldLinesDirty
                jsr   _Apply
@@ -377,21 +334,20 @@ _BltSetupDirtyAlt
                lda   :exit_addr
                rts
 
-; Common setup for a block of lines.  Calculates the patch values from the horizontal scroll and
-; records the block.
+; Common setup for a range of lines.  Calculates the patch values from the horizontal scroll.
 ;
 ; A = first screen line
 ; X = number of lines
 ; Y = horizontal offset in bytes (0 - 255)
 ;
-; Returns the first virtual line of the block in the accumulator
-_BltSetupBlock
+; Returns the first virtual line of the range in the accumulator
+_BltSetupCommon
 :num_lines     equ tmp3
 :exit_addr     equ tmp4
 :exit_bra      equ tmp5
 :entry_rel     equ tmp6
-:odd_y         equ tmp7
-:blt_p         equ tmp8
+:edge_offset   equ tmp7
+:align         equ tmp8
 :rtbl_idx_x2   equ tmp11
 :first_line    equ tmp12
 :word          equ tmp13
@@ -401,13 +357,14 @@ _BltSetupBlock
                asl
                sta   :rtbl_idx_x2        ; Relative location on the screen to draw
 
-; The processor status used to enter the code field. C = 1 for an odd-aligned blit
+; The instruction patched into each line to select the even or odd code path
 
                tya
-               and   #BLT_P_ODD
-               ora   #BLT_P_BASE
-               ora   BltMirrorP
-               sta   :blt_p
+               lsr                       ; C = odd-aligned
+               lda   #BLT_ALIGN_EVEN
+               bcc   *+5
+               lda   #BLT_ALIGN_ODD
+               sta   :align
 
 ; The exit point is the PEA of the left-most word on the screen, L.  Words 64 - 127 are in the odd
 ; page of the row, which only happens with vertical mirroring because the scroll position is masked
@@ -430,25 +387,27 @@ _BltSetupBlock
 
 ; The BRA instruction is the same for both pages, but differs between the even and odd cases
 
-               lda   :blt_p
-               lsr                       ; C = odd-aligned
+               lda   :align
+               cmp   #BLT_ALIGN_ODD
+               beq   :odd_bra
                lda   CodeFieldEvenBRA,x
-               bcc   *+5
-               lda   CodeFieldOddBRA,x
-               sta   :exit_bra
+               bra   :set_bra
+:odd_bra       lda   CodeFieldOddBRA,x
+:set_bra       sta   :exit_bra
 
 ; For odd-aligned blits, the right edge byte is the low byte of word L+64.  With horizontal mirroring
 ; that is word L itself, whose operand gets copied into the save slot.  With vertical mirroring it is
-; the same column in the other page and can be read directly from the PEA operand.
+; the same column in the other page and can be read directly from the PEA operand.  The offset is
+; patched into the LDX at _EDGE_PATCH.
 
                lda   BltMirrorP
-               beq   :vert_y
+               beq   :vert_edge
                lda   #_SAVE_OFFSET
-               bra   :set_y
-:vert_y        lda   :exit_addr
+               bra   :set_edge
+:vert_edge     lda   :exit_addr
                eor   #$0100
                inc
-:set_y         sta   :odd_y
+:set_edge      sta   :edge_offset
 
 ; The entry point is the PEA of the right-most word on the screen, L+63.  Horizontal mirroring
 ; wraps within 64 words and vertical mirroring within 128 words.
@@ -472,26 +431,6 @@ _BltSetupBlock
                clc
                adc   #_PEA_OFFSET-_ENTRY_PATCH-3  ; Make it relative to the BRL
                sta   :entry_rel
-
-; Record the block for _BltRangeLite
-
-               lda   :first_line
-               beq   :first_block        ; A block that starts at line 0 resets the list
-               ldy   BltBlockLast
-               cpy   #{BLT_MAX_BLOCKS-1}*2
-               bcs   :store_block        ; If the list is full, replace the last block
-               iny
-               iny
-               bra   :store_block
-:first_block   ldy   #0
-:store_block   sty   BltBlockLast
-               clc
-               adc   :num_lines
-               sta   BltBlockEnd,y
-               lda   :blt_p
-               sta   BltBlockP,y
-               lda   :odd_y
-               sta   BltBlockY,y
 
 ; Map the first line to a virtual line in the code field
 
@@ -553,7 +492,7 @@ _SetupStack
                 plb
                 rts
 
-; Patch the entry and exit points of a range of lines.
+; Patch the entry and exit points and the even/odd alignment of a range of lines.
 ;
 ; A = physical row
 ; X = number of lines
@@ -562,6 +501,8 @@ _SetupPEAFieldLines
 :exit_addr     equ tmp4
 :exit_bra      equ tmp5
 :entry_rel     equ tmp6
+:edge_offset   equ tmp7
+:align         equ tmp8
 :draw_count_x2 equ tmp9
 :btable_low    equ tmp12
 :exit_loc      equ tmp13
@@ -588,8 +529,10 @@ _SetupPEAFieldLines
                 eor   #$FFFF
                 sec
                 adc   #lsc_bottom
-                sta   :set_bra+1                  ; patch for inserting the BRA instruction
-                sta   :set_entry+1                ; and the entry BRL operand
+                sta   :set_bra+1                  ; patch for inserting the BRA instruction,
+                sta   :set_entry+1                ; the entry BRL operand,
+                sta   :set_align+1                ; the even/odd code path
+                sta   :set_edge+1                 ; and the right edge byte offset
 
                 sep   #$20
                 lda   BTableHigh,y                ; Get the bank for this range of PEA field lines
@@ -623,7 +566,23 @@ _SetupPEAFieldLines
                 adc   BltSegPage          ; to jump into the odd page
 :set_entry      jsr   $0000
 
-                plb                       ; Restore the data bank
+                lda   :btable_low         ; Select the even or odd code path
+                clc
+                adc   #_ALIGN_PATCH
+                tay
+                lda   :align
+:set_align      jsr   $0000
+
+                cmp   #BLT_ALIGN_ODD      ; Odd lines also need the offset of the right edge byte
+                bne   :done
+                lda   :btable_low
+                clc
+                adc   #_EDGE_PATCH+1
+                tay
+                lda   :edge_offset
+:set_edge       jsr   $0000
+
+:done           plb                       ; Restore the data bank
                 rts
 
 ; Only patch the BRA instructions
