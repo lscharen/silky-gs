@@ -137,8 +137,11 @@ EngineReset
                   stz       ScreenX0
                   stz       ScreenX1
 
-                  stz       StartXMod256
-                  stz       StartYMod240
+                  stz       ScrollX
+                  stz       ScrollY
+                  stz       ScrollNT
+                  stz       StartX
+                  stz       StartY
                   stz       StartRow
 
                   lda       #$FFFF                 ; Mark as needing a full update
@@ -290,13 +293,13 @@ _InitLiteBlitter
 ; address masks and the V flag that is used to enter the blitter.  Nothing in the code field is
 ; patched, so these are cheap enough to call whenever a mapper changes the mirroring mode.
 ;
+; The scroll values derived by _UpdateScrollStart and the entry and exit points in the code field
+; depend on the mirroring mode, so a change updates them and forces a full setup of the code field
+; on the next render.
+;
 ; With horizontal mirroring each line stays within one CIRAM page, which creates a virtual 256x480
 ; rendering surface.
 _InitHorizontalMirroring
-                  lda       #$00FF
-                  sta       MirrorMaskX
-                  lda       #$01FF
-                  sta       MirrorMaskY
                   lda       #HORIZONTAL_MIRROR_MASK
                   sta       MirrorMaskLong
                   lda       #$07E0
@@ -311,15 +314,15 @@ _InitHorizontalMirroring
 
                   lda       #BLT_P_HORZ          ; V = 1: lines loop within their CIRAM page
                   sta       BltMirrorP
+
+                  jsr       _UpdateScrollStart   ; The scroll values depend on the mirroring
+                  lda       #DIRTY_BIT_BG0_X
+                  tsb       DirtyBits
                   rts
 
 ; With vertical mirroring each line spans both CIRAM pages, which creates a virtual 512x240
 ; rendering surface.
 _InitVerticalMirroring
-                  lda       #$01FF
-                  sta       MirrorMaskX
-                  lda       #$00FF
-                  sta       MirrorMaskY
                   lda       #VERTICAL_MIRROR_MASK
                   sta       MirrorMaskLong
                   lda       #$03E0
@@ -333,6 +336,10 @@ _InitVerticalMirroring
                   sta       MaxX
 
                   stz       BltMirrorP           ; V = 0: lines continue into the other CIRAM page
+
+                  jsr       _UpdateScrollStart   ; The scroll values depend on the mirroring
+                  lda       #DIRTY_BIT_BG0_X
+                  tsb       DirtyBits
                   rts
 
                 mx %00

@@ -576,33 +576,6 @@ _ResetPEAField
             ldy   exitOffset              ; offset to patch
             jmp   _RestoreBG0OpcodesLite
 
-            mx  %00
-_GetPPUScrollX
-            sep   #$20
-            lda   _ppuctrl                ; Bit 0 is the high bit of the X scroll position
-            lsr                           ; put in the carry bit
-            lda   _ppuscroll_x            ; load the scroll value
-            ror                           ; put the high bit and divide by 2 for the engine
-            rep   #$20
-            and   #$00FF                  ; make sure nothing is in the high byte
-            asl                           ; Put back into the NES Pixel range
-            tax
-            rts
-
-            mx  %00
-_GetPPUScrollY
-            sep   #$20
-            lda   _ppuctrl                ; Bit 1 is the high bit of the Y scroll position
-            lsr
-            lsr                           ; put in the carry bit
-            lda   _ppuscroll_y            ; load the scroll value
-            ror
-            rep   #$20
-            rol
-            and   #$01FF
-            tay
-            rts
-
 ; Given a nametable address ($2000 - $2FFF), return the screen address taking into account the current
 ; scroll position.
 ;
@@ -768,10 +741,10 @@ _ShowDebugInfo
 RenderScreen
             jsr   _ShowDebugInfo
             
-            jsr   _GetPPUScrollX          ; Return in X register
-            jsr   _GetPPUScrollY          ; Return in Y register
-
-            jsr   NES_SetScroll           ; Set the engine to this scroll position
+            lda   _ppuctrl                ; Set the engine to the scroll position from this frame's
+            ldx   _ppuscroll_x            ; PPU register values (the nametable select bits are masked
+            ldy   _ppuscroll_y            ; by NES_SetScroll)
+            jsr   NES_SetScroll
 
 ; If this frame changed any of the background palettes, then we have to refresh all of the background tiles
 

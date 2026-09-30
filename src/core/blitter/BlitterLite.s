@@ -72,7 +72,7 @@ _BltRangeLite
 ; Special mode to use when the background is disabled.  Just slam a bunch of $0000 values
 ;
 ; This is simpler because X and Y are logical values.  Because we're not invoking the PEA
-; table, there is no need to offset by the StartYMod240 value
+; table, there is no need to offset by the StartY value
 ;
 ; If the previous frame was drawn with the background disabled then we can skip everything.  This
 ; is actually not uncommon -- make games disable sprites and background when clearing or initializing the
@@ -140,6 +140,7 @@ _BltRangeLiteBody
                 clc
                 lda   :last_line
                 dec
+                add_y_offset      ; Playfield line to NES scanline
                 adc   StartRow       ; Get the PEA row of the line that we want to return from
                 cmp   #240
                 bcc   *+5
@@ -169,6 +170,7 @@ _BltRangeLiteBody
 
                 clc
                 txa                  ; get the first line
+                add_y_offset      ; Playfield line to NES scanline
                 adc   StartRow       ; add in the physical row offset
                 cmp   #240
                 bcc   *+5
@@ -227,46 +229,77 @@ blt_return_lite ENT
 
                 rts
 
-; Helper routine that takes the horizontal and vertical scoll coordinates in the X and Y registers
-; and sets up the appropriate engine values.
+; Set the engine scroll position from values in the form of the NES PPU registers.  The caller passes
+; the values, so a custom renderer can use different scroll positions for different parts of the screen.
+; NES_SetScrollX, NES_SetScrollY and NES_SetScrollNT change just one of the values.
 ;
-; The range of values is 0 - 511 for both X and Y.  This routine applies the mirroring masks and
-; adjusts the Y value to map onto the valid range of 0 - 479 renderable lines.
+; A = nametable select (PPUCTRL bits 1:0)
+; X = scroll_x (0 - 255)
+; Y = scroll_y (0 - 255)
+NES_SetScroll
+                stx   ScrollX
+                sty   ScrollY
+
+; A = nametable select (PPUCTRL bits 1:0)
+NES_SetScrollNT
+                and   #$0003
+                sta   ScrollNT
+                bra   _UpdateScrollStart
+
+; X = scroll_x (0 - 255)
 NES_SetScrollX
-                txa
-                and   MirrorMaskX
-                lsr
+                stx   ScrollX
+                bra   _UpdateScrollStart
 
-                cmp   StartXMod256
-                beq   :out                       ; Easy, if nothing changed, then nothing changes
+; Y = scroll_y (0 - 255)
+NES_SetScrollY
+                sty   ScrollY
 
-                sta   StartXMod256               ; Save the new position
+; Derive the blitter values from the scroll position.  Sets StartX (the byte offset of the left edge),
+; StartY (the virtual line of NES scanline 0) and StartRow, and sets the dirty bits when they change.
+;
+; Only one of the nametable select bits picks the CIRAM page: the X bit (bit 0) with vertical mirroring
+; and the Y bit (bit 1) with horizontal mirroring.  The other bit selects a mirror of the same page.
+_UpdateScrollStart
 
+; With vertical mirroring, a line spans both CIRAM pages and the X nametable bit is the high bit of
+; a 9-bit horizontal position.
+
+                lda   BltMirrorP
+                bne   :horz_x
+                lda   ScrollNT
+                xba
+                and   #$0100
+                ora   ScrollX
+                bra   :set_x
+:horz_x         lda   ScrollX
+:set_x          lsr                              ; NES pixels to IIgs bytes
+                cmp   StartX
+                beq   :y                         ; Easy, if nothing changed, then nothing changes
+
+                sta   StartX
                 lda   #DIRTY_BIT_BG0_X
                 tsb   DirtyBits
 
-:out            rts
+; Scroll values of 240 - 255 start the screen in the attribute area of the nametable.  The PEA field does
+; not have those lines, so rows 28 and 29 are shown instead.  With horizontal mirroring, the Y nametable
+; bit selects CIRAM page 1, which is virtual lines 240 - 479.
 
-NES_SetScroll   jsr   NES_SetScrollX
-;                jmp   NES_SetScrollY     ; Fall through
-
-NES_SetScrollY
-                tya
-                and   MirrorMaskY
-                asl                       ; Lookup the correct virtual line
-                tay
-                lda   NES2Virtual,y
-
-                clc
-                adc   #y_offset           ; Shift down by the viewport offset
-                cmp   MaxY
-                bcc   *+4
-                sbc   MaxY
-
-                cmp   StartYMod240
+:y              lda   ScrollY
+                cmp   #240
+                bcc   *+5
+                sbc   #16
+                ldx   BltMirrorP
+                beq   :set_y                     ; Vertical mirroring
+                ldx   ScrollNT
+                cpx   #2                         ; Is the Y nametable bit set?
+                bcc   :set_y
+                adc   #240-1                     ; Carry is set
+:set_y
+                cmp   StartY
                 beq   :out                       ; Easy, if nothing changed, then nothing changes
 
-                sta   StartYMod240               ; Save the new position
+                sta   StartY                     ; Save the new position
                 cmp   #240                       ; Virtual lines 240 - 479 are the same rows in CIRAM page 1
                 bcc   *+5
                 sbc   #240
@@ -291,7 +324,7 @@ NES_SetScrollY
 ;
 ; Returns the row-relative offset of the exit PEA, which is passed to _RestoreBG0OpcodesAltLite
 _BltSetup
-               ldy   StartXMod256
+               ldy   StartX
                lda   #0
                ldx   ScreenHeight
 
@@ -318,7 +351,7 @@ _BltSetupAlt
 ; A small variant for dirty rendering that just sets the BRA instruction in the code field assuming
 ; that everything else has not changed, e.g. saved value and entry/exit points.
 _BltSetupDirty
-               ldy   StartXMod256
+               ldy   StartX
                lda   #0
                ldx   ScreenHeight
 
@@ -436,7 +469,8 @@ _BltSetupCommon
 
                lda   :first_line
                clc
-               adc   StartYMod240
+               add_y_offset           ; Playfield line to NES scanline
+               adc   StartY
                cmp   MaxY
                bcc   *+4
                sbc   MaxY

@@ -54,7 +54,7 @@ SetMirrorMode ENT
 ; Finish reconfiguring the engine for a mode change SetMirrorMode (above)
 ; requested -- the parts too expensive/disruptive to do mid-frame from NES
 ; ROM code (PEA-field patching, blitter jump tables, PPU tile-mapping
-; tables; DP MirrorMask/MirrorMaskX/MirrorMaskY, Defs.s, get set as a side
+; tables; DP BltMirrorP and MaxX/MaxY, Defs.s, get set as a side
 ; effect inside _InitHorizontalMirroring/_InitVerticalMirroring). Call this
 ; once per frame before rendering (see PRE_RENDER in each game's Main.s,
 ; matching the existing CheckForPaletteChange precedent).

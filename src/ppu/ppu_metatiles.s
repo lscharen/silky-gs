@@ -56,9 +56,8 @@ ForceMetatileRefresh
 ; Refresh the second page
 :loop2
 
-        lda  MirrorMaskX
-        bit  #$0100
-        beq  :horz
+        lda  BltMirrorP
+        bne  :horz
         lda  #$2800
         bra  :next
 :horz   lda  #$2400

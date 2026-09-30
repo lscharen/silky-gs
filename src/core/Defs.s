@@ -37,15 +37,18 @@ ScreenY1               equ   6           ; End of playfield on the physical scre
 ScreenX0               equ   8           ; 100, then ScreenY1 = 120.
 ScreenX1               equ   10
 
-StartRow               equ   12          ; StartYMod240 mod 240 (the physical PEA row of the first line)
-MirrorMaskX            equ   14          ; Either $00FF or $01FF depending on mirroring mode
-MirrorMaskY            equ   16          ; Either $01FF or $00FF depending on mirroring mode
+; The scroll position in the form of the NES PPU registers (set by NES_SetScroll and friends)
+ScrollX                equ   14          ; scroll_x (0 - 255)
+ScrollY                equ   16          ; scroll_y (0 - 255)
 
 CompileBank0           equ   18          ; Always zero to allow [CompileBank0],y addressing
 CompileBank            equ   20          ; Data bank that holds compiled sprite code
 
-StartXMod256           equ   22
-StartYMod240           equ   24
+; Values derived from the scroll position for the blitter.  These are the position of NES scanline 0,
+; the viewport's y_offset is added by the blitter.
+StartX                 equ   22          ; Byte offset of the left edge (0 - 127 H mirroring, 0 - 255 V mirroring)
+StartY                 equ   24          ; Virtual line (0 - 239 V mirroring, 0 - 479 H mirroring)
+StartRow               equ   12          ; StartY mod 240, the PEA row
 
 ControlBits            equ   26          ; Enable / disable things
 
@@ -152,7 +155,7 @@ RenderMtBase           equ   186
 
 BltSegPage             equ   188         ; $0100 when the current _Apply segment is in CIRAM page 1, else 0
 
-; Free space from 190 to 192
+ScrollNT               equ   190         ; Nametable select (PPUCTRL bits 1:0)
 
 blttmp                 equ   192         ; 32 bytes of local cache/scratch space for blitter
 

@@ -42,6 +42,13 @@ ppu2ciram MAC
         eor  #$0C00           ; If H *and* A11 = 1, then clear A11 and set A10
         <<<
 
+; Convert a playfield line (IIgs screen line) into an NES scanline by adding the offset of the viewport.
+; The carry must be clear.  This is the only place the blitter reads the viewport offset, so replacing the
+; constant with a memory location makes the viewport position dynamic.
+add_y_offset MAC
+        adc  #y_offset
+        <<<
+
 ; Calculates the logical tile row from a CIRAM address.  This does depend on the mirroring mode. When
 ; horizontal mirroring is enabled, the second CIRAM page has logical rows 30 through 59.  When vertical
 ; mirroring is enabled, the second CIRAM page rows and just 0 through 29, like the first page.

@@ -73,7 +73,7 @@ _Apply
 ; take in account the visible playfield and update the PEA fields in the two banks to
 ; set up the entry and exit points.
 ;
-; A = starting virtual line in the code field (0 - 239)
+; A = first playfield line (0 - 199)
 ; X = number of lines to render (0 - 200)
 ; Y = offset into the PEA field
 
@@ -88,7 +88,8 @@ _RestoreBG0OpcodesAltLite
                     sty   :exit_addr
 
                     clc
-                    adc   StartYMod240        ; Load the starting virtual line within the PEA renderer
+                    add_y_offset           ; Playfield line to NES scanline
+                    adc   StartY              ; Load the starting virtual line within the PEA renderer
                     cmp   MaxY
                     bcc   *+4
                     sbc   MaxY

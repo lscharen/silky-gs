@@ -149,31 +149,6 @@ CodeFieldOddBRA
             dfb   $80,$F8     ; col 62: $2A -> $24
             dfb   $80,$FB     ; col 63: $27 -> $24
 
-; Map the NES PPU lines to valid PEA field lines.  It's possible to tell the NES to start
-; drawing in the tile attribute space ($2nC0).  We have a lookup table to map the whole
-; 512 line PPU range into the valid 480 PEA lines
-NES2Virtual
-]line       =     0
-            lup   240
-            dw    ]line
-]line       =     ]line+1
-            --^
-]line       =     224
-            lup   16
-            dw    ]line
-]line       =     ]line+1
-            --^
-]line       =     240
-            lup   240
-            dw    ]line
-]line       =     ]line+1
-            --^
-]line       =     464
-            lup   16
-            dw    ]line
-]line       =     ]line+1
-            --^
-
 ; Col2CodeOffset
 ;
 ; Takes a column number (0 - 63) and returns the offset of its PEA instruction relative to
