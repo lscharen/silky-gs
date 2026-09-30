@@ -121,7 +121,7 @@ _InitCIRAMTileMapping
         xba
         stal PPU_MEM+TILE_ADDR_HI+$400,x  ; Store the high byte of the PEA tile address
 
-        lda  BTableHigh,y                 ; Load the bank byte
+        lda  BTableHigh+{240*2},y         ; Load the bank byte
         stal PPU_MEM+TILE_BANK+$400,x     ; Store it in the PPU bank (Nametable 1)
 
         rep  #$21

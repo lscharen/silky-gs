@@ -66,7 +66,7 @@ lite_enable_int_1  ldx   STK_SAVE
                    cli
                    sei
                    lda   STATE_REG_BLIT             ; External values 
-                   stal  STATE_REG                  ; = 16 bytes
+                   stal  STATE_REG                  ; = 17 bytes
 
 ; Start of the template code.  This code contains two sets of 64 PEA instructions to
 ; represent two nametables set up in vertical mirroring mode.  These lines are
@@ -74,15 +74,22 @@ lite_enable_int_1  ldx   STK_SAVE
 ;
 ; The lite blitter is crafted to allow the accumulator to be in 8-bit mode and avoid any
 ; need for rep/sep instructions to handle the odd-aligned case
-
+;
+; IDEAS:
+;  Remove the lite_entry_jmp BRL. And instead lift the lda: $0000 instruction.  For even case patch with a
+;  a JMP low-1 16-bit value to go to the entry point in 3 cycles.  Patch with a LDA low for the odd case. This
+;  saves one store in the setup (6 cycles) and either 1 cycle in the even case, or 4 cycles in the odd case.
+;  lite_odd_entry might be able to be 
 lite_base_1        ENT
-lite_entry         ldx   #0000                      ; Sets screen address (right edge)
+lite_entry         ldx   #0000                    ; _ENTRY_OFFSET: Sets screen address (right edge)
                    txs
 
-lite_entry_jmp     brl   *                          ; If the screen is odd-aligned, then branch to the next instruction
-                   lda:  $0000                      ; Get the low byte and push onto the stack
+; lite_entry_jmp     brl   *                          ; _ENTRY_PATCH: If the screen is odd-aligned, then branch to the next instruction
+                   bcc   *+6
+                   lda:  $0200,y                     ; Get the low byte and push onto the stack. May come from lite_save or from PEA field
                    pha
-lite_odd_entry     brl   *                          ; unconditionally jump into the "next" instruction in the 
+                   brl   *
+;lite_odd_entry     brl   *                          ; _ODD_PATCH: unconditionally jump into the "next" instruction in the 
                                                     ; code field.  This is OK, even if the entry point was the
                                                     ; last instruction, because there is a JMP at the end of
                                                     ; the code field, so the code will simply jump to that
@@ -99,7 +106,7 @@ lite_save          dfb   $F4,$00,$00                ; Storage for the patched PE
                    jmp   $0000                      ; Jump to the next line.  Not used for horizonal mirroring
                    ds    1                          ; Space for when the exit vector is a JML to cross a bank
 
-lite_exit_odd      lda:  $0000                      ; Load from the patch save location. A = 8-bit for odd, 16-bit for even, Y = 1 for odd, 0 for even
+lite_exit_odd      lda:  $0000                      ; Load from the patch save location.
                    pha
                    jmp   $0000
                    ds    1                          ; Space for when the exit vector is a JML to cross a bank
@@ -116,7 +123,7 @@ lite_exit_odd      lda:  $0000                      ; Load from the patch save l
 
                    ldx   #0000                      ; Normal entry point
                    txs
-                   brl   *
+                   bcc   *+6
                    lda:  $0000
                    pha
                    brl   *
@@ -155,7 +162,7 @@ lite_exit_odd2     lda:  $0000                      ; Load from the patch save l
 
                    ldx   #0000
                    txs
-                   brl   *
+                   bcc   *+6
                    lda:  $0000
                    pha
                    brl   *
@@ -255,7 +262,7 @@ lite_exit_odd2     lda:  $0000                      ; Load from the patch save l
 
                    ldx   #0000
                    txs
-                   brl   *
+                   bcc   *+6
                    lda:  $0000
                    pha
                    brl   *
@@ -358,7 +365,7 @@ lite_exit_odd2     lda:  $0000                      ; Load from the patch save l
 
                    ldx   #0000
                    txs
-                   brl   *
+                   bcc   *+6
                    lda:  $0000
                    pha
                    brl   *
@@ -388,7 +395,7 @@ lite_exit_odd2     lda:  $0000                      ; Load from the patch save l
 
                    ldx   #0000
                    txs
-                   brl   *
+                   bcc   *+6
                    lda:  $0000
                    pha
                    brl   *

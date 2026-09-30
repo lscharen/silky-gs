@@ -45,6 +45,13 @@ consumer (`CheckSprTileDirty` in `ppu.s`, `DrawPPUTile` in `ppu_attributes.s`, `
 `spadr_lo`/`bgadr_lo` values in `ppu_regs.s`) before checking or clearing it -- checking with the raw tile ID
 alone only ever sees pattern table 0's flags and silently never recompiles a tile whose table is $1000.
 
+Each byte holds two independent dirty bits, `CHRRAM_BG_DIRTY` ($01) and `CHRRAM_SPR_DIRTY` ($02) (both defined
+in `CoreData.s`), not one shared flag. `PPUDATA_WRITE` sets both on every CHR-RAM write; each consumer tests
+and clears only its own bit (via `BIT #mask` / `AND #~mask`), leaving the other bit alone. This matters because
+a single tile ID can be drawn as both a background tile and a sprite (e.g. reused for a title-screen sprite and
+a level-map tile) -- with one shared flag, whichever consumer ran first cleared it for both, so the other
+consumer's compiled form was never generated and a later unconditional jump into it crashed.
+
 ## Why this isn't true of the compiled-code banks
 
 The governing rule is: **how the engine reads/tracks CHR-RAM must match what the NES hardware actually does**

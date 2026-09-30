@@ -159,9 +159,9 @@ RefreshPPUTiles
         plp
         rts
 
-; Draw a tile from the PPU into the code field
+; Draw a tile from the CIRAM into the code field
 ;
-; X = PPU address
+; X = CIRAM address
 ; A = Tile value
 ;
 ; A = 8 bit, X/Y = 16bit on entry

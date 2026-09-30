@@ -77,7 +77,8 @@ lite_base_2        ENT
                    ldx   #0000                      ; Sets screen address (right edge)
                    txs
 
-                   brl   *                          ; If the screen is odd-aligned, then branch to the next instruction
+                   bcc   *+6
+;                   brl   *                          ; If the screen is odd-aligned, then branch to the next instruction
                    lda:  $0000                      ; Get the low byte and push onto the stack
                    pha
                    brl   *                          ; unconditionally jump into the "next" instruction in the 
@@ -114,7 +115,7 @@ lite_base_2        ENT
 
                    ldx   #0000                      ; Normal entry point
                    txs
-                   brl   *
+                   bcc   *+6
                    lda:  $0000
                    pha
                    brl   *
@@ -153,7 +154,7 @@ lite_base_2        ENT
 
                    ldx   #0000
                    txs
-                   brl   *
+                   bcc   *+6
                    lda:  $0000
                    pha
                    brl   *
@@ -253,7 +254,7 @@ lite_base_2        ENT
 
                    ldx   #0000
                    txs
-                   brl   *
+                   bcc   *+6
                    lda:  $0000
                    pha
                    brl   *
@@ -356,7 +357,7 @@ lite_base_2        ENT
 
                    ldx   #0000
                    txs
-                   brl   *
+                   bcc   *+6
                    lda:  $0000
                    pha
                    brl   *
@@ -386,7 +387,7 @@ lite_base_2        ENT
 
                    ldx   #0000
                    txs
-                   brl   *
+                   bcc   *+6
                    lda:  $0000
                    pha
                    brl   *

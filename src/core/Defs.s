@@ -225,32 +225,37 @@ _BANK_ENTRY_NT2 equ $000C
 
 _INT_OFFSET    equ  $00                   ; page offset for the code to enable interrupt before the line
 _ENTRY_OFFSET  equ  $11                   ; page offset for each line of code
-_ENTRY_PATCH   equ  $15                   ; page offset for the jmp/ldx at the top of the line
-_ODD_PATCH     equ  $1C                   ; page offset for the jmp following the odd-aligned code
-_E_OUT_OFFSET  equ  $1F                   ; page offset for the top jump that leads to the last word code at $E5
-_O_OUT_OFFSET  equ  $22
-_PEA_OFFSET    equ  $25                   ; page offset to the first PEA instruction
-_LOOP_OFFSET   equ  $E5                   ; page offset for the jump after the PEA opcodes that continues drawing
+;_ENTRY_PATCH   equ  $15                   ; page offset for the jmp/ldx at the top of the line
+;_ODD_PATCH     equ  $1C                   ; page offset for the jmp following the odd-aligned code
+
+_ENTRY_PATCH   equ  $1B                   ; page offset for unified even/odd dispatch
+_E_OUT_OFFSET  equ  $1E                   ; page offset for the top jump that leads to the last word code at $E5
+_O_OUT_OFFSET  equ  $21
+_PEA_OFFSET    equ  $24                   ; page offset to the first PEA instruction
+_LOOP_OFFSET   equ  $E4                   ; page offset for the jump after the PEA opcodes that continues drawing
 ;_WORD_OFFSET  equ  $E5                   ; page offset for the code that pushes the final byte/word onto the stack
-_E_WORD_OFFSET equ  $E8
-_O_WORD_OFFSET equ  $EF
-_E_EXIT_OFFSET equ  $EB                   ; page offset of the jump that goes to the next line
-_O_EXIT_OFFSET equ  $F3                   ; page offset of the jump that goes to the next line
-_SAVE_OFFSET   equ  $E9                   ; page offset to the location where the PEA operand is saved
-_O_LOAD_HI_OFFSET equ $EF
-_O_LOAD_LO_OFFSET equ $18
+_E_WORD_OFFSET equ  $E7
+_O_WORD_OFFSET equ  $EE
+_E_EXIT_OFFSET equ  $EA                   ; page offset of the jump that goes to the next line
+_O_EXIT_OFFSET equ  $F2                   ; page offset of the jump that goes to the next line
+_SAVE_OFFSET   equ  $E8                   ; page offset to the location where the PEA operand is saved
+_O_LOAD_HI_OFFSET equ $EE
+_O_LOAD_LO_OFFSET equ $17
 
-_O_SAVE_EDGE   equ  $F7                  ; Empty byte to stash data in the second page for odd rendering
+_O_SAVE_EDGE   equ  $F6                  ; Empty byte to stash data in the second page for odd rendering
 
-_ENTRY_JMP  equ  4                       ; $nF5: the jump (brl, actually) is 4 bytes after the entry byte
-_ENTRY_ODD  equ  12                      ; $nFD: the brl for the odd entry is a bit further in
-_EXIT_ODD   equ  475                     ; the odd enty point is just 3 bytes of code to load and push the edge byte
-_EXIT_EVEN  equ  478                     ; in the second page of the blitter line
-_LOW_SAVE   equ  {_EXIT_EVEN+4}          ; space to save the code field opcodes is right after the return jmp/jml
+;_ENTRY_JMP  equ  4                       ; $nF5: the jump (brl, actually) is 4 bytes after the entry byte
+;_ENTRY_ODD  equ  12                      ; $nFD: the brl for the odd entry is a bit further in
+
+ENTRY_JMP   equ  11                       ; Unified entry point, used to be the Odd JUMP
+_EXIT_ODD   equ  474                     ; the odd enty point is just 3 bytes of code to load and push the edge byte
+_EXIT_EVEN  equ  477                     ; in the second page of the blitter line
+;_LOW_SAVE   equ  {_EXIT_EVEN+4}          ; space to save the code field opcodes is right after the return jmp/jml
+
 _LINE_SIZE_V equ  512                    ; number of bytes for each blitter line (vertical mirroring)
 _LINE_SIZE_H equ  256                    ; number of bytes for each blitter line (horizontal mirroring)
 _LINE_SPAN  equ  512                     ; always 512 bytes between adjacent vertical lines
-_CODE_TOP   equ  21                      ; number of bytes from the base address of each blitter line to the first PEA instruction
+;_CODE_TOP   equ  21                      ; number of bytes from the base address of each blitter line to the first PEA instruction
 _LINES_PER_BANK equ 120
 
 ; Set up some symbols to reference the different shadow memory in the PPU static bank. All of these
@@ -263,7 +268,10 @@ _LINES_PER_BANK equ 120
 TILE_SHADOW   equ $4000          ; shadowed values of the nametable tiles
 ATTR_SHADOW   equ $5000          ; pre-calculated attribute values derived from the attribute bytes in $2nC0 PPU RAM
 
-; These three tables are static since the PEA fields are 1:1 to the CIRAM layout.
+; These three tables are static since the PEA fields are 1:1 to the CIRAM layout. Note that these tables simply replicate
+; information that's already in the BTableHigh and BTableLow arrays. For a given CIRAM address N, the address corresponds
+; to the Nth entry in those tables.  This is just a convenient way to get the information in 8-bit mode.
+
 TILE_BANK     equ $6000          ; pre-calculated data bank value for the location of the associated PEA field tile
 TILE_ADDR_LO  equ $7000          ; pre-calculated address (low byte) of the location of the PEA field tile
 TILE_ADDR_HI  equ $8000          ; pre-calculated address (high byte) of the location of the PEA field tile

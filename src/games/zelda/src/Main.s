@@ -116,7 +116,7 @@ NO_VERTICAL_CLIP  equ 1
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 0
+NO_INTERRUPTS     equ 1
 
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 1
@@ -558,7 +558,7 @@ INPUT_ITEM_5 dw   KEYMAP
             put    ../../../ppu/ppu_attributes.s
             put    ../../../ppu/ppu_tiles.s
             put    ../../../ppu/ppu_metatiles.s
-            put    ../../../ppu/ppu_nametable.s
+            put    ../../../ppu/ppu_nametable2.s
             put    ../../../ppu/ppu_queues.s
             put    ../../../ppu/ppu_palette.s
             put    ../../../ppu/ppu_regs.s

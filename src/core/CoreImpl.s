@@ -1,73 +1,8 @@
-; Sprite plane data and mask banks are provided as an external segment
-;
-; The sprite data holds a set of pre-rendered sprites that are optimized to support the rendering pipeline.  There
-; are four copies of each sprite, along with the cooresponding mask laid out into 4x4 tile regions where the
-; empty row and column is shared between adjacent blocks.
-;
-; Logically, the memory is laid out as 4 columns of sprites and 4 rows.
-;
-; +---+---+---+---+---+---+---+---+---+---+---+---+-...
-; |   |   |   |   |   |   |   |   |   |   |   |   | ...
-; +---+---+---+---+---+---+---+---+---+---+---+---+-...
-; |   | 0 | 0 |   | 1 | 1 |   | 2 | 2 |   | 3 | 3 | ...
-; +---+---+---+---+---+---+---+---+---+---+---+---+-...
-; |   | 0 | 0 |   | 1 | 1 |   | 2 | 2 |   | 3 | 3 | ...
-; +---+---+---+---+---+---+---+---+---+---+---+---+-...
-; |   |   |   |   |   |   |   |   |   |   |   |   | ...
-; +---+---+---+---+---+---+---+---+---+---+---+---+-...
-; |   | 4 | 4 |   | 5 | 5 |   | 6 | 6 |   | 7 | 7 | ...
-; +---+---+---+---+---+---+---+---+---+---+---+---+-...
-; |   | 4 | 4 |   | 5 | 5 |   | 6 | 6 |   | 7 | 7 | ...
-; +---+---+---+---+---+---+---+---+---+---+---+---+-...
-; |   |   |   |   |   |   |   |   |   |   |   |   | ...
-; +---+---+---+---+---+---+---+---+---+---+---+---+-...
-;
-; For each sprite, when it needs to be copied into an on-screen tile, it could exist at any offset compared to its
-; natural alignment.  By having a buffer around the sprite data, an address pointer can be set to a different origin
-; and a simple 8x8 block copy can cut out the appropriate bit of the sprite.  For example, here is a zoomed-in look
-; at a sprite with an offset, O, at (-2,-3).  As shown, by selecting an appropriate origin, just the top corner
-; of the sprite data will be copied.
-;
-; +---+---+---+---++---+---+---+---++---+---+---+---++---+---+---+---+..
-; |   |           ||           |   ||   |   |   |   ||   |   |   |   |
-; +---+-- O----------------+ --+---++---+---+---+---++---+---+---+---+..
-; |   |   |                |   |   ||   |   |   |   ||   |   |   |   |
-; +---+-- |                | --+---++---+---+---+---++---+---+---+---+..
-; |   |   |                |   |   ||   |   |   |   ||   |   |   |   |
-; +---+-- |                | --+---++---+---+---+---++---+---+---+---+..
-; |   |   |                |   |   ||   |   |   |   ||   |   |   |   |
-; +===+== |       ++===+== | ==+===++===+===+===+===++===+===+===+===+..
-; |   |   |       ||   | S | S | S || S | S | S |   ||   |   |   |   |
-; +---+-- +----------------+ --+---++---+---+---+---++---+---+---+---+..
-; |   |           || S | S   S | S || S | S | S | S ||   |   |   |   |
-; +---+---+---+---++---+---+---+---++---+---+---+---++---+---+---+---+..
-; |   |   |   |   || S | S | S | S || S | S | S | S ||   |   |   |   |
-; +---+---+---+---++---+---+---+---++---+---+---+---++---+---+---+---+..
-; |   |   |   |   || S | S | S | S || S | S | S | S ||   |   |   |   |
-; +===+===+===+===++===+===+===+===++===+===+===+===++===+===+===+===+..
-; |   |   |   |   || S | S | S | S || S | S | S | S ||   |   |   |   |
-; +---+---+---+---++---+---+---+---++---+---+---+---++---+---+---+---+..
-; |   |   |   |   || S | S | S | S || S | S | S | S ||   |   |   |   |
-; +---+---+---+---++---+---+---+---++---+---+---+---++---+---+---+---+..
-; |   |   |   |   || S | S | S | S || S | S | S | S ||   |   |   |   |
-; +---+---+---+---++---+---+---+---++---+---+---+---++---+---+---+---+..
-; |   |   |   |   ||   | S | S | S || S | S | S |   ||   |   |   |   |
-; +---+---+---+---++---+---+---+---++---+---+---+---++---+---+---+---+..
-; .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .
-;
-; Each sprite will take up, effectively 9 tiles of storage space per 
-; instance (plus edges) and there are 4 instances for the H/V bits
-; and 4 more for the masks.  This results in a need for 43,264 bytes
-; for all 16 sprites.
-
-spritedata        EXT
-spritemask        EXT
-
 ; Core engine functionality.  The idea is that that source file can be PUT into
 ; a main source file and all of the functionality will be available.
 ;
 ; There are some constants that must be externally defined that can affect how
-; the GTE runtime works
+; the runtime works
 ;
 ; NO_MUSIC      : Set to non-zero to avoid using any source
 ; NO_INTERRUPTS : Set to non-zero to avoid installing custom interrupt handlers
@@ -387,6 +322,7 @@ _InitHorizontalMirroring
                   sta       CIRAMRowMask         ; V = 0x3E0, H = 0x7E0
                   lda       #$001F
                   sta       CIRAMColMask         ; V = $041F, H = $001F
+
                   lda       #480
                   sta       MaxY
                   lda       #256
@@ -394,21 +330,23 @@ _InitHorizontalMirroring
 
 ; Adjust lookup tables
 
-                  ldx       #126
-:loop0
-                  lda       Col2CodeOffset,x
-                  sta       Col2CodeOffset+128,x                  ; For horizontal mirroring, offsets 64 - 127 are the same as 0 - 63
-                  dex
-                  dex
-                  bpl       :loop0
+;                  ldx       #126
+;:loop0
+;                  lda       Col2CodeOffset,x
+;                  sta       Col2CodeOffset+128,x                  ; For horizontal mirroring, offsets 64 - 127 are the same as 0 - 63
+;                  dex
+;                  dex
+;                  bpl       :loop0
 
 ; Update the flow control in the PEA fields
 
                   ldx       #0
 :loop1
                   PATCH_JMP _LOOP_OFFSET;#_PEA_OFFSET             ; Jump around to the beginning of the line
+
                   PATCH_JMP _E_OUT_OFFSET;#_E_WORD_OFFSET         ; Jump to the code to push the last word for an even blit
                   PATCH_JMP _O_OUT_OFFSET;#_O_WORD_OFFSET         ; Jump to the code to push the last byte for an odd blit
+                  
                   PATCH_JMP _E_EXIT_OFFSET;#{$0200+_ENTRY_OFFSET} ; Jump to the next line
                   PATCH_JMP _O_EXIT_OFFSET;#{$0200+_ENTRY_OFFSET} ; Jump to the next line
 
@@ -435,9 +373,9 @@ _InitHorizontalMirroring
 
                   ldx       #{238*256}
                   PATCH_VAL _E_EXIT_OFFSET;#$005C                           ; JML opcode (in both nametables)
-                  PATCH_VAL _E_EXIT_OFFSET+$100;#$005C                           ; JML opcode (in both nametables)
+                  PATCH_VAL _E_EXIT_OFFSET+$100;#$005C                      ; JML opcode (in both nametables)
                   PATCH_VAL _O_EXIT_OFFSET;#$005C                           ; JML opcode (in both nametables)
-                  PATCH_VAL _O_EXIT_OFFSET+$100;#$005C                           ; JML opcode (in both nametables)
+                  PATCH_VAL _O_EXIT_OFFSET+$100;#$005C                      ; JML opcode (in both nametables)
                   
                   lda       #_BANK_ENTRY_NT1
                   stal      lite_start_page_1+_E_EXIT_OFFSET+1,x       ; A -> B
@@ -485,11 +423,12 @@ _InitVerticalMirroring
                   lda       #VERTICAL_MIRROR_MASK    
  ;                 sta       MirrorMask
                   sta       MirrorMaskLong
-                  lda       #240
                   lda       #$03E0
                   sta       CIRAMRowMask         ; V = 0x3E0, H = 0x7E0
                   lda       #$041F
                   sta       CIRAMColMask         ; V = $041F, H = $001F
+
+                  lda       #240
                   sta       MaxY
                   lda       #512
                   sta       MaxX
@@ -500,7 +439,7 @@ _InitVerticalMirroring
 :loop0
                   lda       Col2CodeOffset,x
                   ora       #$0100
-                  sta       Col2CodeOffset+128,x                  ; For horizontal mirroring, offsets 64 - 127 are +$100 as 0 - 63
+                  sta       Col2CodeOffset+128,x                  ; For vertical mirroring, offsets 64 - 127 are +$100 as 0 - 63
                   dex
                   dex
                   bpl       :loop0

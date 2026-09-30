@@ -10,21 +10,21 @@ _Apply
                   php
                   rep   #$20      ; force 16-bit A for a clean push/pop pair below
                   pha
-                  phx
-                  phy
+;                  phx
+;                  phy
 
                   ldal  MirrorMaskLong
                   cmp   #$0BFF
                   beq   :horz
 
-                  ply
-                  plx
+;                  ply
+;                  plx
                   pla
                   plp
                   jmp   _ApplyVertMirroring
 :horz
-                  ply
-                  plx
+;                  ply
+;                  plx
                   pla
                   plp
                   jmp   _ApplyHorzMirroring
@@ -137,7 +137,7 @@ _ApplyVertMirroring
 ; X = number of lines to render (0 - 200)
 ; Y = address of callback routine
 ;
-; This needs to be a bit more generalized that before.  Really, we don't need to care about the actual
+; This needs to be a bit more generalized than before.  Really, we don't need to care about the actual
 ; bank, it's just a matter of rouding to the nearest 120-line boundary.
 _ApplyHorzMirroring
 :virt_line          equ   tmp1
@@ -366,8 +366,8 @@ _RestoreBG0OpcodesCallback
                     asl                               ; 2 x :virt_line
                     tay                               ; use to load the base address
 
-                    lda   #_SAVE_OFFSET-1             ; Fixed location
-                    sta   :save_addr
+;                    lda   #_SAVE_OFFSET-1             ; Fixed location
+;                    sta   :save_addr
 
                     txa
                     asl
@@ -388,7 +388,8 @@ _RestoreBG0OpcodesCallback
                     lda   BTableLow,y                ; Get the address of the first code field line
                     and   #$FF00
                     sta   :btable_low
-                    adc   :save_addr
+;                    adc   :save_addr
+                    adc   #_SAVE_OFFSET-1
                     tax
 
                     lda   :btable_low

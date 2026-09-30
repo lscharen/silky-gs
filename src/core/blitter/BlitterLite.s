@@ -111,6 +111,19 @@ _BltRangeLite
                 sta   blt_entry_lite+3
                 pha
 
+; Push the entry values (C, V flags). C indicates if this is an even/odd blit and V indicated if this
+; is horizontal or vertical mirroring.
+
+                clv
+                clc
+
+; Set the Y resiger to a relative offset of either the save_offset or the out_offset to load the right edge byte for
+; odd rendering.  For horizontal mirroring where everything happens in a single page, the PEA opcode that straddles
+; the edge is patched out, so the low byte is in the save word.  For vertical mirroring, patch is in the other nametable
+; so the low byte is still accessible in the word just prior to the entry point.
+
+                ldy   #_SAVE_OFFSET+1
+
 ; Set the environment for the blitter and dispatch
 
                 plb                       ; set bank to PEA fields -- can be removed if we tweak the save/restore
@@ -151,7 +164,7 @@ blt_return_lite ENT
 ; table, there is no need to offset by the StartYMod240 value
 ;
 ; If the previous frame was drawn with the background disabled then we can skip everything.  This
-; is actually not uncommon -- make games disable sprites andbackground when clearing or initializing the
+; is actually not uncommon -- make games disable sprites and background when clearing or initializing the
 ; full screen, so tracking this allows us to perform updates to the PEA field quickly without wasting time
 ; redrawing a blank background for a few frames.
 :no_background
@@ -477,6 +490,7 @@ _BltSetupAlt
                 adc   #{_PEA_OFFSET-_ENTRY_PATCH-3}
                 sta   :opcode             ; Convert to a relative branch
 
+
                 lda   #_ENTRY_PATCH+1     ; Entry BRL alway happens on the first page
                 sta   :entry_addr
 
@@ -525,11 +539,13 @@ _BltSetupAlt
                 lda   CodeFieldOddBRA,x   ; This is the instruction that will be patched into
                 sta   :exit_bra           ; each line
 
-                stz   :opcode              ; First BRL continues execution
+;                stz   :opcode              ; First BRL continues execution
 
                 lda   Col2CodeOffset+{63*2},x  ; The entry point is always 63 words later
-                adc   #{_PEA_OFFSET-_ODD_PATCH-3}
-                sta   :odd_opcode         ; Convert to a relative branch
+;                adc   #{_PEA_OFFSET-_ODD_PATCH-3}
+                adc   #{_PEA_OFFSET-_ENTRY_PATCH-3}
+;                sta   :odd_opcode         ; Convert to a relative branch
+                sta   :opcode
 
 ; For horizontal mirroring where only a single PEA line is executed, the patched instruction
 ; represents both the start and end of the line.  The low byte is the right edge of the screen
@@ -542,8 +558,8 @@ _BltSetupAlt
                 lda   #_SAVE_OFFSET        ; Odd code always uses the first/only page
                 sta   :save_addr
 
-                lda   #_ODD_PATCH+1
-                sta   :odd_addr
+;                lda   #_ODD_PATCH+1
+;                sta   :odd_addr
 
                 lda   :virt_start
                 ldx   :num_lines          ; Set up for a full screen
@@ -688,8 +704,8 @@ _SetupPEAFieldLinesOdd
 :draw_count_x2 equ tmp9
 :virt_start    equ tmp10
 :rtbl_idx_x2   equ tmp11
-:odd_addr      equ tmp12
-:odd_opcode    equ tmp13
+;:odd_addr      equ tmp12
+;:odd_opcode    equ tmp13
 :btable_low    equ tmp14
 :last_addr     equ tmp15
 
@@ -731,7 +747,7 @@ _SetupPEAFieldLinesOdd
                 adc   #lsc_bottom
                 sta   :set_bra+1                  ; patch for inserting the BRA instruction and entry jmp opcode
                 sta   :set_opcode+1
-                sta   :set_odd+1
+;                sta   :set_odd+1
 
 ; Setup all of the copy routines
 
@@ -769,12 +785,12 @@ _SetupPEAFieldLinesOdd
 :set_opcode     jsr   $0000
 
 
-                lda   :odd_addr
-                adc   :btable_low
-                tay
-;                ldy   :odd_addr
-                lda   :odd_opcode         ; Set the BRL operand to jump into the PEA field
-:set_odd        jsr   $0000
+;                lda   :odd_addr
+;                adc   :btable_low
+;                tay
+;;                ldy   :odd_addr
+;                lda   :odd_opcode         ; Set the BRL operand to jump into the PEA field
+;:set_odd        jsr   $0000
 
                 plb                       ; Restore the data bank
                 lda   :exit_addr          ; Return the calculated exit address to be used for restore
@@ -796,7 +812,7 @@ _SetupPEAFieldLinesOdd
                 adc   #lsc_bottom
                 sta   :set_bra_v+1                  ; patch for inserting the BRA instruction and entry jmp opcode
                 sta   :set_opcode_v+1
-                sta   :set_odd_v+1
+;                sta   :set_odd_v+1
 
                 sep   #$20
                 lda   BTableHigh,y                ; Get the bank for this range of PEA field lines
@@ -845,11 +861,11 @@ _SetupPEAFieldLinesOdd
 :set_opcode_v   jsr   $0000
 
 
-                lda   :odd_addr
-                adc   :btable_low
-                tay
-                lda   :odd_opcode         ; Set the BRL operand to jump into the PEA field
-:set_odd_v      jsr   $0000
+;                lda   :odd_addr
+;                adc   :btable_low
+;                tay
+;                lda   :odd_opcode         ; Set the BRL operand to jump into the PEA field
+;:set_odd_v      jsr   $0000
 
                 plb                       ; Restore the data bank
                 lda   :exit_addr          ; Return the calculated exit address to be used for restore

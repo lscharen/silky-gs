@@ -559,7 +559,7 @@ NES_RenderFrame
 
 ; Helper functions for patching and restoring the PEA field.  These could
 ; be overridden for games that want to preserve the ability to switch between
-; dirty an full rendering, but still have a custom screen layout
+; dirty and full rendering, but still have a custom screen layout
             mx  %00
 _SetupPEAField
             jsr   _BltSetup
