@@ -109,11 +109,11 @@ _InitCIRAMTileMapping
         asl
         tax                             ; Use this for a lookup
         clc
-        lda  BTableLow+{240*2},y        ; Load the base address of the PEA row for the second buffer
+        lda  BTableLow,y                ; Load the base address of the PEA row
 
         and  #$FF00                     ; Just keep the page
         adc  Col2CodeOffset+2,x         ; Combine with the current column (get the left half of the tile)
-        adc  #_PEA_OFFSET
+        adc  #$100+_PEA_OFFSET          ; CIRAM page 1 is the odd page of the row
         ldx  :ciramAddr
 
         sep  #$20                         ; Switch to 8-bit mode to store the values
@@ -121,7 +121,7 @@ _InitCIRAMTileMapping
         xba
         stal PPU_MEM+TILE_ADDR_HI+$400,x  ; Store the high byte of the PEA tile address
 
-        lda  BTableHigh+{240*2},y         ; Load the bank byte
+        lda  BTableHigh,y                 ; Load the bank byte
         stal PPU_MEM+TILE_BANK+$400,x     ; Store it in the PPU bank (Nametable 1)
 
         rep  #$21

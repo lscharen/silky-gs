@@ -1,32 +1,28 @@
-; This is a specialized blitter specifically made for supporting NES PPU graphics.  Instead of a single, full-screen
-; PEA field (328x208), instead we define two PEA fields (256x240) that can be configured to match the NES PPU nametable
-; mirroring structure.
-;
-; This provides a 1:1 correspondence between PPU nametable addresses and blitter tile addresses.  Also, the PPU
-; SCROLLX and SCROLLY register values can be used directly to set the origin point for the blitter.
+; This is a specialized blitter specifically made for supporting NES PPU graphics.  Each PPU row is
+; a pair of pages that map 1:1 onto the two pages of NES CIRAM (the even page is CIRAM page 0 and
+; the odd page is CIRAM page 1).  The mirroring mode is selected at runtime by the V flag, so the
+; code field never needs to be re-patched when the mirroring changes.  See TemplateLite.Macs.s for
+; the row layout.
 ;
 ; The memory layout of the bank is
 ;
 ; $0000    JML  RETURN
-; $0004    TABLE DATA
+; $0004    Entry stub when arriving from the other bank
 ; ...
-; $0200    LINE 1A
-; $0300    LINE 1B
-; $0400    LINE 2A
-; $0500    LINE 2B
+; $0100    ROW 0   (CIRAM page 0)
+; $0200    ROW 0   (CIRAM page 1)
+; $0300    ROW 1   (CIRAM page 0)
 ; ...
-; $F000    LINE 119A
-; $F100    LINE 119B
-; $F200    LINE 120A
-; $F300    LINE 120B
-; $F400
-; 
-; Template and equates for GTE blitter
+; $EF00    ROW 119 (CIRAM page 0)
+; $F000    ROW 119 (CIRAM page 1)
+;
+; Rows 0 - 119 live in this bank, rows 120 - 239 in TemplateLiteBank2.s
 blt_return_lite    EXT
-lite_base_2        EXT
+lite_bank_entry_2  EXT
 
                    use   GTE.Macs.s
                    use   ../Defs.s
+                   use   TemplateLite.Macs.s
 
                    mx    %00                        ; Code can actually be run with M = 0 or 1
 
@@ -36,390 +32,30 @@ lite_base_2        EXT
                    jml   blt_return_lite            ; Full exit (must be at address $0000)
 
 ; This is the entry point when coming from the other bank.  Need to set the data bank register and
-; then move to the first line of code
-
-; offset = 4
+; then move to the first line of code.
+lite_bank_entry_1  ENT
                    ldx   STK_SAVE_BANK              ; Load the address to a location where this bank's high byte is stored
                    txs
                    plb
-                   jmp   lite_base_1
-                   nop                              ; pad to match other bank code
-
-; offset = 12
-                   ldx   STK_SAVE_BANK              ; Load the address to a location where this bank's high byte is stored
-                   txs
-                   plb
-                   jmp   lite_base_1+$100
-                   nop                              ; pad to match other bank code
+                   jmp   lite_base_1+_ENTRY_OFFSET
 
                    ds    \,$00                      ; pad so that the PEA code is aligned on the page boundary
-                  
-; Pre-code area that holds optional entry points for enabling interrups, reading the
-; joystick and other operations that may need to be interwoven with the PEA field
-; execution
 
+; lite_base_1 is the P0 base address of row 0.  Rows are _LINE_SPAN bytes apart.
 lite_start_page_1  ENT
-lite_enable_int_1  ldx   STK_SAVE
-                   txs                              ; restore the stack. No 2-layer support, so B and D point to useful data
-                   lda   STATE_REG_R0W0             ; we are in 8-bit mode the whole time...
-                   stal  STATE_REG
-                   cli
-                   sei
-                   lda   STATE_REG_BLIT             ; External values 
-                   stal  STATE_REG                  ; = 17 bytes
-
-; Start of the template code.  This code contains two sets of 64 PEA instructions to
-; represent two nametables set up in vertical mirroring mode.  These lines are
-; replicated 120 times over 2 banks to cover the full 240 lines of the NES PPU.
-;
-; The lite blitter is crafted to allow the accumulator to be in 8-bit mode and avoid any
-; need for rep/sep instructions to handle the odd-aligned case
-;
-; IDEAS:
-;  Remove the lite_entry_jmp BRL. And instead lift the lda: $0000 instruction.  For even case patch with a
-;  a JMP low-1 16-bit value to go to the entry point in 3 cycles.  Patch with a LDA low for the odd case. This
-;  saves one store in the setup (6 cycles) and either 1 cycle in the even case, or 4 cycles in the odd case.
-;  lite_odd_entry might be able to be 
 lite_base_1        ENT
-lite_entry         ldx   #0000                    ; _ENTRY_OFFSET: Sets screen address (right edge)
-                   txs
-
-; lite_entry_jmp     brl   *                          ; _ENTRY_PATCH: If the screen is odd-aligned, then branch to the next instruction
-                   bcc   *+6
-                   lda:  $0200,y                     ; Get the low byte and push onto the stack. May come from lite_save or from PEA field
-                   pha
-                   brl   *
-;lite_odd_entry     brl   *                          ; _ODD_PATCH: unconditionally jump into the "next" instruction in the 
-                                                    ; code field.  This is OK, even if the entry point was the
-                                                    ; last instruction, because there is a JMP at the end of
-                                                    ; the code field, so the code will simply jump to that
-                                                    ; instruction directly. (14 bytes)
-
-                   jmp   lite_exit_even             ; Exit the line for odd mode
-                   jmp   lite_exit_odd              ; Exit the line for even mode
-                   lup   64                         ; Set up 64 PEA instructions, which is 256 pixels and consumes 192 bytes
-                   pea   $0000
-                   --^
-                   jmp   $0000                      ; Go to the next nametable PEA. This is a JMP lite_prev for horizontal mirrring
-lite_exit_even
-lite_save          dfb   $F4,$00,$00                ; Storage for the patched PEA data, also executable code for even case
-                   jmp   $0000                      ; Jump to the next line.  Not used for horizonal mirroring
-                   ds    1                          ; Space for when the exit vector is a JML to cross a bank
-
-lite_exit_odd      lda:  $0000                      ; Load from the patch save location.
-                   pha
-                   jmp   $0000
-                   ds    1                          ; Space for when the exit vector is a JML to cross a bank
-
-                   ds    \,$00                      ; pad to the next page boundary
-                   ldx   STK_SAVE
-                   txs
-                   lda   STATE_REG_R0W0
-                   stal  STATE_REG
-                   cli
-                   sei
-                   lda   STATE_REG_BLIT
-                   stal  STATE_REG
-
-                   ldx   #0000                      ; Normal entry point
-                   txs
-                   bcc   *+6
-                   lda:  $0000
-                   pha
-                   brl   *
-
-                   jmp   lite_exit_even2
-                   jmp   lite_exit_odd2
-                   lup   64
-                   pea   $0000
-                   --^
-                   jmp   $0000                      ; Go to the next nametable PEA. This is a JMP lite_prev for horizontal mirrring
-lite_exit_even2
-                   dfb   $F4,$00,$00                ; Storage for the patched PEA data, also executable code for even case
-                   jmp   $0000                      ; Jump to the next line.  Not used for horizonal mirroring
-                   ds    1                          ; Space for when the exit vector is a JML to cross a bank
-
-lite_exit_odd2     lda:  $0000                      ; Load from the patch save location. A = 8-bit for odd, 16-bit for even, Y = 1 or odd, 0 for even
-                   pha
-                   jmp   $0000
-                   ds    1                          ; Space for when the exit vector is a JML to cross a bank
-
-; Align to the next page to keep everything aligned to a 512 byte boundary.  Repeat the code 118 times and
-; manually create the last line to jump to the next bank
-
-]page              equ   $400
-                   lup   118
-
-                   ds    \,$00
-                   ldx   STK_SAVE
-                   txs
-                   lda   STATE_REG_R0W0
-                   stal  STATE_REG
-                   cli
-                   sei
-                   lda   STATE_REG_BLIT
-                   stal  STATE_REG
-
-                   ldx   #0000
-                   txs
-                   bcc   *+6
-                   lda:  $0000
-                   pha
-                   brl   *
-
-                   jmp   ]page+$E8
-                   jmp   ]page+$EF
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   jmp   ]page+$125
-
-                   dfb   $F4,$00,$00 
-                   jmp   $0000
-                   ds    1
-                   lda:  $0000
-                   pha
-                   jmp   $0000
-                   ds    1
-
-                   ds    \,$00
-                   ldx   STK_SAVE
-                   txs
-                   lda   STATE_REG_R0W0
-                   stal  STATE_REG
-                   cli
-                   sei
-                   lda   STATE_REG_BLIT
-                   stal  STATE_REG
-
-                   ldx   #0000
-                   txs
-                   bcc   *+6
-                   lda:  $0000
-                   pha
-                   brl   *
-
-                   jmp   ]page+$E8
-                   jmp   ]page+$EF
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   pea   $0000
-                   jmp   ]page+$025
-
-                   dfb   $F4,$00,$00 
-                   jmp   $0000
-                   ds    1
-                   lda:  $0000
-                   pha
-                   jmp   $0000
-                   ds    1
-
+]page              equ   $0100
+                   lup   119
+                   LITE_ROW
 ]page              equ   ]page+$200
                    --^
 
+; The last row jumps to the first row of the other bank
+]page              equ   $0100+{119*_LINE_SPAN}
+                   LITE_P0
+                   jml   lite_bank_entry_2          ; $EF
+                   lda:  ]page+_SAVE_OFFSET+1       ; $F3
+                   pha
+                   jml   lite_bank_entry_2          ; $F7
                    ds    \,$00
-                   ldx   STK_SAVE
-                   txs
-                   lda   STATE_REG_R0W0
-                   stal  STATE_REG
-                   cli
-                   sei
-                   lda   STATE_REG_BLIT
-                   stal  STATE_REG
-
-                   ldx   #0000
-                   txs
-                   bcc   *+6
-                   lda:  $0000
-                   pha
-                   brl   *
-
-                   jmp   ]page+$E8
-                   jmp   ]page+$EF
-                   lup   64
-                   pea   $0000
-                   --^
-                   jmp   ]page+$125
-
-                   dfb   $F4,$00,$00 
-                   jml   lite_base_2
-                   lda:  $0000
-                   pha
-                   jml   lite_base_2
-
-                   ds    \,$00
-                   ldx   STK_SAVE
-                   txs
-                   lda   STATE_REG_R0W0
-                   stal  STATE_REG
-                   cli
-                   sei
-                   lda   STATE_REG_BLIT
-                   stal  STATE_REG
-
-                   ldx   #0000
-                   txs
-                   bcc   *+6
-                   lda:  $0000
-                   pha
-                   brl   *
-
-                   jmp   ]page+$E8
-                   jmp   ]page+$EF
-                   lup   64
-                   pea   $0000
-                   --^
-                   jmp   ]page+$025
-
-                   dfb   $F4,$00,$00 
-                   jml   lite_base_2
-                   lda:  $0000
-                   pha
-                   jml   lite_base_2
-
-                   ds    \,$00                        ; More padding
-                   ldx   STK_SAVE
-                   txs
-                   lda   STATE_REG_R0W0
-                   stal  STATE_REG
-                   cli
-                   sei
-                   lda   STATE_REG_BLIT
-                   stal  STATE_REG
-                   jml   lite_base_2               ; A catch-all in case anyone tries to go past the end
+                   LITE_P1

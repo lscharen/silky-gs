@@ -28,6 +28,8 @@ PPUStartUp
 
         jsr   PPUResetQueues
 
+        jsr   _InitBTable               ; The static PEA row address table
+
 ; This is not fixed, but games can define the mirroring mode that the cart
 ; is configured with at power on
 
@@ -53,118 +55,61 @@ PPUStartUp
 
 ; Reconfigure the engine for mirroring.  This function can be called while the
 ; engine is running to respond to dynamic mirroring changes supported by mappers
-; like the MMC1.
+; like the MMC1.  It only updates a few direct page values; the PEA field itself
+; does not depend on the mirroring mode.
 ;
 ; A = mirror mode ($01 = Horizontal, $02 = Vertical)
         mx   %00
 PPUSetMirrorMode
         bit  #HORIZONTAL_MIRRORING
         beq  :not_horz
-
-        jsr   _InitHorizontalMirroring
-        jsr   _InitLiteBlitterHorz
-;        jmp   _InitPPUTileMappingHorz 
+        jmp  _InitHorizontalMirroring
 
 :not_horz
         bit  #VERTICAL_MIRRORING
         beq  :not_vert
-
-        jsr   _InitVerticalMirroring
-        jsr   _InitLiteBlitterVert
-;        jmp   _InitPPUTileMappingVert 
+        jmp  _InitVerticalMirroring
 
 ; Some unsupported configuration.  Do nothing
 :not_vert
         rts
 
-; Set up the data tables for horizontal mirroring
+; Fill in the BTable with the address of the even page (CIRAM page 0) of each of the 240
+; PEA rows.  Rows 0 - 119 are in the first blitter bank and rows 120 - 239 in the second.
+; The table does not depend on the mirroring mode, so this only needs to be done once.
                mx        %00
-_InitLiteBlitterHorz
+_InitBTable
                ldx       #0
                ldy       #lite_base_1
-:loop1a
+:loop1
                tya
                sta       BTableLow,x
                clc
-               adc       #_LINE_SIZE_H                ; The screen wraps vertically
-               sta       BTableLow+{240*2},x
-               adc       #_LINE_SIZE_H
+               adc       #_LINE_SPAN
                tay
 
                lda       #^lite_base_1
                sta       BTableHigh,x
-               sta       BTableHigh+{240*2},x
 
                inx
                inx
                cpx       #_LINES_PER_BANK*2
-               bcc       :loop1a
+               bcc       :loop1
 
                ldy       #lite_base_2
-:loop1b
+:loop2
                tya
                sta       BTableLow,x
                clc
-               adc       #_LINE_SIZE_H
-               sta       BTableLow+{240*2},x
-               adc       #_LINE_SIZE_H
+               adc       #_LINE_SPAN
                tay
 
                lda       #^lite_base_2
                sta       BTableHigh,x
-               sta       BTableHigh+{240*2},x
 
                inx
                inx
                cpx       #_LINES_PER_BANK*2*2
-               bcc       :loop1b
-
-               rts
-
-; Set up the data tables for vertical mirroring
-               mx        %00
-_InitLiteBlitterVert
-
-; Fill in the BTable and BRowTable values.  There are 120 lines in each bank and each line covers two of
-; the 256-pixel wide NES nametables.  The table pointers are the address of the start of each wide
-; nametable row
-
-               ldx       #0
-               ldy       #lite_base_1
-
-:loop1a
-               tya
-               sta       BTableLow,x
-               sta       BTableLow+{240*2},x
-               clc
-               adc       #_LINE_SIZE_V
-               tay
-
-               lda       #^lite_base_1
-               sta       BTableHigh,x
-               sta       BTableHigh+{240*2},x
-
-               inx
-               inx
-               cpx       #_LINES_PER_BANK*2
-               bcc       :loop1a
-
-               ldy       #lite_base_2
-:loop1b
-               tya
-               sta       BTableLow,x
-               sta       BTableLow+{240*2},x
-               clc
-               adc       #_LINE_SIZE_V
-               tay
-
-               lda       #^lite_base_2
-               sta       BTableHigh,x
-               sta       BTableHigh+{240*2},x
-
-               inx
-               inx
-               cpx       #_LINES_PER_BANK*2*2
-               bcc       :loop1b
+               bcc       :loop2
 
                rts

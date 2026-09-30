@@ -37,8 +37,7 @@ ScreenY1               equ   6           ; End of playfield on the physical scre
 ScreenX0               equ   8           ; 100, then ScreenY1 = 120.
 ScreenX1               equ   10
 
-unused12               equ   12
-unused13               equ   13
+StartRow               equ   12          ; StartYMod240 mod 240 (the physical PEA row of the first line)
 MirrorMaskX            equ   14          ; Either $00FF or $01FF depending on mirroring mode
 MirrorMaskY            equ   16          ; Either $01FF or $00FF depending on mirroring mode
 
@@ -50,7 +49,7 @@ StartYMod240           equ   24
 
 ControlBits            equ   26          ; Enable / disable things
 
-unused28               equ   28
+BltMirrorP             equ   28          ; BLT_P_HORZ for horizontal mirroring, 0 for vertical
 
 LastRender             equ   30          ; Record which render function was last executed
 DirtyBits              equ   32
@@ -151,7 +150,9 @@ RenderMtBase64         equ   182
 RenderMtBase66         equ   184
 RenderMtBase           equ   186
 
-; Free space from 188 to 192
+BltSegPage             equ   188         ; $0100 when the current _Apply segment is in CIRAM page 1, else 0
+
+; Free space from 190 to 192
 
 blttmp                 equ   192         ; 32 bytes of local cache/scratch space for blitter
 
@@ -220,43 +221,28 @@ DIRTY_RENDERING_VISUALS equ 0
 ; In vertical mirroring mode, two adjacent lines combines to make each logical line cover 512 bytes.  In horizontal
 ; mirroring mode, the line are independent and span 256 bytes.
 
-_BANK_ENTRY_NT1 equ $0004
-_BANK_ENTRY_NT2 equ $000C
+; See TemplateLite.Macs.s for the row layout.  All offsets are relative to a row's even page (P0). The odd
+; page (P1) is at +$100 and uses the same offsets for its PEA run and exit jumps.
+_INT_OFFSET    equ  $00                   ; code to enable interrupts before the line
+_ENTRY_OFFSET  equ  $11                   ; normal entry point for each line
+_ENTRY_PATCH   equ  $1B                   ; BRL to the first PEA (operand at +1)
+_E_OUT_OFFSET  equ  $1E                   ; top jump to the even exit
+_O_OUT_OFFSET  equ  $21                   ; top jump to the odd exit
+_PEA_OFFSET    equ  $24                   ; first PEA instruction
+_LOOP_OFFSET   equ  $E4                   ; BVC / JMP pair after the PEA run
+_E_EXIT_OFFSET equ  $EC                   ; exit_even: saved PEA instruction (P1 has a JMP here)
+_SAVE_OFFSET   equ  $ED                   ; saved PEA operand
+_E_JMP_OFFSET  equ  $EF                   ; even exit JMP to the next line (operand at +1)
+_O_EXIT_OFFSET equ  $F3                   ; exit_odd (P1 has a JMP here)
+_O_JMP_OFFSET  equ  $F7                   ; odd exit JMP to the next line (operand at +1)
 
-_INT_OFFSET    equ  $00                   ; page offset for the code to enable interrupt before the line
-_ENTRY_OFFSET  equ  $11                   ; page offset for each line of code
-;_ENTRY_PATCH   equ  $15                   ; page offset for the jmp/ldx at the top of the line
-;_ODD_PATCH     equ  $1C                   ; page offset for the jmp following the odd-aligned code
-
-_ENTRY_PATCH   equ  $1B                   ; page offset for unified even/odd dispatch
-_E_OUT_OFFSET  equ  $1E                   ; page offset for the top jump that leads to the last word code at $E5
-_O_OUT_OFFSET  equ  $21
-_PEA_OFFSET    equ  $24                   ; page offset to the first PEA instruction
-_LOOP_OFFSET   equ  $E4                   ; page offset for the jump after the PEA opcodes that continues drawing
-;_WORD_OFFSET  equ  $E5                   ; page offset for the code that pushes the final byte/word onto the stack
-_E_WORD_OFFSET equ  $E7
-_O_WORD_OFFSET equ  $EE
-_E_EXIT_OFFSET equ  $EA                   ; page offset of the jump that goes to the next line
-_O_EXIT_OFFSET equ  $F2                   ; page offset of the jump that goes to the next line
-_SAVE_OFFSET   equ  $E8                   ; page offset to the location where the PEA operand is saved
-_O_LOAD_HI_OFFSET equ $EE
-_O_LOAD_LO_OFFSET equ $17
-
-_O_SAVE_EDGE   equ  $F6                  ; Empty byte to stash data in the second page for odd rendering
-
-;_ENTRY_JMP  equ  4                       ; $nF5: the jump (brl, actually) is 4 bytes after the entry byte
-;_ENTRY_ODD  equ  12                      ; $nFD: the brl for the odd entry is a bit further in
-
-ENTRY_JMP   equ  11                       ; Unified entry point, used to be the Odd JUMP
-_EXIT_ODD   equ  474                     ; the odd enty point is just 3 bytes of code to load and push the edge byte
-_EXIT_EVEN  equ  477                     ; in the second page of the blitter line
-;_LOW_SAVE   equ  {_EXIT_EVEN+4}          ; space to save the code field opcodes is right after the return jmp/jml
-
-_LINE_SIZE_V equ  512                    ; number of bytes for each blitter line (vertical mirroring)
-_LINE_SIZE_H equ  256                    ; number of bytes for each blitter line (horizontal mirroring)
-_LINE_SPAN  equ  512                     ; always 512 bytes between adjacent vertical lines
-;_CODE_TOP   equ  21                      ; number of bytes from the base address of each blitter line to the first PEA instruction
+_LINE_SPAN  equ  512                     ; always 512 bytes between adjacent rows
 _LINES_PER_BANK equ 120
+
+; Processor status values used to enter the blitter.  M = 1, X = 0 and I = 1 always.
+BLT_P_BASE     equ  $24
+BLT_P_ODD      equ  $01                   ; C = 1 for odd-aligned blits
+BLT_P_HORZ     equ  $40                   ; V = 1 for horizontal mirroring
 
 ; Set up some symbols to reference the different shadow memory in the PPU static bank. All of these
 ; shadow areas are meant to be accessed using using an CIRAM address ($000 - $7FF)
