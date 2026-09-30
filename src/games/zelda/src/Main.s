@@ -68,14 +68,6 @@ PPU_SPR_TILE_ADDR equ $0000
 ; (ppu_attributes.s), CheckSprTileDirty (ppu.s), and NES_StartUp (scaffold.s).
 HAS_CHR_RAM equ 1
 
-; TODO-DEFERRED: Zelda switches nametable mirroring at runtime (vertical for
-; some rooms, horizontal for others -- see SetMMC1Control call sites in the
-; disassembly). This engine only supports a compile-time mirroring choice
-; (6 DO/ELSE sites across ppu_regs.s/ppu_init.s/Memory.s/CoreImpl.s/
-; HorzLite.s). Horizontal is Zelda's default/most common mode; runtime
-; switching is deferred follow-up work.
-NAMETABLE_MIRRORING equ HORIZONTAL_MIRRORING
-
 ; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
 ; in addition to the compiled representation (usually yes, since this is used for the config
 ; screen)
@@ -169,8 +161,10 @@ x_offset      equ 16                      ; number of bytes from the left edge
             phk
             plb
 
-; Call startup immediately after entering the application: A = memory manager user ID
+; Call startup immediately after entering the application with the cartridge configuration
 
+            tax                           ; X = memory manager user ID (passed in A by GS/OS)
+            lda   #HORIZONTAL_MIRRORING    ; A = cartridge nametable mirroring at power on
             jsr   NES_StartUp
 
 ; Initialize the graphics for the main game mode

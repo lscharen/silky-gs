@@ -58,8 +58,6 @@ SCAN_OAM_XTRA_FILTER mac
 PPU_BG_TILE_ADDR  equ $1000
 PPU_SPR_TILE_ADDR equ $0000
 
-; What kind of Nametable mirroring for this game
-NAMETABLE_MIRRORING equ VERTICAL_MIRRORING
 ; Flag whether this game uploads its own CHR data at runtime (CHR-RAM) rather
 ; than using a fixed CHR-ROM image loaded once at startup
 HAS_CHR_RAM equ 0
@@ -174,8 +172,10 @@ x_offset      equ 16                      ; number of bytes from the left edge
             phk
             plb
 
-; Call startup immediately after entering the application: A = memory manager user ID
+; Call startup immediately after entering the application with the cartridge configuration
 
+            tax                           ; X = memory manager user ID (passed in A by GS/OS)
+            lda   #VERTICAL_MIRRORING      ; A = cartridge nametable mirroring at power on
             jsr   NES_StartUp
 
 ; Initialize the graphics for the main game mode
@@ -375,18 +375,6 @@ _RenderScreen
 ;
 ; These set the horizontal scroll position.  The vertical scroll position is never changed.
 ;
-        ldy   #0
-        jsr   NES_SetScrollY
-
-        sep   #$20
-        ldal  $00004D,x
-        and   #$01                    ; Isolate the nametable select bit
-        xba                           ; put in the high byte
-        lda   _ppuscroll_x            ; load the scroll value
-        rep   #$20
-        tax
-        jsr   NES_SetScrollX          ; This takes a NES pixel position (0 - 511)
-
         sep   #$20
         ldal  $00004E,x               ; Bit 0 is the high bit of the X scroll position
         lsr                           ; put in the carry bit
@@ -395,6 +383,12 @@ _RenderScreen
         rep   #$20
         and   #$00FF                  ; make sure nothing is in the high byte
         sta   _top_bg_x               ; This is used directly so needs a byte offset (0 - 255)
+
+        ldal  $00004D,x
+        and   #$0001                  ; Isolate the X nametable select bit
+        ldx   _ppuscroll_x
+        ldy   #0
+        jsr   NES_SetScroll
 
         lda   ppumask
         and   ppumask_override
@@ -418,7 +412,7 @@ _RenderScreen
 
         lda   #40
         ldx   #{200-32-40}
-        ldy   StartXMod256              ; Xmod256
+        ldy   StartX              ; Xmod256
         jsr   _BltSetupAlt
         sta   nesTopOffset
 

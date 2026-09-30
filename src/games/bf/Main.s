@@ -58,8 +58,6 @@ SCAN_OAM_XTRA_FILTER mac
 PPU_BG_TILE_ADDR  equ $1000
 PPU_SPR_TILE_ADDR equ $0000
 
-; What kind of Nametable mirroring for this game
-NAMETABLE_MIRRORING equ VERTICAL_MIRRORING
 ; Flag whether this game uploads its own CHR data at runtime (CHR-RAM) rather
 ; than using a fixed CHR-ROM image loaded once at startup
 HAS_CHR_RAM equ 0
@@ -159,8 +157,10 @@ x_offset      equ 16                      ; number of bytes from the left edge
             phk
             plb
 
-; Call startup immediately after entering the application: A = memory manager user ID
+; Call startup immediately after entering the application with the cartridge configuration
 
+            tax                           ; X = memory manager user ID (passed in A by GS/OS)
+            lda   #VERTICAL_MIRRORING      ; A = cartridge nametable mirroring at power on
             jsr   NES_StartUp
 
 ; This is set up to let the game define all colors.  We only need to set up a single, static
@@ -421,8 +421,10 @@ _RenderScreen
 ; Otherwise turn off dirty rendering and do the split-screen rendering
 ; like Super Mario
 :trip_renderer
-            jsr   _GetPPUScrollX
-            jsr   NES_SetScrollX
+            lda   _ppuctrl
+            ldx   _ppuscroll_x
+            ldy   _ppuscroll_y
+            jsr   NES_SetScroll
 
 ; Now render the top 16 lines to show the status bar area
 
@@ -439,7 +441,7 @@ _RenderScreen
             sbc   #16
             tax                       ; The rest of the screen is height - 16
             lda   #16                 ; Start at line 16
-            ldy   StartXMod256
+            ldy   StartX
             jsr   _BltSetupAlt
             sta   nesBottomOffset
 

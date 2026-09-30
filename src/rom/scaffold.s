@@ -6,9 +6,16 @@
 ;
 ; Should be called immediately after the application gets control from GS/OS and
 ; only called once.
+;
+; A = cartridge configuration.  Bits 0 and 1 are the nametable mirroring at power on
+;     (HORIZONTAL_MIRRORING or VERTICAL_MIRRORING).  For mappers that can switch the
+;     mirroring, like the MMC1, this is the mode at a cold start.
+; X = memory manager user ID (GS/OS passes it to the application in A)
             mx    %00
 NES_StartUp
-            sta   UserId                  ; GS/OS passes the memory manager user ID for the application into the program
+            stx   UserId
+            and   #HORIZONTAL_MIRRORING+VERTICAL_MIRRORING
+            sta   PendingMirrorMode       ; Applied by PPUStartUp
             _MTStartUp                    ; Require the miscellaneous toolset to be running
             bcc   *+5
             brl   Fail
@@ -47,9 +54,6 @@ NES_StartUp
             lda   #^ROMBase               ; Start off in Bank 0 of the ROM
             and   #$00FF
             sta   mapper_bank
-
-            lda   #HORIZONTAL_MIRRORING
-            sta   PendingMirrorMode
 
             stz   chr_bank                 ; Stub for future MMC1 CHR-bank switching
 

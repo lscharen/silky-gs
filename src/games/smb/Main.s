@@ -54,8 +54,6 @@ SCAN_OAM_XTRA_FILTER mac
 PPU_BG_TILE_ADDR  equ $1000
 PPU_SPR_TILE_ADDR equ $0000
 
-; What kind of Nametable mirroring for this game
-NAMETABLE_MIRRORING equ VERTICAL_MIRRORING
 ; Flag whether this game uploads its own CHR data at runtime (CHR-RAM) rather
 ; than using a fixed CHR-ROM image loaded once at startup
 HAS_CHR_RAM equ 0
@@ -175,8 +173,10 @@ x_offset    equ   16                      ; number of bytes from the left edge
             phk
             plb
 
-; Initialize the NES runtime
+; Call startup immediately after entering the application with the cartridge configuration
 
+            tax                           ; X = memory manager user ID (passed in A by GS/OS)
+            lda   #VERTICAL_MIRRORING      ; A = cartridge nametable mirroring at power on
             jsr   NES_StartUp
 
 ; This an NROM game, so all of the sprite and background tiles are static.  They have
@@ -220,11 +220,6 @@ ContinueWorld          = $07fd
 ;OffScr_AreaNumber     = $0767
 ;OffScr_LevelNumber    = $0763
 ContinueArea           = $7E00   ; patches operand
-
-; We _never_ scroll vertically, so just set it once.  This is to make sure these kinds of optimizations
-; can be set up in the generic structure
-
-            jsr   NES_SetScrollY
 
 ;            lda   #16
 ;            jsr   _SetBG0YPos
@@ -489,8 +484,10 @@ _RenderScreen
 ; Do the basic setup
             jsr   _ShowDebugInfo
 
-            jsr   _GetPPUScrollX
-            jsr   NES_SetScrollX
+            lda   _ppuctrl
+            ldx   _ppuscroll_x
+            ldy   #0                      ; We _never_ scroll vertically
+            jsr   NES_SetScroll
 
             lda   ppumask
             and   ppumask_override
@@ -517,7 +514,7 @@ _RenderScreen
             sbc   #16
             tax                       ; The rest of the screen is height - 16
             lda   #16                 ; Start at line 16
-            ldy   StartXMod256
+            ldy   StartX
             jsr   _BltSetupAlt
             sta   nesBottomOffset
 

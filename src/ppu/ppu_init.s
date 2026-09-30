@@ -30,11 +30,12 @@ PPUStartUp
 
         jsr   _InitBTable               ; The static PEA row address table
 
-; This is not fixed, but games can define the mirroring mode that the cart
-; is configured with at power on
+; Set the mirroring mode that the cartridge is configured with at power on.  NES_StartUp
+; leaves it in PendingMirrorMode.
 
-        lda   #NAMETABLE_MIRRORING
+        lda   PendingMirrorMode
         jsr   PPUSetMirrorMode
+        stz   PendingMirrorMode
 
 ; Initialize the CIRAM-to-PEA_Field mappings. This is invarient to the choice of mirroring
 ; but needs to happen after other tables are filled in.
@@ -58,21 +59,18 @@ PPUStartUp
 ; like the MMC1.  It only updates a few direct page values; the PEA field itself
 ; does not depend on the mirroring mode.
 ;
-; A = mirror mode ($01 = Horizontal, $02 = Vertical)
+; A = mirror mode ($01 = Horizontal, $02 = Vertical).  If neither bit is set, the
+;     engine defaults to horizontal mirroring so that the mirroring state is always
+;     initialized.
         mx   %00
 PPUSetMirrorMode
-        bit  #HORIZONTAL_MIRRORING
-        beq  :not_horz
-        jmp  _InitHorizontalMirroring
-
-:not_horz
         bit  #VERTICAL_MIRRORING
-        beq  :not_vert
+        beq  :horz
+        bit  #HORIZONTAL_MIRRORING
+        bne  :horz
         jmp  _InitVerticalMirroring
 
-; Some unsupported configuration.  Do nothing
-:not_vert
-        rts
+:horz   jmp  _InitHorizontalMirroring
 
 ; Fill in the BTable with the address of the even page (CIRAM page 0) of each of the 240
 ; PEA rows.  Rows 0 - 119 are in the first blitter bank and rows 120 - 239 in the second.

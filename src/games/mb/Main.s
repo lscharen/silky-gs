@@ -57,8 +57,6 @@ SCAN_OAM_XTRA_FILTER mac
 PPU_BG_TILE_ADDR  equ $1000
 PPU_SPR_TILE_ADDR equ $0000
 
-; What kind of Nametable mirroring for this game
-NAMETABLE_MIRRORING equ HORIZONTAL_MIRRORING
 ; Flag whether this game uploads its own CHR data at runtime (CHR-RAM) rather
 ; than using a fixed CHR-ROM image loaded once at startup
 HAS_CHR_RAM equ 0
@@ -157,8 +155,10 @@ x_offset      equ 16                      ; number of bytes from the left edge
             phk
             plb
 
-; Call startup immediately after entering the application: A = memory manager user ID
+; Call startup immediately after entering the application with the cartridge configuration
 
+            tax                           ; X = memory manager user ID (passed in A by GS/OS)
+            lda   #HORIZONTAL_MIRRORING    ; A = cartridge nametable mirroring at power on
             jsr   NES_StartUp
 
 ; Initialize the graphics for the main game mode
