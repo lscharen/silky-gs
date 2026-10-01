@@ -450,8 +450,12 @@ NES_RenderFrame
             stx  curr_at_list_start       ; to point at the other memory range and initialize it
             stx  curr_at_list_end         ; to be an empty list ready for the next round of PPU writes
 
-; If there are background updates to make, force a screen refresh
+; If there are background updates to make, force a screen refresh.  The grid renderer decides for
+; itself in gridPrepare, since it can apply a limited number of background tile updates directly.
 
+            DO   GRID_DIRTY_RENDERING
+            bra  :no_force
+            FIN
             lda  prev_at_list_start
             cmp  prev_at_list_end
             bne  :force_refresh
@@ -773,6 +777,14 @@ RenderScreen
             lda   disableDirtyRendering
             bne   :full_update
 
+            DO    GRID_DIRTY_RENDERING
+; The grid renderer never executes the code field, so it does not need the exit points patched
+            jsr   gridPrepare
+            bcs   :full_update
+            jsr   gridDrawDirty
+            bra   :grid_done
+            FIN
+
 ; This is code path for performing dirty rendering.
 
             jsr   _BltSetupDirty
@@ -790,6 +802,10 @@ RenderScreen
             jsr   _RestoreBG0OpcodesLite
 
 :dirty_done
+            DO    GRID_DIRTY_RENDERING
+            jsr   gridEndFull             ; drawScreen recorded the sprite cells for the next frame
+:grid_done
+            FIN
 
             ELSE
 

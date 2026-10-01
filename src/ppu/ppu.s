@@ -372,6 +372,10 @@ drawSprites
 
         jsr   :setupSprite
 
+        DO   GRID_DIRTY_RENDERING
+        lda  #8-1                      ; The grid renderer erases from the code field, so nothing
+        jmp  gridMarkSprite            ; is saved; just mark the cells that this sprite covers
+        ELSE
         ; If we are in DirtyState 1 or 2, then the sprite data should be copied
         lda  DirtyState
         beq  :not_dirty8
@@ -382,6 +386,7 @@ drawSprites
         plx
 :not_dirty8
         rts
+        FIN
 
 :setupSprite16
         lda   #$2000+x_offset
@@ -391,6 +396,10 @@ drawSprites
 
         jsr   :setupSprite
 
+        DO   GRID_DIRTY_RENDERING
+        lda  #16-1
+        jmp  gridMarkSprite
+        ELSE
         ; If we are in DirtyState 1 or 2, then the sprite data should be copied
         lda  DirtyState
         beq  :not_dirty16
@@ -401,6 +410,7 @@ drawSprites
         plx
 :not_dirty16
         rts
+        FIN
 
 ; X = OAM index
 :setupSprite
@@ -549,9 +559,9 @@ drawSprites
 ; 8x8 mode: the pattern table is whatever PPUCTRL/spadr currently selects for
 ; all sprites (unlike 8x16 mode, where each sprite's own tile ID picks the table)
 
-        lda  spadr_hi
+        ldal spadr_hi                  ; Long addressing: DBR is the tiledata bank inside drawSprites
         sta  sprTmp5
-        lda  spadr_lo
+        ldal spadr_lo
         sta  sprTmp6
         lda  sprTmp2
 

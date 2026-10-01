@@ -249,7 +249,7 @@ loc_C138_exit_nmi
   TAX
   PLA
 ;  RTI
-  rts
+  rtl
 
 
 

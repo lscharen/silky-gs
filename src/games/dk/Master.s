@@ -26,7 +26,7 @@
 
 ; Segment #4 -- Converted Tile Storage
 
-            ASM   ../../core/static/TileData.s
+            ASM   TileData.s
             KND   #$1100
             SNA   CHRDATA
 

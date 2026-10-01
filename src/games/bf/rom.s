@@ -250,7 +250,7 @@
 ;  IIgs shim code
 ; ----------------------
 ROMBase ENT
-    ds  $ba00
+    ds  $b900               ; Filler (one page less than DK; the injected code below must end before $C000)
 
 y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
     ds 24,$01
@@ -260,6 +260,8 @@ y_exclude ENT                     ; Table of excluded scanlines -- kept in NES R
 tile_exclude ENT                  ; Tble of excluded tiles
     ds 256,$00
 
+HORIZONTAL_MIRRORING equ $01        ; From core/Defs.s, which is not included in the ROM segment
+VERTICAL_MIRRORING   equ $02
     put  ../../rom/rom_inject.s
 
 JMP_IND_25  JMP_ABS_IND $25
@@ -545,7 +547,7 @@ lc0f1
     tax			;  |
     pla			;  /
 ;    rti
-    rts
+    rtl			; romxfer calls the NMI handler with JSL
 
 ; ----------------------
 ;  BRK code
@@ -3377,7 +3379,7 @@ ld60d_updatestarbganim
     lda $4c		;  \ If [$4C] == 0
 ;    beq ld63a	;  / Then Do Nothing
 star_patch ENT
-    bra ld63a   ; IIgs -- patch to disable background animation (BEQ = $F0, BRA = $80)
+    beq ld63a   ; IIgs -- patch point to disable background animation (BEQ = $F0, BRA = $80)
     dec $4c
     lda $4f		;  \
     clc			;  |

@@ -58,6 +58,8 @@ y_exclude ENT                     ; Table of excluded scanlines -- kept in NES R
 tile_exclude ENT                  ; Table of excluded tiles
         ds 256,$00
 
+HORIZONTAL_MIRRORING equ $01        ; From core/Defs.s, which cannot be included here (symbol clashes with Defines.s)
+VERTICAL_MIRRORING   equ $02
         put  ../../rom/rom_inject.s
 
 STA_PhaseNo_Y STA_ABS_Y PhaseNo
@@ -1797,7 +1799,7 @@ CODE_C8E8
   STA ControlMirror				;
   PLA						;restore A
 ;  RTI						;return from the interrupt
-  RTS
+  RTL						;romxfer calls the NMI handler with JSL
  
 ;HandleTitleScreen_C8F3
 CODE_C8F3

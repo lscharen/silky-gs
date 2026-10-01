@@ -96,6 +96,11 @@ OAM_END_INDEX     equ 64
 ; have changed) if the background did not scroll compared to the previous frame
 ENABLE_DIRTY_RENDERING equ 1
 
+; Use the screen-aligned 8x8 grid dirty renderer (erase from the PEA field, BG tile updates
+; without a full refresh).  Requires ENABLE_DIRTY_RENDERING.  See BG_TILE_DIRTY_PLAN.md
+GRID_DIRTY_RENDERING equ 1
+GRID_MAX_BG_TILES    equ 64
+
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
 ; this prevents *any* access to memory outside of the SHR screen.
@@ -103,7 +108,7 @@ NO_VERTICAL_CLIP equ 0
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 0
+NO_INTERRUPTS     equ 1
 
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 0
@@ -118,7 +123,7 @@ AUTOMATIC_PALETTE_MAPPING equ 0
 SHOW_ROM_EXECUTION_TIME equ 0
 
 ; Turn on some off-screen information
-SHOW_DEBUG_VARS equ 1
+SHOW_DEBUG_VARS equ 0
 
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 0
@@ -163,6 +168,13 @@ x_offset      equ 16                      ; number of bytes from the left edge
             lda   #VERTICAL_MIRRORING      ; A = cartridge nametable mirroring at power on
             jsr   NES_StartUp
 
+; This an NROM game, so all of the sprite and background tiles are static.  They have been
+; converted into the runtime's internal representation by build.js and loaded into the tiledata
+; bank, so all that's left is to compile them
+
+            jsr   ROM_CompileBackgroundTiles    ; Convert the background tiles (PPU:$1000) to compiled format
+            jsr   ROM_CompileSpriteTiles        ; Convert the COMPILED_SPRITE_LIST tiles to compiled format
+
 ; This is set up to let the game define all colors.  We only need to set up a single, static
 ; swizzle table
 
@@ -205,6 +217,10 @@ quit
             _QuitGS    qtRec
 qtRec       adrl  $0000
             da    $00
+
+; Name of the save and preference files (used by misc/io.s)
+SAVE_FILENAME strl '1/bf.sav'
+PREF_FILENAME strl '1/bf.prefs'
 
 ; Helper to initialize the playfield based on the selected VideoMode
 InitPlayfield
@@ -534,7 +550,7 @@ ApplyConfig
             sep   #$30
             lda   #$80          ; BRA instruction
             ldx   config_video_twinkle
-            beq   :turn_off
+;            beq   :turn_o
             lda   #$F0          ; BEQ instruction
 :turn_off   stal  star_patch
             
@@ -552,16 +568,34 @@ ApplyConfig
 ; by prev/next pointers on the menu and control itmes that direct which control to
 ; select in response to the user's inputs.
 
+config_block_start                    ; range saved / loaded by misc/io.s
 config_audio_quality   ds  2  ; good / better / best audio quality (60Hz, 120Hz, 240Hz audio interrupts)
 config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
 config_video_twinkle   ds  2  ; disable the background star animation
+
+; player 1 config block (layout is fixed by the PLAYER_INPUT_* offsets in core/CoreImpl.s)
+config_block_p1
 config_input_p1_type   dw  0  ; keyboard / snes max
 config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
+config_input_button_a  dw  MOD_REG_COMMAND_DOWN
+config_input_button_b  dw  MOD_REG_OPTION_DOWN
+
+; player 2 config block
+config_block_p2
+config_input_p2_type      dw  0
+config_input_p2_key_left  dw  'j'
+config_input_p2_key_right dw  'l'
+config_input_p2_key_up    dw  'i'
+config_input_p2_key_down  dw  'k'
+config_input_p2_snesmax_port dw 4
+config_input_p2_button_a  dw  MOD_REG_CONTROL_DOWN
+config_input_p2_button_b  dw  MOD_REG_SHIFT_DOWN
+config_block_end
 
 ;CONFIG_PALETTE       equ 0
 ;TILE_TOP_LEFT        equ $1E0
@@ -764,34 +798,44 @@ GAME_ITEM_1  dw   CHKBOX
             put   ../../misc/App.Msg.s
             put   ../../misc/font.s
             FIN
+            put   ../../misc/io.s
 
             mput  ../../ppu
 ; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
             put    ../../ppu/ppu_macros.s
+            put    ../../ppu/ppu_init.s
+            put    ../../ppu/ppu_shadowlist.s
             put    ../../ppu/ppu.s
             put    ../../ppu/ppu_attributes.s
-            put    ../../ppu/ppu_init.s
+            put    ../../ppu/ppu_tiles.s
             put    ../../ppu/ppu_metatiles.s
-            put    ../../ppu/ppu_nametable.s
+            put    ../../ppu/ppu_nametable2.s
             put    ../../ppu/ppu_queues.s
             put    ../../ppu/ppu_palette.s
             put    ../../ppu/ppu_regs.s
             put    ../../ppu/ppu_render.s
+            put    ../../ppu/ppu_grid.s
             put    ../../ppu/ppu_sprites.s
+            put    ../../ppu/ppu_tile_blitters.s
             put    ../../ppu/scanline_bitmap.s
 ; AUTOINC:END
 
-; Palette remapping
+; Palette remapping (the swizzle tables must be page-aligned)
+            ds    \,$00
             put   palettes.s
             put   ../../apu/apu.s
 
 ; Core code
-            put   ../../rom/scaffold.s
-            put   ../../rom/rom_tiles.s
-            put   ../../rom/rom_helpers.s
-            put   ../../rom/rom_input.s
-            put   ../../rom/rom_exec.s
-            put   ../../rom/rom_config.s
+            mput  ../../rom
+; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
+            put    ../../rom/scaffold.s
+            put    ../../rom/rom_color.s
+            put    ../../rom/rom_tiles.s
+            put    ../../rom/rom_helpers.s
+            put    ../../rom/rom_input.s
+            put    ../../rom/rom_exec.s
+            put    ../../rom/rom_config.s
+; AUTOINC:END
 
             put   ../../core/ControlBits.s
             put   ../../core/CoreData.s
