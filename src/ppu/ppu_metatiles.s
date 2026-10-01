@@ -124,6 +124,9 @@ SyncPPUMetatile
 
         mx    %10
 RefreshMetatile                            ; Alternate entry point is not setting a new value, just drawing
+        DO    GRID_DIRTY_RENDERING
+        jsr   gridRecordMetatile           ; Let the grid renderer expose these 4 tiles (preserves A, X, Y)
+        FIN
         clc
         adc   SwizzlePtr+1                 ; Set the palette selection (used for all 4 tiles)
         sta   ActivePtr+1

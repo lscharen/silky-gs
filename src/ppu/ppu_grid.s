@@ -26,6 +26,7 @@ GRID_ROWS   equ   {y_height/8}
 GRID_CELLS  equ   {GRID_COLS*GRID_ROWS}
 GRID_IN_L   equ   $0001
 GRID_IN_S   equ   $0002
+GRID_MAX_METATILES equ 32                 ; Metatiles redrawn by attribute updates that can be tracked per frame
 
 ; Opcode for STA [dp],y.  Brackets inside LUP/macro bodies confuse the Merlin macro processor.
 STA_IND_LONG_IDX equ $97
@@ -63,8 +64,7 @@ gridPrepare
             bit   #CTRL_BKGND_ENABLE      ; match the (blank) screen
             beq   :fb_bgoff
 
-            lda   prev_at_list_start      ; Attribute updates are not tracked per-cell (yet)
-            cmp   prev_at_list_end
+            lda   gmtOverflow             ; Attribute updates redrew more metatiles than can be tracked
             bne   :fb_attr
 
             lda   prev_nt_list_end        ; Too many background tiles?
@@ -314,6 +314,41 @@ gridCiramToCell
             clc
             rts
 :off        sec
+            rts
+
+; ---------------------------------------------------------------------------
+; gridRecordMetatile
+; ---------------------------------------------------------------------------
+; Called from RefreshMetatile whenever an attribute update redraws a metatile in the code field, so the
+; grid renderer can expose those 4 tiles instead of forcing a full render.  The list is consumed by
+; gridDrawDirty and cleared by gridEndFrame.
+;
+; X = CIRAM address of the top-left tile of the metatile.  Any width / DBR.  Preserves A, X, Y and P.
+            mx    %10
+gridRecordMetatile
+            php
+            rep   #$30
+            mx    %00                     ; Assemble the body for 16-bit A/X/Y; plp restores the caller's widths
+            pha
+            phy
+            txy                           ; Y = CIRAM address
+            ldal  gmtEnd
+            cmp   #GRID_MAX_METATILES*2
+            bcs   :overflow
+            tax
+            tya
+            stal  gmtList,x
+            inx
+            inx
+            txa
+            stal  gmtEnd
+            bra   :out
+:overflow   lda   #1
+            stal  gmtOverflow
+:out        tyx
+            ply
+            pla
+            plp
             rts
 
 ; ---------------------------------------------------------------------------
@@ -573,6 +608,8 @@ gridEndFrame
 :test       cpy   gridLEnd
             bcc   :loop
             stz   gridLEnd
+            stz   gmtEnd                  ; Attribute metatile list is per-frame
+            stz   gmtOverflow
 
             lda   gridSCurBase
             sta   gridSPrevStart
@@ -624,6 +661,34 @@ gridDrawDirty
 :t2         cpy   prev_nt_list_end
             bcc   :l2
 
+; Redraw the metatiles that changed palettes because of attribute updates
+
+            stz   gbMtCount
+            ldy   #0
+            bra   :t3
+:l3         phy
+            lda   gmtList,y
+            jsr   gridMarkCiram           ; top-left
+            lda   gmtList,y
+            inc
+            jsr   gridMarkCiram           ; top-right
+            lda   gmtList,y
+            clc
+            adc   #32
+            jsr   gridMarkCiram           ; bottom-left
+            lda   gmtList,y
+            clc
+            adc   #33
+            jsr   gridMarkCiram           ; bottom-right
+            ply
+            iny
+            iny
+:t3         cpy   gmtEnd
+            bcc   :l3
+            tya
+            lsr
+            ADD32 gsMetatiles
+
             lda   gridLEnd
             sta   gridEraseEnd
 
@@ -650,12 +715,28 @@ gridDrawDirty
             ADD32 gsBgCells
             INC32 gsBgFrames               ; The old renderer would have forced a full frame
 :no_bg
+            lda   gbMtCount
+            beq   :no_mt
+            ADD32 gsMtCells
+            INC32 gsAttrFrames             ; The old renderer would have forced a full frame
+:no_mt
             jsr   gridSpriteTiles
             sta   gsLastSprTiles
             ADD32 gsSprTiles
 
             jsr   gridEndFrame
             plb
+            rts
+
+; Mark the cell showing a CIRAM tile, if it is visible.  A = CIRAM address.  DBR = K.  Y is preserved.
+            mx    %00
+gridMarkCiram
+            phy
+            jsr   gridCiramToCell
+            bcs   :off
+            inc   gbMtCount
+            jsr   gridMarkL
+:off        ply
             rts
 
 ; Called after a full render.  drawSprites has marked the sprite cells, so just rotate the lists.
@@ -706,6 +787,7 @@ gbHB            dw    0
 gbCI            dw    0
 gbPea           dw    0
 gbBgCount       dw    0
+gbMtCount       dw    0
 
 gcC             dw    0
 gcVL            dw    0
@@ -735,10 +817,17 @@ gsFbMany        ds    4
 gsFbAlign       ds    4
 gsFbScroll      ds    4               ; Scroll / refresh dirty bits were set
 gsBgFrames      ds    4               ; Grid-dirty frames with at least one visible BG tile update
+gsMetatiles     ds    4               ; Metatiles redrawn by attribute updates in grid-dirty frames
+gsMtCells       ds    4               ; Visible cells marked for those metatiles
+gsAttrFrames    ds    4               ; Grid-dirty frames with at least one attribute-driven cell
 gsLastErased    dw    0
 gsLastExposed   dw    0
 gsLastSprTiles  dw    0
 gsLastBg        dw    0
+
+gmtEnd          dw    0
+gmtOverflow     dw    0
+gmtList         ds    GRID_MAX_METATILES*2
 
 gridFlags       ds    GRID_CELLS*2
 gridL           ds    GRID_CELLS*2
