@@ -17,7 +17,6 @@ OAM_COPY      ds 256
 spriteCount   dw 0
 shadowBitmap0 ds 32                ; Bitmap to use when frameCount & 1 == 0
 shadowBitmap1 ds 32                ; Bitmap to use when frameCount & 1 == 1
-tileBitmap    ds 64                ; Bitmap that marks which rows had background tile updates (32 bytes for vertical mirroring, 64 for horizontal)
 
          mx   %00
 scanOAMSprites

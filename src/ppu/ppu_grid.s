@@ -26,7 +26,7 @@ GRID_ROWS   equ   {y_height/8}
 GRID_CELLS  equ   {GRID_COLS*GRID_ROWS}
 GRID_IN_L   equ   $0001
 GRID_IN_S   equ   $0002
-GRID_MAX_METATILES equ 32                 ; Metatiles redrawn by attribute updates that can be tracked per frame
+GRID_MAX_METATILES equ 64                 ; Metatiles with redrawn tiles (palette changes or tile writes) tracked per frame
 
 ; Experimental: track which lines / words of each cell were touched, so erase and expose only copy those
 ; (see "Cell masks" below).  0 = every touched cell is copied in full.
@@ -40,6 +40,10 @@ GRID_CELL_MASKS equ 0
 ; quadrant of 4 lines x 1 word, on a padded grid so a sprite's cells are at fixed offsets and marking is
 ; a table load + ORA per cell.  Replaces the cell lists below.  Requires GRID_CELL_MASKS = 0.
 GRID_QUADS  equ 1
+
+; Quad mode: sprites whose OAM bytes did not change, and which nothing being redrawn reaches, are neither
+; erased nor redrawn (8x8 sprites).
+GRID_SPRITE_SKIP equ 1
 GRID_MASKED equ GRID_CELL_MASKS
 
 ; Cell mask layout (GRID_CELL_MASKS), an 8-bit key:
@@ -96,12 +100,6 @@ gridPrepare
 
             lda   gmtOverflow             ; Attribute updates redrew more metatiles than can be tracked
             bne   :fb_attr
-
-            lda   prev_nt_list_end        ; Too many background tiles?
-            sec
-            sbc   prev_nt_list_start
-            cmp   #{GRID_MAX_BG_TILES*2}+1
-            bcs   :fb_many
 
             lda   StartX                  ; The scroll position must be cell-aligned
             and   #$0003
@@ -377,9 +375,10 @@ gridCiramToCell
 ; ---------------------------------------------------------------------------
 ; gridRecordMetatile
 ; ---------------------------------------------------------------------------
-; Called from RefreshMetatile whenever an attribute update redraws a metatile in the code field, so the
-; grid renderer can expose those 4 tiles instead of forcing a full render.  The list is consumed by
-; gridDrawDirty and cleared by gridEndFrame.
+; Record redrawn tiles of a metatile so the grid renderer exposes them instead of forcing a full render.
+; Entries are (CIRAM address of the top-left tile, nibble of tiles: bit 0 = +0, bit 1 = +1, bit 2 = +32,
+; bit 3 = +33).  gridRecordMetatile (from RefreshMetatile) records all 4 tiles; PPUFlushQueuesAlt adds
+; partial metatiles inline.  The list is consumed by gridDrawDirty and cleared by gridEndFrame.
 ;
 ; X = CIRAM address of the top-left tile of the metatile.  Any width / DBR.  Preserves A, X, Y and P.
             mx    %10
@@ -389,19 +388,25 @@ gridRecordMetatile
             mx    %00                     ; Assemble the body for 16-bit A/X/Y; plp restores the caller's widths
             pha
             phy
+            lda   #$000F
+            pha                           ; Nibble
             txy                           ; Y = CIRAM address
             ldal  gmtEnd
-            cmp   #GRID_MAX_METATILES*2
+            cmp   #GRID_MAX_METATILES*4
             bcs   :overflow
             tax
             tya
             stal  gmtList,x
-            inx
-            inx
+            pla
+            and   #$000F
+            stal  gmtList+2,x
             txa
+            clc
+            adc   #4
             stal  gmtEnd
             bra   :out
-:overflow   lda   #1
+:overflow   pla
+            lda   #1
             stal  gmtOverflow
 :out        tyx
             ply
@@ -1417,46 +1422,41 @@ gridDrawDirty
 
 ; Redraw the background tiles that changed
 
-            stz   gbBgCount
-            ldy   prev_nt_list_start
-            bra   :t2
-:l2         lda   nt_list,y
-            phy
-            jsr   gridCiramToCell
-            bcs   :skip
-            inc   gbBgCount
-            jsr   gridMarkL
-:skip       ply
-            iny
-            iny
-:t2         cpy   prev_nt_list_end
-            bcc   :l2
-
-; Redraw the metatiles that changed palettes because of attribute updates
-
+            stz   gbBgCount               ; (Tile writes now arrive through the metatile list)
             stz   gbMtCount
             ldy   #0
             bra   :t3
-:l3         phy
+:l3         lda   gmtList+2,y             ; Nibble: the metatile's tiles to expose
+            sta   gmtNib
+            lsr   gmtNib
+            bcc   :mq1
             lda   gmtList,y
-            jsr   gridMarkCiram           ; top-left
+            jsr   gridMarkCiram             ; top-left
+:mq1        lsr   gmtNib
+            bcc   :mq2
             lda   gmtList,y
             inc
-            jsr   gridMarkCiram           ; top-right
+            jsr   gridMarkCiram             ; top-right
+:mq2        lsr   gmtNib
+            bcc   :mq3
             lda   gmtList,y
             clc
             adc   #32
-            jsr   gridMarkCiram           ; bottom-left
+            jsr   gridMarkCiram             ; bottom-left
+:mq3        lsr   gmtNib
+            bcc   :mq4
             lda   gmtList,y
             clc
             adc   #33
-            jsr   gridMarkCiram           ; bottom-right
-            ply
+            jsr   gridMarkCiram             ; bottom-right
+:mq4        iny
+            iny
             iny
             iny
 :t3         cpy   gmtEnd
             bcc   :l3
             tya
+            lsr
             lsr
             ADD32 gsMetatiles
 
@@ -1641,7 +1641,8 @@ gsLastBg        dw    0
 
 gmtEnd          dw    0
 gmtOverflow     dw    0
-gmtList         ds    GRID_MAX_METATILES*2
+gmtNib          dw    0
+gmtList         ds    GRID_MAX_METATILES*4    ; (CIRAM address of the top-left tile, nibble of tiles) pairs
 
             DO    1-GRID_QUADS
 gridFlags       ds    GRID_CELLS*2

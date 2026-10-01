@@ -151,9 +151,6 @@ EngineReset
                   stz       DebugSCB
                   stz       LastRender             ; Initialize as if a full render was performed
 
-                  lda       #1
-                  sta       PPU_VERSION            ; Current version for tile change tracking. Zero is an illegal value.
-                  stz       PPU_CLEAR_ADDR         ; Address of memory that is incrmentally cleared
 
                   lda       #CTRL_EVEN_RENDER
                   sta       ControlBits

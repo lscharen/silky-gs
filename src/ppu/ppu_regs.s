@@ -41,7 +41,6 @@ ppustatus dw 0
 oamaddr   dw 0     ; Typically this will always be 0
 ppuscroll dw 0     ; Y X coordinates
 
-PPU_VERSION ds 2   ; Something to track a version counter
 
 ; Some derived values from spadr and bgadr that makes it easier to calculate addresses
 ; used in the various lookup tables and tile data caches
@@ -329,11 +328,10 @@ PPUDATA_WRITE ENT
         bcs  :extra
         bra  :done
 
-; The PPU wrote to some location in the Nametable RAM ($2000 - $2FFF).  Now we need to determine if it
-; wrote to the nametable tile data area or the tile attribute area.  There are separate queues for each
-; of these pieces of memory since each attribute byte afftect 16 tiles, it's important to process the
-; attribute changes first to avoid having to redraw tiles since the IIgs does not have enough colors
-; to directly support the palette indexes and has to redraw tiles when their palette assignment changes.
+; The PPU wrote to some location in the Nametable RAM ($2000 - $2FFF).  Changed bytes are tracked per
+; attribute byte: once a changed byte is stored, ntmWriteTail (ppu_queues.s) keeps a copy in the current
+; shadow buffer, sets the tile's bit in its 4x4 group's mask (or flags an attribute write) and queues
+; the group for the next render.
         mx  %00
 :in_nt
 ; There are two 1kb physical pages of Console Internal RAM (CIRAM) that back the four nametables. We need
@@ -345,56 +343,14 @@ PPUDATA_WRITE ENT
         txa
         ppu2ciram
         tax
-
-; Switch to 8-bit accumulator with 16-bit registers to compare the accumulator value that was passed
-; into the function
-
         sep  #$20
 
-; Check to see if the tile passed in is different that the one that is currently in the nametable memory. If
-; there is no change, then no need to update the IIgs graphics.
-
+; Unchanged bytes need no work at all
         lda  2,s
         cmpl PPU_CIRAM,x
         beq  :done
         stal PPU_CIRAM,x
-
-; Check if this location has already been marked for an update.  If it has, then do not add it to the update
-; list again.  It is likely unusual for a game to modify the same tile twice in a frame, but the engine will
-; accumulate changes over multiple frames, so it is more probably for there to be repeated updates when it's
-; time to render the frame.
-
-        lda  PPU_VERSION              ; Get the current frame version
-        cmpl PPU_MEM+TILE_VERSION0,x  ; Check if this location is marked for an update
-        beq  :done                    ; It's already been marked
-        stal PPU_MEM+TILE_VERSION0,x  ; Mark this memory location as scheduled for an update
-
-        rep  #$20
-
-        txa                          ; Determine if we add to the AT or NT list
-        and  #$03C0                  ; Is this in the tile attribute space?
-        cmp  #$03C0
-        bcc  :is_nt
-
-; TODO: Add a limit flag here to skip adding more entries if the list is getting too full.  Once a certain number
-; of entries are in the list, it's probably faster to just redraw the entire screen without processing the changes
-; one by one, e.g. on game startup with the whole PPU Nametable RAM is initialized.
-
-        txa
-        ldx  curr_at_list_end
-        sta  at_list,x
-        inx
-        inx
-        stx  curr_at_list_end
-        bra  :done
-
-:is_nt
-        txa
-        ldx  curr_nt_list_end
-        sta  nt_list,x
-        inx
-        inx
-        stx  curr_nt_list_end
+        jmp  ntmWriteTail             ; Shadow copy, tile mask / attribute flag, queue (ppu_queues.s)
 
 :done
         sep  #$30

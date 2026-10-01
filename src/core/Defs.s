@@ -78,6 +78,12 @@ SprSaveTop             equ   76          ; Top stack address for the sprite save
 SprSaveAddr            equ   78          ; Current address
 SprAddrCount           equ   80          ; Number of sprites saved in the buffer
 GridLPtr               equ   82          ; Grid dirty renderer (quad mode): write pointer of the cell list
+NtmPtr                 equ   84          ; PPUFlushQueuesAlt: long pointer to the shadow buffer being drawn (4 bytes)
+NtmTMask               equ   88          ; PPUFlushQueuesAlt: tiles written in the group this period
+NtmPrev                equ   90          ; PPUFlushQueuesAlt: main bank offset of the buffer being drawn ($000 / $100)
+NtmQBase               equ   92          ; PPUFlushQueuesAlt: CIRAM address of the metatile being drawn
+NtmNib                 equ   94          ; PPUFlushQueuesAlt: its nibble of tiles (high byte 0)
+NtmPal                 equ   96          ; PPUFlushQueuesAlt: its palette select * 2
 PPU_BANK               equ   98
 
 ; Dirty State transition
@@ -115,7 +121,7 @@ ROMStk                 equ   144
 OldOneSec              equ   146
 NesTop                 equ   148
 
-; RenderPPUAttr (ppu_attributes.s) locals. These must survive a nested
+; PPUFlushQueuesAlt (ppu_queues.s) locals. These must survive a nested
 ; `jsr SyncPPUMetatile` call (which, for HAS_CHR_RAM games, can go many
 ; frames deep into CheckBgTileDirty/CompileTile/FastROMTileToLookup), so
 ; they are NOT allowed to live in the generic tmp0-15 scratch pool -- those
@@ -125,9 +131,9 @@ NesTop                 equ   148
 ; RenderPPUAttr's tmp5 (:attr_diff) and tmp7 (:mt_base2) whenever a dirty
 ; CHR-RAM tile got recompiled mid-attribute-update, corrupting the
 ; not-yet-consumed quadrant diff/address values.
-RenderAttrDiff         equ   150
-RenderAttrCopy         equ   154
-RenderMtBase2          equ   158
+NtmIdx                 equ   150         ; attribute index (page << 6 | offset)
+NtmAttrAddr            equ   154         ; CIRAM address of the attribute byte
+NtmAttr                equ   158         ; attribute value being applied
 
 ScreenRows             equ   152
 
@@ -142,17 +148,17 @@ STATE_REG_R0W1         equ   166         ; R0W1
 STATE_REG_R1W1         equ   168         ; These values all need to be 16-bit because they may be read
 STK_SAVE_BANK          equ   170         ; Bank 0 locations where the data bank values for the PEA fields are stored
 BANK_VALUES            equ   172         ; Room for two right here
-PPU_CLEAR_ADDR         equ   174         ; Current address for a rolling clear of PPU shadow memory
+unused174              equ   174
 CMPL_BANK              equ   176         ; ^tiledata << 8 | $01 (Bank $01 in low byte)
 
 ; Temporary storage for 8x16 sprite drawing in drawSprites
 sprTmp5Hi              equ   178
 sprTmp6Lo              equ   180
 
-; RenderPPUAttr locals, continued from above (same rationale)
-RenderMtBase64         equ   182
-RenderMtBase66         equ   184
-RenderMtBase           equ   186
+; PPUFlushQueuesAlt locals, continued from above (same rationale)
+NtmDiff                equ   182         ; attribute EOR the last applied value
+NtmMask                equ   184         ; 16-bit tile mask of the group
+NtmBase                equ   186         ; CIRAM address of the group's top-left tile
 
 BltSegPage             equ   188         ; $0100 when the current _Apply segment is in CIRAM page 1, else 0
 
@@ -272,9 +278,7 @@ TILE_BANK     equ $6000          ; pre-calculated data bank value for the locati
 TILE_ADDR_LO  equ $7000          ; pre-calculated address (low byte) of the location of the PEA field tile
 TILE_ADDR_HI  equ $8000          ; pre-calculated address (high byte) of the location of the PEA field tile
 
-; These are bookkeeping tables that are used to avoid duplicate updates
-TILE_VERSION0 equ $9000          ; version count of nametable byte (incremented on each PPUDATA_WRITE)
-TILE_VERSION1 equ $A000          ; version count of nametable byte (incremented on each PPUDATA_WRITE)
+; $9000-$AFFF: free (formerly the TILE_VERSION0/1 dedup tables)
 
 ;TILE_ROW      equ $B000          ; pre-calculated row of the PPU address
 ;TILE_COL      equ $C000          ; pre-calculated column of the PPU address
@@ -283,6 +287,8 @@ TILE_VERSION1 equ $A000          ; version count of nametable byte (incremented 
 GRID_CELL_SCR  equ $B000         ; SHR address of the cell
 GRID_CELL_PEA  equ $B800         ; code field address of the tile shown in the cell
 GRID_CELL_BANK equ $C000         ; code field bank of that tile (in both bytes)
+
+; $C800-$CFFF / $E800-$EFFF: nametable shadow data buffers 0 / 1 (ppu_queues.s, NTM_SB0 / NTM_SB1)
 
 
 

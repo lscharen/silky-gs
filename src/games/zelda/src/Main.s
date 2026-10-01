@@ -99,11 +99,11 @@ OAM_END_INDEX     equ 64
 
 ; Allow the engine to use dirty rendering (drawing only lines where sprites
 ; have changed) if the background did not scroll compared to the previous frame
-ENABLE_DIRTY_RENDERING equ 0
+ENABLE_DIRTY_RENDERING equ 1
 
 ; Use the screen-aligned 8x8 grid dirty renderer (erase from the PEA field, BG tile updates
 ; without a full refresh).  Requires ENABLE_DIRTY_RENDERING.  See BG_TILE_DIRTY_PLAN.md
-GRID_DIRTY_RENDERING equ 0
+GRID_DIRTY_RENDERING equ 1
 GRID_MAX_BG_TILES    equ 64
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
@@ -562,6 +562,8 @@ INPUT_ITEM_5 dw   KEYMAP
             put    ../../../ppu/ppu_palette.s
             put    ../../../ppu/ppu_regs.s
             put    ../../../ppu/ppu_render.s
+            put    ../../../ppu/ppu_grid.s
+            put    ../../../ppu/ppu_grid_quads.s
             put    ../../../ppu/ppu_sprites.s
             put    ../../../ppu/ppu_tile_blitters.s
             put    ../../../ppu/scanline_bitmap.s

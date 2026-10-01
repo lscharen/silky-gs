@@ -424,20 +424,8 @@ NES_RenderFrame
             php
             sei
 
-; Swap the AT and NT list pointers so that any new PPU writes do not interfere with the 
-; current screen rendering code
-
-            lda  curr_nt_list_start       ; Copy the current list memory range
-            ldy  curr_nt_list_end
-
-            ldx  prev_nt_list_start       ; Copy the previous list start address
-
-            sta  prev_nt_list_start       ; Make the previous list range point to the memory range
-            sty  prev_nt_list_end         ; of the current list and then reset the current list
-
-            stx  curr_nt_list_start       ; to point at the other memory range and initialize it
-            stx  curr_nt_list_end         ; to be an empty list ready for the next round of PPU writes
-
+; Swap the attribute list halves so that any new PPU writes do not interfere with the current screen
+; rendering code (PPUFreezeNametableUpdates below moves the write path to the other shadow buffer)
 
             lda  curr_at_list_start
             ldy  curr_at_list_end
@@ -456,19 +444,12 @@ NES_RenderFrame
             DO   GRID_DIRTY_RENDERING
             bra  :no_force
             FIN
-            lda  prev_at_list_start
+            lda  prev_at_list_start       ; Any queued attribute group means background changes
             cmp  prev_at_list_end
-            bne  :force_refresh
-            lda  prev_nt_list_start
-            cmp  prev_nt_list_end
             beq  :no_force
-:force_refresh
             lda  #DIRTY_BIT_BG0_REFRESH
             tsb  DirtyBits
 :no_force
-
-            lda  PPU_VERSION
-            sta  _ppuversion
 
             DO   CUSTOM_PPU_CTRL_LOCK
             CUSTOM_PPU_CTRL_LOCK_CODE
@@ -517,27 +498,6 @@ NES_RenderFrame
 
 ;            jsr   PPUFlushQueues
             jsr   PPUFlushQueuesAlt
-
-; Clear a rolling 16 bytes of data in the TILE_VERSION memory to
-; ensure that the PPUDATA_WRITE code never encounters a false positive
-
-            lda  #0
-            ldx  PPU_CLEAR_ADDR
-
-            stal PPU_MEM+TILE_VERSION0+$000,x
-            stal PPU_MEM+TILE_VERSION1+$000,x
-            stal PPU_MEM+TILE_VERSION1+$002,x
-
-            stal PPU_MEM+TILE_VERSION0+$400,x
-            stal PPU_MEM+TILE_VERSION0+$402,x
-            stal PPU_MEM+TILE_VERSION1+$400,x
-            stal PPU_MEM+TILE_VERSION1+$402,x
-
-            txa
-            clc
-            adc  #4
-            and  #$03FF                           ; Keep rolling around the memory
-            sta  PPU_CLEAR_ADDR
 
 ; Finally, render the PEA field to the Super Hires screen.  The performance of the runtime is limited by this
 ; step and it is important to keep the high-level rendering code generalized so that optimizations, like falling
@@ -704,7 +664,7 @@ _ShowDebugInfo
             jsr   DrawWord
 
 
-; Show the size of the NT and AT queues
+; Show the size of the attribute queues (current, previous)
             lda   curr_at_list_end
             sec
             sbc   curr_at_list_start
@@ -716,20 +676,6 @@ _ShowDebugInfo
             sec
             sbc   prev_at_list_start
             ldx   #{8*160}+144
-            ldy   #$FFFF
-            jsr   DrawWord
-
-            lda   curr_nt_list_end
-            sec
-            sbc   curr_nt_list_start
-            ldx   #{16*160}+144
-            ldy   #$FFFF
-            jsr   DrawWord
-
-            lda   prev_nt_list_end
-            sec
-            sbc   prev_nt_list_start
-            ldx   #{24*160}+144
             ldy   #$FFFF
             jsr   DrawWord
 

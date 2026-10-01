@@ -152,6 +152,25 @@ gqInitTables
             cpx   #GQ_RECBYTES*2
             bcc   :rf
 
+            DO    GRID_SPRITE_SKIP
+            ldx   #62                     ; gqX* = gqL* | gqH* (cascade test tables)
+:xo         lda   gqLTL,x
+            ora   gqHTL,x
+            sta   gqXTL,x
+            lda   gqLTR,x
+            ora   gqHTR,x
+            sta   gqXTR,x
+            lda   gqLBL,x
+            ora   gqHBL,x
+            sta   gqXBL,x
+            lda   gqLBR,x
+            ora   gqHBR,x
+            sta   gqXBR,x
+            dex
+            dex
+            bpl   :xo
+            FIN
+
             lda   #gqRec                  ; Current records in the first array, none previous
             sta   gqRecBase
             sta   gqRecPtr
@@ -502,6 +521,82 @@ gqRep8
 :done
             rts
 
+; Same as gqRep8 for the expose nibble: X = table index, Y = cell.  Used by the sprite skip to mark changed
+; sprites' new positions before the cascade.  DBR = K.
+            mx    %00
+gqRepH8
+            lda   gqGrid,y
+            bne   :hH1
+            tya                           ; First touch: fill in the next "ldy #cell" of the code array
+            sta   (GridLPtr)
+            lda   GridLPtr
+            clc
+            adc   #GQ_ENTRY
+            sta   GridLPtr
+            lda   gqHTL,x
+            sta   gqGrid,y
+            bra   :dH1
+:hH1       ora   gqHTL,x
+            sta   gqGrid,y
+:dH1
+            lda   gqHTR,x
+            beq   :done_r
+            lda   gqGrid+2,y
+            bne   :hH2
+            tya                           ; First touch: fill in the next "ldy #cell" of the code array
+            clc
+            adc   #2
+            sta   (GridLPtr)
+            lda   GridLPtr
+            clc
+            adc   #GQ_ENTRY
+            sta   GridLPtr
+            lda   gqHTR,x
+            sta   gqGrid+2,y
+            bra   :dH2
+:hH2       ora   gqHTR,x
+            sta   gqGrid+2,y
+:dH2
+:done_r
+            lda   gqHBL,x
+            beq   :done
+            lda   gqGrid+GQ_PITCH2,y
+            bne   :hH3
+            tya                           ; First touch: fill in the next "ldy #cell" of the code array
+            clc
+            adc   #GQ_PITCH2
+            sta   (GridLPtr)
+            lda   GridLPtr
+            clc
+            adc   #GQ_ENTRY
+            sta   GridLPtr
+            lda   gqHBL,x
+            sta   gqGrid+GQ_PITCH2,y
+            bra   :dH3
+:hH3       ora   gqHBL,x
+            sta   gqGrid+GQ_PITCH2,y
+:dH3
+            lda   gqHBR,x
+            beq   :done
+            lda   gqGrid+GQ_PITCH2+2,y
+            bne   :hH4
+            tya                           ; First touch: fill in the next "ldy #cell" of the code array
+            clc
+            adc   #GQ_PITCH2+2
+            sta   (GridLPtr)
+            lda   GridLPtr
+            clc
+            adc   #GQ_ENTRY
+            sta   GridLPtr
+            lda   gqHBR,x
+            sta   gqGrid+GQ_PITCH2+2,y
+            bra   :dH4
+:hH4       ora   gqHBR,x
+            sta   gqGrid+GQ_PITCH2+2,y
+:dH4
+:done
+            rts
+
             mx    %00
 gqRep16
             lda   gqGrid,y
@@ -619,6 +714,9 @@ gridDrawDirty
             phb
             phk
             plb
+            DO    GRID_SPRITE_SKIP
+            jsr   gqSkipPrepare           ; Unchanged sprites: their old records become no-ops
+            FIN
 
 ; 1. Replay the previous frame's sprites into the erase nibble: call the record array
 
@@ -645,46 +743,47 @@ gridDrawDirty
 
 ; 2. Background tiles and attribute-driven metatiles: whole cells
 
-            stz   gbBgCount
-            ldy   prev_nt_list_start
-            bra   :t2
-:l2         lda   nt_list,y
-            phy
-            jsr   gridCiramToCell
-            bcs   :skip2
-            inc   gbBgCount
-            jsr   gqMarkBg
-:skip2      ply
-            iny
-            iny
-:t2         cpy   prev_nt_list_end
-            bcc   :l2
-
+            stz   gbBgCount               ; (Tile writes now arrive through the metatile list)
             stz   gbMtCount
             ldy   #0
             bra   :t3
-:l3         phy
+:l3         lda   gmtList+2,y             ; Nibble: the metatile's tiles to expose
+            sta   gmtNib
+            lsr   gmtNib
+            bcc   :mq1
             lda   gmtList,y
             jsr   gqMarkCiram             ; top-left
+:mq1        lsr   gmtNib
+            bcc   :mq2
             lda   gmtList,y
             inc
             jsr   gqMarkCiram             ; top-right
+:mq2        lsr   gmtNib
+            bcc   :mq3
             lda   gmtList,y
             clc
             adc   #32
             jsr   gqMarkCiram             ; bottom-left
+:mq3        lsr   gmtNib
+            bcc   :mq4
             lda   gmtList,y
             clc
             adc   #33
             jsr   gqMarkCiram             ; bottom-right
-            ply
+:mq4        iny
+            iny
             iny
             iny
 :t3         cpy   gmtEnd
             bcc   :l3
             tya
             lsr
+            lsr
             ADD32 gsMetatiles
+
+            DO    GRID_SPRITE_SKIP
+            jsr   gqSkipCascade           ; Changed sprites' new positions, then everything they reach
+            FIN
 
 ; 3. Erase (shadowing off) every cell listed so far.  The erase handler leaves DBR on the last code
 ;    field bank it used; tmp4 tracks it.
@@ -706,6 +805,9 @@ gridDrawDirty
 ; 4. New sprites (mark the expose nibble, extend the cell array and record themselves)
 
             jsr   drawSprites
+            DO    GRID_SPRITE_SKIP
+            jsr   gqSkipClear
+            FIN
             jsr   _ShadowOn
 
 ; 5. Expose and clear every cell
@@ -876,6 +978,9 @@ gridEndFull
             phk
             plb
             INC32 gsFullFrames
+            DO    GRID_SPRITE_SKIP
+            jsr   gqSkipSync              ; Every sprite was drawn
+            FIN
             lda   GridLPtr
             dec
             tax
@@ -891,6 +996,9 @@ gridEndFull
 ; Make this frame's records the previous ones and reset the per-frame arrays.  DBR = K.
             mx    %00
 gqSwap
+            lda   _ppuctrl                ; Records of 8x16 sprites can't be skipped next frame
+            and   #NES_PPUCTRL_SPRSIZE
+            sta   gqPrevTall
             lda   gqRecBase
             sta   gqPrevBase
             lda   gqRecPtr
@@ -908,6 +1016,240 @@ gqSwap
             stz   gmtEnd
             stz   gmtOverflow
             rts
+
+; ---------------------------------------------------------------------------
+; Unchanged-sprite skip (GRID_SPRITE_SKIP, 8x8 sprites only)
+; ---------------------------------------------------------------------------
+; A sprite whose 4 OAM bytes match the previous frame's (same index) is "unchanged".  Its old record
+; erases nothing and it is not redrawn -- unless the area being redrawn reaches it:
+;
+;   erase set = old positions of changed / vanished sprites + background / attribute cells
+;   cascade   = an unchanged sprite with a quadrant in the erase set, or under a changed sprite's new
+;               position (marked in the expose nibble), is redrawn, and its quadrants join the erase set
+;               (repeat until nothing new joins)
+;
+; Every drawn sprite then has all of its quadrants erased first, so the draw order is preserved, and an
+; unchanged sprite outside the erase set keeps its pixels on screen untouched.  Skipped sprites still
+; record themselves for the next frame (gridRecordSprite8).
+
+; Per sprite (X = OAM offset): changed test.  An unchanged sprite gets its cell / table index and skip flag
+; and its old record turned into a no-op; a changed one only updates gqPrevOAM.  DBR = K.
+            mx    %00
+gqSkipPrepare
+            stz   gqUnch
+            lda   _ppuctrl
+            and   #NES_PPUCTRL_SPRSIZE
+            ora   gqPrevTall
+            beq   :go
+            jmp   gqSkipSync              ; 8x16 now or last frame: no skipping
+:go         lda   gqPrevBase
+            sta   gqRecK                  ; Previous frame's record of sprite 0
+            ldx   #0
+:loop       cpx   spriteCount
+            bcs   :inv
+            lda   OAM_COPY,x
+            cmp   gqPrevOAM,x
+            bne   :chg
+            lda   OAM_COPY+2,x
+            cmp   gqPrevOAM+2,x
+            bne   :chg
+            jsr   gqCellIdx               ; Unchanged: cell / index, skip flag
+            ora   #$0100
+            sta   gqSI,x
+            tya
+            sta   gqSC,x
+            ldy   gqRecK
+            lda   #gqRepNop               ; Its old record erases nothing
+            sta:  $0007,y
+            inc   gqUnch
+            bra   :nx
+:chg        lda   OAM_COPY,x
+            sta   gqPrevOAM,x
+            lda   OAM_COPY+2,x
+            sta   gqPrevOAM+2,x
+:nx         lda   gqRecK
+            clc
+            adc   #GQ_RENTRY
+            sta   gqRecK
+            inx
+            inx
+            inx
+            inx
+            bra   :loop
+:inv        lda   #$FFFF                  ; Entries past the count were not drawn: never match
+:il         cpx   gqOAMEnd
+            bcs   :id
+            sta   gqPrevOAM,x
+            inx
+            inx
+            inx
+            inx
+            bra   :il
+:id         lda   spriteCount
+            sta   gqOAMEnd
+            rts
+
+; Cell and table index of sprite X (OAM offset, preserved): A = table index, Y = cell.  DBR = K.
+            mx    %00
+gqCellIdx
+            stx   gqLoopX
+            sep   #$30
+            mx    %11
+            lda   OAM_COPY+3,x
+            tay
+            lda   OAM_COPY,x
+            tax
+            lda   gridRowLo,x
+            clc
+            adc   gridColOff,y
+            sta   gqCell
+            lda   gridRowHi,x
+            adc   #0
+            sta   gqCell+1
+            lda   gridKIdx,x
+            ora   gridBIdx,y
+            rep   #$30
+            mx    %00
+            and   #$00FF
+            ldy   gqCell
+            ldx   gqLoopX
+            rts
+
+; gqPrevOAM := OAM_COPY (every sprite was drawn), entries past the count invalidated.  DBR = K.
+            mx    %00
+gqSkipSync
+            stz   gqUnch
+            ldx   #0
+:cp         cpx   spriteCount
+            bcs   :inv
+            lda   OAM_COPY,x
+            sta   gqPrevOAM,x
+            lda   OAM_COPY+2,x
+            sta   gqPrevOAM+2,x
+            inx
+            inx
+            inx
+            inx
+            bra   :cp
+:inv        lda   #$FFFF
+:il         cpx   gqOAMEnd
+            bcs   :id
+            sta   gqPrevOAM,x
+            inx
+            inx
+            inx
+            inx
+            bra   :il
+:id         lda   spriteCount
+            sta   gqOAMEnd
+            rts
+
+; After the replay and the background marks: mark changed sprites' new positions (expose nibble), then
+; the cascade.  Nothing to do when no sprite is unchanged.  DBR = K.
+            mx    %00
+gqSkipCascade
+            lda   gqUnch
+            bne   *+3
+            rts
+            ldx   #0
+:c1         cpx   spriteCount
+            bcs   :casc
+            lda   gqSkip,x
+            cmp   #$0100
+            bcs   :c1n
+            jsr   gqCellIdx               ; Changed sprite: its new position, for detection only
+            tax
+            jsr   gqRepH8
+            ldx   gqLoopX
+:c1n        inx
+            inx
+            inx
+            inx
+            bra   :c1
+:casc       stz   gqMore
+            ldx   #0
+:c2         cpx   spriteCount
+            bcs   :c2e
+            lda   gqSkip,x
+            cmp   #$0100
+            bcc   :c2n
+            stx   gqLoopX
+            ldy   gqSC,x
+            lda   gqSI,x
+            and   #$00FF
+            tax
+            lda   gqGrid,y                ; Any of its quadrants being erased, or under a changed sprite?
+            and   gqXTL,x
+            bne   :hit
+            lda   gqGrid+2,y
+            and   gqXTR,x
+            bne   :hit
+            lda   gqGrid+GQ_PITCH2,y
+            and   gqXBL,x
+            bne   :hit
+            lda   gqGrid+GQ_PITCH2+2,y
+            and   gqXBR,x
+            bne   :hit
+            ldx   gqLoopX
+            bra   :c2n
+:hit        jsr   gqRep8                  ; Redraw it: its quadrants join the erase set
+            ldx   gqLoopX
+            lda   gqSkip,x
+            and   #$00FF
+            sta   gqSkip,x
+            inc   gqMore
+:c2n        inx
+            inx
+            inx
+            inx
+            bra   :c2
+:c2e        lda   gqMore
+            bne   :casc
+            rts
+
+; After drawSprites: no skip flags outside the dirty-frame draw.  DBR = K.
+            mx    %00
+gqSkipClear
+            lda   gqUnch
+            beq   :out
+            ldx   #0
+:l          cpx   spriteCount
+            bcs   :out
+            lda   gqSkip,x
+            and   #$00FF
+            sta   gqSkip,x
+            inx
+            inx
+            inx
+            inx
+            bra   :l
+:out        rts
+
+; Record a skipped sprite for the next frame, from the cell / index gqSkipPrepare computed.  Called from
+; drawSprites (DBR = tiledata).  X = OAM offset, preserved.
+            mx    %00
+gridRecordSprite8
+            phx
+            phb
+            phk
+            plb
+            ldy   gqRecPtr
+            lda   gqSI,x
+            and   #$00FF                  ; (drop the skip flag)
+            sta:  $0001,y
+            lda   gqSC,x
+            sta:  $0004,y
+            lda   #gqRep8
+            sta:  $0007,y
+            tya
+            clc
+            adc   #GQ_RENTRY
+            sta   gqRecPtr
+            plb
+            plx
+            rts
+
+gqRepNop    rts
 
 ; ---------------------------------------------------------------------------
 ; Copy routines: one per quadrant mask
@@ -1629,6 +1971,20 @@ gridBIdx    ds    256
 gqRec       ds    GQ_RECBYTES*2           ; Two record code arrays (current / previous)
 gqCode      ds    GQ_CODEBYTES            ; Cell code array
 gqGrid      ds    GQ_BYTES
+gqSC        ds    256                     ; Per OAM offset: +0 cell, +2 table index, +3 skip flag
+gqSI        equ   gqSC+2                  ;   (byte; read as a word, the high byte is the skip flag)
+gqSkip      equ   gqSC+2                  ;   word: table index | skip << 8 -- skip when >= $100
+gqPrevOAM   ds    256                     ; OAM_COPY as last drawn
+gqOAMEnd    dw    256
+gqXTL       ds    64                      ; gqL* | gqH*: a sprite's quadrants in either nibble
+gqXTR       ds    64
+gqXBL       ds    64
+gqXBR       ds    64
+gqPrevTall  dw    1                       ; (no skipping before the first full frame)
+gqUnch      dw    0                       ; Unchanged sprites this frame (0: no skipping, no cascade)
+gqRecK      dw    0
+gqLoopX     dw    0
+gqMore      dw    0
 
             FIN
             FIN

@@ -42,12 +42,12 @@ LOAD_INV_CURRENT mac
         eor  #$FF
         <<<
 
-; (prev | background) & ~current
-; Lines that had sprites/tile-updates last frame but are clear this frame.
+; prev & ~current
+; Lines that had sprites last frame but are clear this frame.  (Background tile changes never reach
+; this renderer: they force a full refresh.)
 ; de Morgan: A & ~B = ~(~A | B)
 LOAD_OTHERS mac
         lda  (PrevShadowBitmap),y
-        ora  tileBitmap,y
         eor  #$FF
         ora  (CurrShadowBitmap),y
         eor  #$FF

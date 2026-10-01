@@ -6,7 +6,7 @@ _ppuctrl     ds  2
 _ppuscroll_y dw  0          ; Pad the top-byte with zero to allow 8- or 16-bit access
 _ppuscroll_x dw  0          ; Pad the top-byte with zero to allow 8- or 16-bit access
 _ppumask     ds  2
-_ppuversion  ds  2
+
 
 ; Alternate scanOAMSprites that unrolls the loop, uses exclusion tables and 8-bit operations
 ; to improve scanning speed
@@ -236,7 +236,7 @@ LOAD_HORZ_MIRROR mac
 ; components are on.
 ;
 ; shadowBitmap0 and shadowBitmap1 track the lines that hold sprites from the previous
-; and current frame. tileBitmap marks lines that had a tile updated since the last frame.
+; and current frame.
 ;
 ; There are actually two phases to the dirty rendering.  The first is when the prior
 ; frame was rendered normally and the second in when the prior frame used the dirty
@@ -309,6 +309,15 @@ drawSprites
 :oam_loop_8x8
         phx                           ; Save x
 
+        DO    GRID_DIRTY_RENDERING
+        ldal  gqSkip,x                ; Unchanged and out of reach of anything redrawn: just record it
+        cmp   #$0100                  ; (word = table index | skip flag << 8)
+        bcc   :draw8
+        jsr   gridRecordSprite8
+        bra   :next8
+:draw8
+        FIN
+
 ; Regardless of whether the PPUCTRL is in 8x8 or 8x16 mode, the 
 ; starting SHR address and palette selection is the same
 
@@ -325,6 +334,7 @@ drawSprites
 
 ; Restore and continue processing the OAMtable
 
+:next8
         plx
         inx
         inx
