@@ -42,6 +42,10 @@ PPUStartUp
 
         jsr   _InitCIRAMTileMapping
 
+        DO    GRID_DIRTY_RENDERING
+        jsr   gridStartUp               ; Static tables for the grid dirty renderer
+        FIN
+
         lda   #$FFFF                    ; Set initial palette values to out-of-range values
         ldx   #0
 :loop

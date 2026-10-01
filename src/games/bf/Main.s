@@ -815,6 +815,7 @@ GAME_ITEM_1  dw   CHKBOX
             put    ../../ppu/ppu_regs.s
             put    ../../ppu/ppu_render.s
             put    ../../ppu/ppu_grid.s
+            put    ../../ppu/ppu_grid_quads.s
             put    ../../ppu/ppu_sprites.s
             put    ../../ppu/ppu_tile_blitters.s
             put    ../../ppu/scanline_bitmap.s

@@ -123,7 +123,7 @@ AUTOMATIC_PALETTE_MAPPING equ 1
 SHOW_ROM_EXECUTION_TIME equ 0
 
 ; Turn on some off-screen information
-SHOW_DEBUG_VARS equ 1
+SHOW_DEBUG_VARS equ 0
 
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 0
@@ -659,6 +659,7 @@ INPUT_ITEM_7 dw   BTNMAP
             put    ../../ppu/ppu_regs.s
             put    ../../ppu/ppu_render.s
             put    ../../ppu/ppu_grid.s
+            put    ../../ppu/ppu_grid_quads.s
             put    ../../ppu/ppu_sprites.s
             put    ../../ppu/ppu_tile_blitters.s
             put    ../../ppu/scanline_bitmap.s

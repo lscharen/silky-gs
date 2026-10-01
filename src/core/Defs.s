@@ -77,6 +77,7 @@ pputmp                 equ   60          ; 16 bytes of temporary storage for the
 SprSaveTop             equ   76          ; Top stack address for the sprite save buffer
 SprSaveAddr            equ   78          ; Current address
 SprAddrCount           equ   80          ; Number of sprites saved in the buffer
+GridLPtr               equ   82          ; Grid dirty renderer (quad mode): write pointer of the cell list
 PPU_BANK               equ   98
 
 ; Dirty State transition
@@ -277,6 +278,11 @@ TILE_VERSION1 equ $A000          ; version count of nametable byte (incremented 
 
 ;TILE_ROW      equ $B000          ; pre-calculated row of the PPU address
 ;TILE_COL      equ $C000          ; pre-calculated column of the PPU address
+
+; Grid dirty renderer (ppu_grid.s): per-cell lookup tables, one word per 8x8 screen cell (max 800 cells)
+GRID_CELL_SCR  equ $B000         ; SHR address of the cell
+GRID_CELL_PEA  equ $B800         ; code field address of the tile shown in the cell
+GRID_CELL_BANK equ $C000         ; code field bank of that tile (in both bytes)
 
 
 

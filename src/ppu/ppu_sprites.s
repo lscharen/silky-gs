@@ -10,6 +10,9 @@
 ; But if we the background is not changing, then the runtime can render only lines that
 ; have changed from one frame to the next.
 
+              DO GRID_DIRTY_RENDERING
+              ds \,$00             ; Page-aligned: the grid renderer reads it with 8-bit index registers
+              FIN
 OAM_COPY      ds 256
 spriteCount   dw 0
 shadowBitmap0 ds 32                ; Bitmap to use when frameCount & 1 == 0

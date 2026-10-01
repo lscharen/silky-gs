@@ -373,8 +373,8 @@ drawSprites
         jsr   :setupSprite
 
         DO   GRID_DIRTY_RENDERING
-        lda  #8-1                      ; The grid renderer erases from the code field, so nothing
-        jmp  gridMarkSprite            ; is saved; just mark the cells that this sprite covers
+        jmp  gridMarkSprite8           ; The grid renderer erases from the code field, so nothing is
+                                       ; saved; just mark the cells that this sprite covers
         ELSE
         ; If we are in DirtyState 1 or 2, then the sprite data should be copied
         lda  DirtyState
@@ -397,8 +397,7 @@ drawSprites
         jsr   :setupSprite
 
         DO   GRID_DIRTY_RENDERING
-        lda  #16-1
-        jmp  gridMarkSprite
+        jmp  gridMarkSprite16
         ELSE
         ; If we are in DirtyState 1 or 2, then the sprite data should be copied
         lda  DirtyState
