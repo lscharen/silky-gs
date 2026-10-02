@@ -6032,6 +6032,7 @@ SetMMC1Control
     RTS
 
 SwitchBank
+    JMP  SET_MMC1_REG3_FAST            ; IIgs fast MMC1 bank switch
 ;    STA $E000
     jsr  STA_MMC1_REG3
     LSR

@@ -5482,6 +5482,15 @@ CheckMonsterCollisions ENT
     LDA ObjInvincibilityTimer, X
     BNE :Exit
 
+    ; IIgs: if no weapon slot is active, none of the checks below can hit.
+    LDA ObjState+$0D
+    ORA ObjState+$0E
+    ORA ObjState+$0F
+    ORA ObjState+$10
+    ORA ObjState+$11
+    ORA ObjState+$12
+    BEQ :CheckLink
+
     ; Check for collisions with each weapon.
     LDY #$0F
     JSR CheckMonsterBoomerangOrFoodCollision
@@ -5834,6 +5843,7 @@ CheckMonsterBoomerangOrFoodCollision
             JSR   LDA_ObjState_Y
     ASL
     BCS :Anon0089
+    BEQ :Anon0089               ; IIgs: inactive slot (state 0), nothing to check
     STY $00                     ; [00] holds the weapon slot
 
     ; Set boomerang damage type (2) in [09].
@@ -6044,6 +6054,7 @@ CheckMonsterSwordShotOrMagicShotCollision ENT
             JSR   LDA_ObjState_Y
     LSR
     BCS :Exit
+    BEQ :Exit                   ; IIgs: inactive slot (state 0), nothing to check
 
     ; Set horizontal collision threshold $C.
     LDA #$0C
@@ -6239,6 +6250,7 @@ CheckMonsterStabbingCollision
 CheckMonsterArrowOrRodCollision ENT
     STY $00                     ; [00] holds the weapon slot
             JSR   LDA_ObjState_Y
+    BEQ L763A_Exit              ; IIgs: inactive slot (state 0), nothing to check
 
     ; If the weapon is a rod, then
     ; go check a stabbing collision using rod parameters.
@@ -6691,10 +6703,10 @@ BeginShove ENT
     RTS
 
 Filler_7751
+            ; IIgs: trimmed by 20 bytes to make room for the collision early-outs
+            ; (block must still end exactly at __BANK_01_CODE_RUN_END__ = $7F00).
             db    $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF
-            db    $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF
-            db    $FF, $FF, $FF, $FF, $FF, $FF, $FF, $FF
-            db    $FF, $FF, $FF, $FF, $FF, $FF, $FF
+            db    $FF, $FF, $FF
 
 ; .SEGMENT "BANK_01_ISR"
             org
