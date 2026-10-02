@@ -47,7 +47,7 @@ NES_StartUp
 
 ; Set up the initial register values when transferring control to the NES ROM code
 
-            sta   yield_s                 ; Set the high byte of the stack address
+            sta   nesStackTop             ; Initial NES task stack pointer
 
 ; Default bank for MMC1 games
 
@@ -117,7 +117,8 @@ NES_StartUp
             jsr   _ClearToColor
             jsr   InitPlayfield
 
-; Convert the CHR ROM from the cart into blittable tiles. CHR-RAM games don't
+; CHR-ROM games have their tiles converted offline into the tiledata bank by
+; build.js (scripts/lib/nromBuild.js) and compiled by Main.s. CHR-RAM games don't
 ; have a fixed image to pre-convert -- mark every tile dirty instead, so
 ; DrawPPUTile/CheckSprTileDirty lazily compile each tile the first time it's
 ; actually drawn (once the game has uploaded real data for it).
@@ -130,9 +131,6 @@ NES_StartUp
             inx
             cpx   #512
             bcc   :mtloop
-            ELSE
-;            jsr   ROM_LoadBackgroundTiles
-;            jsr   ROM_LoadSpriteTiles
             FIN
 
 ; Now the core of the runtime has been initialized
@@ -153,26 +151,7 @@ StartUp
 ShutDown
             jmp   _CoreShutDown
 
-; NES_ColdBoot
-;
-; Invoke the reset vector
-            mx  %00
-NES_ColdBoot
-            ldal  ROMBase+$FFFC         ; Reset Vector
-            tax
-            sei
-            jsr   romxfer               ; Cannot allow interrupts within the rom dispatch
-            cli
-            rts
-
-            mx  %00
-NES_WarmBoot
-            ldal  ROMBase+$FFFC
-            tax
-            sei
-            jsr   romxfer
-            cli
-            rts
+; NES_ColdBoot / NES_WarmBoot are in rom_exec.s
 
 ; A pair of utility functions to stop/start the actual execution of the game runtime.  This is
 ; used to cleanly suspend the VBL interrupt driver and allow "something else" to happen.  Typically
@@ -705,7 +684,9 @@ RenderScreen
             lda   #DIRTY_BIT_PAL_CHANGE
             bit   DirtyBits
             beq   :no_refresh
-            ldx   #$2000
+            ldx   #$0000                  ; The tile tables are indexed by CIRAM address, so refresh
+            jsr   RefreshPPUTiles         ; both physical nametables ($000 and $400), not PPU $2000
+            ldx   #$0400
             jsr   RefreshPPUTiles
             lda   #DIRTY_BIT_BG0_REFRESH
             tsb   DirtyBits
