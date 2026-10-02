@@ -96,7 +96,7 @@ ENABLE_DIRTY_RENDERING equ 1
 
 ; Use the screen-aligned 8x8 grid dirty renderer (erase from the PEA field, BG tile updates
 ; without a full refresh).  Requires ENABLE_DIRTY_RENDERING.  See BG_TILE_DIRTY_PLAN.md
-GRID_DIRTY_RENDERING equ 0
+GRID_DIRTY_RENDERING equ 1
 GRID_MAX_BG_TILES    equ 64
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
