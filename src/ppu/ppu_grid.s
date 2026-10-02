@@ -125,13 +125,18 @@ gridPrepare
             rts
 
 :fb_bgoff   INC32 gsFbBgOff
+            lda   #FB_COLOR_BGOFF
             bra   :fb
 :fb_attr    INC32 gsFbAttr
+            lda   #FB_COLOR_METATILES
             bra   :fb
 :fb_many    INC32 gsFbMany
+            lda   #FB_COLOR_MANY
             bra   :fb
 :fb_unaligned INC32 gsFbAlign
-:fb         plb
+            lda   #FB_COLOR_UNALIGNED
+:fb         sta   gridFbReason            ; Read by the scaffold's GRID_FALLBACK_BORDER indicator
+            plb
             sec
             rts
 
@@ -1628,6 +1633,7 @@ gsFbAttr        ds    4
 gsFbMany        ds    4
 gsFbAlign       ds    4
 gsFbScroll      ds    4               ; Scroll / refresh dirty bits were set
+gridFbReason    dw    0               ; FB_COLOR_* of the last gridPrepare fallback
 gsBgFrames      ds    4               ; Grid-dirty frames with at least one visible BG tile update
 gsMetatiles     ds    4               ; Metatiles redrawn by attribute updates in grid-dirty frames
 gsMtCells       ds    4               ; Visible cells marked for those metatiles
