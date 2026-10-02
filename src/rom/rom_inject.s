@@ -177,7 +177,6 @@ STA_MMC1_REG3
 ;
 ; Since bank 0 can be put into the working bank, only Banks 1 through 7 need to be updated.
 ; For Zelda, this is just under 350 instructions, which is a manageable number.
-
             and   #$07
             clc
             adc   #^ROMBase
@@ -192,6 +191,35 @@ STA_MMC1_REG3
 
 :done
             MMC1_RTN
+
+; Optimized MMC1 bank switch if the accumulator has the bank
+SET_MMC1_REG3
+            php
+            pha
+
+            and   #$07
+            clc
+            adc   #^ROMBase
+            stal  mapper_bank
+            stal  :patch+3
+:patch      jml   :done
+:done
+            pla
+            plp
+            rts
+
+; Optimized MMC1 bank switch if the accumulator has the bank. Does not
+; preserve P or A registers
+SET_MMC1_REG3_FAST
+            and   #$07
+            clc
+            adc   #^ROMBase
+            stal  mapper_bank
+            stal  :patch+3
+:patch      jml   :done
+:done
+            rts
+
 
 APU_PULSE1  EXT
 ORA_4000    oral APU_PULSE1+0
@@ -258,12 +286,14 @@ STA_4002_X
             plp
             rts
 
-STY_4002    phy
+STY_4002    php
+            phy
             pha
             tya
             jsl  APU_PULSE1_REG3_WRITE
             pla
             ply
+            plp
             rts
 
 STA_4003    jsl  APU_PULSE1_REG4_WRITE
@@ -579,20 +609,18 @@ LDA_LONG_Y  mac
             tyx
             ldal ]1,x
             plx
-            pha
-            pla
+            ora  #$00
+;            pha
+;            pla
             rts
             <<<
 
 ADC_LONG_Y  mac
-            pha
             phx
             tyx
-            ldal ]1,x
-            stal aly_patch+1
+            adcl ]1,x
             plx
-            pla
-aly_patch   adc  #0
+            ora  #$00       ; N/Z from the sum (plx clobbered them); C/V are untouched
             rts
             <<<
 
@@ -613,8 +641,9 @@ AND_LONG_Y  mac
             tyx
             andl ]1,x
             plx
-            pha
-            pla
+            ora  #$00       ; refresh accumulator
+;            pha
+;            pla
             rts
             <<<
 
@@ -624,8 +653,10 @@ LDX_LONG_Y  mac
             ldal ]1,x
             tax
             pla
-            phx
-            plx
+            inx
+            dex
+;            phx
+;            plx
             rts
             <<<
 
@@ -634,8 +665,10 @@ LDY_LONG_X  mac
             ldal ]1,x
             tay
             pla
-            phy
-            ply
+            iny
+            dey
+;            phy
+;            ply
             rts
             <<<
 
@@ -644,9 +677,11 @@ LDX_LONG    mac
             ldal ]1
             tax
             pla
-            phx
-            plx
-            rts
+            inx
+            dex
+;            phx
+;            plx
+           rts
             <<<
 
 LDA_LONG    mac
@@ -684,8 +719,9 @@ LDA_ABS_Y   mac
             tyx
             lda  ]1,x
             plx
-            pha
-            pla              ; required reload to make sure Z,N flags are set correctly.
+            ora  #$00
+;            pha
+;            pla              ; required reload to make sure Z,N flags are set correctly.
             rts
             <<<
 
@@ -700,16 +736,11 @@ STA_ABS_Y   mac
             <<<
 
 ORA_ABS_Y   mac
-;            php
-            pha
             phx
             tyx
-            lda  ]1,x
-            stal oay_patch+1
+            ora  ]1,x
             plx
-            pla
-;            plp
-oay_patch   ora  #0
+            ora  #$00       ; N/Z from the result (plx clobbered them); C/V are untouched
             rts
             <<<
 
@@ -728,30 +759,20 @@ cay_patch   cmp  #0
             <<<
 
 SBC_ABS_Y   mac
-;            php
-            pha                ; make sure none of these instructions disturbs the carry flag
             phx
             tyx
-            lda  ]1,x
-            stal say_patch+1
+            sbc  ]1,x
             plx
-            pla
-;            plp
-say_patch   sbc  #0
+            ora  #$00       ; N/Z from the result (plx clobbered them); C/V are untouched
             rts
             <<<
 
 ADC_ABS_Y   mac
-;            php
-            pha                ; make sure none of these instructions disturbs the carry flag
             phx
             tyx
-            lda  ]1,x
-            stal aay_patch+1
+            adc  ]1,x
             plx
-            pla
-;            plp
-aay_patch   adc  #0
+            ora  #$00       ; N/Z from the result (plx clobbered them); C/V are untouched
             rts
             <<<
 
@@ -801,8 +822,9 @@ zp          phx
             tax
             lda  ]1,x
             plx
-            pha
-            pla
+            ora  #$00
+;            pha
+;            pla
             rts
             <<<
 
@@ -833,34 +855,32 @@ zp          phx
 ; fixed PRG bank ($C0-$FF), but the code is set up to trap zero-page and PPU/APU register accesses
 ; also.  Register traps are currently unimplemented until anactual use case is discovered.
 MMC1_LDA_IND_Y mac
-        php            ; preserve caller's flags (esp. carry) across our internal cmps -- a
-                       ; plain LDA (dp),Y never touches C, so callers may depend on it surviving
-        lda ]1+1       ; load the high address byte
-        bmi hi        ; HB >= $80 means we are in the upper half of memory, $8000 - $FFFF
-        cmp #$02       ; zero page AND the NES stack page ($0000-$01FF) are a special case
-        bcc zpage
-        cmp #$20       ; is it below the I.O space? If so, then the bank register is fine
-        bcc ok
-        cmp #$60       ; is it in the WRAM space? Is so, then the bank register is fine
-        bcc tail       ; if it's between $2000 and $5FFF, just ignore it for now and return the high byte which is like a floating bus read
-
-ok      lda  (]1),y   ; it's ok to just execute the instruction as-is
-tail    plp            ; restore caller's carry (and other flags)
-        pha            ; refresh N/Z to match the loaded byte in A (plp above may have
-        pla            ; clobbered them with the caller's pre-call flags)
+        lda  ]1+1       ; load the high address byte
+        bmi  hi         ; HB >= $80 means we are in the upper half of memory, $8000 - $FFFF
+        bit  #$FE       ; zero page AND the NES stack page ($0000-$01FF) are a special case
+        beq  zpage
+        bit  #$E0       ; $02-$1F: NES RAM, the bank register is fine
+        beq  ok
+        bit  #$40       ; $20-$3F: I/O -- floating bus
+        beq  tail
+        bit  #$20       ; $40-$5F: I/O -- floating bus; $60-$7F: WRAM falls through to ok
+        beq  tail
+ok      lda  (]1),y    ; it's ok to just execute the instruction as-is
         rts
 
-hi      cmp #$C0
-        bcs ok        ; $C0-$FF: fixed ROM bank -- ok as-is
+hi      bit  #$40       ; $C0-$FF: fixed bank, ok as-is
+        bne  ok
 
-        phb            ; $80-$BF: switchable ROM window
+        phb             ; $80-$BF: switchable ROM window
         phk
         plb
         lda  (]1),y
-        plb            ; this affects flags, but tail's plp/pha/pla below fixes them up
-        bra  tail
+        plb             ; this affects flags, but tail's ora below fixes them up
+tail    ora  #$00
+        rts
 
 zpage
+        php            ; only path that affects the carry bit
         phx
         rep  #$31      ; use 16-bit index registers for a quick add (and clear the carry)
         tya
@@ -872,5 +892,6 @@ zpage
                        ; from the 16-bit load above, since A's low byte is the only part that's real)
         sep  #$30      ; back to 8-bit
         plx            ; restore x
+        plp
         bra  tail
         <<<
