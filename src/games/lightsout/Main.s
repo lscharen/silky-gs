@@ -106,7 +106,7 @@ NO_VERTICAL_CLIP  equ 0
 
 ; Flag to turn off interupts.  This will run the ROM code with no sound and
 ; the frames will be driven sychronously by the event loop.  Useful for debugging.
-NO_INTERRUPTS     equ 1
+NO_INTERRUPTS     equ 0
 
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 0
@@ -164,6 +164,13 @@ x_offset      equ 16                      ; number of bytes from the left edge
             tax                           ; X = memory manager user ID (passed in A by GS/OS)
             lda   #VERTICAL_MIRRORING      ; A = cartridge nametable mirroring at power on
             jsr   NES_StartUp
+
+; This an NROM game, so all of the sprite and background tiles are static.  They have been
+; converted into the runtime's internal representation by build.js and loaded into the tiledata
+; bank, so all that's left is to compile them
+
+            jsr   ROM_CompileBackgroundTiles    ; Compile the background tiles
+            jsr   ROM_CompileSpriteTiles        ; Compile the COMPILED_SPRITE_LIST tiles
 
 ; Initialize the graphics for the main game mode
 
@@ -492,11 +499,13 @@ INPUT_ITEM_7 dw   BTNMAP
             put    ../../ppu/ppu_attributes.s
             put    ../../ppu/ppu_tiles.s
             put    ../../ppu/ppu_metatiles.s
-            put    ../../ppu/ppu_nametable.s
+            put    ../../ppu/ppu_nametable2.s
             put    ../../ppu/ppu_queues.s
             put    ../../ppu/ppu_palette.s
             put    ../../ppu/ppu_regs.s
             put    ../../ppu/ppu_render.s
+            put    ../../ppu/ppu_grid.s
+            put    ../../ppu/ppu_grid_quads.s
             put    ../../ppu/ppu_sprites.s
             put    ../../ppu/ppu_tile_blitters.s
             put    ../../ppu/scanline_bitmap.s

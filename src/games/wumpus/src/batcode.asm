@@ -19,7 +19,7 @@ BatNMI
     tax
     pla  
 ;    rti
-    rts
+    rtl
 
 
 BatMain

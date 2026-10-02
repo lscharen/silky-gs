@@ -2,45 +2,12 @@
 ;
             mx %00
 
-; ROM_LoadBackgroundTiles
+; ROM_CompileBackgroundTiles
 ;
-; Scan a CHR-ROM and convert a set of 256 tiles as background
-; tiles.  This means the tiles are converted into a compiled
-; tile representation.
-;
-; Bank is selected by the PPU_BG_TILE_ADDR variable
-ROM_LoadBackgroundTiles
-
-            ldx  bgadr           ; address in PPU memory to read for each tile 
-
-            cpx  #$1000
-            lda  #$0000
-            ror                  ; pattern table select determines if the tile is saved in first or second half of memory
-            tay                  ; starting value of $0000 or $8000
-
-:loop
-            phx
-            phy
-
-            tya                       ; move the tiledata address into the y-register
-            jsr  FastROMTileToLookup
-
-            pla
-            clc
-            adc  #128               ; Move to the next tiledata slot
-            tay
-
-            pla
-            clc
-            adc  #16                  ; NES tiles are 16 bytes
-            tax
-
-            and  #$0FFF          ; did we reach the end of a 4kb block?
-            bne  :loop
-            rts
-
-; Companion routine to ROM_LoadBackgroundTiles that can be called after the bg tile data is
-; converted. There is sufficient room to compile *all* 256 tiles.
+; Compile all 256 tiles of the background pattern table (bgadr) out of the tiledata bank, which
+; build.js has already filled with every converted CHR-ROM tile (scripts/lib/nromBuild.js).  The
+; tiledata bank holds pattern table $0000 in its first half and $1000 in its second half; there
+; is sufficient room to compile *all* 256 tiles.
 ROM_CompileBackgroundTiles
 
             lda  bgadr           ; address in PPU memory to read for each tile 
@@ -69,56 +36,11 @@ ROM_CompileBackgroundTiles
             bne  :loop
             rts
 
-; ROM_LoadSpriteTiles
+; ROM_CompileSpriteTiles
 ;
-; Scan a CHR-ROM and convert a set of 256 tiles as sprite
-; tiles.  Sprite tile are saved as data blocks in order to
-; support horizontal and vertical mirroring, as well as
-; sprite priority
-;
-; Bank is selected by the PPU_SPR_TILE_ADDR variable
-ROM_LoadSpriteTiles
-
-            ldx  spadr           ; address in PPU memory to read for each tile index
-
-            cpx  #$1000
-            lda  #$0000
-            ror                  ; pattern table select determines if the tile is saved in first or second half of memory
-            tay                  ; starting value of $0000 or $8000
-
-:sloop
-            phx                  ; save the PPU pattern table address and the IIgs buffer address
-            phy
-
-            lda  #TileBuff
-            jsr  ConvertROMTile2 ; convert the tile, extract the mask and create horizontally flipped versions
-
-            ldy  #0              ; copy the converted tile data into the tiledata bank
-            plx                  ; this was the y-register value
-:cploop
-            lda  TileBuff,y
-            stal tiledata,x
-            iny
-            iny
-            inx
-            inx
-            cpy  #128
-            bcc  :cploop
-
-; If this sprite is in the compilation list, also compile it
-
-            txy                  ; y register is now 128 bytes ahead of where it was at the start of the loop
-            pla                  ; pop the original x register value
-            clc
-            adc  #16             ; NES tiles are 16 bytes each
-            tax
-
-            and  #$0FFF          ; did we reach the end of a 4kb block?
-            bne  :sloop
-            rts
-
-; Companion routing to ROM_LoadSpriteTiles that can be called after the sprite tile data is
-; converted and will compile any tiles that are marked by in the COMPILED_SPRITE_LIST.
+; Compile any sprite tiles listed in COMPILED_SPRITE_LIST out of the tiledata bank, which build.js
+; has already filled with every converted CHR-ROM tile (scripts/lib/nromBuild.js).  The half of
+; the bank is chosen by the sprite pattern table (spadr) selected at startup.
 ;
 ; The compiled sprite buffer only uses a single bank, so there is not enough space to
 ; compile all of the sprite tiles, but this is useful for optimizing the drawing of the

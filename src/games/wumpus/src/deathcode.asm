@@ -33,7 +33,7 @@ DeathNMI
     tax
     pla
 ;    rti
-    rts
+    rtl
 
 
 ;sets the positions and ids of the arrow sprites

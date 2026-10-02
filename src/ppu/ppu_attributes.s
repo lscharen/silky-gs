@@ -120,9 +120,11 @@ DrawPPUAttribute
 :not_bot_right
         rts
 
-; Draw all of the tiles
+; Draw all of the tiles in one physical (CIRAM) nametable.  The attribute bytes at the end
+; of the nametable have a zero TILE_BANK entry, so DrawPPUTile skips them.
 ;
-; X = nametable base ($2000, $2400, $2800, or $2C00)
+; X = CIRAM nametable base ($0000 or $0400) -- the PPU_MEM tile tables are indexed by CIRAM
+;     address, not by the logical PPU address ($2000-$2FFF)
         mx    %00
 RefreshPPUTiles
         php

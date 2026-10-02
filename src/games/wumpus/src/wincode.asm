@@ -38,7 +38,7 @@ VictoryNMI
   tax
   pla 
 ;  rti
-  rts
+  rtl
 
 
 DrawVictoryScreen

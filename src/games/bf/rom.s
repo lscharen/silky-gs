@@ -250,7 +250,7 @@
 ;  IIgs shim code
 ; ----------------------
 ROMBase ENT
-    ds  $b900               ; Filler (one page less than DK; the injected code below must end before $C000)
+    ds   $B000-*            ; Pad up to $B000; the exclusion tables and injected code below must end before $C000
 
 y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
     ds 24,$01
@@ -372,7 +372,7 @@ _copyppublock
     txa
     rts
 
-    ds   \,$00   ; pad to next page
+    ds   $C000-*            ; Pad up to the start of the NES PRG-ROM
 
 ; ----------------------
 ;  RESET code

@@ -9,8 +9,9 @@
  *
  * For simple games whose CHR data never changes at runtime, this lets the
  * conversion happen once, offline, instead of on every ROM load: the output
- * tables can be assembled directly into a game's data segment in place of
- * calling ROM_LoadBackgroundTiles/ROM_LoadSpriteTiles at startup.
+ * tables can be assembled directly into a game's data segment instead of
+ * converting tiles at startup.  (NROM games build their whole tiledata bank
+ * this way through scripts/lib/nromBuild.js.)
  *
  * Usage:
  *   node scripts/convert-chr-rom.js <chr-rom-file> [options]

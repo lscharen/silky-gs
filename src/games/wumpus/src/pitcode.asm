@@ -27,7 +27,7 @@ PitNMI
   tax
   pla 
 ;  rti
-  rts
+  rtl
 
 
 SetupPit

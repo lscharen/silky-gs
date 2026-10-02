@@ -31,4 +31,4 @@ RevealNMI
     tax
     pla  
 ;  rti
-  rts
+  rtl

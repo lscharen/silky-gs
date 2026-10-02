@@ -23,7 +23,9 @@ ROMBase ENT
         ds   $0300
 vidbuf  ds   128
 
-        ds   $8000-$480
+        ds   $7000-*              ; Pad up to $7000; the injected code and y_exclude below must end before $F800
+HORIZONTAL_MIRRORING equ $01        ; From core/Defs.s, which is not included in the ROM segment
+VERTICAL_MIRRORING   equ $02
         put  ../../../rom/rom_inject.s
 
 y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
@@ -35,9 +37,7 @@ y_exclude ENT                     ; Table of excluded scanlines -- kept in NES R
 ;        .export vidbuf
 
 ;        .code
-        ds   \,$00
-        ds   $F800-$8200
-        org  $F800
+        ds   $F800-*              ; Pad up to the start of the NES PRG-ROM
 reset   
 ;        sei
 ;        cld
@@ -182,14 +182,12 @@ native_joy    EXT
         tax
         pla
 irq     ; rti
-        rts
+        rtl                     ; the NMI handler is called with JSL
 
         put main.s
         put board.s
         put xorshift.s
 
-        ds   \,$00
-        ds   $FA
+        ds   $FFFA-*              ; Pad up to the vectors
 ;        .segment "VECTORS"
-        org  $FFFA
         dw   vblank,reset,irq

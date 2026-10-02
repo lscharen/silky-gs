@@ -24,7 +24,7 @@ TitleNMI
     tax
     pla  
 ;  rti
-  rts
+  rtl
 
 TitleMain
     lda #0

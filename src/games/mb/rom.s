@@ -73,7 +73,7 @@ Version = NTSC
 ;.feature force_range				;allows -$xx expressions (for negative values)
 
 ROMBase ENT
-        ds   $BB00
+        ds   $B000-*              ; Pad up to $B000; the exclusion tables and injected code below must end before $C000
 
 y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
         ds 24,$01
@@ -82,6 +82,8 @@ y_exclude ENT                     ; Table of excluded scanlines -- kept in NES R
 
 tile_exclude ENT                  ; Table of excluded tiles
         ds 256,$00
+HORIZONTAL_MIRRORING equ $01        ; From core/Defs.s, which is not included in the ROM segment
+VERTICAL_MIRRORING   equ $02
 
         put  ../../rom/rom_inject.s
 
@@ -116,7 +118,7 @@ CODE_C077_SHIM
         jsl yield
         rts
  
-        ds   \,$00
+        ds   $C000-*              ; Pad up to the start of the NES PRG-ROM
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;Reset routine
@@ -273,7 +275,7 @@ CODE_C0AC
    TAX						;|
    PLA						;/
 ;   RTI						;exit interrupt
-   RTS
+   RTL                  ;the NMI handler is called with JSL
 
 ;interaction between bros
 ;$10 - movement bits for player 2

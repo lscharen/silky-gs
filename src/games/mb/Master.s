@@ -26,7 +26,7 @@
 
 ; Segment #4 -- Converted Tile Storage
 
-            ASM   ../../core/static/TileData.s
+            ASM   TileData.s
             KND   #$1100
             SNA   CHRDATA
 
@@ -88,3 +88,7 @@
 
 
 
+; Segment #7 -- Palette swizzle tables (long-addressed data, too large for the main segment)
+            ASM   palettes.s
+            KND   #$1100
+            SNA   PALDATA

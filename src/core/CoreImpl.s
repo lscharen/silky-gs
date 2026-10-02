@@ -67,6 +67,8 @@ IntStartUp
                   PushLong  #VBLTASK            ; Also register a Heart Beat Task
                   _SetHeartBeat
                   bcs       :error4
+
+                  jsr       InstallIrqHook      ; Lets the scheduler switch tasks after an interrupt
                   bra       :done
 :error1           brk       $c1
 :error2           brk       $c2
@@ -80,6 +82,8 @@ IntStartUp
 IntShutDown
                   DO        NO_INTERRUPTS
                   ELSE
+
+                  jsr       RemoveIrqHook
 
                   pea       $0007               ; disable 1-second interrupts
                   _IntSource
@@ -121,7 +125,11 @@ TaskCnt           dw        1
 VblTaskCode       mx        %11
                   lda       #1
                   stal      TaskCnt            ; Reset the task count
-                  jml       nmiTask            ; Jump to the NES NMI interrupt emulation
+                  DO        NO_INTERRUPTS
+                  rtl
+                  ELSE
+                  jml       schedTask          ; Run the NES/IIgs task scheduler
+                  FIN
                   mx        %00
 
 ; Reset the engine to a known state

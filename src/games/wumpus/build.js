@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * build.js — Balloon Fight build script
+ * build.js — Wumpus build script
  *
  * Converts the CHR-ROM (as assembled by PPU.s) into the 64KB tiledata bank
  * (tiledata.bin, assembled by TileData.s into the CHRDATA segment) and then
@@ -12,4 +12,4 @@
 
 const { buildNromGame } = require('../../../scripts/lib/nromBuild.js');
 
-buildNromGame(__dirname, 'BF.s');
+buildNromGame(__dirname, 'Wump.s');

@@ -681,6 +681,8 @@ tile_exclude ENT                  ; Table of excluded tiles
         ds 252,$00
         ds 1,$01                    ; Tile $FC can be skipped
         ds 3,$00
+HORIZONTAL_MIRRORING equ $01        ; From core/Defs.s, which is not included in the ROM segment
+VERTICAL_MIRRORING   equ $02
 
         put  ../../rom/rom_inject.s
 

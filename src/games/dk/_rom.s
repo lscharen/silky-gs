@@ -48,7 +48,7 @@
 ;  endif
 
 ROMBase ENT
-        ds   $BA00                ; Filler
+        ds   $B000-*              ; Pad up to $B000; the exclusion tables and injected code below must end before $C000
 
 y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
         ds 24,$01
@@ -72,7 +72,7 @@ LDA_Bolt_RemovedFlag_Y LDA_ABS_Y Bolt_RemovedFlag
 STA_Bolt_RemovedFlag_Y STA_ABS_Y Bolt_RemovedFlag
 LDA_Item_RemovedFlag_Y LDA_ABS_Y Item_RemovedFlag
 STA_Item_RemovedFlag_Y STA_ABS_Y Item_RemovedFlag
-LDA_0020_Y LDA_ABS_Y $0020
+LDA_0020_Y LDA_ABS_Y $20   ; not $0020: Merlin32 sizes that as absolute in pass 1 but emits DP, skewing "*"
 LDA_ScoreDisplay_Top_2_Y LDA_ABS_Y {ScoreDisplay_Top+2}
 LDA_ScoreDisplay_Top_1_Y LDA_ABS_Y {ScoreDisplay_Top+1}
 LDA_ScoreDisplay_Top_Y LDA_ABS_Y ScoreDisplay_Top
@@ -184,7 +184,7 @@ VRAMUpdateToBuffer
 :RETURN_F33D
   RTS
 
-        ds   \,$00
+        ds   $C000-*              ; Pad up to the start of the NES PRG-ROM
 
 ;  org $C000
 ;  FILLVALUE $FF					;original game's free space is marked with FFs

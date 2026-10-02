@@ -7,12 +7,14 @@
         use  bank_ram.inc
         use  bank_val.inc
 ROMBase ENT
-        ds   $BC00
+        ds   $B000-*              ; Pad up to $B000; the exclusion tables and injected code below must end before $C000
 
 y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
         ds 24,$01
         ds 200,$00
         ds 32,$01
+HORIZONTAL_MIRRORING equ $01        ; From core/Defs.s, which is not included in the ROM segment
+VERTICAL_MIRRORING   equ $02
 
         put  ../../rom/rom_inject.s
 
@@ -49,7 +51,7 @@ IIgs_memclear
         plx
         rts
 
-        ds   \,$00
+        ds   $C000-*              ; Pad up to the start of the NES PRG-ROM
 
 tbl_C000
   dw ofs_000_C346_00
@@ -711,7 +713,7 @@ bra_C26F
   JSR LDA_2002 ; channel 3
   JSR sub_C339 ; channel 4
 ;  RTI
-  RTS
+  RTL                   ; the NMI handler is called with JSL
 
 
 

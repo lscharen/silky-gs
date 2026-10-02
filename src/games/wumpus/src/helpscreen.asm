@@ -16,7 +16,7 @@ HelpNMI
     tax
     pla
 ;    rti
-    rts
+    rtl
 
 
 HelpMain
