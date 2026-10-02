@@ -252,17 +252,31 @@ PPUDATA_READ ENT
         mx   %00
 :buff_read
         cpx  #$2000
-        bcc  :not_in_nt   ; If we are not in the nametable space, just read the PPU memory and return
+        bcc  :chr_read    ; Pattern table ($0000 - $1FFF): read CHR memory, not CIRAM
 
         txa
         ppu2ciram             ; map address to CIRAM address range ($000 - $7FF)
         tax
 
-:not_in_nt
         sep  #$20       ; 8-bit acc/16-bit regs
         ldal vram_buff
         sta  2,s
         ldal PPU_CIRAM,x
+        stal vram_buff
+        sep  #$30
+
+        plx
+        pla
+        rtl
+
+; CHR-ROM / CHR-RAM lives at PPU_MEM $0000 - $1FFF (CHR-RAM writes in PPUDATA_WRITE store there too).
+; SMB's title screen and Ice Climber's title / score screens are loaded by reading data stored in CHR.
+        mx   %00
+:chr_read
+        sep  #$20       ; 8-bit acc/16-bit regs
+        ldal vram_buff
+        sta  2,s
+        ldal PPU_MEM,x
         stal vram_buff
         sep  #$30
 
