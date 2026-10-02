@@ -468,6 +468,15 @@ _RenderScreen
 
             jsr   drawScreen
 
+; drawScreen's drawSprites marked this frame's sprite cells and records for the grid renderer.  As in
+; the default RenderScreen full-render path, close the frame out so those per-frame lists are reset;
+; without this, every Balloon Trip frame appended to them until they overran into the code that
+; follows (OAM_COPY, shadowBitmap0/1 and scanOAMSprites) and crashed.
+
+            DO    GRID_DIRTY_RENDERING
+            jsr   gridEndFull
+            FIN
+
 ; Restore the buffer
 
             lda   #0                      ; virt_line
