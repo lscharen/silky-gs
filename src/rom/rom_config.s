@@ -4,11 +4,18 @@ CHKBOX          equ 2     ; checkbox (boolean)
 KEYMAP          equ 3     ; keymap (reads input character; tab to enter/exit)
 CTRL_LIST       equ 4     ; list of other controls (no UI)
 NUMBER_SELECT   equ 5     ; select from a range of single-digit numbers
+BTNMAP          equ 6     ; button mapping for keyboard
+TAB             equ 7     ; tab control
 
-CHKBOX_YES          str 'YES'
-CHKBOX_NO           str ' NO'
-CHKBOX_ON           str ' ON'
-CHKBOX_OFF          str 'OFF'
+CHKBOX_YES      str 'YES'
+CHKBOX_NO       str ' NO'
+CHKBOX_ON       str ' ON'
+CHKBOX_OFF      str 'OFF'
+
+BTNMAP_COMMAND  str 'CMD '
+BTNMAP_OPTION   str 'OPT '
+BTNMAP_CONTROL  str 'CNTL'
+BTNMAP_SHIFT    str 'SHFT'
 
 ; Control offsets from their base address
 MENU_TITLE      equ  0 
@@ -28,6 +35,13 @@ CTRL_VALUE_ADDR equ  12
 CTRL_DATA       equ  14
 
 ; Control-specific offsets
+CTRL_TAB_OPTION_COUNT    equ CTRL_DATA
+CTRL_TAB_OPTION_VALUE    equ CTRL_DATA+2
+CTRL_TAB_OPTION_LABEL    equ CTRL_DATA+4
+CTRL_TAB_OPTION_WIDTH    equ CTRL_DATA+6
+CTRL_TAB_OPTION_NEXT     equ CTRL_DATA+8
+CTRL_TAB_OPTION_SIZEOF   equ 8
+
 CTRL_RADIO_OPTION_COUNT  equ CTRL_DATA
 CTRL_RADIO_OPTION_VALUE  equ CTRL_DATA+2
 CTRL_RADIO_OPTION_LABEL  equ CTRL_DATA+4
@@ -287,6 +301,7 @@ ShowConfig
             beq   :not_radio
             tax
             lda:  CTRL_RADIO_OPTION_NEXT,x
+:tab_and_radio
             beq   :not_radio
             tax
             lda:  CTRL_TYPE,x
@@ -295,8 +310,17 @@ ShowConfig
             lda:  CTRL_LIST_COUNT+2,x
             tax
 :not_list   stx   config_active_ctrl
-:not_radio
+:not_tab
 :no_action  rts
+
+:not_radio
+            cmp   #TAB
+            bne   :not_tab
+            jsr   _SelectedTabItem
+            beq   :not_tab
+            tax
+            lda:  CTRL_TAB_OPTION_NEXT,x
+            bra   :tab_and_radio
 
 :set_first_control_active
             lda:  MENU_CTRL_COUNT,x
@@ -479,6 +503,81 @@ _DrawControlList
 ; + XX <title>  
 ;
 ; Where XX is the character hex code
+_DrawBtnmap
+            lda  #0
+
+_DrawBtnmap0
+:addr       equ  tmp15
+:highlight  equ  tmp14
+
+; Save the palette select
+
+            sta  :highlight
+
+; First two words are the offset coordinates of the control
+
+            jsr  _OffsetToAddr
+            sta  :addr
+
+; Move label to right for yes/no label
+
+            clc
+            adc  #COL_STEP*5
+            tay
+
+; Move to the label string
+
+            phx
+            lda: CTRL_TITLE,x
+            tax
+            lda  #TEXT_NORMAL
+            jsr  ConfigDrawString
+            plx
+
+            ldy: CTRL_VALUE_ADDR,x      ; load the variable address
+            ldx: 0,y                    ; load the variable value; 0 = command, 1 = option, 2 = control, 3 = shift
+
+            cpx  #MOD_REG_COMMAND_DOWN
+            bne  :not_cmd
+            ldx  #BTNMAP_COMMAND
+            ldy  :addr
+            lda  :highlight
+            jmp  ConfigDrawString
+
+:not_cmd
+            cpx  #MOD_REG_OPTION_DOWN
+            bne  :not_opt
+            ldx  #BTNMAP_OPTION
+            ldy  :addr
+            lda  :highlight
+            jmp  ConfigDrawString
+
+:not_opt
+            cpx  #MOD_REG_CONTROL_DOWN
+            bne  :not_cntl
+            ldx  #BTNMAP_CONTROL
+            ldy  :addr
+            lda  :highlight
+            jmp  ConfigDrawString
+
+:not_cntl
+            cpx  #MOD_REG_SHIFT_DOWN
+            bne  :not_shft
+            ldx  #BTNMAP_SHIFT
+            ldy  :addr
+            lda  :highlight
+            jmp  ConfigDrawString
+
+:not_shft
+            rts
+
+; Y = screen addr
+; X = control addr
+;
+; +----------------
+; + XX <title>  
+;
+; Where XX is the character hex code
 _DrawKeymap
             lda  #0
 
@@ -516,7 +615,6 @@ _DrawKeymap0
             ldy  :addr
             lda  :highlight
             jmp  ConfigDrawByte
-            rts
 
 ; Y = screen addr
 ; X = control addr
@@ -620,16 +718,68 @@ _ToggleNumber
 
             rts
 
+; Wait for one of the valid buttons to be pressed
+_WaitForBtnUp
+            lda       #0                  ; clear high byte
+            sep       #$20
+:waitloop1
+            ldal      MOD_REG
+            bit       #MOD_REG_SHIFT_DOWN
+            beq       :no_shift
+            lda       #MOD_REG_SHIFT_DOWN
+            bra       :done
+
+:no_shift
+            bit       #MOD_REG_CONTROL_DOWN
+            beq       :no_ctrl
+            lda       #MOD_REG_CONTROL_DOWN
+            bra       :done
+
+:no_ctrl
+            bit       #MOD_REG_OPTION_DOWN
+            beq       :no_opt
+            lda       #MOD_REG_OPTION_DOWN
+            bra       :done
+
+:no_opt
+            bit       #MOD_REG_COMMAND_DOWN
+            beq       :no_cmd
+            lda       #MOD_REG_COMMAND_DOWN
+            bra       :done
+
+:no_cmd
+            bra       :waitloop1
+
+:done
+            rep       #$20
+            rts
+
 ; Wait for a new key press
 _WaitForKeyUp
 :waitloop1
             jsr  _ReadRawKeypress                       ; Read keyboard directly, and only for raw keystrokes
             bit  #PAD_KEY_DOWN
             beq  :waitloop1
-;            jsr  _AckKeypress
-;            sta  config_keypress
-;            lda  config_keypress
             and  #$7F
+            rts
+
+; X = control addr
+;
+; Wait for the user to press a key
+_ToggleBtnmap
+:addr       equ  tmp15
+
+            phx
+            lda  #TEXT_HIGHLIGHTED
+            jsr  _DrawBtnmap0
+            plx
+
+            lda: CTRL_VALUE_ADDR,x
+            sta  :addr   ; address of the value
+
+            jsr  _WaitForBtnUp
+            sta  (:addr)
+
             rts
 
 ; X = control addr
@@ -664,6 +814,79 @@ _ToggleCheckbox
             eor  #$0001
             sta  (:addr)
 
+            rts
+
+; X = control addr
+;
+; Move the tab to the next value
+_ToggleTab
+:value      equ  tmp15     ; shared with _SelectedRadioItem
+:count      equ  tmp14     ; shared with _SelectedRadioItem
+:addr       equ  tmp13
+
+            stx  :addr
+
+            jsr  _SelectedTabItem
+            bne  :found
+            rts
+
+:found
+            tya
+            inc
+            cmp  :count
+            bcc  *+5
+            lda  #0
+
+; multiply by sizeof record
+
+            asl
+            asl
+            asl
+            clc
+            adc  :addr
+            tax
+            lda: CTRL_TAB_OPTION_VALUE,x
+            sta  (:value)          ; Update the value
+
+:done
+            rts
+
+; X = control addr
+;
+; Return A = address of selected tab. 0 is no match
+;        Y = index of selected item
+_SelectedTabItem
+:value      equ  tmp15
+:count      equ  tmp14
+
+            lda: CTRL_VALUE_ADDR,x
+            sta  :value
+
+            lda: CTRL_TAB_OPTION_COUNT,x
+            beq  :empty_list
+            sta  :count
+            ldy  #0
+
+:loop
+            lda:  CTRL_TAB_OPTION_VALUE,x
+            cmp   (:value)
+            beq   :found
+
+            txa
+            clc
+            adc  #CTRL_TAB_OPTION_SIZEOF
+            tax
+
+            iny
+            cpy  :count
+            bcc  :loop
+
+:empty_list
+            lda   #0
+            rts
+
+:found
+            txa
             rts
 
 ; X = control addr
@@ -736,6 +959,90 @@ _ToggleRadio
             sta  (:value)          ; Update the value
 
 :done
+            rts
+
+; Y = screen addr
+; X = control addr
+;
+; +--------------------------
+; | option 1 | option 2 | ...
+_DrawTab
+:addr       equ  tmp15
+:count      equ  tmp14
+:value      equ  tmp13
+:palette    equ  tmp12
+:next       equ  tmp11           ; next control to draw (must use tail-call, draw routines not recursive)
+
+; First two words are the offset coordinates of the control
+
+            jsr  _OffsetToAddr
+            sty  :addr
+
+; Clear the next control (conditional control shows when options are selected)
+
+            stz  :next
+
+; Move to the label string
+
+            phx
+            lda: CTRL_TITLE,x
+            tax
+            lda  #0
+            jsr  ConfigDrawString
+            plx
+
+            lda  :addr
+            clc
+            adc  #{1*ROW_STEP}+0              ; Go to the next line to show the tab values
+            sta  :addr
+
+            lda: CTRL_VALUE_ADDR,x            ; Get a copy of the config value address
+            sta  :value
+
+            ldy: CTRL_TAB_OPTION_COUNT,x    ; Load the number of options
+            beq  :done
+
+:loop
+            phx
+            phy
+
+            stz  :palette
+            lda: CTRL_TAB_OPTION_VALUE,x    ; See if this options matches the current value
+            cmp  (:value)
+            bne  :no_match
+            lda: CTRL_TAB_OPTION_NEXT,x     ; Mark the next control to show based on this selection
+            sta  :next
+            lda  #2
+            sta  :palette
+:no_match
+
+            ldy  :addr
+            lda: CTRL_TAB_OPTION_WIDTH,x    ; Make space
+            asl
+            asl
+            clc
+            adc  :addr
+            sta  :addr
+            lda: CTRL_TAB_OPTION_LABEL,x    ; Load the string address
+            tax
+
+            lda  :palette
+            jsr  ConfigDrawString
+            ply
+
+            pla
+            clc
+            adc  #CTRL_TAB_OPTION_SIZEOF    ; number of bytes per radio option entry
+            tax
+
+            dey
+            bne  :loop
+
+:done
+            ldx  :next                        ; Is there another control to draw?
+            beq  *+5
+            jmp  _DrawControl                 ; Tail call
+
             rts
 
 ; Y = screen addr
@@ -849,7 +1156,14 @@ _DrawControl
             bne  :not_number
             jmp  _DrawNumber
 
-:not_number
+:not_number cmp  #BTNMAP
+            bne  :not_btnmap
+            jmp  _DrawBtnmap
+
+:not_btnmap cmp  #TAB
+            bne  :not_tab
+            jmp  _DrawTab
+:not_tab
             rts
 
 ; Switch the value of the active control
@@ -880,7 +1194,15 @@ _ToggleActiveControl
             bne  :not_number
             jmp  _ToggleNumber
 
-:not_number
+:not_number cmp  #BTNMAP
+            bne  :not_btnmap
+            jmp  _ToggleBtnmap
+
+:not_btnmap cmp  #TAB
+            bne  :not_tab
+            jmp  _ToggleTab
+
+:not_tab
             rts
 
 ; Loads the active menu address from config_active_menu
@@ -937,7 +1259,9 @@ _GetMenuItemIndex
             rts
 
 ; If the focus is on the config panel, draw the cursor next to the
-; active control
+; active control. This actuallydraws a cursor next to *all* the controls
+; that have a cursor position, but draws an empty square if the control
+; is not the active one.
 _UpdateControlCursor
             ldx  config_active_menu
             bne  *+3                   ; Check that it is set
@@ -977,6 +1301,11 @@ _DrawControlCursor
             lda  1,s
             tax
 
+; If this is a list control, nothing to draw
+            lda:  CTRL_TYPE,x
+            cmp   #CTRL_LIST
+            beq   :no_draw
+
             jsr  _OffsetToAddr            ; Address of control label
             tya
             sec
@@ -987,9 +1316,10 @@ _DrawControlCursor
             ldx   #CONFIG_PALETTE*2
             jsr   _blitTileNoMask
 
+:no_draw
             plx                           ; restore the control address
 
-; If this is a list control, call for each of its controle
+; If this is a list control, call for each of its controls
 
             lda:  CTRL_TYPE,x
             cmp   #CTRL_LIST
@@ -1005,8 +1335,8 @@ _DrawControlCursor
             dey
             bne   :loop_list
 :empty_list
-:not_radio
 :not_found
+:not_tab
             rts
 
 ; If it's a radio, check it's selected value and see if it points to conditional control
@@ -1018,6 +1348,17 @@ _DrawControlCursor
 
             lda: CTRL_RADIO_OPTION_NEXT,x
             beq  :not_radio
+            jmp  _DrawControlCursor
+
+:not_radio
+            cmp  #TAB
+            bne  :not_tab
+
+            jsr  _SelectedTabItem
+            beq  :not_found
+
+            lda: CTRL_TAB_OPTION_NEXT,x
+            beq  :not_tab
             jmp  _DrawControlCursor
 
 _UpdateMenuCursor

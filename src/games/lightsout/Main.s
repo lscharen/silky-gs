@@ -35,15 +35,9 @@ EVT_LOOP_END mac
 ;
              <<<
 
-; Pre-render check to see if there are any background tiles queued for updates.  If so, we will do
-; a regular rendering.  If not, use dirty rendering.
+; Pre-render check.
 PRE_RENDER   mac
-             stz  disableDirtyRendering
-             lda  at_queue_tail
-             cmp  tmp4                    ; If there are any attribute changes, render the full screen
-             bne  do_full
-             inc  disableDirtyRendering
-do_full
+;
              <<<
 
 POST_RENDER  mac
@@ -59,11 +53,13 @@ SCAN_OAM_XTRA_FILTER mac
             <<<
 
 ; Define which PPU address has the background and sprite tiles
-PPU_BG_TILE_ADDR  equ #$1000
-PPU_SPR_TILE_ADDR equ #$0000
+PPU_BG_TILE_ADDR  equ $1000
+PPU_SPR_TILE_ADDR equ $0000
 
-; What kind of Nametable mirroring for this game
-NAMETABLE_MIRRORING equ VERTICAL_MIRRORING
+; Flag whether this game uploads its own CHR data at runtime (CHR-RAM) rather
+; than using a fixed CHR-ROM image loaded once at startup
+HAS_CHR_RAM equ 0
+
 
 ; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
 ; in addition to the compiled representation (usually yes, since this is used for the config
@@ -75,6 +71,11 @@ BG_TILES_AS_SPRITES equ 1
 ; 0 = Reset code drops into an infinite loop
 ; 1 = Reset code is the game code
 ROM_DRIVER_MODE   equ 1
+
+; MAME cycle-count benchmark harness flag (scripts/run-bench.js) -- see
+; src/games/smb/Main.s for details. Always 0 here; rom_input.s is shared
+; across all games and must default to normal (non-bench) behavior.
+BENCH_MODE        equ 0
 
 ; Flag whether the backend should use the OAMDMA to get the sprite information,
 ; or if it can scan the NES RAM area directly
@@ -92,6 +93,11 @@ OAM_END_INDEX     equ 2
 ; Allow the engine to use dirty rendering (drawing only lines where sprites
 ; have changed) if the background did not scroll compared to the previous frame
 ENABLE_DIRTY_RENDERING equ 1
+
+; Use the screen-aligned 8x8 grid dirty renderer (erase from the PEA field, BG tile updates
+; without a full refresh).  Requires ENABLE_DIRTY_RENDERING.  See BG_TILE_DIRTY_PLAN.md
+GRID_DIRTY_RENDERING equ 1
+GRID_MAX_BG_TILES    equ 64
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
@@ -117,6 +123,9 @@ SHOW_ROM_EXECUTION_TIME equ 0
 ; Turn on some off-screen information
 SHOW_DEBUG_VARS equ 0
 
+; Show the number of VBLs each screen render takes at the top-left of the screen (debug)
+RENDER_VBL_COUNT equ 0
+
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 0
 CUSTOM_PPU_SCROLL_LOCK equ 0
@@ -131,6 +140,9 @@ COMPILED_SPRITE_LIST_COUNT equ 0
 COMPILED_SPRITE_LIST       mac
 ;
                            <<<
+
+; Do not check for specific Tile IDs to exclude from drawing
+NO_TILE_EXCLUDE equ 1
 
 ; Do we have a custom routine to execite RenderScreen.  If yes, put its address here
 CUSTOM_RENDER_SCREEN equ 0
@@ -150,13 +162,26 @@ x_offset      equ 16                      ; number of bytes from the left edge
             phk
             plb
 
-; Call startup immediately after entering the application: A = memory manager user ID
+; Call startup immediately after entering the application with the cartridge configuration
 
+            tax                           ; X = memory manager user ID (passed in A by GS/OS)
+            lda   #VERTICAL_MIRRORING      ; A = cartridge nametable mirroring at power on
             jsr   NES_StartUp
+
+; This an NROM game, so all of the sprite and background tiles are static.  They have been
+; converted into the runtime's internal representation by build.js and loaded into the tiledata
+; bank, so all that's left is to compile them
+
+            jsr   ROM_CompileBackgroundTiles    ; Compile the background tiles
+            jsr   ROM_CompileSpriteTiles        ; Compile the COMPILED_SPRITE_LIST tiles
 
 ; Initialize the graphics for the main game mode
 
             jsr   SetDefaultPalette
+
+; Load in the game preferences (if they exist)
+
+            jsr   LoadPrefData
 
 ; Call the boot code in the ROM
 
@@ -179,11 +204,19 @@ x_offset      equ 16                      ; number of bytes from the left edge
 quit
             jsr   NES_ShutDown
 
+; Save the user preferences
+
+            jsr   SavePrefData
+
 ; Exit the application
 
             _QuitGS    qtRec
 qtRec       adrl  $0000
             da    $00
+
+; Name of the save and preference files
+SAVE_FILENAME strl '1/lo.sav'
+PREF_FILENAME strl '1/lo.prefs'
 
 InitPlayfield
             ldx   #TitleScreen
@@ -207,14 +240,14 @@ PALETTE_DISPATCH
 
 
 ; For this game, we utilize a single, static palette
+        mx      %00
 SetDefaultPalette
 
 ; Set the tile/sprite mapping
-
-            lda   SwizzleTables+2
-            ldx   SwizzleTables
-            jsr   NES_SetPaletteMap
-            rts
+        lda   SwizzleTables+2
+        ldx   SwizzleTables
+        jsr   NES_SetPaletteMap
+        rts
 
 SwizzleTables adrl L1_T0
 
@@ -225,11 +258,11 @@ ApplyConfig
             lda   config_video_fastmode
             beq   :normal_video
             lda   #CTRL_EVEN_RENDER
-            tsb   GTEControlBits
+            tsb   ControlBits
             bra   :apply_video
 :normal_video
             lda   #CTRL_EVEN_RENDER
-            trb   GTEControlBits
+            trb   ControlBits
 :apply_video
             lda   #0
             jsr   FillScreen
@@ -238,7 +271,6 @@ ApplyConfig
             lda   config_audio_quality
             jsr   APUReload
 
-            rep   #$30
             rts
 
 ; Configuration screen and variables
@@ -252,30 +284,34 @@ ApplyConfig
 ; by prev/next pointers on the menu and control itmes that direct which control to
 ; select in response to the user's inputs.
 
+config_block_start
+
 config_audio_quality   ds  2  ; good / better / best audio quality (60Hz, 120Hz, 240Hz audio interrupts)
 config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
+
+; player 1 config block
+config_block_p1
 config_input_p1_type   dw  0  ; keyboard / snes max
 config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
+config_input_button_a  dw  MOD_REG_COMMAND_DOWN
+config_input_button_b  dw  MOD_REG_OPTION_DOWN
 
-;CONFIG_PALETTE       equ 0
-;TILE_TOP_LEFT        equ $105
-;TILE_TOP_RIGHT       equ $106
-;TILE_BOTTOM_LEFT     equ $107
-;TILE_BOTTOM_RIGHT    equ $108
-;TILE_HORIZONTAL      equ $10A
-;TILE_HORIZONTAL_TOP  equ $10A
-;TILE_HORIZONTAL_BOTTOM  equ $10A
-;TILE_VERTICAL_LEFT   equ $10E
-;TILE_VERTICAL_RIGHT  equ $10D
-;TILE_ZERO            equ $100
-;TILE_A               equ $12E
-;TILE_SPACE           equ $100
-;TILE_CURSOR          equ $149  ; $10A
+; player 2 config block
+config_block_p2
+config_input_p2_type      dw  0
+config_input_p2_key_left  dw  'j'
+config_input_p2_key_right dw  'l'
+config_input_p2_key_up    dw  'i'
+config_input_p2_key_down  dw  'k'
+config_input_p2_snesmax_port dw 4
+config_input_p2_button_a  dw  MOD_REG_CONTROL_DOWN
+config_input_p2_button_b  dw  MOD_REG_SHIFT_DOWN
+config_block_end
 
 AUDIO_TITLE_STR     str 'AUDIO'
 AUDIO_QUALITY_STR   str 'QUALITY'
@@ -297,6 +333,8 @@ INPUT_RIGHT_MAP_STR str 'RIGHT'
 INPUT_UP_MAP_STR    str 'UP'
 INPUT_DOWN_MAP_STR  str 'DOWN'
 INPUT_SNESMAX_PORT_STR str 'SLOT'
+INPUT_BUTTON_A_STR str 'A BUTTON'
+INPUT_BUTTON_B_STR str 'B BUTTON'
 
 ; The configuration screen leverages the NES runtime itself
 CONFIG_BLK   db   CONFIG_PALETTE        ; Which background palette to use
@@ -309,14 +347,15 @@ CONFIG_BLK   db   CONFIG_PALETTE        ; Which background palette to use
              db   TILE_ZERO             ; First tile for the 0 - 9 characters
              db   TILE_A                ; First tile for the alphabet A - Z characters
              db   TILE_SPACE
-CONFIG_MENU  dw   3                     ; Four screens "Audio", "Video", "Input", "Game"
+CONFIG_MENU  dw   2                     ; Two screens "Audio", "Input"
              dw   AUDIO_CONFIG
-             dw   VIDEO_CONFIG
+;             dw   VIDEO_CONFIG
              dw   INPUT_CONFIG
 
 AUDIO_CONFIG dw   AUDIO_TITLE_STR
              dw   0                     ; previous menu item
-             dw   VIDEO_CONFIG          ; next menu item
+;            dw   VIDEO_CONFIG          ; next menu item
+             dw   INPUT_CONFIG          ; next menu item
 
              dw   1                     ; One configuration element
              dw   AUDIO_ITEM_1
@@ -364,7 +403,8 @@ VIDEO_ITEM_2 dw   CHKBOX
              dw   config_video_fastmode
 
 INPUT_CONFIG dw   INPUT_TITLE_STR
-             dw   VIDEO_CONFIG          ; previous menu item
+;            dw   VIDEO_CONFIG          ; previous menu item
+             dw   AUDIO_CONFIG          ; previous menu item
              dw   0                     ; next menu item
 
              dw   1
@@ -397,11 +437,13 @@ SNESMAX_LIST  dw  NUMBER_SELECT
               dw  7            ; maximum value
 
 KEYBOARD_LIST dw  CTRL_LIST
-              dw  4
+              dw  6
               dw  INPUT_ITEM_2
               dw  INPUT_ITEM_3
               dw  INPUT_ITEM_4
               dw  INPUT_ITEM_5
+              dw  INPUT_ITEM_6
+              dw  INPUT_ITEM_7
 
 INPUT_ITEM_2 dw   KEYMAP
              dw   INPUT_ITEM_1
@@ -426,28 +468,68 @@ INPUT_ITEM_4 dw   KEYMAP
 
 INPUT_ITEM_5 dw   KEYMAP
              dw   INPUT_ITEM_4
-             dw   0
+             dw   INPUT_ITEM_6
              dw   3,11
              dw   INPUT_DOWN_MAP_STR
              dw   config_input_key_down
+
+INPUT_ITEM_6 dw   BTNMAP
+             dw   INPUT_ITEM_5
+             dw   INPUT_ITEM_7
+             dw   3,13
+             dw   INPUT_BUTTON_A_STR
+             dw   config_input_button_a
+
+INPUT_ITEM_7 dw   BTNMAP
+             dw   INPUT_ITEM_6
+             dw   0
+             dw   3,14
+             dw   INPUT_BUTTON_B_STR
+             dw   config_input_button_b
 
             DO    SHOW_DEBUG_VARS
             put   ../../misc/App.Msg.s
             put   ../../misc/font.s
             FIN
+            put   ../../misc/io.s
 
-            put   ../../ppu/ppu.s
+            mput  ../../ppu
+; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
+            put    ../../ppu/ppu_macros.s
+            put    ../../ppu/ppu_init.s
+            put    ../../ppu/ppu_shadowlist.s
+            put    ../../ppu/ppu.s
+            put    ../../ppu/ppu_attributes.s
+            put    ../../ppu/ppu_tiles.s
+            put    ../../ppu/ppu_metatiles.s
+            put    ../../ppu/ppu_nametable2.s
+            put    ../../ppu/ppu_queues.s
+            put    ../../ppu/ppu_palette.s
+            put    ../../ppu/ppu_regs.s
+            put    ../../ppu/ppu_render.s
+            put    ../../ppu/ppu_grid.s
+            put    ../../ppu/ppu_grid_quads.s
+            put    ../../ppu/ppu_sprites.s
+            put    ../../ppu/ppu_tile_blitters.s
+            put    ../../ppu/scanline_bitmap.s
+; AUTOINC:END
 
 ; Palette remapping
+            ds    \,$00
             put   palettes.s
             put   ../../apu/apu.s
 
 ; Core code
-            put   ../../rom/scaffold.s
-            put   ../../rom/rom_helpers.s
-            put   ../../rom/rom_input.s
-            put   ../../rom/rom_exec.s
-            put   ../../rom/rom_config.s
+            mput   ../../rom
+; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
+            put    ../../rom/scaffold.s
+            put    ../../rom/rom_color.s
+            put    ../../rom/rom_tiles.s
+            put    ../../rom/rom_helpers.s
+            put    ../../rom/rom_input.s
+            put    ../../rom/rom_exec.s
+            put    ../../rom/rom_config.s
+; AUTOINC:END
 
             put   ../../core/ControlBits.s
             put   ../../core/CoreData.s

@@ -14,7 +14,7 @@ ShootSelfNMI
     tax
     pla  
 ;  rti
-  rts
+  rtl
 
 ShootSelfMain
     ;wait for nmi

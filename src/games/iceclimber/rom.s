@@ -7,8 +7,18 @@
         use  bank_ram.inc
         use  bank_val.inc
 ROMBase ENT
-        ds   $BD00
+        ds   $B000-*              ; Pad up to $B000; the exclusion tables and injected code below must end before $C000
+HORIZONTAL_MIRRORING equ $01        ; From core/Defs.s, which is not included in the ROM segment
+VERTICAL_MIRRORING   equ $02
         put  ../../rom/rom_inject.s
+
+y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
+    ds 24,$01
+    ds 200,$00
+    ds 32,$01
+
+tile_exclude ENT                  ; Tble of excluded tiles
+    ds 256,$00
 
 LDA_ram_0000_Y      LDA_ABS_Y ram_0000
 STA_ram_0004_Y      STA_ABS_Y ram_0004
@@ -45,7 +55,7 @@ IIGS_CLEAR
         sep  #$30
         rts
   
-        ds   \,$00
+        ds   $C000-*              ; Pad up to the start of the NES PRG-ROM
 
 tbl_C000_lo
   db  ram_ppu_buffer ;   00 ; logo screen, mountain counter
@@ -77,11 +87,15 @@ tbl_C00A_hi
 
 vec_C014_RESET
 ;  SEI
+  nop
   CLD
   LDA #$10
   JSR STA_2000
   LDX #$FF
+
 ;  TXS
+  nop
+
 ; bzk optimize, BIT + BPL
 ;bra_C01E_infinite_loop
 ;  JSR LDA_2002
@@ -91,6 +105,10 @@ vec_C014_RESET
 ;  JSR LDA_2002
 ;  ASL
 ;  BCC bra_C024_infinite_loop
+  bra :pad
+  ds  3
+:pad
+
   LDY #$07
   STY <ram_0001
   LDY #$00
@@ -254,7 +272,7 @@ loc_C138_exit_nmi
   TAX
   PLA
 ;  RTI
-  rts
+  rtl                   ; the NMI handler is called with JSL
 
 
 
@@ -11894,7 +11912,7 @@ vec_FFF0_IRQ
 
 ;.out .sprintf("Free bytes in bank FF 0x%04X [%d]", ($FFFA - *), ($FFFA - *))
 
-  ds 7
+  ds 0
 
 ;.segment "VECTORS"
   dw vec_C076_NMI

@@ -2,140 +2,119 @@
 ;
             mx %00
 
-; ROM_LoadBackgroundTiles
+; ROM_CompileBackgroundTiles
 ;
-; Scan a CHR-ROM and convert a set of 256 tiles as background
-; tiles.  This means the tiles are converted into a compiled
-; tile representation.
-;
-; Bank is selected by the PPU_BG_TILE_ADDR variable
-ROM_LoadBackgroundTiles
+; Compile all 256 tiles of the background pattern table (bgadr) out of the tiledata bank, which
+; build.js has already filled with every converted CHR-ROM tile (scripts/lib/nromBuild.js).  The
+; tiledata bank holds pattern table $0000 in its first half and $1000 in its second half; there
+; is sufficient room to compile *all* 256 tiles.
+ROM_CompileBackgroundTiles
 
-            ldx  PPU_BG_TILE_ADDR
-            ldy  #0
+            lda  bgadr           ; address in PPU memory to read for each tile 
+            cmp  #$1000
+            lda  #$0000
+            ror                  ; pattern table select determines if the tile is saved in first or second half of memory
 
-:tloop
-            phx
-            phy
+            ldy  #0              ; start at the beginning of the bank
+:loop
+            pha                  ; save the tiledata source address (A) across the call
+            phy                  ; save the compiled tile slot address (Y) across the call
 
-            lda  #TileBuff
-            jsr  ConvertROMTile3
+            ldx  #^tiledata
+            jsr  CompileTile
 
-            clc
             pla
-            adc  #$0100          ; Put the next compiled tile on the next page
+            clc
+            adc  #$100           ; the next compiled tile slot is 256 further
             tay
 
             pla
-            adc  #16             ; NES tiles are 16 bytes
-            tax
-
-            cpx  #16*512         ; Have we done the last background tile?
-            bcc  :tloop
-
-            DO   BG_TILES_AS_SPRITES
-            ldx  PPU_BG_TILE_ADDR
-            ldy  #$8000
-:tloop2
-            phx
-            phy
-
-            lda  #TileBuff
-            jsr  ROMTileToBitmap ; Convert the tile, no mask and create horizontally flipped versions
-
-            ldy  #0              ; Copy the converted tile data into the tiledata bank
-            plx
-:cploop
-            lda  TileBuff,y
-            stal tiledata,x
-            iny
-            iny
-            inx
-            inx
-            cpy  #128
-            bcc  :cploop
-
-            txy
-            pla
             clc
-            adc  #16             ; NES tiles are 16 bytes
-            tax
+            adc  #128          ; the next set of tile bitmap lookup data is 128 bytes in the tiledata bank
 
-            cpx  #16*512         ; Have we done the last background tile?
-            bcc  :tloop2
-            FIN
+            cpy  #0              ; did we reach the end of the bank?
+            bne  :loop
             rts
 
-; ROM_LoadSpriteTiles
+; ROM_CompileSpriteTiles
 ;
-; Scan a CHR-ROM and convert a set of 256 tiles as sprite
-; tiles.  Sprite tile are saved as data blocks in order to
-; support horizontal and vertical mirroring, as well as
-; sprite priority
+; Compile any sprite tiles listed in COMPILED_SPRITE_LIST out of the tiledata bank, which build.js
+; has already filled with every converted CHR-ROM tile (scripts/lib/nromBuild.js).  The half of
+; the bank is chosen by the sprite pattern table (spadr) selected at startup.
 ;
-; Bank is selected by the PPU_SPR_TILE_ADDR variable
-ROM_LoadSpriteTiles
+; The compiled sprite buffer only uses a single bank, so there is not enough space to
+; compile all of the sprite tiles, but this is useful for optimizing the drawing of the
+; player character or other sprites that are commonly on screen and never have their
+; sprite priority bit set.
+ROM_CompileSpriteTiles
 
-            ldx  PPU_SPR_TILE_ADDR
-            ldy  #0
+            lda #2*{COMPILED_SPRITE_LIST_COUNT-1}         ; are any compiled sprite tiles defined?
+            bmi :empty_list
 
-:sloop
-            phx
-            phy
+            lda :compiled_sprite_list                     ; is there a list of IDs?
+            bmi :match_first_n                            ; no, then just compile tiles 0 .. n
 
-            lda  #TileBuff
-            jsr  ConvertROMTile2 ; Convert the tile, extract the mask and create horizontally flipped versions
+            ldy  #0                                       ; scan the compiled sprite list
+:loop1
+            phy                                           ; save the current index
 
-            ldy  #0              ; Copy the converted tile data into the  tiledata bank
-            plx
-:cploop
-            lda  TileBuff,y
-            stal tiledata,x
-            iny
-            iny
-            inx
-            inx
-            cpy  #128
-            bcc  :cploop
-
-; If this sprite is in the compilation list, also compile it
-
-            lda  1,s
-            jsr  FindInList
-            bcc  :no_match
-
-; Y = address in the compile bank
-; A = low address of bitmap
-; X = high address of bitmap
-
-            phx
-            lsr                  ; A = sprite_idx * 16
-            lsr
-            lsr                  ; Make it sprite_idx * 2
-            tax
-            lda  SpriteBankPos
-            sta  spr_comp_tbl,x  ; Put the compiled sprite address in the table
-
+            lda  :compiled_sprite_list,y                  ; load the tile index
+            asl                                           ; make it tile_idx * 2
             tay
-            lda  #TileBuff
-            ldx  #^TileBuff
+
+            jsr  :compile_sprite_tile
+
+            ply                                           ; restore the current index
+            iny
+            iny
+            cpy  #2*{COMPILED_SPRITE_LIST_COUNT-1}
+            bcc  :loop1
+
+:empty_list
+            rts
+
+; This is a simple case, just compile the first N sprites
+:match_first_n
+            ldy  #0                                       ; scan the compiled sprite list
+
+:loop2
+            phy                                           ; save the current index
+
+            jsr  :compile_sprite_tile
+
+            ply                                           ; restore the current index
+            iny
+            iny
+            cpy  #2*{COMPILED_SPRITE_LIST_COUNT-1}
+            bcc  :loop2
+
+; Common code to actually compile a tile
+;
+; Y = tile index * 2
+; All registers are changed
+:compile_sprite_tile
+            lda  SpriteBankPos                            ; this is the current free address in the bank
+            sta  spr_comp_tbl,y                           ; put the compiled sprite address in the table
+
+            tya                                           ; convert the tile index * 2 into an address in the tiledata bank
+            lsr                                           ; put it back as the normal tile_index
+            xba                                           ; each tile takes up 128 bytes
+
+            ldx  spadr                                    ; load the sprite pattern table address ($0000 or $1000)
+            cpx  #$1000                                   ; put the pattern table select in the carry
+            ror  a                                        ; roll the pattern table select into high bit and divide tile_index * 256 by 2 at the same time
+
+            ldy  SpriteBankPos                            ; the CompileSprite routine uses the y-register
+            ldx  #^tiledata                               ; read directly from the tiledata bank
+
             jsr  CompileSprite
-            sty  SpriteBankPos
-            plx
-:no_match
-
-            txy
-            pla
-            clc
-            adc  #16             ; NES tiles are 16 bytes
-            tax
-
-            cpx  #16*256         ; Have we done the last sprite tile?
-            bcc  :sloop
+            sty  SpriteBankPos                            ; save the updated address for the next compiled sprite
             rts
+
+:compiled_sprite_list COMPILED_SPRITE_LIST
 
 ; Find a value in the compiled sprite list
-; A = value
+; A = value (index * 16)
 ; Can use y-reg
 FindInList
             ldy #2*{COMPILED_SPRITE_LIST_COUNT-1}
@@ -145,15 +124,23 @@ FindInList
             bmi :match_first_n
             ldy #2*{COMPILED_SPRITE_LIST_COUNT-1}
 
+            pha
+            lsr
+            lsr
+            lsr
+            lsr
 :loop
             cmp :compiled_sprite_list,y
-            beq :match
+            beq :match0
             dey
             dey
             bpl :loop
+            pla
 :no_match
             clc
             rts
+:match0
+            pla
 :match
             sec
             rts
@@ -165,469 +152,12 @@ FindInList
 
 :compiled_sprite_list COMPILED_SPRITE_LIST
 
-; Low-level utility functions to extract the NES Tile data and convert it
-; from the interleaved format into something that the runtime can handle
-; more efficiently.
-
-
-; X = address in the rom file
-; A = address to write
-;
-; This keeps the tile in 2-bit mode in a format that makes it easy to look up pixel data
-; based on a dynamic palette selection
-;
-; Tiles are stored in a pre-shifted, 16-bit format (2 bits per pixel): 0000000w wxxyyzz0
-; When rendered, the 2-bit palette selection is passed in bits 9 and 10 and ORed with
-; the palette data to create a single word of 00000ppw wxxyyzz0.  This value is used
-; to index directly into a 2048-byte swizzel table that will load the appropriate
-; pixel data for the word.  There are 2 swizzle tables, one for tiles and one for sprites
-; that take care of mapping the 25 possible on-screen colors to a 16-color palette.
-ConvertROMTile3
-            phy                       ; Save y -- this is the compiled address location to use
-            jsr   ROMTileToBitmap
-            ply
-
-; Now we have the NES pixel data in a more linear format that matches the IIgs screen
-
-            lda   #TileBuff
-            ldx   #^TileBuff
-            jmp   CompileTile
-
-ROMTileToBitmap
-:DPtr       equ   tmp1
-:save       equ   tmp2
-
-; This routine is used for background tiles, so there is no need to create masks or
-; to provide alternative vertically and horizontally flipped variants.  Instead,
-; we leverage this to create optimized, compiled representations of the background tiles
-
-            jsr   ROMTileToLookup      ; A = address to write, X = address in CHR ROM
-
-; The :DPtr is set to point at the data buffer, so now convert the lookup values to data nibbles
-
-            sep   #$30                ; 8-bit mode
-            ldy   #0
-:loop
-            lda   (:DPtr),y           ; Load the index for this tile byte
-            tax
-            lda   DLUT2_shft,x        ; Look up the two, 2-bit pixel values for this quad of bits.  This remains a 4-bit value
-            sta   tmp3
-
-            iny
-            lda   (:DPtr),y
-            tax
-            lda   DLUT2,x             ; Look up the two, 2-bit pixel values for next quad of bits
-            ora   tmp3                ; Move it into the top nibble since it will decode to the top-byte on the SHR screen
-
-            dey
-            asl
-            sta   (:DPtr),y
-            iny
-            lda   #0
-            rol
-            sta   (:DPtr),y
-
-            iny
-            cpy   #32
-            bcc   :loop
-
-            rep    #$30
-            rts
-
-ConvertROMTile2
-:DPtr       equ   tmp1
-:MPtr       equ   tmp2
-
-            jsr   ROMTileToLookup
-
-; Now we have 32 bytes (4 x 8) with each byte being a 4-bit value that holds two pairs of bits
-; from the PPU pattern table.  We use these 4-bit values as lookup indices into tables
-; that decode the values differently depending on the use case.
-
-            sta   :DPtr
-            clc
-            adc   #32                ; Move to the mask
-            sta   :MPtr
-
-            lda   #0                 ; Zero out high byte
-            sep   #$30               ; 8-bit mode
-            ldy   #0
-
-:loop
-            lda   (:DPtr),y           ; Load the index for the initial high nibble
-            tax
-            lda   MLUT4,x             ; Look up the mask value for this byte. This table decodes the 4 bits into an 8-bit mask
-            sta   (:MPtr),y
-
-            lda   DLUT2,x             ; Look up the two, 2-bit pixel values for this quad of bits.  This remains a 4-bit value
-            asl
-            asl
-            asl
-            asl
-            sta   tmp3
-
-            iny
-            lda   (:DPtr),y
-            tax
-            lda   DLUT2,x             ; Look up the two, 2-bit pixel values for next quad of bits
-            ora   tmp3                ; Move it into the top nibble since it will decode to the top-byte on the SHR screen
-
-            dey
-            sta   (:DPtr),y           ; Put in low byte
-            iny
-            lda   #0
-            sta   (:DPtr),y           ; Zero high byte
-
-            lda   MLUT4,x
-            sta   (:MPtr),y
-
-            iny
-            cpy   #32
-            bcc   :loop
-
-; Reverse and shift the data
-
-            rep    #$30
-            ldy    #8
-            ldx    :DPtr
-
-:rloop
-            lda:   0,x              ; Load the word: xx00
-            jsr    reverse2         ; Reverse the bottom byte in chunks of 2 bits
-            asl                     ; Shift by 1 for indexing
-            sta:   66,x
-            asl:   0,x              ; Shift the original word, too
-
-            lda:   2,x
-            jsr    reverse2
-            asl
-            sta:   64,x
-            asl:   2,x
-
-            lda:   32,x
-            jsr    reverse4
-            sta:   98,x
-            lda:   34,x
-            jsr    reverse4
-            sta:   96,x
-
-            inx
-            inx
-            inx
-            inx
-            dey
-            bne    :rloop
-            rts
-
-; Build a table of index values for the ROM tile data.  The different routines
-; can mix and match the lookup table information as they see fit
-;
-; X = address in the rom file
-; A = address to write
-;
-; For each byte of pattern table memory, we create two bytes in the DPtr with
-; a lookup value for the pixels corresponding to bits in that location
-;
-; Example:
-;   Tile 0: $03,$0F,$1F,$1F,$1C,$24,$26,$66, $00,$00,$00,$00,$1F,$3F,$3F,$7F
-;
-;                                      0,1  2,3  4,5  6,7
-;
-;   $03 | 00000011 | 00000000 | $00 -> 0000 0000 0000 0011 -> 00 00 05 00 
-;   $0F | 00001111 | 00000000 | $00 -> 0000 0000 0011 0011 -> 00 00 55 00
-;   $1F | 00011111 | 00000000 | $00 -> 0000 0001 0011 0011 -> 01 00 55 00
-;   $1F | 00011111 | 00000000 | $00 -> 0000 0001 0011 0011 -> 01 00 55 00
-;   $1C | 00011100 | 00011111 | $1F -> 0000 0101 1111 1100 -> 03 00 FA 00
-;   $24 | 00100100 | 00111111 | $3F -> 0000 1110 1101 1100 -> 0E 00 BA 00
-;   $26 | 00100110 | 00111111 | $3F -> 0000 1110 1101 1110 -> 0E 00 BE 00
-;   $66 | 01100110 | 01111111 | $7F -> 0101 1110 1101 1110 -> 3E 00 BE 00
-;
-;   
-; e.g. Plane 0   = 0101 0001 (LSB)
-;      Plane 1   = 1001 0001 (MSB)
-;
-;      For speed, use a table and convert one pair at a time
-;
-;      Pair 1 = 1001 -> 1001
-;      Pair 2 = 0101 -> 0011
-;      Pair 3 = 0000 -> 0000
-;      Pair 4 = 0101 -> 0011
-;
-;      Lookup[0] = 10 01 00 11
-;      Lookup[1] = 00 00 00 11
-;
-;      Tile Data  = 63 00 03 00
-;      Pixel Data = 12 03 00 03
-
-ROMTileToLookup
-:DPtr       equ   tmp1
-            pha
-            phx
-
-            sta   :DPtr
-            lda   #0                 ; Clear A and B
-
-            sep   #$20               ; 8-bit mode
-            ldy   #0
-
-:loop
-
-; Top two bits from each byte defines the two left-most pixels
-
-            ldal  CHR_ROM,x          ; Load the low bits
-            and   #$C0
-            lsr
-            lsr
-            sta   tmp0
-
-            ldal  CHR_ROM+8,x        ; Load the high bits
-            and   #$C0
-            ora   tmp0
-            lsr
-            lsr
-            lsr
-            lsr
-            sta   (:DPtr),y          ; First byte
-            iny
-
-; Repeat for bits 4 & 5
-
-            ldal  CHR_ROM,x
-            and   #$30
-            lsr
-            lsr
-            sta   tmp0
-
-            ldal  CHR_ROM+8,x
-            and   #$30
-            ora   tmp0
-            lsr
-            lsr
-            sta   (:DPtr),y
-            iny
-
-; Repeat for bits 2 & 3
-
-            ldal  CHR_ROM,x
-            and   #$0C
-            lsr
-            lsr
-            sta   tmp0
-
-            ldal  CHR_ROM+8,x
-            and   #$0C
-            ora   tmp0               ; Combine the two and create a lookup value
-            sta   (:DPtr),y
-            iny
-
-; Repeat for bits 0 & 1
-
-            ldal  CHR_ROM,x          ; Load the high bits
-            and   #$03
-            sta   tmp0
-
-            ldal  CHR_ROM+8,x
-            and   #$03
-            asl
-            asl
-            ora   tmp0                ; Combine the two and create a lookup value
-            sta   (:DPtr),y
-            iny
-
-            inx
-            cpy   #32
-            bcc   :loop
-
-            rep    #$20
-            plx
-            pla
-            rts
-
-; Reverse the 2-bit fields in a byte
-            mx   %00
-reverse2
-            php
-            sta  tmp0
-            stz  tmp1
-
-            sep  #$20
-
-            and  #$C0
-            lsr
-            lsr
-            lsr
-            lsr
-            lsr
-            lsr
-            tsb  tmp1
-
-            lda  tmp0
-            and  #$30
-            lsr
-            lsr
-            tsb  tmp1
-
-            lda  tmp0
-            and  #$0C
-            asl
-            asl
-            tsb  tmp1
-
-            lda  tmp0
-            and  #$03
-            asl
-            asl
-            asl
-            asl
-            asl
-            asl
-            ora  tmp1
-
-            plp
-            rts
-
-; Reverse the nibbles in a word
-            mx   %00
-reverse4
-            xba
-            sta   tmp0
-            and   #$0F0F
-            asl
-            asl
-            asl
-            asl
-            sta   tmp1
-            lda   tmp0
-            and   #$F0F0
-            lsr
-            lsr
-            lsr
-            lsr
-            ora   tmp1
-            rts
-
-; Look up the 2-bit indexes for the data words
-DLUT2       db    $00,$01,$04,$05    ; CHR_ROM[0] = xy, CHR_ROM[8] = 00 -> 0x0y
-            db    $02,$03,$06,$07    ; CHR_ROM[0] = xy, CHR_ROM[8] = 01 -> 0x1y
-            db    $08,$09,$0C,$0D    ; CHR_ROM[0] = xy, CHR_ROM[8] = 10 ->
-            db    $0A,$0B,$0E,$0F    ; CHR_ROM[0] = xy, CHR_ROM[8] = 11
-
-; Shifted version of the table
-DLUT2_shft  db    $00,$10,$40,$50    ; CHR_ROM[0] = xy, CHR_ROM[8] = 00 -> 0x0y
-            db    $20,$30,$60,$70    ; CHR_ROM[0] = xy, CHR_ROM[8] = 01 -> 0x1y
-            db    $80,$90,$C0,$D0    ; CHR_ROM[0] = xy, CHR_ROM[8] = 10 ->
-            db    $A0,$B0,$E0,$F0    ; CHR_ROM[0] = xy, CHR_ROM[8] = 11
-
-; Look up the 4-bit indexes for the data words
-DLUT4       db    $00,$01,$10,$11    ; CHR_ROM[0] = xx, CHR_ROM[8] = 00
-            db    $02,$03,$12,$13    ; CHR_ROM[0] = xx, CHR_ROM[8] = 01
-            db    $20,$21,$30,$31    ; CHR_ROM[0] = xx, CHR_ROM[8] = 10
-            db    $22,$23,$32,$33    ; CHR_ROM[0] = xx, CHR_ROM[8] = 11
-
-MLUT4       db    $FF,$F0,$0F,$00
-            db    $F0,$F0,$00,$00
-            db    $0F,$00,$0F,$00
-            db    $00,$00,$00,$00
-
-; Inverted mask for using eor/and/eor rendering
-;MLUT4       db    $00,$0F,$F0,$FF
-;            db    $0F,$0F,$FF,$FF
-;            db    $F0,$FF,$F0,$FF
-;            db    $FF,$FF,$FF,$FF
-
-; Extracted tiles
-TileBuff    ds    128
-
-; NES Palette (52 entries)
-nesPalette
-   dw $0777
-   dw $000f
-   dw $000b
-   dw $042b
-   dw $0908
-   dw $0a02
-   dw $0a10
-   dw $0810
-   dw $0530
-   dw $0070
-   dw $0060
-   dw $0050
-   dw $0045
-   dw $0000
-   dw $0000
-   dw $0000
-   dw $0bbb
-   dw $007f
-   dw $005f
-   dw $064f
-   dw $0d0c
-   dw $0d05
-   dw $0f30
-   dw $0d51
-   dw $0a70
-   dw $00b0
-   dw $00a0
-   dw $00a4
-   dw $0088
-   dw $0000
-   dw $0000
-   dw $0000
-   dw $0fff
-   dw $04bf
-   dw $068f
-   dw $097f
-   dw $0f7f
-   dw $0f59
-   dw $0f75
-   dw $0f94
-   dw $0fb0
-   dw $0bf1
-   dw $05d5
-   dw $05f9
-   dw $00ed
-   dw $0777
-   dw $0000
-   dw $0000
-   dw $0fff
-   dw $0adf
-   dw $0bbf
-   dw $0dbf
-   dw $0fbf
-   dw $0fab
-   dw $0eca
-   dw $0fda
-   dw $0fd7
-   dw $0df7
-   dw $0bfb
-   dw $0bfd
-   dw $00ff
-   dw $0fdf
-   dw $0000
-   dw $0000
-
-; Convert a single NES palette entry to IIgs RGB
-; A = NES color index
-; Y is overwritten
-;
-; Returns RGB value in A
-NES_ColorToIIgs
-            and   #$003F
-            asl
-            tay
-            lda   nesPalette,y
-            rts
-
-; Convert a single NES palette entry to IIgs RGB
-; A = NES color index
-; X is overwritten
-;
-; Returns RGB value in A
-NES_ColorToIIgs_X
-            and   #$003F
-            asl
-            tax
-            lda   nesPalette,x
-            rts
+; ConvertROMTile3, ROMTileToBitmap, ConvertROMTile2, ROMTileToLookup, reverse2,
+; reverse4, TileBuff, and the DLUT2/DLUT2_shft/DLUT4/MLUT4 lookup tables live
+; in rom_tiles.s (put alongside this file by each game's Main.s) -- see that
+; file for the low-level CHR-ROM decoding this file's loaders call into.
+
+            mput  rom_color.s
 
 ; Convert NES palette entries to IIgs
 ; X = NES palette (16 color indices)
@@ -692,6 +222,19 @@ NES_SetPaletteMap
 ; Example mapper for donkey kong
 mapping     equ   PPU_PALETTE_MAP
 
+; A 16-bit version of the NES palette values.  The high byte is always zero, but it makes it easy to write
+; 8-bit values and then read 16-bit values later.  This table must match the layout of the "current" table
+; below.  If one changes, then the other must change, too.
+nes_palette
+bg0_palette ds    8
+bg1_palette ds    8
+bg2_palette ds    8
+bg3_palette ds    8
+sp0_palette ds    8
+sp1_palette ds    8
+sp2_palette ds    8
+sp3_palette ds    8
+
 ; The current IIgs palette index for each NES palette entry. Will match the mapping value for non-negative entries
 current     dw    0, -1, -1, -1
             dw    0, -1, -1, -1
@@ -702,6 +245,15 @@ current     dw    0, -1, -1, -1
             dw    0, -1, -1, -1
             dw    0, -1, -1, -1
             dw    0, -1, -1, -1
+
+bg0_changed db $ff
+bg1_changed db $ff
+bg2_changed db $ff
+bg3_changed db $ff
+sp0_changed db $ff
+sp1_changed db $ff
+sp2_changed db $ff
+sp3_changed db $ff
 
 iigs_nes_colors ds   32   ; list of NES colors assigned to each IIgs index location
 
@@ -821,8 +373,15 @@ BitMask     dw   $0001,$0002,$0004,$0008,$0010,$0020,$0040,$0080
             dw   $0100,$0200,$0400,$0800,$1000,$2000,$4000,$8000
 
 ; These are the NES palette locations that need to be scanned
-NESPalIndices dw  2,  4,  6, 10, 12, 14, 18, 20, 22, 26, 28, 30
-              dw 34, 36, 38, 42, 44, 46, 50, 52, 54, 58, 60, 62
+NESPalIndices 
+BG0_PAL_IDX dw    2,  4,  6
+BG1_PAL_IDX dw   10, 12, 14
+BG2_PAL_IDX dw   18, 20, 22
+BG3_PAL_IDX dw   26, 28, 30
+SP0_PAL_IDX dw   34, 36, 38
+SP1_PAL_IDX dw   42, 44, 46
+SP2_PAL_IDX dw   50, 52, 54
+SP3_PAL_IDX dw   58, 60, 62
 
 ReverseMap  ds   64*2
 
@@ -905,6 +464,43 @@ find_free_slot
 
             rts
 
+; Used when the game uses no more than 16 unique colors
+NES_BuildStaticPalette
+            ldx  #0
+:loop1      ldy  NESPalIndices,x
+            lda  nes_palette,y          ; What color is in the NES palette
+            asl
+            tay
+            lda  ReverseMap,y           ; Lookup the IIgs palette index for this color
+
+            ldy  NESPalIndices,x
+            lsr
+            sta  current,y              ; Store the index in the current table
+
+            inx
+            inx
+            cpx  #{24*2}
+            bcc  :loop1
+
+            rts
+
+; Tries to find the best mapping between the current NES palette and the IIgs color palette and updates
+; the swizzle tables as needed.  The input data structures are
+;
+; nes_palette: A 16-bit version of the PPU palette values (0 - 63)
+;
+; ReverseMap: A mapping from NES Colors (0 - 63) to the IIgs palette index that currently represents that color (-1 is unmapped)
+; NESPalIndices: A array of 24 indices that represet the NES palette location that matter.  The first (color 0) of each palette doesn't matter (is transparent)
+; mapping: A mapping table the identified reserved entries and other constraints. 
+;          $00xx = FIXED (use the value as a literal and add to the reverse map)
+;          $40xx = NO_MAP (use the bottom byte as a literal value in the 'current' array, but do not add to the reverse map, e.g. this color cannot be reused)
+;          $8xxx = DYNAMIC (can allocate a IIgs index for the NES color in this palette entry)
+; current: word[64] - The current IIgs palette index for each NES palette entry.  Negative values are unassigned.
+;
+; The goal is to try and keep the tile palette mappings as stable as possible so that
+; the least amount of tiles need to be redrawn.  The code tracks which palettes have been
+; changed and then scans the Attribute bytes to mark the metatiles that need to be redrawn
+; because their palette indices are different.
 
 NES_BuildPalette
 :bitmask    equ  tmp0
@@ -914,7 +510,7 @@ NES_BuildPalette
             lda  #$0001
             sta  :bitmask
 
-; Zero out the reverse map (identified which IIgs palette index contains a NES color)
+; Zero out the reverse map (identifies which IIgs palette index contains a NES color)
 
             ldx  #126
             lda  #$FFFF

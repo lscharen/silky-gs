@@ -51,11 +51,13 @@ SCAN_OAM_XTRA_FILTER mac
             <<<
 
 ; Define which PPU address has the background and sprite tiles
-PPU_BG_TILE_ADDR  equ #$1000
-PPU_SPR_TILE_ADDR equ #$0000
+PPU_BG_TILE_ADDR  equ $1000
+PPU_SPR_TILE_ADDR equ $0000
 
-; What kind of Nametable mirroring for this game
-NAMETABLE_MIRRORING equ VERTICAL_MIRRORING
+; Flag whether this game uploads its own CHR data at runtime (CHR-RAM) rather
+; than using a fixed CHR-ROM image loaded once at startup
+HAS_CHR_RAM equ 0
+
 
 ; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
 ; in addition to the compiled representation (usually yes, since this is used for the config
@@ -67,6 +69,18 @@ BG_TILES_AS_SPRITES equ 1
 ; 0 = Reset code drops into an infinite loop
 ; 1 = Reset code is the game code
 ROM_DRIVER_MODE   equ 0
+
+; Flag for the MAME cycle-count benchmark harness (scripts/run-bench.js):
+; skips GS/OS-dependent quit handling (there is no GS/OS to return to when
+; booted directly by the harness) and feeds NES_ReadInput from a canned
+; input file instead of the keyboard/joystick, advancing one entry per
+; virtual NMI (see src/rom/rom_input.s).
+;
+; 0 = normal build (this is the only other game/build that shares
+;     rom_input.s, so it must always default to 0 there too)
+; 1 = bench harness build
+BENCH_MODE        equ 0
+BENCH_MODE_LEN    equ 3600
 
 ; Flag whether the backend should use the OAMDMA to get the sprite information,
 ; or if it can scan the NES RAM area directly
@@ -84,6 +98,11 @@ OAM_END_INDEX     equ 64
 ; Allow the engine to use dirty rendering (drawing only lines where sprites
 ; have changed) if the background did not scroll compared to the previous frame
 ENABLE_DIRTY_RENDERING equ 0
+
+; Use the screen-aligned 8x8 grid dirty renderer (erase from the PEA field, BG tile updates
+; without a full refresh).  Requires ENABLE_DIRTY_RENDERING.  See BG_TILE_DIRTY_PLAN.md
+GRID_DIRTY_RENDERING equ 0
+GRID_MAX_BG_TILES    equ 64
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
@@ -108,6 +127,9 @@ SHOW_ROM_EXECUTION_TIME equ 0
 
 ; Turn on some off-screen information
 SHOW_DEBUG_VARS equ 0
+
+; Show the number of VBLs each screen render takes at the top-left of the screen (debug)
+RENDER_VBL_COUNT equ 0
 
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 1
@@ -134,6 +156,9 @@ COMPILED_SPRITE_LIST       mac
                            dw  $FFFF
                            <<<
 
+; Do not check for specific Tile IDs to exclude from drawing
+NO_TILE_EXCLUDE equ 1
+
 ; Do we have a custom routine to execute RenderScreen.  If yes, put its address here
 CUSTOM_RENDER_SCREEN equ 1
 CUSTOM_RENDER_SCREEN_ADDR equ _RenderScreen
@@ -150,10 +175,27 @@ max_nes_y   equ min_nes_y+y_height
 
 x_offset    equ   16                      ; number of bytes from the left edge
 
+            nop                           ; workaround when loading into emulator memory before boot.  The ROM memory detection routine writed to the first two bytes
+            nop
+
             phk
             plb
 
+; Call startup immediately after entering the application with the cartridge configuration
+
+            tax                           ; X = memory manager user ID (passed in A by GS/OS)
+            lda   #VERTICAL_MIRRORING      ; A = cartridge nametable mirroring at power on
             jsr   NES_StartUp
+
+; This an NROM game, so all of the sprite and background tiles are static.  They have
+; been statically converted into the runtime's internal representation and are loaded
+; into the 
+
+            jsr   ROM_CompileBackgroundTiles    ; Convert the background tiles (PPU:$1000) to compiled format
+            jsr   ROM_CompileSpriteTiles        ; Convert a bunch (100) of the sprite tiles to compiled format for speed
+
+; Now, initialize the game-specific functionality that this wrapper needs in order to
+; run the game in an effective manner.
 
             stz   LastAreaType            ; Check if the palettes need to be updated
             stz   LastAreaStyle
@@ -187,11 +229,6 @@ ContinueWorld          = $07fd
 ;OffScr_LevelNumber    = $0763
 ContinueArea           = $7E00   ; patches operand
 
-; We _never_ scroll vertically, so just set it once.  This is to make sure these kinds of optimizations
-; can be set up in the generic structure
-
-            jsr   NES_SetScrollY
-
 ;            lda   #16
 ;            jsr   _SetBG0YPos
 ;            jsr   _ApplyBG0YPosPreLite
@@ -209,6 +246,11 @@ ContinueArea           = $7E00   ; patches operand
 
             jsr   NES_EvtLoop
 
+; (BENCH_MODE's exhausted-input quit check now lives in NES_EvtLoop
+; itself, right after NES_RenderFrame -- see src/rom/scaffold.s. It has
+; to be there, not here, since NES_EvtLoop never returns under BENCH_MODE
+; in the first place.)
+
             cmp   #USER_SAYS_QUIT
             beq   quit
 
@@ -223,9 +265,16 @@ ContinueArea           = $7E00   ; patches operand
 quit
             jsr   NES_ShutDown
 
-; Exit the application
+; Exit the application. Under the MAME bench harness there is no GS/OS to
+; return to (it boots straight into this code, bypassing GS/OS entirely --
+; see BENCH_MODE above), so _QuitGS would fail; just RTL back to the boot
+; stub's WDM $01 completion loop instead.
 
+            DO    BENCH_MODE
+            rtl
+            ELSE
             _QuitGS    qtRec
+            FIN
 qtRec       adrl  $0000
             da    $00
 
@@ -233,6 +282,17 @@ Greyscale   dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
+
+            DO    BENCH_MODE
+; Canned controller input for the MAME bench harness, one byte per
+; virtual NES frame in the same A-B-Select-Start-Up-Down-Left-Right bit
+; layout NES_ReadInput normally produces (see src/rom/rom_input.s).
+; Extracted from an FCEUX .fm2 movie via scripts/fm2-extract.js, e.g.:
+;   node scripts/fm2-extract.js -n 1000 replay.fm2 -o src/games/smb/bench_input.bin
+;BenchInputIndex   dw    0
+;BenchInputData
+;            putbin bench_input.bin
+            FIN
 
 ; Program variables
 LastAreaType      dw  0
@@ -254,7 +314,7 @@ InitPlayfield
 ;            beq   :better
 
             lda   #0
-            sta   MinYScroll
+;            sta   MinYScroll
 
             lda   #200
             sta   ScreenHeight
@@ -262,7 +322,7 @@ InitPlayfield
 
 :better
             lda   #16            ; Keep the GTE playfield below the status bar in PPU RAM
-            sta   MinYScroll
+;            sta   MinYScroll
 
             lda   #160           ; 160 lines high for 'better'
             sta   ScreenHeight
@@ -270,7 +330,7 @@ InitPlayfield
 
 :good
             lda   #16            ; Keep the GTE playfield below the status bar in PPU RAM
-            sta   MinYScroll
+;            sta   MinYScroll
 
             lda   #128           ; Only 128 lines tall for speed
             sta   ScreenHeight
@@ -286,7 +346,7 @@ InitPlayfield
             lda   #200           ; Only display down to this row
             sec
             sbc   ScreenHeight
-            sta   MaxYScroll
+;            sta   MaxYScroll
 
             lda   NesTop
             clc
@@ -308,14 +368,14 @@ InitPlayfield
             asl
             asl
             asl
-            sta   ScreenBase
+;            sta   ScreenBase
             asl
             asl
             clc
-            adc   ScreenBase
+;            adc   ScreenBase
             clc
             adc   #$2000+x_offset
-            sta   ScreenBase
+;            sta   ScreenBase
 
 ; Set a default palette for the title screen
 
@@ -430,9 +490,12 @@ nesBottomOffset ds 2
 _RenderScreen
 
 ; Do the basic setup
+            jsr   _ShowDebugInfo
 
-            jsr   _GetPPUScrollX
-            jsr   NES_SetScrollX
+            lda   _ppuctrl
+            ldx   _ppuscroll_x
+            ldy   #0                      ; We _never_ scroll vertically
+            jsr   NES_SetScroll
 
             lda   ppumask
             and   ppumask_override
@@ -459,7 +522,7 @@ _RenderScreen
             sbc   #16
             tax                       ; The rest of the screen is height - 16
             lda   #16                 ; Start at line 16
-            ldy   StartXMod256
+            ldy   StartX
             jsr   _BltSetupAlt
             sta   nesBottomOffset
 
@@ -568,11 +631,11 @@ ApplyConfig
             lda   config_video_fastmode
             beq   :normal_video
             lda   #CTRL_EVEN_RENDER
-            tsb   GTEControlBits
+            tsb   ControlBits
             bra   :apply_video
 :normal_video
             lda   #CTRL_EVEN_RENDER
-            trb   GTEControlBits
+            trb   ControlBits
 :apply_video
             lda   #0
             jsr   FillScreen
@@ -641,17 +704,35 @@ CopyStatusToScreen
 ; by prev/next pointers on the menu and control itmes that direct which control to
 ; select in response to the user's inputs.
 
+config_block_start
+
 config_audio_quality   ds  2  ; good / better / best audio quality (60Hz, 120Hz, 240Hz audio interrupts)
 config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
 config_video_small     ds  2  ; use a smaller playfield screen size
-config_input_p1_type   dw  0  ; keyboard  / snes max
-config_input_p2_type   dw  0
+
+; player 1 config block
+config_block_p1
+config_input_p1_type   dw  0  ; keyboard / snes max
 config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
+config_input_button_a  dw  MOD_REG_COMMAND_DOWN
+config_input_button_b  dw  MOD_REG_OPTION_DOWN
+
+; player 2 config block
+config_block_p2
+config_input_p2_type      dw  0
+config_input_p2_key_left  dw  'j'
+config_input_p2_key_right dw  'l'
+config_input_p2_key_up    dw  'i'
+config_input_p2_key_down  dw  'k'
+config_input_p2_snesmax_port dw 4
+config_input_p2_button_a  dw  MOD_REG_CONTROL_DOWN
+config_input_p2_button_b  dw  MOD_REG_SHIFT_DOWN
+config_block_end
 
 ;CONFIG_PALETTE      equ 1
 ;TILE_TOP_LEFT       equ $144
@@ -835,7 +916,27 @@ INPUT_ITEM_5 dw   KEYMAP
             put   ../../misc/font.s
             FIN
 
-            put   ../../ppu/ppu.s
+            mput  ../../ppu
+; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
+            put    ../../ppu/ppu_macros.s
+            put    ../../ppu/ppu_init.s
+            put    ../../ppu/ppu_shadowlist.s
+            put    ../../ppu/ppu.s
+            put    ../../ppu/ppu_attributes.s
+            put    ../../ppu/ppu_tiles.s
+            put    ../../ppu/ppu_metatiles.s
+            put    ../../ppu/ppu_nametable2.s
+            put    ../../ppu/ppu_queues.s
+            put    ../../ppu/ppu_palette.s
+            put    ../../ppu/ppu_regs.s
+            put    ../../ppu/ppu_render.s
+            put    ../../ppu/ppu_grid.s
+            put    ../../ppu/ppu_grid_quads.s
+            put    ../../ppu/ppu_sprites.s
+            put    ../../ppu/ppu_tile_blitters.s
+            put    ../../ppu/scanline_bitmap.s
+; AUTOINC:END
+
 
             ds    \,$00                      ; pad to the next page boundary
 
@@ -884,11 +985,16 @@ MushroomPalette dw  $22, $00, $27, $16, $0F, $36, $17, $30, $21, $27, $1A, $16, 
             put   ../../apu/apu.s
 
 ; Core code
-            put   ../../rom/scaffold.s
-            put   ../../rom/rom_helpers.s
-            put   ../../rom/rom_input.s
-            put   ../../rom/rom_exec.s
-            put   ../../rom/rom_config.s
+             mput  ../../rom
+; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
+            put    ../../rom/scaffold.s
+            put    ../../rom/rom_color.s
+            put    ../../rom/rom_tiles.s
+            put    ../../rom/rom_helpers.s
+            put    ../../rom/rom_input.s
+            put    ../../rom/rom_exec.s
+            put    ../../rom/rom_config.s
+; AUTOINC:END
 
             put   ../../core/CoreData.s
             put   ../../core/CoreImpl.s

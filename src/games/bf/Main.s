@@ -32,23 +32,13 @@ EVT_LOOP_BEGIN mac
 ; This hook happens immediately after all key presses have been handled by the scaffold and gives
 ; user-code a change to implement custom key commands
 EVT_LOOP_END mac
-             cmp  #'d'
-             bne  not_d
-             lda  disableDirtyRendering
-             eor  #1
-             sta  disableDirtyRendering
-not_d
+;
              <<<
 
 ; Pre-render check to see if there are any background tiles queued for updates.  If so, we will do
 ; a regular rendering.  If not, use dirty rendering.
 PRE_RENDER   mac
-             stz  disableDirtyRendering
-             lda  at_queue_tail
-             cmp  tmp4                    ; If there are any attribute changes, render the full screen
-             bne  do_full
-             inc  disableDirtyRendering
-do_full
+;
              <<<
 
 POST_RENDER  mac
@@ -65,11 +55,13 @@ SCAN_OAM_XTRA_FILTER mac
             <<<
 
 ; Define which PPU address has the background and sprite tiles
-PPU_BG_TILE_ADDR  equ #$1000
-PPU_SPR_TILE_ADDR equ #$0000
+PPU_BG_TILE_ADDR  equ $1000
+PPU_SPR_TILE_ADDR equ $0000
 
-; What kind of Nametable mirroring for this game
-NAMETABLE_MIRRORING equ VERTICAL_MIRRORING
+; Flag whether this game uploads its own CHR data at runtime (CHR-RAM) rather
+; than using a fixed CHR-ROM image loaded once at startup
+HAS_CHR_RAM equ 0
+
 
 ; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
 ; in addition to the compiled representation (usually yes, since this is used for the config
@@ -81,6 +73,11 @@ BG_TILES_AS_SPRITES equ 1
 ; 0 = Reset code drops into an infinite loop
 ; 1 = Reset code is the game code
 ROM_DRIVER_MODE   equ 1
+
+; MAME cycle-count benchmark harness flag (scripts/run-bench.js) -- see
+; src/games/smb/Main.s for details. Always 0 here; rom_input.s is shared
+; across all games and must default to normal (non-bench) behavior.
+BENCH_MODE        equ 0
 
 ; Flag whether the backend should use the OAMDMA to get the sprite information,
 ; or if it can scan the NES RAM area directly
@@ -98,6 +95,11 @@ OAM_END_INDEX     equ 64
 ; Allow the engine to use dirty rendering (drawing only lines where sprites
 ; have changed) if the background did not scroll compared to the previous frame
 ENABLE_DIRTY_RENDERING equ 1
+
+; Use the screen-aligned 8x8 grid dirty renderer (erase from the PEA field, BG tile updates
+; without a full refresh).  Requires ENABLE_DIRTY_RENDERING.  See BG_TILE_DIRTY_PLAN.md
+GRID_DIRTY_RENDERING equ 1
+GRID_MAX_BG_TILES    equ 64
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
@@ -123,6 +125,9 @@ SHOW_ROM_EXECUTION_TIME equ 0
 ; Turn on some off-screen information
 SHOW_DEBUG_VARS equ 0
 
+; Show the number of VBLs each screen render takes at the top-left of the screen (debug)
+RENDER_VBL_COUNT equ 0
+
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 0
 CUSTOM_PPU_SCROLL_LOCK equ 0
@@ -138,8 +143,10 @@ COMPILED_SPRITE_LIST       mac
                            dw  $FFFF
                            <<<
 
+; Do not check for specific Tile IDs to exclude from drawing
+NO_TILE_EXCLUDE equ 1
+
 ; Do we have a custom routine to execute RenderScreen.  If yes, put its address here
-;CUSTOM_RENDER_SCREEN equ 0
 CUSTOM_RENDER_SCREEN equ 1
 CUSTOM_RENDER_SCREEN_ADDR equ _RenderScreen
 
@@ -158,9 +165,18 @@ x_offset      equ 16                      ; number of bytes from the left edge
             phk
             plb
 
-; Call startup immediately after entering the application: A = memory manager user ID
+; Call startup immediately after entering the application with the cartridge configuration
 
+            tax                           ; X = memory manager user ID (passed in A by GS/OS)
+            lda   #VERTICAL_MIRRORING      ; A = cartridge nametable mirroring at power on
             jsr   NES_StartUp
+
+; This an NROM game, so all of the sprite and background tiles are static.  They have been
+; converted into the runtime's internal representation by build.js and loaded into the tiledata
+; bank, so all that's left is to compile them
+
+            jsr   ROM_CompileBackgroundTiles    ; Convert the background tiles (PPU:$1000) to compiled format
+            jsr   ROM_CompileSpriteTiles        ; Convert the COMPILED_SPRITE_LIST tiles to compiled format
 
 ; This is set up to let the game define all colors.  We only need to set up a single, static
 ; swizzle table
@@ -173,13 +189,6 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
             jsr   SetDefaultPalette
 
-; Start the FPS counter
-
-            ldal  OneSecondCounter
-            sta   OldOneSec
-            lda   frameCount
-            sta   oldFrameCount
-
 ; Set an internal flag to tell the VBL interrupt handler that it is
 ; ok to start invoking the game logic.  The ROM code has to be run
 ; at 60 Hz because it controls the audio.  Bad audio is way worse
@@ -188,11 +197,6 @@ x_offset      equ 16                      ; number of bytes from the left edge
 ; Call the boot code in the ROM
 
             jsr   NES_ColdBoot
-
-; We _never_ scroll vertically, so just set it once.  This is to make sure these kinds of optimizations
-; can be set up in the generic structure
-
-            jsr   NES_SetScrollY
 
 ; Start up the NES
 :start
@@ -217,65 +221,12 @@ quit
 qtRec       adrl  $0000
             da    $00
 
-Greyscale   dw    $0000,$5555,$AAAA,$FFFF
-            dw    $0000,$5555,$AAAA,$FFFF
-            dw    $0000,$5555,$AAAA,$FFFF
-            dw    $0000,$5555,$AAAA,$FFFF
-
-; Program variables
-;use_dirty         dw  0        ; can use dirty rendering for this frame
-oldFrameCount     dw  0
-;disableDirtyRendering dw 0
+; Name of the save and preference files (used by misc/io.s)
+SAVE_FILENAME strl '1/bf.sav'
+PREF_FILENAME strl '1/bf.prefs'
 
 ; Helper to initialize the playfield based on the selected VideoMode
 InitPlayfield
-;            lda   #16
-            lda   #24
-            sta   NesTop
-
-            lda   #0
-            sta   MinYScroll
-
-            lda   #200
-            sta   ScreenHeight
-            lsr
-            lsr
-            lsr
-            sta   ScreenRows
-
-            lda   #200           ; Only display down to this row
-            sec
-            sbc   ScreenHeight
-            sta   MaxYScroll
-
-            lda   NesTop
-            clc
-            adc   ScreenHeight
-            sec
-            sbc   #8
-            inc
-            sta   NesBottom
-
-; Initialize the graphics screen playfield
-
-            ldx   #128
-            ldy   ScreenHeight
-            jsr   _SetScreenMode                 ; This is also called in the Init
-
-            lda   ScreenY0
-            asl
-            asl
-            asl
-            asl
-            asl
-            sta   ScreenBase
-            asl
-            asl
-            clc
-            adc   ScreenBase
-            clc
-            adc   #$2000+x_offset
-            sta   ScreenBase
 
 ; Set a default palette for the title screen
 
@@ -473,18 +424,32 @@ BF_3F1F ldal PPU_MEM+$3F1F
         stal $E19E5E
         rts
 
-
 ; Make the screen appear
 nesTopOffset    ds 2
 nesBottomOffset ds 2
+_RenderScreen
 
-; Patch the PEA field based on the current PPU parameters
-_BFSetupPEAField
+; If we're not on Balloon Trip, jut use the default render function
+
+            ldx   DP_NES
+            ldal  $000016,x
+            and   #$00FF           ; Balloon Trip mode; $16 = !0
+            bne   :trip_renderer
+            jmp   RenderScreen
+
+; Otherwise turn off dirty rendering and do the split-screen rendering
+; like Super Mario
+:trip_renderer
+            lda   _ppuctrl
+            ldx   _ppuscroll_x
+            ldy   _ppuscroll_y
+            jsr   NES_SetScroll
+
 ; Now render the top 16 lines to show the status bar area
 
             lda   #0
             ldx   #16
-            ldy   #0                      ; Xmod256
+            ldy   #0                      ; Xmod256 = 0
             jsr   _BltSetupAlt
             sta   nesTopOffset            ; cache the :exit_offset value returned from this function
 
@@ -493,19 +458,26 @@ _BFSetupPEAField
             lda   ScreenHeight
             sec
             sbc   #16
-            tax
-            lda   #16
-            ldy   StartXMod256
+            tax                       ; The rest of the screen is height - 16
+            lda   #16                 ; Start at line 16
+            ldy   StartX
             jsr   _BltSetupAlt
             sta   nesBottomOffset
 
-            lda   #1
-            sta   peaFieldIsPatched
-            rts
+; Copy the sprites and buffer to the graphics screen
 
-; Restore the patched PEA field to put it back into a clean state
-_BFResetPEAField
-            stz   peaFieldIsPatched
+            jsr   drawScreen
+
+; drawScreen's drawSprites marked this frame's sprite cells and records for the grid renderer.  As in
+; the default RenderScreen full-render path, close the frame out so those per-frame lists are reset;
+; without this, every Balloon Trip frame appended to them until they overran into the code that
+; follows (OAM_COPY, shadowBitmap0/1 and scanOAMSprites) and crashed.
+
+            DO    GRID_DIRTY_RENDERING
+            jsr   gridEndFull
+            FIN
+
+; Restore the buffer
 
             lda   #0                      ; virt_line
             ldx   #16                     ; lines_left
@@ -518,78 +490,9 @@ _BFResetPEAField
             tax                           ; lines_left
             lda   #16                     ; virt_line
             ldy   nesBottomOffset         ; offset to patch
-            jmp   _RestoreBG0OpcodesAltLite
-
-* ; Track if the PEA field is patched or not
-* peaFieldIsPatched dw 0
-
-_RenderScreen
-
-; Do the basic setup
-
-            jsr   _GetPPUScrollX
-            jsr   NES_SetScrollX
-
-            lda   ppumask
-            and   ppumask_override
-            and   #NES_PPUMASK_BG
-            jsr   EnableBackground
-
-            lda   ppumask
-            and   ppumask_override
-            and   #NES_PPUMASK_SPR
-            jsr   EnableSprites
-
-; Determine if this will be a dirty update or not
-
-            lda   DirtyBits
-            bit   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_REFRESH
-            bne   :full_update
-            lda   disableDirtyRendering
-            bne   :full_update
-            lda   disableDirtyRendering
-            beq   :dirty_update
-:full_update
-            lda   peaFieldIsPatched
-            beq   :no_restore
-            jsr   _BFResetPEAField          ; A full update needs to restore the PEA field before changing the XPos
-:no_restore
-            jsr   _BFSetupPEAField
-            jsr   drawScreen
-            bra   :complete
-:dirty_update
-            lda   peaFieldIsPatched
-            bne   :no_patch
-            jsr   _BFSetupPEAField
-:no_patch
-            jsr   drawDirtyScreen
-:complete
-
-; Optionally show the frames per second
-            DO    SHOW_DEBUG_VARS
-            ldal  OneSecondCounter
-            cmp   OldOneSec
-            beq   :skip_fps
-
-            sta   OldOneSec
-            ldx   frameCount
-            txa
-            sec
-            sbc   oldFrameCount
-            stx   oldFrameCount
-            ldx   #0
-            ldy   #$FFFF
-            jsr   DrawByte
-:skip_fps
-
-            lda   InputPlayer1
-            ldx   #8*160
-            ldy   #$FFFF
-            jsr   DrawWord
-            FIN
+            jsr   _RestoreBG0OpcodesAltLite
 
             stz   DirtyBits
-;            stz   LastPatchOffset
             rts
 
 ; For this game, we utilize multiple palettes to conserve palette colors and reserve colors for the sprites
@@ -643,11 +546,11 @@ ApplyConfig
             lda   config_video_fastmode
             beq   :normal_video
             lda   #CTRL_EVEN_RENDER
-            tsb   GTEControlBits
+            tsb   ControlBits
             bra   :apply_video
 :normal_video
             lda   #CTRL_EVEN_RENDER
-            trb   GTEControlBits
+            trb   ControlBits
 :apply_video
             lda   #0
             jsr   FillScreen
@@ -659,7 +562,7 @@ ApplyConfig
             sep   #$30
             lda   #$80          ; BRA instruction
             ldx   config_video_twinkle
-            beq   :turn_off
+;            beq   :turn_o
             lda   #$F0          ; BEQ instruction
 :turn_off   stal  star_patch
             
@@ -677,16 +580,34 @@ ApplyConfig
 ; by prev/next pointers on the menu and control itmes that direct which control to
 ; select in response to the user's inputs.
 
+config_block_start                    ; range saved / loaded by misc/io.s
 config_audio_quality   ds  2  ; good / better / best audio quality (60Hz, 120Hz, 240Hz audio interrupts)
 config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
 config_video_twinkle   ds  2  ; disable the background star animation
+
+; player 1 config block (layout is fixed by the PLAYER_INPUT_* offsets in core/CoreImpl.s)
+config_block_p1
 config_input_p1_type   dw  0  ; keyboard / snes max
 config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
+config_input_button_a  dw  MOD_REG_COMMAND_DOWN
+config_input_button_b  dw  MOD_REG_OPTION_DOWN
+
+; player 2 config block
+config_block_p2
+config_input_p2_type      dw  0
+config_input_p2_key_left  dw  'j'
+config_input_p2_key_right dw  'l'
+config_input_p2_key_up    dw  'i'
+config_input_p2_key_down  dw  'k'
+config_input_p2_snesmax_port dw 4
+config_input_p2_button_a  dw  MOD_REG_CONTROL_DOWN
+config_input_p2_button_b  dw  MOD_REG_SHIFT_DOWN
+config_block_end
 
 ;CONFIG_PALETTE       equ 0
 ;TILE_TOP_LEFT        equ $1E0
@@ -889,19 +810,45 @@ GAME_ITEM_1  dw   CHKBOX
             put   ../../misc/App.Msg.s
             put   ../../misc/font.s
             FIN
+            put   ../../misc/io.s
 
-            put   ../../ppu/ppu.s
+            mput  ../../ppu
+; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
+            put    ../../ppu/ppu_macros.s
+            put    ../../ppu/ppu_init.s
+            put    ../../ppu/ppu_shadowlist.s
+            put    ../../ppu/ppu.s
+            put    ../../ppu/ppu_attributes.s
+            put    ../../ppu/ppu_tiles.s
+            put    ../../ppu/ppu_metatiles.s
+            put    ../../ppu/ppu_nametable2.s
+            put    ../../ppu/ppu_queues.s
+            put    ../../ppu/ppu_palette.s
+            put    ../../ppu/ppu_regs.s
+            put    ../../ppu/ppu_render.s
+            put    ../../ppu/ppu_grid.s
+            put    ../../ppu/ppu_grid_quads.s
+            put    ../../ppu/ppu_sprites.s
+            put    ../../ppu/ppu_tile_blitters.s
+            put    ../../ppu/scanline_bitmap.s
+; AUTOINC:END
 
-; Palette remapping
+; Palette remapping (the swizzle tables must be page-aligned)
+            ds    \,$00
             put   palettes.s
             put   ../../apu/apu.s
 
 ; Core code
-            put   ../../rom/scaffold.s
-            put   ../../rom/rom_helpers.s
-            put   ../../rom/rom_input.s
-            put   ../../rom/rom_exec.s
-            put   ../../rom/rom_config.s
+            mput  ../../rom
+; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
+            put    ../../rom/scaffold.s
+            put    ../../rom/rom_color.s
+            put    ../../rom/rom_tiles.s
+            put    ../../rom/rom_helpers.s
+            put    ../../rom/rom_input.s
+            put    ../../rom/rom_exec.s
+            put    ../../rom/rom_config.s
+; AUTOINC:END
 
             put   ../../core/ControlBits.s
             put   ../../core/CoreData.s

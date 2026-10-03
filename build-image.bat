@@ -1,33 +1,42 @@
-echo off
+@echo off
+setlocal
 
-REM Copy all of the assets into the ProDOS image for emulator testing
+REM Build a fresh ProDOS image holding all of the games for emulator testing
 REM
-REM Pass the path of the Cadius tool as the first argument (%1)
+REM   %1 = path of the Cadius tool
+REM   %2 = image to create (e.g. .\emu\Target.2mg); an existing image is replaced
+REM   %3 = ProDOS folder for the files, which is also the volume name (e.g. /ClassicsGS/)
 
-set CADIUS="%1"
-set IMAGE="%2"
-set FOLDER="%3"
+set CADIUS="%~1"
+set IMAGE="%~2"
+set FOLDER=%~3
+set VOLUME=%FOLDER:/=%
 
-REM Cadius does not overwrite files, so clear the files first
-%CADIUS% DELETEFILE %IMAGE% %FOLDER%SuperMarioGS
-%CADIUS% DELETEFILE %IMAGE% %FOLDER%BalloonFgtGS
-%CADIUS% DELETEFILE %IMAGE% %FOLDER%LightsOutGS
-%CADIUS% DELETEFILE %IMAGE% %FOLDER%WumpusGS
-%CADIUS% DELETEFILE %IMAGE% %FOLDER%IceClimberGS
-%CADIUS% DELETEFILE %IMAGE% %FOLDER%ExciteBikeGS
-%CADIUS% DELETEFILE %IMAGE% %FOLDER%DonkeyKongGS
-%CADIUS% DELETEFILE %IMAGE% %FOLDER%DonkeyKongGS
-%CADIUS% DELETEFILE %IMAGE% %FOLDER%Finder.Data
-%CADIUS% DELETEFOLDER %IMAGE% %FOLDER%Icons
+REM Cadius reports ADDFILE errors but always exits 0, so check the inputs up front
+for %%F in (
+    .\src\games\smb\SuperMarioGS
+    .\src\games\bf\BalloonFgtGS
+    .\src\games\lightsout\LightsOutGS
+    .\src\games\wumpus\WumpusGS
+    .\src\games\iceclimber\IceClimberGS
+    .\src\games\excitebike\ExciteBikeGS
+    .\src\games\dk\DonkeyKongGS
+    .\src\games\mb\MarioBrosGS
+    .\src\games\zelda\src\ZeldaGS
+    .\emu\Classics
+    .\emu\Finder.Data
+) do if not exist "%%~F" (
+    echo build-image: missing %%~F -- build the games first ^(npm run build:all^)
+    exit /b 1
+)
 
-REM Collect the files in a single spot
-COPY .\src\games\smb\SuperMarioGS .\src\games\SuperMarioGS
-COPY .\src\games\bf\BalloonFgtGS .\src\games\BalloonFighGS
-COPY .\src\games\lightsout\LightsOutGS .\src\games\LightsOutGS
-COPY .\src\games\wumpus\WumpusGS .\src\games\WumpusGS
-COPY .\src\games\iceclimber\IceClimberGS .\src\games\IceClimberGS
-COPY .\src\games\excitebike\ExciteBikeGS .\src\games\ExciteBikeGS
-COPY .\src\games\dk\DonkeyKongGS .\src\games\DonkeyKongGS
+REM Start from an empty 8MB volume every time, so the image never runs out of space
+if exist %IMAGE% del %IMAGE%
+%CADIUS% CREATEVOLUME %IMAGE% %VOLUME% 8192KB
+if errorlevel 1 (
+    echo build-image: could not create %IMAGE%
+    exit /b 1
+)
 
 REM Now copy files and folders as needed
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\smb\SuperMarioGS
@@ -37,9 +46,9 @@ REM Now copy files and folders as needed
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\iceclimber\IceClimberGS
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\excitebike\ExciteBikeGS
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\dk\DonkeyKongGS
+%CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\mb\MarioBrosGS
+%CADIUS% ADDFILE %IMAGE% %FOLDER% .\src\games\zelda\src\ZeldaGS
 
 %CADIUS% CREATEFOLDER %IMAGE% %FOLDER%Icons
 %CADIUS% ADDFILE %IMAGE% %FOLDER%Icons .\emu\Classics
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\emu\Finder.Data
-
-REM Copy in the image assets

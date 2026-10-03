@@ -1,5 +1,6 @@
 
 ; Graphic screen initialization
+                 mx %00
 InitGraphics
                  jsr   _ShadowOn
                  jsr   _GrafOn
@@ -59,6 +60,7 @@ SystemPalette   dw    $0000,$0777,$0841,$072C
 ;
 ;  X = mode number OR width in bytes
 ;  Y = height in pixels (if X > 8)
+                 mx    %00
 _SetScreenMode
                   cpx       #11
                   bcs       :direct             ; if x > 10, then assume X and Y are the dimensions
@@ -105,6 +107,7 @@ _SetScreenMode
                   rts
 
 ; Return the current border color ($0 - $F) in the accumulator
+                 mx    %00
 _GetBorderColor  lda   #0000
                  sep   #$20
                  ldal  BORDER_REG
@@ -113,6 +116,7 @@ _GetBorderColor  lda   #0000
                  rts
 
 ; Set the border color to the accumulator value.
+                 mx    %00
 _SetBorderColor  sep   #$20                 ; ACC = $X_Y, REG = $W_Z
                  eorl  BORDER_REG           ; ACC = $(X^Y)_(Y^Z)
                  and   #$0F                 ; ACC = $0_(Y^Z)
@@ -122,6 +126,7 @@ _SetBorderColor  sep   #$20                 ; ACC = $X_Y, REG = $W_Z
                  rts
 
 ; Clear to SHR screen to a specific color
+                 mx    %00
 _ClearToColor
                  ldx  #$7CFE
 :loop            stal $012000,x
@@ -132,6 +137,7 @@ _ClearToColor
 
 ; Set a palette values
 ; A = palette number, X = palette address
+                 mx    %00
 _SetPalette
                  and   #$000F               ; palette values are 0 - 15 and each palette is 32 bytes
                  asl
@@ -151,6 +157,7 @@ _SetPalette
                  rts
 
 ; Initialize the SCB
+                 mx    %00
 _SetSCBs
                  ldx   #$0100               ;set all $100 scbs to A
 :scbloop         dex
@@ -160,6 +167,7 @@ _SetSCBs
                  rts
 
 ; Turn SHR screen On/Off
+                 mx    %00
 _GrafOn
                  sep   #$20
                  lda   #$C1              ; SHR On, Linear Memory Map On, Ignore Bank Latch
@@ -167,6 +175,7 @@ _GrafOn
                  rep   #$20
                  rts
 
+                 mx    %00
 _GrafOff
                  sep   #$20
                  lda   #$01              ; SHR Off, Linear Memory Map Off
@@ -175,6 +184,7 @@ _GrafOff
                  rts
 
 ; Enable/Disable Shadowing.
+                 mx    %00
 _ShadowOn
                  sep   #$20
                  ldal  SHADOW_REG
@@ -184,6 +194,7 @@ _ShadowOn
                  rep   #$20
                  rts
 
+                 mx    %00
 _ShadowOff
                  sep   #$20
                  ldal  SHADOW_REG
@@ -193,6 +204,7 @@ _ShadowOff
                  rep   #$20
                  rts
 
+                 mx    %00
 _GetVBL
                  sep   #$20
                  ldal  VBL_HORZ_REG
@@ -203,6 +215,7 @@ _GetVBL
                  and   #$00FF
                  rts
 
+                 mx    %00
 _WaitForVBL
                  sep   #$20
 :wait1           ldal  VBL_STATE_REG        ; If we are already in VBL, then wait
@@ -228,6 +241,7 @@ _WaitForVBL
 ; usually only be executed once during app initialization.  It doesn't get called
 ; with any significant frequency.
 
+                   mx    %00
 SetScreenRect      sty   ScreenHeight               ; Save the screen height and width
                    stx   ScreenWidth
 
@@ -246,22 +260,13 @@ SetScreenRect      sty   ScreenHeight               ; Save the screen height and
                    adc   ScreenWidth
                    sta   ScreenX1
 
-                   lda   ScreenHeight               ; Divide the height in scanlines by 8 to get the number tiles
-                   lsr
-                   lsr
-                   lsr
-                   sta   ScreenTileHeight
-
-                   lda   ScreenWidth                ; Divide width in bytes by 4 to get the number of tiles
-                   lsr
-                   lsr
-                   sta   ScreenTileWidth
-
                    lda   ScreenY0                   ; Calculate the address of the first byte
                    asl                              ; of the right side of the playfield
                    tax
-                   lda   ScreenAddr,x               ; This is the address for the edge of the physical screen
-                   clc
+;                   lda   ScreenAddr,x               ; This is the address for the edge of the physical screen
+;                   clc
+                   lda   Mul160Tbl,x
+                   adc   #$2000
                    adc   ScreenX1
                    dec
                    pha                              ; Save for second loop
@@ -291,13 +296,16 @@ SetScreenRect      sty   ScreenHeight               ; Save the screen height and
                    lda   ScreenY0                   ; Calculate the address of the first byte
                    asl                              ; of the right side of the playfield
                    tax
-                   lda   ScreenAddr,x               ; This is the address for the left edge of the physical screen
-                   clc
+;                   lda   ScreenAddr,x               ; This is the address for the left edge of the physical screen
+;                   clc
+                   lda   Mul160Tbl,x
+                   adc   #$2000
                    adc   ScreenX0
 
                    rts
 
 ; Clear the SHR screen and then infill the defined field
+                   mx    %00
 FillScreen         cmp   #0
                    bne   :fullfill
                    jmp   _ClearToColor
@@ -312,8 +320,10 @@ FillScreen         cmp   #0
                    tya
                    asl   a
                    tax
-                   lda   ScreenAddr,x
-                   clc
+;                   lda   ScreenAddr,x
+;                   clc
+                   lda   Mul160Tbl,x
+                   adc   #$2000
                    adc   ScreenX0
                    tax
                    phy
@@ -336,53 +346,6 @@ FillScreen         cmp   #0
                    pla
                    rts
 
-
-; SetBG0XPos
-;
-; Set the virtual horizontal position of the primary background layer.  In addition to 
-; updating the direct page state locations, this routine needs to preserve the original
-; value as well.  This is a bit subtle, because if this routine is called multiple times
-; with different values, we need to make sure the *original* value is preserved and not
-; continuously overwrite it.
-;
-; We assume that there is a clean code field in this routine
-_SetBG0XPos
-                    DO    NAMETABLE_MIRRORING&HORIZONTAL_MIRRORING
-                    and   #$007F                     ; X position capped for horizontal mirroring
-                    ELSE
-                    and   #$00FF
-                    FIN
-
-                    cmp   StartX
-                    beq   :out                       ; Easy, if nothing changed, then nothing changes
-
-                    ldx   StartX                     ; Load the old value (but don't save it yet)
-                    sta   StartX                     ; Save the new position
-
-                    lda   #DIRTY_BIT_BG0_X
-                    tsb   DirtyBits                  ; Check if the value is already dirty, if so exit
-                    bne   :out                       ; without overwriting the original value
-
-                    stx   OldStartX                  ; First change, so preserve the prior value
-:out                rts
-
-
-; SetBG0YPos
-;
-; Set the virtual position of the primary background layer.
-_SetBG0YPos
-                     cmp   StartY
-                     beq   :out                 ; Easy, if nothing changed, then nothing changes
-
-                     ldx   StartY               ; Load the old value (but don't save it yet)
-                     sta   StartY               ; Save the new position
-
-                     lda   #DIRTY_BIT_BG0_Y
-                     tsb   DirtyBits            ; Check if the value is already dirty, if so exit
-                     bne   :out                 ; without overwriting the original value
-
-                     stx   OldStartY            ; First change, so preserve the value
-:out                 rts
 
 ;  0. Full Screen           : 40 x 25   320 x 200 (32,000 bytes (100.0%)) 
 ;  1. Sword of Sodan        : 34 x 24   272 x 192 (26,112 bytes ( 81.6%))

@@ -5,6 +5,7 @@
 ; Special subroutine to divide the accumulator by 164 and return remainder in the Accumulator
 ;
 ; 164 = $A4 = 1010_0100
+                   mx    %00
 Mod164             cmp   #%1010010000000000
                    bcc   *+5
                    sbc   #%1010010000000000
@@ -50,6 +51,7 @@ Mod164             cmp   #%1010010000000000
 ;   https://www.drdobbs.com/parallel/optimizing-integer-division-by-a-constan/184408499
 ;   https://embeddedgurus.com/stack-overflow/2009/06/division-of-integers-by-constants/
 
+                   mx    %00
 Mod208             cmp   #%1101000000000000
                    bcc   *+5
                    sbc   #%1101000000000000
@@ -87,7 +89,7 @@ Mod208             cmp   #%1101000000000000
                    sbc   #%0000000011010000
                    rts
 
-
+                   mx    %00
 Mod240             cmp   #%1111000000000000
                    bcc   *+5
                    sbc   #%1111000000000000

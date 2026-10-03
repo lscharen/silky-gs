@@ -54,11 +54,13 @@ SCAN_OAM_XTRA_FILTER mac
             <<<
 
 ; Define which PPU address has the background and sprite tiles
-PPU_BG_TILE_ADDR  equ #$1000
-PPU_SPR_TILE_ADDR equ #$0000
+PPU_BG_TILE_ADDR  equ $1000
+PPU_SPR_TILE_ADDR equ $0000
 
-; What kind of Nametable mirroring for this game
-NAMETABLE_MIRRORING equ HORIZONTAL_MIRRORING
+; Flag whether this game uploads its own CHR data at runtime (CHR-RAM) rather
+; than using a fixed CHR-ROM image loaded once at startup
+HAS_CHR_RAM equ 0
+
 
 ; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
 ; in addition to the compiled representation (usually yes, since this is used for the config
@@ -70,6 +72,11 @@ BG_TILES_AS_SPRITES equ 1
 ; 0 = Reset code drops into an infinite loop
 ; 1 = Reset code is the game code
 ROM_DRIVER_MODE   equ 1
+
+; MAME cycle-count benchmark harness flag (scripts/run-bench.js) -- see
+; src/games/smb/Main.s for details. Always 0 here; rom_input.s is shared
+; across all games and must default to normal (non-bench) behavior.
+BENCH_MODE        equ 0
 
 ; Flag whether the backend should use the OAMDMA to get the sprite information,
 ; or if it can scan the NES RAM area directly
@@ -84,9 +91,14 @@ DIRECT_OAM_READ   equ $200
 OAM_START_INDEX   equ 0
 OAM_END_INDEX     equ 64
 
-; Allow the engine to use dirty rendering (drawing only lines where sprites
+; Allow the engine to use dirty rendering (drawing only lines/blocks where sprites
 ; have changed) if the background did not scroll compared to the previous frame
-ENABLE_DIRTY_RENDERING equ 0
+ENABLE_DIRTY_RENDERING equ 1
+
+; Use the screen-aligned 8x8 grid dirty renderer (erase from the PEA field, BG tile updates
+; without a full refresh).  Requires ENABLE_DIRTY_RENDERING.  See BG_TILE_DIRTY_PLAN.md
+GRID_DIRTY_RENDERING equ 1
+GRID_MAX_BG_TILES    equ 64
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
@@ -113,6 +125,9 @@ SHOW_ROM_EXECUTION_TIME equ 0
 ; Turn on some off-screen information
 SHOW_DEBUG_VARS equ 0
 
+; Show the number of VBLs each screen render takes at the top-left of the screen (debug)
+RENDER_VBL_COUNT equ 0
+
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 0
 CUSTOM_PPU_SCROLL_LOCK equ 0
@@ -123,12 +138,29 @@ CUSTOM_PPU_SCROLL_LOCK_CODE mac
 ;
                           <<<
 
-COMPILED_SPRITE_LIST_COUNT equ 0
+; Mario occupies the first 48 sprite tiles
+COMPILED_SPRITE_LIST_COUNT equ 108
 COMPILED_SPRITE_LIST       mac
-;
+                           dw   246,247,248,249,250,251                 ; Hammer sprites
+                           dw   252,253,254,255                         ; Oil barrel flames
+                           dw   128,129,130,131,132,133,134,135         ; Rolling barrels 128 - 151
+                           dw   136,137,138,139,140,141,142,143
+                           dw   144,145,146,147,148,149,150,151
+                           dw   213,214,215,216,217,218,219,220,221,222 ; Pauline
+                           dw   152,153,154,155,156,157,158,159         ; Flame dude
+                           dw   168,169,170,171,172,173,174,175
+                           dw   0,1,2,3,4,5,6,7                         ; Mario ex death and ladder animation 0 - 47
+                           dw   8,9,10,11,12,13,14,15
+                           dw   16,17,18,19,20,21,22,23
+                           dw   24,25,26,27,28,29,30,31
+                           dw   32,33,34,35,36,37,38,39
+                           dw   40,41,42,43,44,45,46,47
                            <<<
 
-; Do we have a custom routine to execite RenderScreen.  If yes, put its address here
+; Do not check for specific Tile IDs to exclude from drawing
+NO_TILE_EXCLUDE equ 1
+
+; Do we have a custom routine to execute RenderScreen.  If yes, put its address here
 CUSTOM_RENDER_SCREEN equ 0
 
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
@@ -146,73 +178,36 @@ x_offset      equ 16                      ; number of bytes from the left edge
             phk
             plb
 
-; Call startup immediately after entering the application: A = memory manager user ID
+; Call startup immediately after entering the application with the cartridge configuration
 
+            tax                           ; X = memory manager user ID (passed in A by GS/OS)
+            lda   #HORIZONTAL_MIRRORING    ; A = cartridge nametable mirroring at power on
             jsr   NES_StartUp
+
+; This an NROM game, so all of the sprite and background tiles are static.  They have been
+; converted into the runtime's internal representation by build.js and loaded into the tiledata
+; bank, so all that's left is to compile them
+
+            jsr   ROM_CompileBackgroundTiles    ; Convert the background tiles (PPU:$1000) to compiled format
+            jsr   ROM_CompileSpriteTiles        ; Convert the COMPILED_SPRITE_LIST tiles to compiled format
 
 ; Initialize the graphics for the main game mode
 
             jsr   SetDefaultPalette
 
-; Horizontal mirroring, so fill 2000 with a tile and 2800 with a different tile
+; Load in the game preferences (if they exist)
 
-*             ldx   #$2000
-* :nt1_loop
-*             ldy   #0
-*             phx
-*             jsr   _DrawPPUTile
-*             plx
-*             inx
-*             cpx   #$23C0
-*             bcc  :nt1_loop
-
-*             ldx   #$2800
-* :nt2_loop
-*             ldy   #1
-*             phx
-*             jsr   _DrawPPUTile
-*             plx
-*             inx
-*             cpx   #$2BC0
-*             bcc  :nt2_loop
-
-* ; Test the blit
-
-*             ldy   #0
-*             ldx   #0
-* :scroll_loop
-*             phy
-*             phx
-*             jsr   NES_SetScroll    ; Setup the scroll origin
-
-*             jsr   _BltSetup        ; Setup the rendering based on the current origin
-*             pha                    ; Save the patch location
-
-*             ldx   #0               ; Render the full screen
-*             ldy   #200
-*             jsr   _BltRangeLite
-
-*             ply                    ; offset returned in A, but is passed in Y
-*             jsr   _RestoreBG0OpcodesLite
-
-
-* ;            jsr   WaitForKey
-*             pla
-*             inc
-*             and   #$1FF
-*             tax
-
-*             ply
-*             iny
-*             cpy   #512
-*             bcc   :scroll_loop
-
-
-*             jmp   quit
+            jsr   LoadPrefData
 
 ; Call the boot code in the ROM
 
             jsr   NES_ColdBoot
+
+; Load in the saved high score from disk
+
+            ldx   #$0507                 ; Area of RAM to load into
+            lda   #3                     ; Only three bytes
+            jsr   LoadROMData
 
 ; Start up the NES
 :start
@@ -227,55 +222,59 @@ x_offset      equ 16                      ; number of bytes from the left edge
             jsr   NES_WarmBoot
             bra   :start
 
-; The user has existed the runtime
+; The user has exited the runtime
 quit
             jsr   NES_ShutDown
 
+; Save the high score file
+
+            ldx   #$0507                 ; Area of RAM to load into
+            lda   #3                     ; Only three bytes
+            jsr   SaveROMData
+
+; Save the user preferences
+
+            jsr   SavePrefData
+
 ; Exit the application
 
-            _QuitGS    qtRec
-qtRec       adrl  $0000
-            da    $00
+        _QuitGS    qtRec
+qtRec   adrl  $0000
+        da    $00
 
-PendingPhase dw   0
-LastPhaseNo dw    0
+; Name of the save and preference files
+SAVE_FILENAME strl '1/dk.sav'
+PREF_FILENAME strl '1/dk.prefs'
 
 InitPlayfield
-            ldx   #AllColors
-            lda   #0
-            jsr   NES_SetPalette
-            rts
+        ldx   #AllColors
+        lda   #0
+        jsr   NES_SetPalette
+
+; Initialize the reverse color map lookup since we will not allow the IIgs palette to change
+
+        ldx  #0
+:rloop
+        lda  AllColors,x   
+        asl
+        tay
+        txa
+        sta  ReverseMap,y
+        inx
+        inx
+        cpx  #32
+        bcc  :rloop
+        rts
 
 SwizzleTables
             adrl L0_T0
 
-; Are there less than 15 total color combos? Yes!
+; Are there less than 15 total color combos? Yes! This game can use a fixed palette
 ;                      1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
-AllColors   dw     $00,$02,$06,$12
+AllColors   dw     $0F,$02,$06,$12
             dw     $15,$16,$17,$24
             dw     $25,$27,$28,$2C
             dw     $30,$36,$37,$38
-
-;TitleScreen
-;             dw    $0F,$2C,$38,$12
-;             dw    $27,$30,$24,$25
-;             dw    $36,$16,$37,$06
-;             dw    $02,$0F,$0F,$0F
-;
-;Phase1       dw    $0F,$15,$2C,$12
-;             dw    $27,$02,$17,$30
-;             dw    $36,$06,$24,$16
-;             dw    $37,$0F,$0F,$0F
-;
-;Phase2       dw    $0F,$15,$2C,$06
-;             dw    $30,$27,$16,$36
-;             dw    $24,$02,$37,$12
-;             dw    $0F,$0F,$0F,$0F
-;
-;Phase3       dw    $0F,$2C,$27,$02
-;             dw    $30,$12,$24,$36
-;             dw    $06,$16,$37,$0F
-;             dw    $0F,$0F,$0F,$0F
 
 ; When the NES ROM code tried to write to the PPU palette space, intercept here.
 PALETTE_DISPATCH
@@ -295,7 +294,7 @@ dk_palette_map
             dw    0,  1,  2,  3    ; donkey kong background tiles are mapped to fixed colors
             dw    0, -1, -1, -1
 
-            dw    0,  4,  5,  6    ; mario is always set to his own colors
+            dw    0,  4,  5,  6    ; jumpman is always set to his own colors
             dw    0, -1, -1, -1    ; everything else is dynamically assigned
             dw    0, -1, -1, -1
             dw    0, -1, -1, -1
@@ -303,7 +302,6 @@ dk_palette_map
 ; The the phase changes, set a flag, but way for the transition time to drop below $70
 ; before applying the change.
 HasPaletteChange dw 0
-nes_palette      ds 64
 
 ; X = 2*nes_palette_index
 dk_3Fxx
@@ -328,7 +326,8 @@ CheckForPaletteChange
         rts
 
 :update_palette
-        jsr  NES_BuildPalette         ; Create a mapping of the NES palette to the Apple IIgs palette
+;       jsr  NES_BuildPalette         ; Create a mapping of the NES palette to the Apple IIgs palette
+        jsr  NES_BuildStaticPalette    ; Create a mapping to a static list of colors
 
         ldy  #current
         lda  SwizzleTables
@@ -408,16 +407,16 @@ SetDefaultPalette
 
 ; ApplyConfig
 ;
-; Read the variabled set up the configuration screen and apply them to the runtime engine.
+; Read the variables set up the configuration screen and apply them to the runtime engine.
 ApplyConfig
             lda   config_video_fastmode
             beq   :normal_video
             lda   #CTRL_EVEN_RENDER
-            tsb   GTEControlBits
+            tsb   ControlBits
             bra   :apply_video
 :normal_video
             lda   #CTRL_EVEN_RENDER
-            trb   GTEControlBits
+            trb   ControlBits
 :apply_video
             lda   #0
             jsr   FillScreen
@@ -426,7 +425,6 @@ ApplyConfig
             lda   config_audio_quality
             jsr   APUReload
 
-            rep   #$30
             rts
 
 ; Configuration screen and variables
@@ -440,30 +438,34 @@ ApplyConfig
 ; by prev/next pointers on the menu and control itmes that direct which control to
 ; select in response to the user's inputs.
 
+config_block_start
 config_audio_quality   ds  2  ; good / better / best audio quality (60Hz, 120Hz, 240Hz audio interrupts)
 config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
+
+
+; player 1 config block
+config_block_p1
 config_input_p1_type   dw  0  ; keyboard / snes max
 config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
+config_input_button_a  dw  MOD_REG_COMMAND_DOWN
+config_input_button_b  dw  MOD_REG_OPTION_DOWN
 
-;CONFIG_PALETTE       equ 0
-;TILE_TOP_LEFT        equ $105
-;TILE_TOP_RIGHT       equ $106
-;TILE_BOTTOM_LEFT     equ $107
-;TILE_BOTTOM_RIGHT    equ $108
-;TILE_HORIZONTAL      equ $10A
-;TILE_HORIZONTAL_TOP  equ $10A
-;TILE_HORIZONTAL_BOTTOM  equ $10A
-;TILE_VERTICAL_LEFT   equ $10E
-;TILE_VERTICAL_RIGHT  equ $10D
-;TILE_ZERO            equ $100
-;TILE_A               equ $12E
-;TILE_SPACE           equ $100
-;TILE_CURSOR          equ $149  ; $10A
+; player 2 config block
+config_block_p2
+config_input_p2_type      dw  0
+config_input_p2_key_left  dw  'j'
+config_input_p2_key_right dw  'l'
+config_input_p2_key_up    dw  'i'
+config_input_p2_key_down  dw  'k'
+config_input_p2_snesmax_port dw 4
+config_input_p2_button_a  dw  MOD_REG_CONTROL_DOWN
+config_input_p2_button_b  dw  MOD_REG_SHIFT_DOWN
+config_block_end
 
 AUDIO_TITLE_STR     str 'AUDIO'
 AUDIO_QUALITY_STR   str 'QUALITY'
@@ -485,6 +487,8 @@ INPUT_RIGHT_MAP_STR str 'RIGHT'
 INPUT_UP_MAP_STR    str 'UP'
 INPUT_DOWN_MAP_STR  str 'DOWN'
 INPUT_SNESMAX_PORT_STR str 'SLOT'
+INPUT_BUTTON_A_STR str 'A BUTTON'
+INPUT_BUTTON_B_STR str 'B BUTTON'
 
 ; The configuration screen leverages the NES runtime itself
 CONFIG_BLK   db   CONFIG_PALETTE        ; Which background palette to use
@@ -497,14 +501,15 @@ CONFIG_BLK   db   CONFIG_PALETTE        ; Which background palette to use
              db   TILE_ZERO             ; First tile for the 0 - 9 characters
              db   TILE_A                ; First tile for the alphabet A - Z characters
              db   TILE_SPACE
-CONFIG_MENU  dw   3                     ; Four screens "Audio", "Video", "Input", "Game"
+CONFIG_MENU  dw   2                     ; Four screens "Audio", "Video", "Input", "Game"
              dw   AUDIO_CONFIG
-             dw   VIDEO_CONFIG
+;             dw   VIDEO_CONFIG
              dw   INPUT_CONFIG
 
 AUDIO_CONFIG dw   AUDIO_TITLE_STR
              dw   0                     ; previous menu item
-             dw   VIDEO_CONFIG          ; next menu item
+;            dw   VIDEO_CONFIG          ; next menu item
+             dw   INPUT_CONFIG          ; next menu item
 
              dw   1                     ; One configuration element
              dw   AUDIO_ITEM_1
@@ -552,7 +557,8 @@ VIDEO_ITEM_2 dw   CHKBOX
              dw   config_video_fastmode
 
 INPUT_CONFIG dw   INPUT_TITLE_STR
-             dw   VIDEO_CONFIG          ; previous menu item
+;            dw   VIDEO_CONFIG          ; previous menu item
+             dw   AUDIO_CONFIG          ; previous menu item
              dw   0                     ; next menu item
 
              dw   1
@@ -585,11 +591,13 @@ SNESMAX_LIST  dw  NUMBER_SELECT
               dw  7            ; maximum value
 
 KEYBOARD_LIST dw  CTRL_LIST
-              dw  4
+              dw  6
               dw  INPUT_ITEM_2
               dw  INPUT_ITEM_3
               dw  INPUT_ITEM_4
               dw  INPUT_ITEM_5
+              dw  INPUT_ITEM_6
+              dw  INPUT_ITEM_7
 
 INPUT_ITEM_2 dw   KEYMAP
              dw   INPUT_ITEM_1
@@ -614,17 +622,51 @@ INPUT_ITEM_4 dw   KEYMAP
 
 INPUT_ITEM_5 dw   KEYMAP
              dw   INPUT_ITEM_4
-             dw   0
+             dw   INPUT_ITEM_6
              dw   3,11
              dw   INPUT_DOWN_MAP_STR
              dw   config_input_key_down
+
+INPUT_ITEM_6 dw   BTNMAP
+             dw   INPUT_ITEM_5
+             dw   INPUT_ITEM_7
+             dw   3,13
+             dw   INPUT_BUTTON_A_STR
+             dw   config_input_button_a
+
+INPUT_ITEM_7 dw   BTNMAP
+             dw   INPUT_ITEM_6
+             dw   0
+             dw   3,14
+             dw   INPUT_BUTTON_B_STR
+             dw   config_input_button_b
 
             DO    SHOW_DEBUG_VARS
             put   ../../misc/App.Msg.s
             put   ../../misc/font.s
             FIN
-
-            put   ../../ppu/ppu.s
+            put   ../../misc/io.s
+            
+            mput  ../../ppu
+; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
+            put    ../../ppu/ppu_macros.s
+            put    ../../ppu/ppu_init.s
+            put    ../../ppu/ppu_shadowlist.s
+            put    ../../ppu/ppu.s
+            put    ../../ppu/ppu_attributes.s
+            put    ../../ppu/ppu_tiles.s
+            put    ../../ppu/ppu_metatiles.s
+            put    ../../ppu/ppu_nametable2.s
+            put    ../../ppu/ppu_queues.s
+            put    ../../ppu/ppu_palette.s
+            put    ../../ppu/ppu_regs.s
+            put    ../../ppu/ppu_render.s
+            put    ../../ppu/ppu_grid.s
+            put    ../../ppu/ppu_grid_quads.s
+            put    ../../ppu/ppu_sprites.s
+            put    ../../ppu/ppu_tile_blitters.s
+            put    ../../ppu/scanline_bitmap.s
+; AUTOINC:END
 
 ; Palette remapping
             ds    \,$00
@@ -632,11 +674,16 @@ INPUT_ITEM_5 dw   KEYMAP
             put   ../../apu/apu.s
 
 ; Core code
-            put   ../../rom/scaffold.s
-            put   ../../rom/rom_helpers.s
-            put   ../../rom/rom_input.s
-            put   ../../rom/rom_exec.s
-            put   ../../rom/rom_config.s
+            mput  ../../rom
+; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
+            put    ../../rom/scaffold.s
+            put    ../../rom/rom_color.s
+            put    ../../rom/rom_tiles.s
+            put    ../../rom/rom_helpers.s
+            put    ../../rom/rom_input.s
+            put    ../../rom/rom_exec.s
+            put    ../../rom/rom_config.s
+; AUTOINC:END
 
             put   ../../core/ControlBits.s
             put   ../../core/CoreData.s

@@ -3,7 +3,6 @@
             mx  %00
 
 ; Expose joypad bits to the ROM for two controllers: A-B-Select-Start-Up-Down-Left-Right
-;   
 native_joy  ENT
             db   0,0
 
@@ -11,58 +10,40 @@ native_joy  ENT
 ;
 ; Read input for the configured controller inputs and place in the appropriate joypad byte
 ; for the ROM routines to read.
+            mx  %00
 NES_ReadInput
-            jsr   _ReadControl
+            DO    BENCH_MODE
+; MAME bench harness (scripts/run-bench.js): feed player 1 from a canned
+; input file instead of the keyboard/joystick (see BenchInputData /
+; BENCH_MODE in the game's Main.s). NES_ReadInput may be called more than
+; once within the same virtual 1/60th of a second, so the index is NOT
+; advanced here -- only src/rom/rom_exec.s::NES_TriggerNMI (one call per
+; virtual NMI) advances it, so every read within that frame returns the
+; same value.
+            ldal  BenchInputIndex
+            tax
+            sep   #$20
+            ldal  BenchInputData,x
+            sta   native_joy
+            stz   native_joy+1           ; player 2: no input
+            rep   #$20
+            and   #$00FF
+            xba
             sta   LastRead
+            sta   InputPlayer1
+            stz   InputPlayer2
+            rts
+            ELSE
+            jsr   _ReadControl
+            sta   LastRead               ; The keyboard input is replicated in both, so save it
+
             pha
             sep   #$20
-            xba
+            lda   InputPlayer1+1         ; Copy the top byte into the native input locations
             sta   native_joy
+            lda   InputPlayer2+1
             sta   native_joy+1
             rep   #$20
             pla
             rts
-
-; Map the field to the NES controller format: A-B-Select-Start-Up-Down-Left-Right
-
-            pha
-            and   #PAD_BUTTON_A+PAD_BUTTON_B        ; bits 0x200 and 0x100
-            lsr
-            lsr
-            sta  native_joy
-
-            sep   #$20
-            lda   1,s
-            cmp   #9           ; TAB, was 'n' mapped to Select
-            bne   *+6
-            lda   #$20
-            bra   :nes_merge
-            cmp   #13          ; RETURN, was 'm' mapped to Start
-            bne   *+6
-            lda   #$10
-            bra   :nes_merge
-            cmp   #UP_ARROW
-            bne   *+6
-            lda   #$08
-            bra   :nes_merge
-            cmp   #DOWN_ARROW
-            bne   *+6
-            lda   #$04
-            bra   :nes_merge
-            cmp   #LEFT_ARROW
-            bne   *+6
-            lda   #$02
-            bra   :nes_merge
-            cmp   #RIGHT_ARROW
-            bne   *+6
-            lda   #$01
-            bra   :nes_merge
-            lda   #0
-:nes_merge  ora  native_joy 
-            sta  native_joy
-            sta  native_joy+1
-
-:nes_done
-            rep   #$20
-            pla
-            rts
+            FIN

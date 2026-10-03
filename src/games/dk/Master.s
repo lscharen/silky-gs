@@ -10,6 +10,10 @@
             KND   #$1100
             SNA   MAIN
 
+            ASM   Stack.s
+            KND   $0012
+            SNA   STKDP
+
 ; Segment #2 & #3 -- PPU blitter
 
             ASM   ../../core/blitter/TemplateLiteBank1.s
@@ -22,7 +26,7 @@
 
 ; Segment #4 -- Converted Tile Storage
 
-            ASM   ../../core/static/TileData.s
+            ASM   TileData.s
             KND   #$1100
             SNA   CHRDATA
 

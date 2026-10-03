@@ -2,6 +2,7 @@
 HexToChar      dfb   '0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'
 
 ; Convert a byte (Acc) into a string and store at (Y)
+               mx    %00
 ByteToString   and   #$00FF
                sep   #$20
                pha
@@ -24,15 +25,18 @@ ByteToString   and   #$00FF
                rts
 
 ; Convert a word (Acc) into a hexadecimal string and store at (Y)
+               mx    %00
 WordToString   pha
                bra   Addr2ToString
 
 ; Pass in Acc = High, X = low
+               mx    %00
 Addr3ToString  phx
                jsr   ByteToString
                iny
                iny
                lda   1,s
+               mx    %00
 Addr2ToString  xba
                jsr   ByteToString
                iny
@@ -43,6 +47,7 @@ Addr2ToString  xba
 
 ; A=Value
 ; X=Screen offset
+               mx    %00
 DrawByte       phx                  ; Save register value
                phy
                ldy   #ByteBuff+1
@@ -55,6 +60,7 @@ DrawByte       phx                  ; Save register value
 
 ; A=Value
 ; X=Screen offset
+               mx    %00
 DrawWord       phx                  ; Save register value
                phy
                ldy   #WordBuff+1
@@ -65,6 +71,7 @@ DrawWord       phx                  ; Save register value
                jsr   DrawString
                rts
 
+               mx    %00
 ClearWord      lda   #EmptyBuff
                jsr   DrawString
                rts

@@ -55,11 +55,13 @@ SCAN_OAM_XTRA_FILTER mac
             <<<
 
 ; Define which PPU address has the background and sprite tiles
-PPU_BG_TILE_ADDR  equ #$1000
-PPU_SPR_TILE_ADDR equ #$0000
+PPU_BG_TILE_ADDR  equ $1000
+PPU_SPR_TILE_ADDR equ $0000
 
-; What kind of Nametable mirroring for this game
-NAMETABLE_MIRRORING equ VERTICAL_MIRRORING
+; Flag whether this game uploads its own CHR data at runtime (CHR-RAM) rather
+; than using a fixed CHR-ROM image loaded once at startup
+HAS_CHR_RAM equ 0
+
 
 ; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
 ; in addition to the compiled representation (usually yes, since this is used for the config
@@ -71,6 +73,11 @@ BG_TILES_AS_SPRITES equ 1
 ; 0 = Reset code drops into an infinite loop
 ; 1 = Reset code is the game code
 ROM_DRIVER_MODE   equ 1
+
+; MAME cycle-count benchmark harness flag (scripts/run-bench.js) -- see
+; src/games/smb/Main.s for details. Always 0 here; rom_input.s is shared
+; across all games and must default to normal (non-bench) behavior.
+BENCH_MODE        equ 0
 
 ; Flag whether the backend should use the OAMDMA to get the sprite information,
 ; or if it can scan the NES RAM area directly
@@ -88,6 +95,11 @@ OAM_END_INDEX     equ 64
 ; Allow the engine to use dirty rendering (drawing only lines where sprites
 ; have changed) if the background did not scroll compared to the previous frame
 ENABLE_DIRTY_RENDERING equ 0
+
+; Use the screen-aligned 8x8 grid dirty renderer (erase from the PEA field, BG tile updates
+; without a full refresh).  Requires ENABLE_DIRTY_RENDERING.  See BG_TILE_DIRTY_PLAN.md
+GRID_DIRTY_RENDERING equ 0
+GRID_MAX_BG_TILES    equ 64
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
@@ -114,6 +126,9 @@ SHOW_ROM_EXECUTION_TIME equ 0
 ; Turn on some off-screen information
 SHOW_DEBUG_VARS equ 0
 
+; Show the number of VBLs each screen render takes at the top-left of the screen (debug)
+RENDER_VBL_COUNT equ 0
+
 ; Game has two scroll positions for split scroll
 ;
 ; ram_scroll_X / ram_scroll_Y plus ram_for_2000 | ram_004D_base_nametable ($12, $13))
@@ -128,17 +143,23 @@ CUSTOM_PPU_SCROLL_LOCK equ 1
 CUSTOM_PPU_CTRL_LOCK_CODE mac
 ;
                           <<<
+
+; Read the scroll positions from the NES zero page
 CUSTOM_PPU_SCROLL_LOCK_CODE mac
-                          ldal $010050
-                          sta  _topscroll    ; order Y, X
-                          ldal $010012
-                          xba
-                          <<<
+        ldx   DP_NES
+        ldal  $000050,x
+        sta   _topscroll    ; order Y, X
+        ldal  $000012,x
+        xba
+        <<<
 
 COMPILED_SPRITE_LIST_COUNT equ 0
 COMPILED_SPRITE_LIST       mac
 ;
                            <<<
+
+; Do not check for specific Tile IDs to exclude from drawing
+NO_TILE_EXCLUDE equ 1
 
 ; Do we have a custom routine to execite RenderScreen.  If yes, put its address here
 CUSTOM_RENDER_SCREEN equ 1
@@ -159,9 +180,18 @@ x_offset      equ 16                      ; number of bytes from the left edge
             phk
             plb
 
-; Call startup immediately after entering the application: A = memory manager user ID
+; Call startup immediately after entering the application with the cartridge configuration
 
+            tax                           ; X = memory manager user ID (passed in A by GS/OS)
+            lda   #VERTICAL_MIRRORING      ; A = cartridge nametable mirroring at power on
             jsr   NES_StartUp
+
+; This an NROM game, so all of the sprite and background tiles are static.  They have been
+; converted into the runtime's internal representation by build.js and loaded into the tiledata
+; bank, so all that's left is to compile them
+
+            jsr   ROM_CompileBackgroundTiles    ; Compile the background tiles
+            jsr   ROM_CompileSpriteTiles        ; Compile the COMPILED_SPRITE_LIST tiles
 
 ; Initialize the graphics for the main game mode
 
@@ -245,10 +275,9 @@ eb_palette_map
             dw    0, -1, -1, -1
 
 
-; The the phase changes, set a flag, but way for the transition time to drop below $70
+; When the phase changes, set a flag, but wait for the transition time to drop below $70
 ; before applying the change.
 HasPaletteChange dw 0
-nes_palette      ds 64
 
 ; X = 2*nes_palette_index
 dk_3Fxx
@@ -346,10 +375,11 @@ _RenderScreen
 
 ; If we are not in-game, defer to the standard renderer
 
-            ldal  $010047
-            and   #$00FF
-            bne   :racing
-            jmp   RenderScreen
+        ldx  DP_NES
+        ldal  $000047,x
+        and   #$00FF
+        bne   :racing
+        jmp   RenderScreen
 
 :racing
 
@@ -360,111 +390,105 @@ _RenderScreen
 ;
 ; These set the horizontal scroll position.  The vertical scroll position is never changed.
 ;
-            ldy   #0
-            jsr   NES_SetScrollY
+        sep   #$20
+        ldal  $00004E,x               ; Bit 0 is the high bit of the X scroll position
+        lsr                           ; put in the carry bit
+        lda   _topscroll              ; load the scroll value
+        ror                           ; put the high bit and divide by 2 for the engine
+        rep   #$20
+        and   #$00FF                  ; make sure nothing is in the high byte
+        sta   _top_bg_x               ; This is used directly so needs a byte offset (0 - 255)
 
-            sep   #$20
-            ldal  $01004D
-            and   #$01                    ; Isolate the nametable select bit
-            xba                           ; put in the high byte
-            lda   _ppuscroll+1            ; load the scroll value
-            rep   #$20
-            tax
-            jsr   NES_SetScrollX          ; This takes a NES pixel position (0 - 511)
+        ldal  $00004D,x
+        and   #$0001                  ; Isolate the X nametable select bit
+        ldx   _ppuscroll_x
+        ldy   #0
+        jsr   NES_SetScroll
 
-            sep   #$20
-            ldal  $01004E                 ; Bit 0 is the high bit of the X scroll position
-            lsr                           ; put in the carry bit
-            lda   _topscroll              ; load the scroll value
-            ror                           ; put the high bit and divide by 2 for the engine
-            rep   #$20
-            and   #$00FF                  ; make sure nothing is in the high byte
-            sta   _top_bg_x               ; This is used directly so needs a byte offset (0 - 255)
- 
-            lda   ppumask
-            and   ppumask_override
-            and   #NES_PPUMASK_BG
-            jsr   EnableBackground
+        lda   ppumask
+        and   ppumask_override
+        and   #NES_PPUMASK_BG
+        jsr   EnableBackground
 
-            lda   ppumask
-            and   ppumask_override
-            and   #NES_PPUMASK_SPR
-            jsr   EnableSprites
+        lda   ppumask
+        and   ppumask_override
+        and   #NES_PPUMASK_SPR
+        jsr   EnableSprites
 
 ; First, render the crowd (40 scanlines)
 
-            lda   #0
-            ldx   #40
-            ldy   _top_bg_x           ; Xmod256
-            jsr   _BltSetupAlt
-            sta   nesCrowdOffset
+        lda   #0
+        ldx   #40
+        ldy   _top_bg_x           ; Xmod256
+        jsr   _BltSetupAlt
+        sta   nesCrowdOffset
 
 ; Next render top part of the screen to move with the player
 
-            lda   #40
-            ldx   #{200-32-40}
-            ldy   StartXMod256              ; Xmod256
-            jsr   _BltSetupAlt
-            sta   nesTopOffset
+        lda   #40
+        ldx   #{200-32-40}
+        ldy   StartX              ; Xmod256
+        jsr   _BltSetupAlt
+        sta   nesTopOffset
 
 ; Now render the bottom 32 lines to show the status bar area
 
-            lda   #200-32
-            ldx   #32
-            ldy   #0                         ; Xmod256
-            jsr   _BltSetupAlt
-            sta   nesBottomOffset            ; cache the :exit_offset value returned from this function
+        lda   #200-32
+        ldx   #32
+        ldy   #0                         ; Xmod256
+        jsr   _BltSetupAlt
+        sta   nesBottomOffset            ; cache the :exit_offset value returned from this function
 
 ; Copy the sprites and buffer to the graphics screen
 
-            jsr   drawScreen
+        jsr   drawScreen
 
 ; Restore the buffer
 
-            lda   #0
-            ldx   #40
-            ldy   nesCrowdOffset          ; offset to patch
-            jsr   _RestoreBG0OpcodesAltLite
+        lda   #0
+        ldx   #40
+        ldy   nesCrowdOffset          ; offset to patch
+        jsr   _RestoreBG0OpcodesAltLite
 
-            lda   #40
-            ldx   #{200-32-40}
-            ldy   nesTopOffset            ; offset to patch
-            jsr   _RestoreBG0OpcodesAltLite
+        lda   #40
+        ldx   #{200-32-40}
+        ldy   nesTopOffset            ; offset to patch
+        jsr   _RestoreBG0OpcodesAltLite
 
-            lda   #200-32
-            ldx   #32
-            ldy   nesBottomOffset         ; offset to patch
-            jsr   _RestoreBG0OpcodesAltLite
+        lda   #200-32
+        ldx   #32
+        ldy   nesBottomOffset         ; offset to patch
+        jsr   _RestoreBG0OpcodesAltLite
 
-            DO    SHOW_DEBUG_VARS
-            ldal  OneSecondCounter
-            cmp   OldOneSec
-            beq   :skip_fps
+        DO    SHOW_DEBUG_VARS
+        ldal  OneSecondCounter
+        cmp   OldOneSec
+        beq   :skip_fps
 
-            sta   OldOneSec
-            ldx   frameCount
-            txa
-            sec
-            sbc   oldFrameCount
-            stx   oldFrameCount
-            ldx   #0
-            ldy   #$FFFF
-            jsr   DrawByte
+        sta   OldOneSec
+        ldx   frameCount
+        txa
+        sec
+        sbc   oldFrameCount
+        stx   oldFrameCount
+        ldx   #0
+        ldy   #$FFFF
+        jsr   DrawByte
 :skip_fps
 
-            lda   InputPlayer1
-            ldx   #8*160
-            ldy   #$FFFF
-            jsr   DrawWord
+        lda   InputPlayer1
+        ldx   #8*160
+        ldy   #$FFFF
+        jsr   DrawWord
 
-            lda   LastRead
-            ldx   #16*160
-            ldy   #$FFFF
-            jsr   DrawWord
-            FIN
+        lda   LastRead
+        ldx   #16*160
+        ldy   #$FFFF
+        jsr   DrawWord
+        FIN
 
-            stz   DirtyBits
-            rts
+        stz   DirtyBits
+        rts
 
 ; For this game, we utilize a single, static palette
 SetDefaultPalette
@@ -486,11 +510,11 @@ ApplyConfig
             lda   config_video_fastmode
             beq   :normal_video
             lda   #CTRL_EVEN_RENDER
-            tsb   GTEControlBits
+            tsb   ControlBits
             bra   :apply_video
 :normal_video
             lda   #CTRL_EVEN_RENDER
-            trb   GTEControlBits
+            trb   ControlBits
 :apply_video
             lda   #0
             jsr   FillScreen
@@ -513,30 +537,31 @@ ApplyConfig
 ; by prev/next pointers on the menu and control itmes that direct which control to
 ; select in response to the user's inputs.
 
+config_block_start
 config_audio_quality   dw  APU_60HZ  ; good / better / best audio quality (60Hz, 120Hz, 240Hz audio interrupts)
 config_video_statusbar dw  1         ; exclude the status bar from the animate playfield area or not
 config_video_fastmode  ds  2         ; use the "skip line" rendering mode
-config_input_p1_type   dw  0         ; keyboard / snes max
+config_block_p1
+config_input_p1_type   dw  0  ; keyboard / snes max
 config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
+config_input_button_a  dw  MOD_REG_COMMAND_DOWN
+config_input_button_b  dw  MOD_REG_OPTION_DOWN
 
-;CONFIG_PALETTE       equ 0
-;TILE_TOP_LEFT        equ $105
-;TILE_TOP_RIGHT       equ $106
-;TILE_BOTTOM_LEFT     equ $107
-;TILE_BOTTOM_RIGHT    equ $108
-;TILE_HORIZONTAL      equ $10A
-;TILE_HORIZONTAL_TOP  equ $10A
-;TILE_HORIZONTAL_BOTTOM  equ $10A
-;TILE_VERTICAL_LEFT   equ $10E
-;TILE_VERTICAL_RIGHT  equ $10D
-;TILE_ZERO            equ $100
-;TILE_A               equ $12E
-;TILE_SPACE           equ $100
-;TILE_CURSOR          equ $149  ; $10A
+; player 2 config block
+config_block_p2
+config_input_p2_type      dw  0
+config_input_p2_key_left  dw  'j'
+config_input_p2_key_right dw  'l'
+config_input_p2_key_up    dw  'i'
+config_input_p2_key_down  dw  'k'
+config_input_p2_snesmax_port dw 4
+config_input_p2_button_a  dw  MOD_REG_CONTROL_DOWN
+config_input_p2_button_b  dw  MOD_REG_SHIFT_DOWN
+config_block_end
 
 AUDIO_TITLE_STR     str 'AUDIO'
 AUDIO_QUALITY_STR   str 'QUALITY'
@@ -695,9 +720,29 @@ INPUT_ITEM_5 dw   KEYMAP
             DO    SHOW_DEBUG_VARS
             put   ../../misc/App.Msg.s
             put   ../../misc/font.s
+            put   ../../misc/io.s
             FIN
 
-            put   ../../ppu/ppu.s
+            mput  ../../ppu
+; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
+            put    ../../ppu/ppu_macros.s
+            put    ../../ppu/ppu_init.s
+            put    ../../ppu/ppu_shadowlist.s
+            put    ../../ppu/ppu.s
+            put    ../../ppu/ppu_attributes.s
+            put    ../../ppu/ppu_tiles.s
+            put    ../../ppu/ppu_metatiles.s
+            put    ../../ppu/ppu_nametable2.s
+            put    ../../ppu/ppu_queues.s
+            put    ../../ppu/ppu_palette.s
+            put    ../../ppu/ppu_regs.s
+            put    ../../ppu/ppu_render.s
+            put    ../../ppu/ppu_grid.s
+            put    ../../ppu/ppu_grid_quads.s
+            put    ../../ppu/ppu_sprites.s
+            put    ../../ppu/ppu_tile_blitters.s
+            put    ../../ppu/scanline_bitmap.s
+; AUTOINC:END
 
 ; Palette remapping
             put   palettes.s
@@ -705,6 +750,8 @@ INPUT_ITEM_5 dw   KEYMAP
 
 ; Core code
             put   ../../rom/scaffold.s
+            put   ../../rom/rom_color.s
+            put   ../../rom/rom_tiles.s
             put   ../../rom/rom_helpers.s
             put   ../../rom/rom_input.s
             put   ../../rom/rom_exec.s

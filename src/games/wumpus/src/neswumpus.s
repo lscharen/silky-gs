@@ -156,12 +156,19 @@ shadowChannel1 equ 100
 shadowChannel2 equ 104
 
 ROMBase ENT
-    ds   $8000-$280
+    ds   $7000-*            ; Pad up to $7000; the injected code and y_exclude below must end before $8000
+HORIZONTAL_MIRRORING equ $01        ; From core/Defs.s, which is not included in the ROM segment
+VERTICAL_MIRRORING   equ $02
     put  ../../../rom/rom_inject.s
     ds   \,$00
 
+y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
+        ds 24,$01
+        ds 200,$00
+        ds 32,$01
+
 ; Pad from $8000 to $c000
-    ds   $4000
+    ds   $C000-*            ; Pad up to the start of the NES PRG-ROM
 
 ;  .bank 0
 ;  .org $C000 
@@ -2390,7 +2397,7 @@ MainNMI
   tax
   pla  
 ;  rti
-  rts
+  rtl                   ; the NMI handler is called with JSL
 
 	put main.asm
 	put nesutils.asm
@@ -2410,8 +2417,7 @@ MainNMI
 
 ;   .bank 1
 ;  .org $E000
-    ds  \,$00
-	ds  $300
+    ds   $E000-*            ; Pad up to $E000 (graphics and music data)
   	put graphics.asm
 	put titlemusic.asm
 	put titlescreendata.asm
@@ -2421,7 +2427,7 @@ MainNMI
 	put nesmusic.asm
  	put helpscreendata.asm
 
-    ds  $14F4
+    ds   $FFFA-*            ; Pad up to the vectors
 ;  .org $FFFA     ;first of the three vectors starts here
    dw NMI        ;when an NMI happens (once per frame if enabled) the 
                    ;processor will jump to the label NMI:

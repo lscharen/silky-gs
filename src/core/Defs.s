@@ -11,9 +11,14 @@ VOC_CONTROL_REG        equ   $00C0B1
 KBD_REG                equ   $E0C000
 KBD_STROBE_REG         equ   $E0C010
 VBL_STATE_REG          equ   $E0C019
-MOD_REG                equ   $E0C025
+MOD_REG                equ   $E0C025      ; Modifier key register
 COMMAND_KEY_REG        equ   $E0C061
 OPTION_KEY_REG         equ   $E0C062
+
+MOD_REG_SHIFT_DOWN     equ   $01
+MOD_REG_CONTROL_DOWN   equ   $02
+MOD_REG_OPTION_DOWN    equ   $40
+MOD_REG_COMMAND_DOWN   equ   $80
 
 SHADOW_SCREEN          equ   $012000
 SHADOW_SCREEN_SCB      equ   $019D00
@@ -31,40 +36,55 @@ ScreenY0               equ   4           ; First vertical line on the physical s
 ScreenY1               equ   6           ; End of playfield on the physical screen. If the height is 20 and Y0 is
 ScreenX0               equ   8           ; 100, then ScreenY1 = 120.
 ScreenX1               equ   10
-ScreenTileHeight       equ   12          ; Height of the playfield in 8x8 blocks
-ScreenTileWidth        equ   14          ; Width of the playfield in 8x8 blocks
 
-StartX                 equ   16          ; Which code buffer byte is the left edge of the screen. Range = 0 to 167
-StartY                 equ   18          ; Which code buffer line is the top of the screen. Range = 0 to 207
+; The scroll position in the form of the NES PPU registers (set by NES_SetScroll and friends)
+ScrollX                equ   14          ; scroll_x (0 - 255)
+ScrollY                equ   16          ; scroll_y (0 - 255)
 
-CompileBank0           equ   20          ; Always zero to allow [CompileBank0],y addressing
-CompileBank            equ   22          ; Data bank that holds compiled sprite code
+CompileBank0           equ   18          ; Always zero to allow [CompileBank0],y addressing
+CompileBank            equ   20          ; Data bank that holds compiled sprite code
 
-MirrorMaskX            equ   24
+; Values derived from the scroll position for the blitter.  These are the position of NES scanline 0,
+; the viewport's y_offset is added by the blitter.
+StartX                 equ   22          ; Byte offset of the left edge (0 - 127 H mirroring, 0 - 255 V mirroring)
+StartY                 equ   24          ; Virtual line (0 - 239 V mirroring, 0 - 479 H mirroring)
+StartRow               equ   12          ; StartY mod 240, the PEA row
 
-StartXMod256           equ   26
-StartYMod240           equ   28
+ControlBits            equ   26          ; Enable / disable things
 
-GTEControlBits         equ   30          ; Enable / disable things
+BltMirrorP             equ   28          ; BLT_P_HORZ for horizontal mirroring, 0 for vertical
 
-MirrorMaskY            equ   32
-
-LastRender             equ   34          ; Record which render function was last executed
-CompileBankTop         equ   36          ; First free byte in the compile bank.  Grows upward in memeory.
-
-DirtyBits              equ   38
-OldStartX              equ   40
-OldStartY              equ   42
+LastRender             equ   30          ; Record which render function was last executed
+DirtyBits              equ   32
 
 ; Application variables
-SwizzlePtr             equ   44          ; Pointer to a table of 8 swizzle tables, one per palette
-SwizzlePtr2            equ   52          ; Work pointer to point at the fourth palette of the active swizzle table
-ActivePtr              equ   48          ; Work pointer to point at the active swizzle table
+SwizzlePtr             equ   34          ; Pointer to a table of 8 swizzle tables, one per palette
+SwizzlePtr2            equ   42          ; Work pointer to point at the fourth palette of the active swizzle table
+ActivePtr              equ   38          ; Work pointer to point at the active swizzle table
 
-pputmp                 equ   56          ; 16 bytes of temporary storage for the ppu subsystem
+; Keep track of the current sprite bitmap and the one for the previous frame
+CurrShadowBitmap       equ   46          ; These are 16-bit pointers
+PrevShadowBitmap       equ   48
 
-;shadowBitmap           equ   52          ; Provide enough space for the full ppu range (240 lines) + 16 since the y coordinate can be off-screen
-;_next                  equ   shadowBitmap+32
+; Pointers to which block of CHR memory is for tiles vs sprites
+TileChrMem             equ   50
+SprChrMem              equ   54
+
+unused59               equ   59
+
+pputmp                 equ   60          ; 16 bytes of temporary storage for the ppu subsystem
+
+SprSaveTop             equ   76          ; Top stack address for the sprite save buffer
+SprSaveAddr            equ   78          ; Current address
+SprAddrCount           equ   80          ; Number of sprites saved in the buffer
+GridLPtr               equ   82          ; Grid dirty renderer (quad mode): write pointer of the cell list
+NtmPtr                 equ   84          ; PPUFlushQueuesAlt: long pointer to the shadow buffer being drawn (4 bytes)
+NtmTMask               equ   88          ; PPUFlushQueuesAlt: tiles written in the group this period
+NtmPrev                equ   90          ; PPUFlushQueuesAlt: main bank offset of the buffer being drawn ($000 / $100)
+NtmQBase               equ   92          ; PPUFlushQueuesAlt: CIRAM address of the metatile being drawn
+NtmNib                 equ   94          ; PPUFlushQueuesAlt: its nibble of tiles (high byte 0)
+NtmPal                 equ   96          ; PPUFlushQueuesAlt: its palette select * 2
+PPU_BANK               equ   98
 
 ; Dirty State transition
 ;                                                                                                +---------------------------------------------+
@@ -72,10 +92,9 @@ pputmp                 equ   56          ; 16 bytes of temporary storage for the
 ;                                                                                                V          |               |    V           | |
 DirtyState             equ   100          ; Track the transition from normal to dirty rendering [0] normal -+-> [1] dirty1 -+-> [2] dirty2 --+-+
 DebugSCB               equ   102          ; SCB byte to use for tracing actions
-;RenderCount            equ   102         ; 8-bit value tracking the number of times the PPU queues have been rendered to the PEA field
 LastRead               equ   104
 
-SpriteBank0            equ   106          ; Always zero to allow [CompileBank0],y addressing
+SpriteBank0            equ   106          ; Always zero to allow [SpriteBank0],y addressing
 SpriteBank             equ   108          ; Data bank that holds compiled sprite code
 SpriteBankPos          equ   110          ; Current free location in the sprite compile bank
 
@@ -85,12 +104,15 @@ InputPlayer1           equ   118          ; Filled in by _ReadContollers
 InputPlayer2           equ   120
 
 ShowFPS                equ   126
-YOrigin                equ   128
 
-MaxY                   equ   130          ; Horizontal Mirroring = 480, Vertical Virroring = 240
-; VideoMode              equ   130
-; AudioMode              equ   132
-; BGToggle               equ   134
+MaxX                   equ   128          ; Horizontal Mirroring = 256, Vertical Mirroring = 512
+MaxY                   equ   130          ; Horizontal Mirroring = 480, Vertical Mirroring = 240
+
+unused132              equ   132
+unused133              equ   133
+unused134              equ   134
+unused135              equ   135
+
 LastEnable             equ   136
 LastStatusUdt          equ   138
 ActiveBank             equ   140
@@ -98,13 +120,27 @@ ROMZeroPg              equ   142
 ROMStk                 equ   144
 OldOneSec              equ   146
 NesTop                 equ   148
-MinYScroll             equ   150
-ScreenRows             equ   152
-MaxYScroll             equ   154
-NesBottom              equ   156
-ScreenBase             equ   158
 
-; Free space from 160 to 192
+; PPUFlushQueuesAlt (ppu_queues.s) locals. These must survive a nested
+; `jsr SyncPPUMetatile` call (which, for HAS_CHR_RAM games, can go many
+; frames deep into CheckBgTileDirty/CompileTile/FastROMTileToLookup), so
+; they are NOT allowed to live in the generic tmp0-15 scratch pool -- those
+; are documented as leaf-routine-only, freely reused by any callee, and
+; using them here caused a real bug: CompileTile (core/tiles/CompileTile.s)
+; uses tmp4/tmp5/tmp7/tmp8 as its own scratch, silently aliasing
+; RenderPPUAttr's tmp5 (:attr_diff) and tmp7 (:mt_base2) whenever a dirty
+; CHR-RAM tile got recompiled mid-attribute-update, corrupting the
+; not-yet-consumed quadrant diff/address values.
+NtmIdx                 equ   150         ; attribute index (page << 6 | offset)
+NtmAttrAddr            equ   154         ; CIRAM address of the attribute byte
+NtmAttr                equ   158         ; attribute value being applied
+
+ScreenRows             equ   152
+
+NesBottom              equ   156
+;ScreenBase             equ   158
+
+; Free space from 160 to 182
 STATE_REG_R0W0         equ   160         ; R0W0
 STATE_REG_BLIT         equ   162         ; Value used for blit (could be R0W0 or R0W1)
 STK_SAVE               equ   164         ; Only used by the lite renderer
@@ -112,6 +148,21 @@ STATE_REG_R0W1         equ   166         ; R0W1
 STATE_REG_R1W1         equ   168         ; These values all need to be 16-bit because they may be read
 STK_SAVE_BANK          equ   170         ; Bank 0 locations where the data bank values for the PEA fields are stored
 BANK_VALUES            equ   172         ; Room for two right here
+unused174              equ   174
+CMPL_BANK              equ   176         ; ^tiledata << 8 | $01 (Bank $01 in low byte)
+
+; Temporary storage for 8x16 sprite drawing in drawSprites
+sprTmp5Hi              equ   178
+sprTmp6Lo              equ   180
+
+; PPUFlushQueuesAlt locals, continued from above (same rationale)
+NtmDiff                equ   182         ; attribute EOR the last applied value
+NtmMask                equ   184         ; 16-bit tile mask of the group
+NtmBase                equ   186         ; CIRAM address of the group's top-left tile
+
+BltSegPage             equ   188         ; $0100 when the current _Apply segment is in CIRAM page 1, else 0
+
+ScrollNT               equ   190         ; Nametable select (PPUCTRL bits 1:0)
 
 blttmp                 equ   192         ; 32 bytes of local cache/scratch space for blitter
 
@@ -155,8 +206,8 @@ PAD_DOWN               equ   $0400
 PAD_UP                 equ   $0800
 PAD_START              equ   $1000
 PAD_SELECT             equ   $2000
-PAD_BUTTON_A           equ   $4000
-PAD_BUTTON_B           equ   $8000
+PAD_BUTTON_B           equ   $4000
+PAD_BUTTON_A           equ   $8000
 
 ; Rendering Control Bits
 CTRL_SPRITE_ENABLE     equ   $0001
@@ -171,6 +222,28 @@ PER_TILE_SIZE equ 3
 ; Turn ON/OFF dirty rendering debugging
 DIRTY_RENDERING_VISUALS equ 0
 
+; Debug border indicators.  Both write the border color, so turn on at most one of them.
+;
+; TASK_TIME_BORDER: raster bar of CPU time.  The border is TASK_COLOR_NES while the NES task (game
+; logic) runs and TASK_COLOR_GS while the GS task (renderer) runs, so the height of the NES-colored
+; band is the share of each 1/60s spent in game logic.  A solid NES-colored border = overrunning.
+TASK_TIME_BORDER   equ 0
+TASK_COLOR_GS      equ 0                ; Black
+TASK_COLOR_NES     equ 12               ; Green
+
+; GRID_FALLBACK_BORDER: color the border by why the grid renderer fell back to a full render, black
+; on frames it handles (GRID_DIRTY_RENDERING only).  Values are IIgs border colors.
+GRID_FALLBACK_BORDER equ 0
+FB_COLOR_GRID      equ 0                ; Black      - grid frame, no fallback
+FB_COLOR_SCROLL    equ 2                ; Dark blue  - scrolled (DIRTY_BIT_BG0_X / BG0_Y)
+FB_COLOR_PALETTE   equ 13               ; Yellow     - background palette changed
+FB_COLOR_REFRESH   equ 15               ; White      - forced refresh (DIRTY_BIT_BG0_REFRESH, other cause)
+FB_COLOR_DISABLED  equ 5                ; Dark gray  - disableDirtyRendering is set
+FB_COLOR_METATILES equ 1                ; Deep red   - more than GRID_MAX_METATILES redrawn (gmtOverflow)
+FB_COLOR_UNALIGNED equ 9                ; Orange     - scroll position not cell-aligned
+FB_COLOR_BGOFF     equ 3                ; Purple     - background disabled
+FB_COLOR_MANY      equ 11               ; Pink       - gridPrepare :fb_many (currently unused)
+
 ; Offsets for the Lite blitter
 ;
 ; The first line of blitter code is at bank address $0100, but some of the line's code preceeds this address to
@@ -180,50 +253,66 @@ DIRTY_RENDERING_VISUALS equ 0
 ; In vertical mirroring mode, two adjacent lines combines to make each logical line cover 512 bytes.  In horizontal
 ; mirroring mode, the line are independent and span 256 bytes.
 
-_BANK_ENTRY_NT1 equ $0004
-_BANK_ENTRY_NT2 equ $000C
+; See TemplateLite.Macs.s for the row layout.  All offsets are relative to a row's even page (P0). The odd
+; page (P1) is at +$100 and uses the same offsets for its PEA run and exit jumps.
+_INT_OFFSET    equ  $00                   ; code to enable interrupts before the line
+_ENTRY_OFFSET  equ  $11                   ; normal entry point for each line
+_ALIGN_PATCH   equ  $15                   ; BRA (even) or LDA #imm (odd), patched per line
+_EDGE_PATCH    equ  $17                   ; LDX #imm with the offset of the odd right edge byte (operand at +1)
+_ENTRY_PATCH   equ  $1E                   ; BRL to the first PEA (operand at +1)
+_E_OUT_OFFSET  equ  $21                   ; top jump to the even exit
+_O_OUT_OFFSET  equ  $24                   ; top jump to the odd exit
+_PEA_OFFSET    equ  $27                   ; first PEA instruction
+_LOOP_OFFSET   equ  $E7                   ; BVC / JMP pair after the PEA run
+_E_EXIT_OFFSET equ  $EF                   ; exit_even: saved PEA instruction (P1 has a JMP here)
+_SAVE_OFFSET   equ  $F0                   ; saved PEA operand
+_E_JMP_OFFSET  equ  $F2                   ; even exit JMP to the next line (operand at +1)
+_O_EXIT_OFFSET equ  $F6                   ; exit_odd (P1 has a JMP here)
+_O_JMP_OFFSET  equ  $FA                   ; odd exit JMP to the next line (operand at +1)
 
-_INT_OFFSET    equ  $00                   ; page offset for the code to enable interrupt before the line
-_ENTRY_OFFSET  equ  $11                   ; page offset for each line of code
-_ENTRY_PATCH   equ  $15                   ; page offset for the jmp/ldx at the top of the line
-_ODD_PATCH     equ  $1C                   ; page offset for the jmp following the odd-aligned code
-_E_OUT_OFFSET  equ  $1F                   ; page offset for the top jump that leads to the last word code at $E5
-_O_OUT_OFFSET  equ  $22
-_PEA_OFFSET    equ  $25                   ; page offset to the first PEA instruction
-_LOOP_OFFSET   equ  $E5                   ; page offset for the jump after the PEA opcodes that continues drawing
-;_WORD_OFFSET  equ  $E5                   ; page offset for the code that pushes the final byte/word onto the stack
-_E_WORD_OFFSET equ  $E8
-_O_WORD_OFFSET equ  $EF
-_E_EXIT_OFFSET equ  $EB                   ; page offset of the jump that goes to the next line
-_O_EXIT_OFFSET equ  $F3                   ; page offset of the jump that goes to the next line
-_SAVE_OFFSET   equ  $E9                   ; page offset to the location where the PEA operand is saved
-_O_LOAD_HI_OFFSET equ $EF
-_O_LOAD_LO_OFFSET equ $18
-
-_O_SAVE_EDGE   equ  $F7                  ; Empty byte to stash data in the second page for odd rendering
-
-_ENTRY_JMP  equ  4                       ; $nF5: the jump (brl, actually) is 4 bytes after the entry byte
-_ENTRY_ODD  equ  12                      ; $nFD: the brl for the odd entry is a bit further in
-_EXIT_ODD   equ  475                     ; the odd enty point is just 3 bytes of code to load and push the edge byte
-_EXIT_EVEN  equ  478                     ; in the second page of the blitter line
-_LOW_SAVE   equ  {_EXIT_EVEN+4}          ; space to save the code field opcodes is right after the return jmp/jml
-_LINE_SIZE_V equ  512                    ; number of bytes for each blitter line (vertical mirroring)
-_LINE_SIZE_H equ  256                    ; number of bytes for each blitter line (horizontal mirroring)
-_LINE_SPAN  equ  512                     ; always 512 bytes between adjacent vertical lines
-_CODE_TOP   equ  21                      ; number of bytes from the base address of each blitter line to the first PEA instruction
+_LINE_SPAN  equ  512                     ; always 512 bytes between adjacent rows
 _LINES_PER_BANK equ 120
 
+; Values patched into _ALIGN_PATCH.  Even lines branch over the edge byte code to the BRL.  Odd lines
+; execute a harmless 8-bit LDA #imm and fall into the code that pushes the right edge byte.
+BLT_ALIGN_EVEN equ  $80+{{_ENTRY_PATCH-_ALIGN_PATCH-2}*256}
+BLT_ALIGN_ODD  equ  $00A9
+
+; Processor status values used to enter the blitter.  M = 1, X = 0 and I = 1 always.
+BLT_P_BASE     equ  $24
+BLT_P_HORZ     equ  $40                   ; V = 1 for horizontal mirroring
+
 ; Set up some symbols to reference the different shadow memory in the PPU static bank. All of these
-; shadow areas are meant to be accessed using indexed addressed with a Nametable address ($2000 - $2FFF)
-; e.g. lda TILE_SHADOW,x
-TILE_SHADOW  equ $2000          ; shadowed values of the nametable tiles
-ATTR_SHADOW  equ $3000          ; pre-calculated attribute values derived from the attribute bytes in $2nC0 PPU RAM
-TILE_BANK    equ $4000          ; pre-calculated data bank value for the location of the associated PEA field tile
-TILE_ADDR_LO equ $5000          ; pre-calculated address (low byte) of the location of the PEA field tile
-TILE_ADDR_HI equ $6000          ; pre-calculated address (high byte) of the location of the PEA field tile
-TILE_VERSION equ $7000          ; version count of nametable byte (incremented on each PPUDATA_WRITE)
-TILE_TARGET  equ $8000          ; value of last rendered byte. If TILE_VERSION == TILE_TARGET, then no update
-TILE_ROW     equ $9000          ; pre-calculated row of the PPU address
+; shadow areas are meant to be accessed using using an CIRAM address ($000 - $7FF)
+; e.g. ldal TILE_SHADOW,x
+;
+; Since moving to directly modeling CIRAM, the size of each buffer could be reduces to $800 bytes.  But we are leaving them
+; for now.  Justknow that only the first half od each region should have data.
+
+TILE_SHADOW   equ $4000          ; shadowed values of the nametable tiles
+ATTR_SHADOW   equ $5000          ; pre-calculated attribute values derived from the attribute bytes in $2nC0 PPU RAM
+
+; These three tables are static since the PEA fields are 1:1 to the CIRAM layout. Note that these tables simply replicate
+; information that's already in the BTableHigh and BTableLow arrays. For a given CIRAM address N, the address corresponds
+; to the Nth entry in those tables.  This is just a convenient way to get the information in 8-bit mode.
+
+TILE_BANK     equ $6000          ; pre-calculated data bank value for the location of the associated PEA field tile
+TILE_ADDR_LO  equ $7000          ; pre-calculated address (low byte) of the location of the PEA field tile
+TILE_ADDR_HI  equ $8000          ; pre-calculated address (high byte) of the location of the PEA field tile
+
+; $9000-$AFFF: free (formerly the TILE_VERSION0/1 dedup tables)
+
+;TILE_ROW      equ $B000          ; pre-calculated row of the PPU address
+;TILE_COL      equ $C000          ; pre-calculated column of the PPU address
+
+; Grid dirty renderer (ppu_grid.s): per-cell lookup tables, one word per 8x8 screen cell (max 800 cells)
+GRID_CELL_SCR  equ $B000         ; SHR address of the cell
+GRID_CELL_PEA  equ $B800         ; code field address of the tile shown in the cell
+GRID_CELL_BANK equ $C000         ; code field bank of that tile (in both bytes)
+
+; $C800-$CFFF / $E800-$EFFF: nametable shadow data buffers 0 / 1 (ppu_queues.s, NTM_SB0 / NTM_SB1)
+
+
 
 ; Return codes from the Event Loop harness
 USER_SAYS_QUIT  equ 'q'
@@ -243,3 +332,6 @@ NES_PPUCTRL_SPRSIZE equ $20
 ; NES Nametable Mirroring
 HORIZONTAL_MIRRORING equ $01
 VERTICAL_MIRRORING   equ $02
+
+HORIZONTAL_MIRROR_MASK equ $0BFF
+VERTICAL_MIRROR_MASK equ $07FF

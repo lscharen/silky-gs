@@ -98,7 +98,7 @@ ScoreboardNMI
     tax
     pla  
 ;  rti
-  rts
+  rtl
 
 DrawScoreBoard
 	;jsr ClearPPU 

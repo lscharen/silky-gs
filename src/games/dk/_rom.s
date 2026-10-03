@@ -48,7 +48,18 @@
 ;  endif
 
 ROMBase ENT
-        ds   $BC00
+        ds   $B000-*              ; Pad up to $B000; the exclusion tables and injected code below must end before $C000
+
+y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
+        ds 24,$01
+        ds 200,$00
+        ds 32,$01
+
+tile_exclude ENT                  ; Table of excluded tiles
+        ds 256,$00
+
+HORIZONTAL_MIRRORING equ $01        ; From core/Defs.s, which cannot be included here (symbol clashes with Defines.s)
+VERTICAL_MIRRORING   equ $02
         put  ../../rom/rom_inject.s
 
 STA_PhaseNo_Y STA_ABS_Y PhaseNo
@@ -61,7 +72,7 @@ LDA_Bolt_RemovedFlag_Y LDA_ABS_Y Bolt_RemovedFlag
 STA_Bolt_RemovedFlag_Y STA_ABS_Y Bolt_RemovedFlag
 LDA_Item_RemovedFlag_Y LDA_ABS_Y Item_RemovedFlag
 STA_Item_RemovedFlag_Y STA_ABS_Y Item_RemovedFlag
-LDA_0020_Y LDA_ABS_Y $0020
+LDA_0020_Y LDA_ABS_Y $20   ; not $0020: Merlin32 sizes that as absolute in pass 1 but emits DP, skewing "*"
 LDA_ScoreDisplay_Top_2_Y LDA_ABS_Y {ScoreDisplay_Top+2}
 LDA_ScoreDisplay_Top_1_Y LDA_ABS_Y {ScoreDisplay_Top+1}
 LDA_ScoreDisplay_Top_Y LDA_ABS_Y ScoreDisplay_Top
@@ -173,7 +184,7 @@ VRAMUpdateToBuffer
 :RETURN_F33D
   RTS
 
-        ds   \,$00
+        ds   $C000-*              ; Pad up to the start of the NES PRG-ROM
 
 ;  org $C000
 ;  FILLVALUE $FF					;original game's free space is marked with FFs
@@ -1788,7 +1799,7 @@ CODE_C8E8
   STA ControlMirror				;
   PLA						;restore A
 ;  RTI						;return from the interrupt
-  RTS
+  RTL						;romxfer calls the NMI handler with JSL
  
 ;HandleTitleScreen_C8F3
 CODE_C8F3

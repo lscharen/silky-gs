@@ -1,8 +1,7 @@
 ; Compile an 8x8 bitmap into executable code into the SpriteBank
 ;
 ; Y = address in the compile bank
-; A = low address of bitmap
-; X = high address of bitmap
+; A = low address of bitmap in tiledata bank
 ;
 ; Algorithm is simple O(n^2), but there are only 16 words
 ;   Load first word
@@ -12,7 +11,7 @@
 ;   Scan for any duplicate words and mark complete
 ;   Continue until no words are left
 ;
-; This routine differs from the CompileTile routine a few way.  First, duplicate
+; This routine differs from the CompileTile routine in a few ways.  First, duplicate
 ; words that have a mask are cached to save the lookup time, but can't be used
 ; immediately.  Second, the compilation needs to produce vertical and horizontally
 ; flipped versions of the sprite, which take up more space.  So the compiled sprite
@@ -36,11 +35,13 @@ VERT_ADDR_OFFSET equ 21
 HORZ_ADDR_OFFSET equ 24
 PREAMBLE_SIZE    equ 26
 
+        mx    %00
 CompileSprite
-:base   equ tmp9                 ; start of the sprite
+:base    equ tmp9                 ; start of the sprite
+:src     equ tmp10
 
 ; Sprite are called with OAM Byte 2 in the accumulator and X set to the sprite index. The
-; direct page location sprTmp1 holds the SHR address.  The compiled sprite has an preamble
+; direct page location sprTmp1 holds the SHR address.  The compiled sprite has a preamble
 ; that dispatches to the correct compiled tile based on the value in the accumulator
 ;
 ; This is the template code that each compiled sprite starts with
@@ -60,7 +61,8 @@ CompileSprite
 ;            ...
 ;            jml   draw_rtn2
 
-        sty  :base               ; base address of the sprite
+        sty  :base               ; base address of the sprite code in the CompileSprite bank
+        sta  :src                ; address of the source tile data in the tiledata bank (updated)
 
 ; Gerenate the preamble
 
@@ -112,6 +114,7 @@ CompileSprite
 
         rts
 
+        mx    %00
 CompileSpritePreamble
 
         lda  #$A6+{256*sprTmp1}  ; LDX dp
@@ -178,6 +181,7 @@ CompileSpritePreamble
 
         rts
 
+        mx    %00
 CompileSpriteNormal
 :flags  equ tmp8
 
@@ -204,6 +208,7 @@ CompileSpriteNormal
 :exit
         jmp  _EmitReturn
 
+        mx    %00
 CompileSpriteHorz
 :flags  equ tmp8
 
@@ -230,6 +235,7 @@ CompileSpriteHorz
 :exit
         jmp  _EmitReturn
 
+        mx    %00
 CompileSpriteVert
 :flags  equ tmp8
 
@@ -256,6 +262,7 @@ CompileSpriteVert
 :exit
         jmp  _EmitReturn
 
+        mx    %00
 CompileSpriteBoth
 :flags  equ tmp8
 
@@ -282,6 +289,7 @@ CompileSpriteBoth
 :exit
         jmp  _EmitReturn
 
+        mx    %00
 _EmitReturn
         lda  #$005C           ; return instruction jumps back to draw_rtn
         sta  [SpriteBank0],y
@@ -296,10 +304,20 @@ _EmitReturn
 
         rts
 
+        mx    %00
 emit_op
+:xsave  equ tmp11
+:src    equ tmp10
+
         sta  tmp7
 
-        lda  TileBuff+32,x            ; Check if the mask is zero of not
+        stx  :xsave
+        txa
+        clc
+        adc  :src
+        tax
+
+        ldal tiledata+32,x          ; Check if the mask is zero of not
         beq  :no_mask
         cmp  #$FFFF
         beq  :no_data
@@ -307,7 +325,7 @@ emit_op
         lda  #$00A0                 ; ldy #imm
         sta  [SpriteBank0],y
         iny
-        lda  TileBuff,x
+        ldal tiledata,x
         sta  [SpriteBank0],y
         iny
         iny
@@ -323,7 +341,7 @@ emit_op
         lda  #$0029                 ; and #imm
         sta  [SpriteBank0],y
         iny
-        lda  TileBuff+32,x
+        ldal tiledata+32,x
         sta  [SpriteBank0],y
         iny
         iny
@@ -341,13 +359,14 @@ emit_op
         iny
         iny
 :no_data
+        ldx  :xsave
         rts
 
 :no_mask
         lda  #$00A0                 ; ldy #imm
         sta  [SpriteBank0],y
         iny
-        lda  TileBuff,x
+        ldal tiledata,x
         sta  [SpriteBank0],y
         iny
         iny
@@ -364,12 +383,23 @@ emit_op
         sta  [SpriteBank0],y
         iny
         iny
+        ldx  :xsave
         rts
 
+        mx    %00
 emit_op_flip
+:xsave  equ tmp11
+:src    equ tmp10
+
         sta  tmp7
 
-        lda  TileBuff+32,x            ; Check if the mask is zero or not
+        stx  :xsave
+        txa
+        clc
+        adc  :src
+        tax
+
+        ldal tiledata+32,x          ; Check if the mask is zero or not
         beq  :no_mask_flip
         cmp  #$FFFF
         beq  :no_data_flip
@@ -377,7 +407,7 @@ emit_op_flip
         lda  #$00A0                 ; ldy #imm
         sta  [SpriteBank0],y
         iny
-        lda  TileBuff,x
+        ldal tiledata,x
         sta  [SpriteBank0],y
         iny
         iny
@@ -393,7 +423,7 @@ emit_op_flip
         lda  #$0029                 ; and #imm
         sta  [SpriteBank0],y
         iny
-        lda  TileBuff+32,x
+        ldal tiledata+32,x
         sta  [SpriteBank0],y
         iny
         iny
@@ -411,13 +441,14 @@ emit_op_flip
         iny
         iny
 :no_data_flip
+        ldx  :xsave
         rts
 
 :no_mask_flip
         lda  #$00A0                 ; ldy #imm
         sta  [SpriteBank0],y
         iny
-        lda  TileBuff,x
+        ldal tiledata,x
         sta  [SpriteBank0],y
         iny
         iny
@@ -434,6 +465,7 @@ emit_op_flip
         sta  [SpriteBank0],y
         iny
         iny
+        ldx  :xsave
         rts
 
 ; data tables for generating code

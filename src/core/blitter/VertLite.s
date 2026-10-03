@@ -2,7 +2,7 @@
 ]line                equ   119
                      lup   120
                      ldal  RTable+{]line*2},x
-                     sta   {]line*_LINE_SIZE_V},y
+                     sta   {]line*_LINE_SPAN},y
 ]line                equ   ]line-1
                      --^
 copyr_bottom

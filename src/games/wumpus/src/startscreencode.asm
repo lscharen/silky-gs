@@ -87,7 +87,7 @@ StartScreenNMI
     tax
     pla  
 ;  rti
-  rts
+  rtl
 
 DrawStartScreen
 

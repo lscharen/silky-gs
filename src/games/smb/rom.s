@@ -670,8 +670,21 @@ GameOverModeValue     = 3
 ;       .org $8000
 
 ROMBase  ENT
-         ds    $7800
-         put  ../../rom/rom_inject.s
+         ds    $6000-*
+
+y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
+        ds 24,$01
+        ds 200,$00
+        ds 32,$01
+
+tile_exclude ENT                  ; Table of excluded tiles
+        ds 252,$00
+        ds 1,$01                    ; Tile $FC can be skipped
+        ds 3,$00
+HORIZONTAL_MIRRORING equ $01        ; From core/Defs.s, which is not included in the ROM segment
+VERTICAL_MIRRORING   equ $02
+
+        put  ../../rom/rom_inject.s
 
 ; Absolute address in zero page helpers
 JMP_IND_06  JMP_ABS_IND $06
@@ -728,7 +741,8 @@ GteInitMem
 
             plp
             rts
-         ds   \,$00
+            
+            ds   $8000-*
 
 ;-------------------------------------------------------------------------------------
              mx    %11
@@ -772,7 +786,7 @@ ColdBoot     jsr InitializeMemory         ;clear memory using pointer in Y
              ora #%10000000               ;enable NMIs
              jsr WritePPUReg1
 ;EndlessLoop jmp EndlessLoop              ;endless loop, need I say more?
-InternalRts  rts
+InternalRts  rtl
 ;-------------------------------------------------------------------------------------
 ;$00 - vram buffer address table low, also used for pseudorandom bit
 ;$01 - vram buffer address table high
@@ -912,7 +926,7 @@ SkipMainOper   jsr LDA_2002            ;reset flip-flop
                ora #%10000000            ;reactivate NMIs
                jsr STA_2000
 ;               rti                       ;we are done until the next frame!
-               rts
+               rtl
 
 ;-------------------------------------------------------------------------------------
 
@@ -16656,8 +16670,7 @@ BrickShatterEnvData
 
 ;-------------------------------------------------------------------------------------
 ; IIgs -- fill in some space to put the vectors in the right spot
-      ds   \,$00
-      ds   $3FA
+      ds   $FFFA-*
 
 ;INTERRUPT VECTORS
 
