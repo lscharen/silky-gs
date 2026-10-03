@@ -221,9 +221,9 @@ qtRec   adrl  $0000
             DO    BENCH_MODE
 ; Canned controller input for benchmarking, one byte per virtual NES frame in the
 ; A-B-Select-Start-Up-Down-Left-Right bit layout (see src/rom/rom_input.s)
-BenchInputIndex   dw    0
-BenchInputData
-            putbin bench_input.bin
+;BenchInputIndex   dw    0
+;BenchInputData
+;            putbin bench_input.bin
             FIN
 
 ; Name of the save and preference files

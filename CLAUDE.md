@@ -17,7 +17,8 @@ npm run build:smb       # Super Mario Bros
 npm run build:bf        # Balloon Fight
 npm run build:lo        # Lights Out
 npm run build:wump      # Wumpus
-npm run build:all       # All games (excludes mb)
+npm run build:zelda     # Zelda
+npm run build:all       # All games
 
 npm run build-image     # Package built binaries into Target.2mg ProDOS disk image
 npm run test            # Build image and launch in GSPort emulator
@@ -30,7 +31,7 @@ External tools are configured in `package.json` under `config`: Merlin32 assembl
 
 ### Execution Model
 
-The runtime sets up a dual-context environment: the IIgs runs as host, with a separate direct page and stack allocated for NES code execution. `NES_StartUp` in `src/rom/scaffold.s` initializes everything and then transfers control to the game loop, which alternates between NES code execution and IIgs rendering.
+The runtime sets up a dual-context environment: the IIgs runs as host, with a separate direct page and stack allocated for NES code execution. `NES_StartUp` in `src/rom/scaffold.s` initializes everything and then transfers control to the game loop, which alternates between NES code execution and IIgs rendering. Each game's `Main.s` calls it with X = the memory manager user ID and A = the cartridge's power-on nametable mirroring (`HORIZONTAL_MIRRORING` or `VERTICAL_MIRRORING`); mirroring is switched at runtime for mappers like the MMC1.
 
 **This is not a real-time/cycle-accurate emulator — the IIgs is not fast enough for that.** The NES ROM code runs in real time, driven by an emulated 60Hz interrupt, and its PPU/APU register writes are simply *recorded* (queued) as they happen. Separately, and as fast as it is able, the runtime renders the current recorded state of the NES display to the IIgs hardware — typically at only 12-15 frames per second. The NES logic clock and the IIgs render clock are decoupled; many emulated NES "frames" of ROM execution can elapse between two actual IIgs screen redraws, and a redraw always reflects whatever has been queued up by that point, not a 1:1 snapshot of a single NES frame.
 
@@ -76,7 +77,6 @@ Each port has a consistent structure:
 |---|---|
 | `PPU_BG_TILE_ADDR` | NES address of background CHR tiles |
 | `PPU_SPR_TILE_ADDR` | NES address of sprite CHR tiles |
-| `NAMETABLE_MIRRORING` | Horizontal or vertical mirroring mode |
 | `ENABLE_DIRTY_RENDERING` | Enable optimized dirty-scanline rendering |
 | `NO_VERTICAL_CLIP` | Disable vertical sprite clipping |
 | `DIRECT_OAM_READ` | OAM access method |

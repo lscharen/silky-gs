@@ -289,9 +289,9 @@ Greyscale   dw    $0000,$5555,$AAAA,$FFFF
 ; layout NES_ReadInput normally produces (see src/rom/rom_input.s).
 ; Extracted from an FCEUX .fm2 movie via scripts/fm2-extract.js, e.g.:
 ;   node scripts/fm2-extract.js -n 1000 replay.fm2 -o src/games/smb/bench_input.bin
-BenchInputIndex   dw    0
-BenchInputData
-            putbin bench_input.bin
+;BenchInputIndex   dw    0
+;BenchInputData
+;            putbin bench_input.bin
             FIN
 
 ; Program variables
