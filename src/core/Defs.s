@@ -227,7 +227,7 @@ DIRTY_RENDERING_VISUALS equ 0
 ; TASK_TIME_BORDER: raster bar of CPU time.  The border is TASK_COLOR_NES while the NES task (game
 ; logic) runs and TASK_COLOR_GS while the GS task (renderer) runs, so the height of the NES-colored
 ; band is the share of each 1/60s spent in game logic.  A solid NES-colored border = overrunning.
-TASK_TIME_BORDER   equ 1
+TASK_TIME_BORDER   equ 0
 TASK_COLOR_GS      equ 0                ; Black
 TASK_COLOR_NES     equ 12               ; Green
 

@@ -553,6 +553,7 @@ INPUT_ITEM_5 dw   KEYMAP
              dw   config_input_key_down
 
             mput  ../../../ppu
+; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
             put    ../../../ppu/ppu_macros.s
             put    ../../../ppu/ppu_init.s
             put    ../../../ppu/ppu_shadowlist.s
@@ -570,6 +571,7 @@ INPUT_ITEM_5 dw   KEYMAP
             put    ../../../ppu/ppu_sprites.s
             put    ../../../ppu/ppu_tile_blitters.s
             put    ../../../ppu/scanline_bitmap.s
+; AUTOINC:END
 
 ; Palette remapping
             put   palettes.s

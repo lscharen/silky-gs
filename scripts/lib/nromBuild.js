@@ -136,16 +136,26 @@ function run(cmd, args) {
 }
 
 /**
- * Build an NROM game: precompute tiledata.bin, expand the mput blocks in Main.s
- * and assemble the Merlin32 link file.
+ * Assemble a game: expand the mput blocks in Main.s and assemble the Merlin32
+ * link file.  Shared by every game, NROM or not.
+ *
+ *   gameDir    - the directory that holds Main.s and the link file
+ *   linkFile   - Merlin32 link file, relative to gameDir (e.g. 'Master.s')
+ */
+function assembleGame(gameDir, linkFile) {
+  run(process.execPath, [path.join(PROJECT_ROOT, 'scripts', 'gen-includes.js'), path.join(gameDir, 'Main.s')]);
+  run(PACKAGE_JSON.config.merlin32, ['-V', PACKAGE_JSON.config.macros, path.join(gameDir, linkFile)]);
+}
+
+/**
+ * Build an NROM game: precompute tiledata.bin, then assemble it.
  *
  *   gameDir    - the game's directory (holds PPU.s, Main.s, TileData.s)
  *   linkFile   - Merlin32 link file, relative to gameDir (e.g. 'Master.s')
  */
 function buildNromGame(gameDir, linkFile) {
   generateTileData(gameDir);
-  run(process.execPath, [path.join(PROJECT_ROOT, 'scripts', 'gen-includes.js'), path.join(gameDir, 'Main.s')]);
-  run(PACKAGE_JSON.config.merlin32, ['-V', PACKAGE_JSON.config.macros, path.join(gameDir, linkFile)]);
+  assembleGame(gameDir, linkFile);
 }
 
-module.exports = { buildNromGame, generateTileData, loadChrFromPPU, parseDataSource };
+module.exports = { buildNromGame, assembleGame, generateTileData, loadChrFromPPU, parseDataSource };
