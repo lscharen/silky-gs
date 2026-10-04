@@ -60,7 +60,19 @@ LoadPrefData
             sta        closeRec+2
 
             _ReadGS    readRec
-            bcs        :gsosError
+            bcs        :closeFile
+
+; Followed by the game-specific values.  Ignore errors since a preference file from
+; before the game block existed will hit EOF and leave the defaults in place.
+
+            lda        #{config_game_end-config_game_start}
+            beq        :closeFile
+            sta        readRec+8
+            lda        #config_game_start
+            sta        readRec+4
+            lda        #^config_game_start
+            sta        readRec+6
+            _ReadGS    readRec
 
 :closeFile  _CloseGS   closeRec
             clc
@@ -144,7 +156,19 @@ SavePrefData
             _WriteGS   writeRec
             bcs        :gsosError2
 
-            _CloseGS   closeRec
+; Followed by the game-specific values
+
+            lda        #{config_game_end-config_game_start}
+            beq        :close
+            sta        writeRec+8
+            lda        #config_game_start
+            sta        writeRec+4
+            lda        #^config_game_start
+            sta        writeRec+6
+            _WriteGS   writeRec
+            bcs        :gsosError2
+
+:close      _CloseGS   closeRec
             clc
             rts
 
