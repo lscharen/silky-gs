@@ -112,7 +112,7 @@ stop_interrupts
 
 stop_playing            = *
 
-                        ldy   #7                        ; Number of oscillators
+                        ldy   #8                        ; Number of oscillators (4 channels x L/R)
 
                         sep   #$20
                         mx    %10
@@ -392,6 +392,7 @@ setup_interrupt         = *
                         mx    %10
 
                         ldal  apu_mode
+                        cmp   #APU_240HZ
                         beq   :do_240hz
                         lda   #598
                         ldy   #598/256
@@ -516,12 +517,8 @@ clock_length_counter    mac
                         bit   ]2
                         bne   no_count
                         lda   ]1+{APU_PULSE1_LENGTH_COUNTER-APU_PULSE1}
-                        bne   dec_count
-                        lda   ]2
-                        ora   ]1+{APU_PULSE1_REG1-APU_PULSE1}
-                        sta   ]1+{APU_PULSE1_REG1-APU_PULSE1}
-                        bra   no_count
-dec_count               dec
+                        beq   no_count                        ; stops at zero (channel is silenced)
+                        dec
                         sta   ]1+{APU_PULSE1_LENGTH_COUNTER-APU_PULSE1}
 no_count                <<<
 
@@ -662,7 +659,11 @@ quarter_frame_clock
 ; interupt handler
 ;-----------------------------------------------------------------------------------------
 
-apu_frame_steps      equ 5
+; The frame sequencer runs the 4-step pattern (Q, Q+H, Q, Q+H at 240Hz).  The NES 5-step mode
+; ($4017 bit 7) has a silent fifth step, but games such as Zelda write $4017 once per video frame,
+; which clocks Q+H immediately and restarts the sequence -- that also works out to exactly
+; 4 quarter-frame and 2 half-frame clocks per 1/60s, so the 4-step pattern is used for both.
+apu_frame_steps      equ 4
 PULSE_HALT_FLAG      equ $20
 NOISE_HALT_FLAG      equ $20     ; noise and pulse channels have halt flag in same bit position in REG1
 PULSE_CONST_VOL_FLAG equ $10
@@ -681,19 +682,8 @@ APU_quarter_speed_driver    = *
                         pea  $c000
                         pld
 
-                        ldx   apu_frame_counter
-                        inx
-                        inx
-                        cpx   #2*apu_frame_steps          ; TODO: This is set by MSB in $4017 (4 or 5).  4 = PAL, 5 = NTSC.
-                        bcc   *+4
-                        ldx   #0
-                        stx   apu_frame_counter
-                        jmp   (:frame_counter_proc,x)
-:frame_counter_proc     da    :quarter_frame,:half_frame,:quarter_frame,:no_frame_60,:half_frame
-
-; Quarter-speed interrupts (60Hz) -- clock four times in each handler
-:half_frame
-:quarter_frame
+; Quarter-speed driver (60Hz) -- one call covers a whole 4-step sequence: 2 half-frame and
+; 4 quarter-frame clocks
                         jsr   half_frame_clock
                         jsr   quarter_frame_clock
                         jsr   quarter_frame_clock
@@ -702,11 +692,6 @@ APU_quarter_speed_driver    = *
                         jsr   quarter_frame_clock
 
                         brl   update_doc_registers
-:no_frame_60
-                        pld
-                        plb
-                        clc
-                        rtl
 
                         mx %11
 interrupt_handler       = *
@@ -743,7 +728,7 @@ interrupt_handler       = *
                         ldx   apu_frame_counter
                         inx
                         inx
-                        cpx   #2*apu_frame_steps          ; TODO: This is set by MSB in $4017 (4 or 5).  4 = PAL, 5 = NTSC.
+                        cpx   #2*apu_frame_steps
                         bcc   *+4
                         ldx   #0
                         stx   apu_frame_counter
@@ -754,8 +739,8 @@ interrupt_handler       = *
                         beq   :do_240hz_mode
                         jmp   (:apu_120hz_table,x)
 :do_240hz_mode          jmp   (:apu_240hz_table,x)
-:apu_240hz_table        da    :quarter_frame_240,:half_frame_240,:quarter_frame_240,no_frame,:half_frame_240
-:apu_120hz_table        da    :quarter_frame_120,:half_frame_120,:quarter_frame_120,no_frame,:half_frame_120
+:apu_240hz_table        da    :quarter_frame_240,:half_frame_240,:quarter_frame_240,:half_frame_240
+:apu_120hz_table        da    :half_frame_120,:half_frame_120,:half_frame_120,:half_frame_120
 
 ; Full speed emulation (240Hz)
 :half_frame_240         jsr   half_frame_clock
@@ -1292,6 +1277,11 @@ APU_TRIANGLE_REG4_WRITE ENT
     and   #$07
     stal  APU_TRIANGLE_CURRENT_PERIOD+1
 
+; A $400B write always sets the linear counter reload flag, even when the channel is disabled
+    lda   #1
+    stal  APU_TRIANGLE_START_FLAG
+
+; The length counter only loads when the channel is enabled in $4015
     ldal  APU_STATUS
     bit   #$04
     beq   :no_reload
@@ -1304,8 +1294,6 @@ APU_TRIANGLE_REG4_WRITE ENT
     tax
     ldal  LengthTable,x
     stal  APU_TRIANGLE_LENGTH_COUNTER  ; Immediately start the counter
-    lda   #1
-    stal  APU_TRIANGLE_START_FLAG
 
 :no_reload
     pla
@@ -1387,39 +1375,40 @@ APU_STATUS_FORCE
     sta   APU_STATUS
     bra   force_entry
 
+; Reading $4015 reports which channels have a length counter > 0 (bits 0-3)
 APU_STATUS_READ ENT
-    ldal  APU_NOISE
-    and   #NOISE_HALT_FLAG
-    bne   :noise_halted
-    lda   #$08
-:noise_halted
+    lda   #0
     pha                           ; build the return value
 
-    ldal  APU_TRIANGLE
-    and   #TRIANGLE_HALT_FLAG
-    bne   :triangle_halted
-    lda   #$04
+    ldal  APU_PULSE1_LENGTH_COUNTER
+    beq   :pulse1_done
+    lda   #$01
     ora   1,s
     sta   1,s
-:triangle_halted
+:pulse1_done
 
-    ldal  APU_PULSE2
-    and   #PULSE_HALT_FLAG
-    bne   :pulse2_halted
+    ldal  APU_PULSE2_LENGTH_COUNTER
+    beq   :pulse2_done
     lda   #$02
     ora   1,s
     sta   1,s
-:pulse2_halted
+:pulse2_done
 
-    ldal  APU_PULSE1
-    and   #PULSE_HALT_FLAG
-    bne   :pulse1_halted
-    pla
-    ora   #$01
-    rtl
+    ldal  APU_TRIANGLE_LENGTH_COUNTER
+    beq   :triangle_done
+    lda   #$04
+    ora   1,s
+    sta   1,s
+:triangle_done
 
-:pulse1_halted
-    pla
+    ldal  APU_NOISE_LENGTH_COUNTER
+    beq   :noise_done
+    lda   #$08
+    ora   1,s
+    sta   1,s
+:noise_done
+
+    pla                           ; N/Z flags reflect the returned value
     rtl
 
 
