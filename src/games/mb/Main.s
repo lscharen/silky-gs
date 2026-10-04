@@ -114,6 +114,10 @@ NO_INTERRUPTS     equ 0
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 0
 
+; Decode the DMC samples listed in DMC_SAMPLE_LIST into DOC RAM at start-up (see apu/apu.s).
+; 0 = decode each sample when the game plays it.
+CACHE_DMC_SAMPLES equ 0
+
 ; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
 ; set the background color.

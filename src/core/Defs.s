@@ -323,6 +323,9 @@ APU_60HZ  equ 0
 APU_120HZ equ 1
 APU_240HZ equ 2
 
+; Address in the ROMBase bank of the DMC sample area (NES $C000, where $4012 = 0)
+DMC_SAMPLE_BASE equ $C000
+
 ; NES Register definitions
 NES_PPUMASK_BG  equ $08
 NES_PPUMASK_SPR equ $10

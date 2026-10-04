@@ -118,6 +118,10 @@ NO_INTERRUPTS     equ 0
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 1
 
+; Decode the DMC samples listed in DMC_SAMPLE_LIST into DOC RAM at start-up (see apu/apu.s).
+; 0 = decode each sample when the game plays it.
+CACHE_DMC_SAMPLES equ 1
+
 ; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
 ; set the background color.
@@ -205,6 +209,18 @@ quit
             _QuitGS    qtRec
 qtRec       adrl  $0000
             da    $00
+
+; DMC samples decoded at start-up: count, then $4012 address, $4013 length, $4010 rate for each
+; (from SampleAddrs / SampleLengths / SampleRates in rom_00.s)
+DMC_SAMPLE_LIST
+            db    7
+            db    $00,$75,$0F           ; $01 sword shot
+            db    $4C,$C0,$0F           ; $02 boss hit / shout
+            db    $80,$40,$0D           ; $04 door
+            db    $1D,$0A,$0F           ; $08 hurt
+            db    $20,$B0,$0E           ; $10 Aquamentus / Gleeok / Ganon roar
+            db    $28,$90,$0F           ; $20 Dodongo / Gohma roar
+            db    $4C,$D0,$0E           ; $40 Digdogger / Manhandla / Patra roar
 
 InitPlayfield
             ldx   #TitleScreen
