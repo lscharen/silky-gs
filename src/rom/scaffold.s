@@ -112,7 +112,7 @@ NES_StartUp
             DO    NO_INTERRUPTS
             ELSE
             lda   config_audio_quality
-            jsr   APUStartUp              ; 0 = 240Hz, 1 = 120Hz, 2 = 60Hz (external)
+            jsr   APUStartUp              ; APU_60HZ (external driver), APU_120HZ or APU_240HZ
             FIN
 
 ; Decode the game's DMC samples into DOC RAM up front (see DMC_SAMPLE_LIST in Main.s)

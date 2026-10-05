@@ -231,6 +231,10 @@ TASK_TIME_BORDER   equ 0
 TASK_COLOR_GS      equ 0                ; Black
 TASK_COLOR_NES     equ 12               ; Green
 
+; APU_STATS: count the VBLs and the APU interrupts, frame sequencer clocks and DOC updates in the
+; apu_stats block (apu/apu.s), to check the audio rates against the VBL in a debugger.
+APU_STATS          equ 0
+
 ; GRID_FALLBACK_BORDER: color the border by why the grid renderer fell back to a full render, black
 ; on frames it handles (GRID_DIRTY_RENDERING only).  Values are IIgs border colors.
 GRID_FALLBACK_BORDER equ 0
