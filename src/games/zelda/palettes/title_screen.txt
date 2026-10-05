@@ -1,0 +1,11 @@
+; Title screen palette
+; BG1[2] is the color cycling color (reserved)
+
+BG0: $36 $0F $00 $10
+BG1: $36 $17 *$07 $0F
+BG2: $36 $08 $1A $28
+BG3: $36 $30 $3B $22
+SP0: $36 $30 $3B $16
+SP1: $36 $17 $27 $0F
+SP2: $36 $08 $1A $28
+SP3: $36 $30 $3B $22

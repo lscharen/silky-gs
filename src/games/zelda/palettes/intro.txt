@@ -1,0 +1,9 @@
+; Palette used for the into scroll text
+BG0: $0F $30 $30 $30
+BG1: $0F $21 $30 $30
+BG2: $0F $16 $30 $30
+BG3: $0F $29 $1A $09
+SP0: $0F $29 $37 $17
+SP1: $0F $02 $22 $30
+SP2: $0F $16 $27 $30
+SP3: $0F $0B $1B $2B

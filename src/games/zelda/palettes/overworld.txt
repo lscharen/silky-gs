@@ -1,0 +1,10 @@
+; Overworld palette
+; SP0[1] is Link's tunic (rings), SP3 is reloaded with each room's enemy colors (reserved)
+BG0: $0F $30 $00 $12
+BG1: $0F $16 $27 $36
+BG2: $0F $1A $37 $12
+BG3: $0F $17 $37 $12
+SP0: $0F *$29 $27 $17
+SP1: $0F $02 $22 $30
+SP2: $0F $16 $27 $30
+SP3: $0F *$0F *$1C *$16

@@ -1,0 +1,12 @@
+; Character select
+; SP3[1] changes color in elimination mode (reserved)
+; SP0[1]-SP2[1] are each save slot's tunic color (reserved)
+
+BG0: $0F $30 $00 $12
+BG1: $0F $16 $27 $36
+BG2: $0F $0C $1C $2C
+BG3: $0F $12 $1C $2C
+SP0: $0F *$29 $27 $07
+SP1: $0F *$29 $27 $07
+SP2: $0F *$29 $27 $07
+SP3: $0F *$15 $27 $30
