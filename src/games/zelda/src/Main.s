@@ -9,7 +9,6 @@
             use   GTE.Macs.s
 
             put   ../../../Externals.s
-AT1_T0      EXT                       ; Swizzle tables live in the PALDATA segment (palettes.s)
             put   ../../../core/Defs.s
 
             mx    %00
@@ -40,6 +39,7 @@ EVT_LOOP_END mac
 ; a regular rendering.  If not, use dirty rendering.
 PRE_RENDER   mac
              jsr  ApplyMirrorMode   ; finish any mirroring-mode change requested since the last frame
+             jsr  ApplyPaletteChange ; switch to a new palette detected since the last frame
              <<<
 
 POST_RENDER  mac
@@ -131,9 +131,7 @@ CONFIG_APPLY_HOOK mac
 ; 0 = decode each sample when the game plays it.
 CACHE_DMC_SAMPLES equ 1
 
-; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
-; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
-; set the background color.
+; Dispatch table for palette RAM writes: every entry goes to Z_PalWrite (palette management)
 PPU_PALETTE_DISPATCH equ ZELDA_PALETTE_DISPATCH
 AUTOMATIC_PALETTE_MAPPING equ 0
 
@@ -237,65 +235,65 @@ WRAM_FILENAME strl '1/zelda.wram'
 SAVE_FILENAME strl '1/zelda.sav'     ; unused
 PREF_FILENAME strl '1/zelda.prefs'   ; unused
 
+; Palette management.  The palettes the game uses are described in ../palettes/, and
+; pal_transitions.s (generated from them) gives each one a fixed IIgs slot layout and swizzle
+; tables.  Every palette RAM write goes through Z_PalWrite: when the palette RAM becomes one of
+; the known palettes, the switch is made at the next render (by the GS task, since it redraws
+; tiles); any other change is shown straight away in the current palette's layout.
+zCurPal     dw    0                         ; PAL_* id of the palette on screen (0 = none yet)
+zPendingPal dw    0                         ; PAL_* id to switch to at the next render (0 = none)
+
+; Point the swizzle tables at the first palette until the game sets one.  InitPlayfield is called
+; by NES_StartUp.
 InitPlayfield
-            ldx   #TitleScreen
-            lda   #0
-            jsr   NES_SetPalette
-            rts
-
-TitleScreen  dw    $0F, $00, $10, $20, $0F, $00, $10, $20, $0F, $00, $10, $20, $0F, $00, $10, $20
-
-; When the NES ROM code tried to write to the PPU palette space, intercept here.
-PALETTE_DISPATCH
-        dw   ppu_3F00,ppu_3F01,ppu_3F02,ppu_3F03
-        dw   ppu_3F04,ppu_3F05,ppu_3F06,ppu_3F07
-        dw   ppu_3F08,ppu_3F09,ppu_3F0A,ppu_3F0B
-        dw   ppu_3F0C,ppu_3F0D,ppu_3F0E,ppu_3F0F
-
-        dw   ppu_3F10,ppu_3F11,ppu_3F12,ppu_3F13
-        dw   ppu_3F14,ppu_3F15,ppu_3F16,ppu_3F17
-        dw   ppu_3F18,ppu_3F19,ppu_3F1A,ppu_3F1B
-        dw   ppu_3F1C,ppu_3F1D,ppu_3F1E,ppu_3F1F
-
-
-; TODO-DEFERRED: placeholder static palette/swizzle mapping, copied from
-; src/games/wumpus/palettes.s. Real Zelda palette handling depends on the
-; CHR-RAM work deferred above.
 SetDefaultPalette
+            ldx   PAL_SWIZZLE_LO+2
+            lda   PAL_SWIZZLE_HI+2
+            jmp   NES_SetPaletteMap
 
-            lda   SwizzleTables+2
-            ldx   SwizzleTables
-            jsr   NES_SetPaletteMap
-
-            lda   #0                     ; IIgs palette zero
-            ldx   #TitlePalette
-            jsr   NES_SetPalette
+; Palette RAM write ($3F00-$3F1F), on the NES task.  A = NES color, X = 2 * palette RAM offset.
+; The palette RAM is already updated.
+Z_PalWrite
+            pha                             ; 1,s = color
+            txa
+            lsr
+            pha                             ; 1,s = offset, 3,s = color
+            ldx   zPendingPal               ; the palette that the RAM is changing from
+            bne   :detect
+            ldx   zCurPal
+:detect     jsr   DetectNESPalette
+            beq   :show                     ; not a known palette
+            cmp   zCurPal
+            beq   :current
+            sta   zPendingPal               ; switch at the next render, which loads every color
+            bra   :done
+:current    stz   zPendingPal               ; back to the palette on screen before it switched
+:show       lda   zPendingPal
+            bne   :done
+            ldx   zCurPal
+            beq   :done
+            ply                             ; Y = offset
+            pla                             ; A = color
+            jmp   SetPaletteColor
+:done       pla
+            pla
             rts
 
-; Color index 5 (07) is the color cycling color
-;                  BG0             BG1     BG2         BG3         SP0 SP1
-TitlePalette  db   $36,$0f,$00,$10,$17,$07,$08,$1a,$28,$30,$3b,$22,$16,$27 ; 14 colors :)
+; PRE_RENDER, on the GS task: make a palette switch that Z_PalWrite detected
+ApplyPaletteChange
+            php
+            sei                             ; take the request without racing the NES task
+            ldy   zPendingPal
+            beq   :none
+            ldx   zCurPal
+            sty   zCurPal
+            stz   zPendingPal
+            plp
+            jmp   UpdatePalette             ; X = from, Y = to
+:none       plp
+            rts
 
-; Palette showing back story and items
-;                  BG0     BG1 BG2 BG3         SP0         SP1     SP2     SP3
-IntroPalette  db   $0f,$30,$21,$16,$29,$1a,$09,$29,$37,$17,$02,$22,$16,$27,$0b,$1b,$2b   ; 17 colors :(
-
-; Palette at the select screen
-;                  BG0             BG1         BG2         SP0     SP3
-SelectPalette db   $0f,$30,$00,$12,$16,$27,$36,$0c,$1c,$2c,$29,$07,$15     ; 13 colors :)
-
-; Overworld palette
-;                  BG0             BG1         BG2     BG3 SP0 SP1     SP4
-WoldPalette   db   $0f,$30,$00,$12,$16,$27,$36,$1a,$37,$17,$29,$02,$22,$1c ; 14 colors :)
-
-; Merchant
-;                  BG0             BG1         BG3     SP0 SP1     SP4
-MerchPalette  db   $0f,$30,$00,$12,$16,$27,$36,$07,$17,$29,$02,$22,$1c ; 13 colors :)
-
-; Dungeon 1 (only changes BG3 and SP2 & 3 compared to overworld)
-;                  BG0             BG1         BG2         SP0     SP1     
-Dungeon1Pal   db   $0f,$30,$00,$12,$16,$27,$36,$0c,$1c,$2c,$29,$17,$02,$22 ; 14 colors :)
-
+            put   pal_transitions.s
 
 ; Room transitions scroll the play area under a fixed status bar.  The NES does it with a sprite-0
 ; hit at the bottom of the status bar: the NMI shows the status bar at scroll (0,0), then
@@ -515,81 +513,15 @@ zExposePlayArea
             ldy   #y_height
             jmp   _BltRangeLite
 
-SwizzleTables adrl AT1_T0
-
 ZELDA_PALETTE_DISPATCH
-        dw   Z_3F00, Z_3F01,   Z_3F02,   Z_3F03
-        dw   ppu_3F04, Z_3F05,   Z_3F06,   ppu_3F07
-        dw   ppu_3F08, Z_3F09,   Z_3F0A,   Z_3F0B
-        dw   ppu_3F0C, Z_3F0D,   Z_3F0E,   Z_3F0F
-        dw   Z_3F10, ppu_3F11, ppu_3F12, Z_3F13
-        dw   ppu_3F14, ppu_3F15, Z_3F16,   ppu_3F17
-        dw   ppu_3F18, ppu_3F19, ppu_3F1A, ppu_3F1B
-        dw   ppu_3F1C, ppu_3F1D, ppu_3F1E, ppu_3F1F
-
-Z_3F00
-Z_3F10  jsr  NES_ColorToIIgs
-        stal $E19E00
-        rts
-
-Z_3F01  jsr  NES_ColorToIIgs
-        stal $E19E02
-        rts
-
-Z_3F02  jsr  NES_ColorToIIgs
-        stal $E19E04
-        rts
-
-Z_3F03  jsr  NES_ColorToIIgs
-        stal $E19E06
-        rts
-
-Z_3F05  jsr  NES_ColorToIIgs
-        stal $E19E08
-        rts
-
-Z_3F06  jsr  NES_ColorToIIgs
-        stal $E19E0A
-        rts
-
-Z_3F09  jsr  NES_ColorToIIgs
-        stal $E19E0C
-        rts
-
-Z_3F0A  jsr  NES_ColorToIIgs
-        stal $E19E0E
-        rts
-
-Z_3F0B  jsr  NES_ColorToIIgs
-        stal $E19E10
-        rts
-
-Z_3F0D  jsr  NES_ColorToIIgs
-        stal $E19E12
-        rts
-
-Z_3F0E  jsr  NES_ColorToIIgs
-        stal $E19E14
-        rts
-
-Z_3F0F  jsr  NES_ColorToIIgs
-        stal $E19E16
-        rts
-
-Z_3F13  jsr  NES_ColorToIIgs
-        stal $E19E18
-        rts
-
-Z_3F16  jsr  NES_ColorToIIgs
-        stal $E19E1A
-        rts
-
-
-; Sprite Palette 0, color 1
-SMB_3F11    ldal PPU_MEM+$3F11
-            jsr  NES_ColorToIIgs
-            stal $E19E00+28
-            rts
+        dw   Z_PalWrite,Z_PalWrite,Z_PalWrite,Z_PalWrite
+        dw   Z_PalWrite,Z_PalWrite,Z_PalWrite,Z_PalWrite
+        dw   Z_PalWrite,Z_PalWrite,Z_PalWrite,Z_PalWrite
+        dw   Z_PalWrite,Z_PalWrite,Z_PalWrite,Z_PalWrite
+        dw   Z_PalWrite,Z_PalWrite,Z_PalWrite,Z_PalWrite
+        dw   Z_PalWrite,Z_PalWrite,Z_PalWrite,Z_PalWrite
+        dw   Z_PalWrite,Z_PalWrite,Z_PalWrite,Z_PalWrite
+        dw   Z_PalWrite,Z_PalWrite,Z_PalWrite,Z_PalWrite
 
 ; Game-specific configuration values, saved after the built-in values by misc/io.s.  The
 ; built-in values, menus and ApplyConfig are defined in rom/rom_config_setup.s

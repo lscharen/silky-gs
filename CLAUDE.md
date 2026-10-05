@@ -68,8 +68,22 @@ Each port has a consistent structure:
 - `rom.s` — Converted NES PRG-ROM code/data
 - `chr.s` — NES CHR-ROM tile graphics
 - `PPU.s` — NES PPU/OAM memory allocations
-- `pal_*.s` — Palette definitions
+- `pal_*.s` — Palette definitions (older ports; Zelda uses the generated palette pipeline below)
 - `Stack.s` — Stack allocation
+
+### Palette Pipeline (Zelda; the model for new ports)
+
+The IIgs shows 16 colors at once (one palette of 16 slots); the NES shows up to 25. Palettes are described as data and compiled into the game by a tool — **don't hand-write palette code or copy the older ports' per-address `$3Fxx` handlers.**
+
+- **Source of truth:** `src/games/zelda/palettes/*.txt` (one file per palette the game shows: `BG0:`–`SP3:`, 4 NES colors each) and `palettes/transitions.txt` (INI-style graph: each `[palette]` lists the palettes that can follow it).
+  - `*$xx` — **reserved**: the game changes this color on the fly (color cycling, Link's tunic/rings, per-room enemy palettes in SP3). It gets an IIgs slot of its own and matches any value during detection.
+  - `$xx~$yy` — **approximated**: palette RAM holds `$xx` (used for detection) but it is drawn in `$yy`'s slot; used only when a palette can't fit 16 slots otherwise. It never writes the CLUT.
+  - Parser: `scripts/palette-transition.js` (`parsePaletteFile`).
+- **Generator:** `scripts/generate-palette-transitions.js` (run by `src/games/zelda/build.js`; skipped when its outputs are newer than the palette files and scripts — expect ~20s when it does run; `--report` prints layouts, slot use and the redraw matrix). It gives every palette **one fixed IIgs slot layout**, chosen jointly so the background groups that keep the same slots across the graph's transitions don't need redrawing. Outputs (never edit by hand):
+  - `src/palettes.s` — 8 swizzle tables × 512 bytes per palette (PALDATA segment; 4KB per palette, so at most 16 palettes per bank).
+  - `src/pal_transitions.s` — `PAL_*` ids, `DetectNESPalette`, `UpdatePalette`, `SetPaletteColor` and their tables (put into MAIN).
+- **Runtime:** every palette RAM write goes to `Z_PalWrite` (Zelda `Main.s`, NES task). `DetectNESPalette` matches all 32 bytes minus reserved cells, trying the current palette, then its successors in the graph, then all (palettes can share colors — e.g. dungeon 1 and the select screen have identical backgrounds). A detected switch is deferred to `PRE_RENDER` (`ApplyPaletteChange`, GS task), where `UpdatePalette` switches the swizzle tables, loads the CLUT from **live** palette RAM through the palette's cell→slot map, and calls `RefreshPPUAttributes` (`src/ppu/ppu_metatiles.s`) to redraw only the background groups whose slots changed. Writes that don't complete a known palette (fades, cycling) are shown immediately in the current layout.
+- **Adding a palette:** add `<name>.txt`, list it in `transitions.txt`, build. If the generator reports a palette needs more than 16 colors, mark a close color with `~`. Pull exact colors from the ROM's palette transfer records (e.g. Zelda's `LevelInfo` blocks) rather than guessing.
 
 ### Key Configuration Constants (in `Main.s` per game)
 
