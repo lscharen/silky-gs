@@ -67,6 +67,9 @@ PPU_SPR_TILE_ADDR equ $0000
 ; than using a fixed CHR-ROM image loaded once at startup
 HAS_CHR_RAM equ 0
 
+; No battery-backed WRAM to load and save (see HAS_BACKED_WRAM in scaffold.s)
+HAS_BACKED_WRAM equ 0
+
 
 ; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
 ; in addition to the compiled representation (usually yes, since this is used for the config

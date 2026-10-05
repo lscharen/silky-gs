@@ -133,6 +133,17 @@ NES_StartUp
             bcc   :mtloop
             FIN
 
+; Battery-backed cartridges: restore the WRAM image ($6000-$7FFF of the NES address space, in the
+; ROMBase bank) before any ROM code runs.  If there is no file yet (first run), WRAM is left as-is
+; and the game sees the same uninitialized memory as a new cartridge.  Saved by NES_ShutDown.
+
+            DO    HAS_BACKED_WRAM
+            lda   #$2000
+            ldx   #$6000
+            ldy   #wrCreateRec
+            jsr   LoadROMFile
+            FIN
+
 ; Now the core of the runtime has been initialized
             rts
 
@@ -338,6 +349,16 @@ NES_ShutDown
             jsr   APUShutDown
             FIN
             jsr   ShutDown
+
+; Battery-backed cartridges: write the WRAM image back out.  Done after ShutDown, when the NES task
+; can no longer be scheduled, so WRAM can't change while it is being written.
+
+            DO    HAS_BACKED_WRAM
+            lda   #$2000
+            ldx   #$6000
+            ldy   #wrCreateRec
+            jsr   SaveROMFile
+            FIN
             rts
 
 OneSecondCounter  dw  0

@@ -69,6 +69,10 @@ PPU_SPR_TILE_ADDR equ $0000
 ; (ppu_attributes.s), CheckSprTileDirty (ppu.s), and NES_StartUp (scaffold.s).
 HAS_CHR_RAM equ 1
 
+; The cartridge has battery-backed WRAM ($6000-$7FFF).  NES_StartUp loads it from
+; WRAM_FILENAME and NES_ShutDown saves it back (scaffold.s, misc/io.s).
+HAS_BACKED_WRAM equ 1
+
 ; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
 ; in addition to the compiled representation (usually yes, since this is used for the config
 ; screen)
@@ -206,6 +210,11 @@ quit
             _QuitGS    qtRec
 qtRec       adrl  $0000
             da    $00
+
+; Files used by misc/io.s.  WRAM_FILENAME holds the battery-backed save RAM (HAS_BACKED_WRAM).
+WRAM_FILENAME strl '1/zelda.wram'
+SAVE_FILENAME strl '1/zelda.sav'     ; unused
+PREF_FILENAME strl '1/zelda.prefs'   ; unused
 
 InitPlayfield
             ldx   #TitleScreen
@@ -597,3 +606,6 @@ INPUT_ITEM_5 dw   KEYMAP
             put   ../../../core/blitter/VertLite.s
             put   ../../../core/tiles/CompileTile.s
             put   ../../../core/sprites/CompileSprites.s
+
+; GS/OS file load / save (battery-backed WRAM, see HAS_BACKED_WRAM)
+            put   ../../../misc/io.s
