@@ -103,6 +103,10 @@ NES_StartUp
             bcc   *+5
             jmp   Fail
 
+; Build the sprite Y filter used by scanOAMSprites from this game's playfield settings
+
+            jsr   InitYExclude
+
 ; Initialize the sound hardware for APU emulation
 
             DO    NO_INTERRUPTS

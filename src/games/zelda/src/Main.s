@@ -46,14 +46,6 @@ POST_RENDER  mac
 ;
              <<<
 
-; Put in additional conditions to skip sprites when scanning the OAM table to decide what to
-; render.  Set the carry flag to keep, clear the carry flag to skip
-;
-; Input: The accumulator holds the first two OAM bytes (y-position and tile id)
-SCAN_OAM_XTRA_FILTER mac
-            sec               ; pass everything
-            <<<
-
 ; Define which PPU address has the background and sprite tiles
 ;
 ; Zelda uses CHR-RAM (tiles uploaded dynamically via PPUDATA writes into
@@ -150,7 +142,7 @@ COMPILED_SPRITE_LIST       mac
                            <<<
 
 ; Do not check for specific Tile IDs to exclude from drawing
-NO_TILE_EXCLUDE equ 1
+NO_TILE_EXCLUDE equ 0
 
 ; Do we have a custom routine to execite RenderScreen.  If yes, put its address here
 CUSTOM_RENDER_SCREEN equ 0
