@@ -1247,7 +1247,9 @@ _GetMenuItemIndex
             beq  :found
             iny
             iny
-            cpy  #8           ; number of items
+            tya
+            lsr
+            cmp  CONFIG_MENU  ; number of items
             bcc  :loop
             ldy  #0           ; pick index zero by default
 
@@ -1362,14 +1364,20 @@ _DrawControlCursor
             jmp  _DrawControlCursor
 
 _UpdateMenuCursor
-            lda  CONFIG_MENU+2
+            ldx  #0
+:loop
+            phx
+            lda  CONFIG_MENU+2,x
             jsr  _DrawMenuCursor
-            lda  CONFIG_MENU+4
-            jsr  _DrawMenuCursor
-            lda  CONFIG_MENU+6
-            jsr  _DrawMenuCursor
-            lda  CONFIG_MENU+8
-            
+            plx
+            inx
+            inx
+            txa
+            lsr
+            cmp  CONFIG_MENU             ; number of menu items
+            bcc  :loop
+            rts
+
 _DrawMenuCursor
 :tile       equ  tmp15
 :scratch    equ  tmp14
@@ -1645,7 +1653,7 @@ rom_cfg_chr_a
             dw    %111100000,%000000000
             dw    %111100000,%000000000
             dw    %001111000,%001111000
-            dw    %000011110,%11110000
+            dw    %000011110,%111100000
             dw    %000000000,%000000000
 
             dw    %111111110,%110000000     ; D

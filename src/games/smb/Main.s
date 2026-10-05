@@ -9,6 +9,10 @@
             use   GTE.Macs.s
 
             put   ../../Externals.s
+AT0_T0      EXT                       ; Swizzle tables live in the PALDATA segment (pal_w11.s)
+AT1_T0      EXT
+AT2_T0      EXT
+AT3_T0      EXT
             put   ../../core/Defs.s
 
             mx    %00
@@ -41,15 +45,6 @@ POST_RENDER  mac
              jsr  CheckForPaletteChange
              <<<
 
-; Put in additional conditions to skip sprites when scanning the OAM table to decide what to
-; render.  Set the carry flag to keep, clear the carry flag to skip
-;
-; Input: The accumulator holds the first two OAM bytes (y-position and tile id)
-SCAN_OAM_XTRA_FILTER mac
-            eor    #$FC00             ; Is the tile == $FC? This is a blank tile in this ROM
-            cmp    #$0100
-            <<<
-
 ; Define which PPU address has the background and sprite tiles
 PPU_BG_TILE_ADDR  equ $1000
 PPU_SPR_TILE_ADDR equ $0000
@@ -57,6 +52,9 @@ PPU_SPR_TILE_ADDR equ $0000
 ; Flag whether this game uploads its own CHR data at runtime (CHR-RAM) rather
 ; than using a fixed CHR-ROM image loaded once at startup
 HAS_CHR_RAM equ 0
+
+; No battery-backed WRAM to load and save (see HAS_BACKED_WRAM in scaffold.s)
+HAS_BACKED_WRAM equ 0
 
 
 ; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
@@ -120,6 +118,18 @@ NO_CONFIG         equ 0
 ; 0 = decode each sample when the game plays it.
 CACHE_DMC_SAMPLES equ 0
 
+; Configuration screen setup (see rom/rom_config_setup.s)
+CONFIG_DEFAULT_AUDIO equ APU_60HZ   ; default audio quality
+CONFIG_VIDEO_MENU    equ 1          ; show the VIDEO menu
+CONFIG_INPUT_BUTTONS equ 0          ; allow remapping the A/B buttons
+CONFIG_INPUT_2P      equ 0          ; show P1/P2 tabs on the INPUT menu
+CONFIG_GAME_MENU     equ 0          ; append a GAME_CONFIG menu defined by this file
+
+; Callback after the configuration has been applied.  X = config_block_start, Y = config_game_start
+CONFIG_APPLY_HOOK mac
+;
+             <<<
+
 ; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
 ; set the background color.
@@ -161,7 +171,7 @@ COMPILED_SPRITE_LIST       mac
                            <<<
 
 ; Do not check for specific Tile IDs to exclude from drawing
-NO_TILE_EXCLUDE equ 1
+NO_TILE_EXCLUDE equ 0
 
 ; Do we have a custom routine to execute RenderScreen.  If yes, put its address here
 CUSTOM_RENDER_SCREEN equ 1
@@ -628,28 +638,6 @@ SetAreaPalette
 AreaPalettes  dw   WaterPalette,Area1Palette,Area2Palette,Area3Palette,Area2Palette
 SwizzleTables adrl AT0_T0,AT1_T0,AT2_T0,AT3_T0,AT2_T0
 
-; ApplyConfig
-;
-; Read the variables set up the configuration screen and apply them to the runtime engine.
-ApplyConfig
-            lda   config_video_fastmode
-            beq   :normal_video
-            lda   #CTRL_EVEN_RENDER
-            tsb   ControlBits
-            bra   :apply_video
-:normal_video
-            lda   #CTRL_EVEN_RENDER
-            trb   ControlBits
-:apply_video
-            lda   #0
-            jsr   FillScreen
-            jsr   _InitRenderMode
-
-
-            lda   config_audio_quality
-            jsr   APUReload
-            rts
-
 ; Copy just the tiles that change directly to the graphics screen
 
 MemOffsets    dw    67, 68, 69, 70, 71,                        82, 83, 84, 85, 86,  89, 90, 91, 92
@@ -697,227 +685,13 @@ CopyStatusToScreen
 ;            rts
 
 
-; Configuration screen and variables
-;
-; The configuration screen has two sections -- the menu and the controls.  Each
-; menu defines a set of controls and each control references a memory location
-; that stores a configuration value.
-;
-; The focus can either be on the menu column or the control column and code tracks
-; the active menu and the active control.  Navigation is primarily controlled
-; by prev/next pointers on the menu and control itmes that direct which control to
-; select in response to the user's inputs.
+; Game-specific configuration values, saved after the built-in values by misc/io.s.  The
+; built-in values, menus and ApplyConfig are defined in rom/rom_config_setup.s
+config_game_start
+config_game_end
 
-config_block_start
-
-config_audio_quality   ds  2  ; good / better / best audio quality (60Hz, 120Hz, 240Hz audio interrupts)
-config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
-config_video_fastmode  ds  2  ; use the "skip line" rendering mode
-config_video_small     ds  2  ; use a smaller playfield screen size
-
-; player 1 config block
-config_block_p1
-config_input_p1_type   dw  0  ; keyboard / snes max
-config_input_key_left  dw  LEFT_ARROW
-config_input_key_right dw  RIGHT_ARROW
-config_input_key_up    dw  UP_ARROW
-config_input_key_down  dw  DOWN_ARROW
-config_input_snesmax_port dw 4
-config_input_button_a  dw  MOD_REG_COMMAND_DOWN
-config_input_button_b  dw  MOD_REG_OPTION_DOWN
-
-; player 2 config block
-config_block_p2
-config_input_p2_type      dw  0
-config_input_p2_key_left  dw  'j'
-config_input_p2_key_right dw  'l'
-config_input_p2_key_up    dw  'i'
-config_input_p2_key_down  dw  'k'
-config_input_p2_snesmax_port dw 4
-config_input_p2_button_a  dw  MOD_REG_CONTROL_DOWN
-config_input_p2_button_b  dw  MOD_REG_SHIFT_DOWN
-config_block_end
-
-;CONFIG_PALETTE      equ 1
-;TILE_TOP_LEFT       equ $144
-;TILE_TOP_RIGHT      equ $149
-;TILE_BOTTOM_LEFT    equ $15F
-;TILE_BOTTOM_RIGHT   equ $17A
-;TILE_HORIZONTAL_TOP equ $148
-;TILE_HORIZONTAL_BOTTOM equ $178
-;TILE_VERTICAL_LEFT  equ $146
-;TILE_VERTICAL_RIGHT equ $14A
-;TILE_ZERO           equ $100
-;TILE_A              equ $10A
-;TILE_SPACE          equ $124
-;TILE_CURSOR         equ $1CE
-
-AUDIO_TITLE_STR     str 'AUDIO'
-AUDIO_QUALITY_STR   str 'QUALITY'
-AUDIO_QUALITY_60HZ  str ' 60 HZ'
-AUDIO_QUALITY_120HZ str '120 HZ'
-AUDIO_QUALITY_240HZ str '240 HZ'
-
-VIDEO_TITLE_STR      str 'VIDEO'
-VIDEO_FASTMODE_STR   str 'FAST BLIT'
-VIDEO_STATUS_BAR_STR str 'STATUS BAR'
-VIDEO_SMALL_STR      str 'SMALL SCRN'
-
-INPUT_TITLE_STR     str 'INPUT'
-INPUT_TYPE_STR      str 'TYPE'
-INPUT_TYPE_OPT_1    str 'KEYBOARD'
-INPUT_TYPE_OPT_2    str 'JOYSTICK'
-INPUT_TYPE_OPT_3    str 'SNES MAX'
-INPUT_LEFT_MAP_STR  str 'LEFT'
-INPUT_RIGHT_MAP_STR str 'RIGHT'
-INPUT_UP_MAP_STR    str 'UP'
-INPUT_DOWN_MAP_STR  str 'DOWN'
-INPUT_SNESMAX_PORT_STR str 'SLOT'
-
-; The configuration screen leverages the NES runtime itself
-CONFIG_BLK   db   CONFIG_PALETTE        ; Which background palette to use
-             db   TILE_TOP_LEFT         ; Define the tiles to use for the UI
-             db   TILE_TOP_RIGHT
-             db   TILE_HORIZONTAL_TOP
-             db   TILE_HORIZONTAL_BOTTOM
-             db   TILE_VERTICAL_LEFT
-             db   TILE_VERTICAL_RIGHT
-             db   TILE_ZERO             ; First tile for the 0 - 9 characters
-             db   TILE_A                ; First tile for the alphabet A - Z characters
-             db   TILE_SPACE
-CONFIG_MENU  dw   3                     ; Four screens "Audio", "Video", "Input"
-             dw   AUDIO_CONFIG
-             dw   VIDEO_CONFIG
-             dw   INPUT_CONFIG
-
-AUDIO_CONFIG dw   AUDIO_TITLE_STR
-             dw   0                     ; previous menu item
-             dw   VIDEO_CONFIG          ; next menu item
-
-             dw   1                     ; One configuration element
-             dw   AUDIO_ITEM_1
-
-AUDIO_ITEM_1 dw   RADIO                 ; A radio button (mutually exclusive) option
-             dw   0                     ; previous control
-             dw   0                     ; next control
-             dw   3,2                   ; X,Y location of control in the config area
-             dw   AUDIO_QUALITY_STR     ; Title
-             dw   config_audio_quality  ; Memory address to write the configuration value (set to zero if not saved)
-             dw   3                     ; Three options
-
-             dw   APU_60HZ              ; config value
-             dw   AUDIO_QUALITY_60HZ    ; config label
-             dw   0                     ; conditional control (if null, nothing)
-
-             dw   APU_120HZ
-             dw   AUDIO_QUALITY_120HZ
-             dw   0                     ; conditional control (if null, nothing)
-
-             dw   APU_240HZ
-             dw   AUDIO_QUALITY_240HZ
-             dw   0                     ; conditional control (if null, nothing)
-
-VIDEO_CONFIG dw   VIDEO_TITLE_STR
-             dw   AUDIO_CONFIG          ; previous menu item
-             dw   INPUT_CONFIG          ; next menu item
-
-             dw   3                     ; Two configuration elements
-             dw   VIDEO_ITEM_1
-             dw   VIDEO_ITEM_2
-             dw   VIDEO_ITEM_3
-
-VIDEO_ITEM_1 dw   CHKBOX                ; Checkbox just forces a 0/1 for False/True
-             dw   0                     ; previous control
-             dw   VIDEO_ITEM_2          ; next control
-             dw   3,2
-             dw   VIDEO_STATUS_BAR_STR
-             dw   config_video_statusbar
-
-VIDEO_ITEM_2 dw   CHKBOX
-             dw   VIDEO_ITEM_1          ; previous control
-             dw   VIDEO_ITEM_3          ; next control
-             dw   3,4
-             dw   VIDEO_FASTMODE_STR
-             dw   config_video_fastmode
-
-VIDEO_ITEM_3 dw   CHKBOX
-             dw   VIDEO_ITEM_2          ; previous control
-             dw   0                     ; next control
-             dw   3,6
-             dw   VIDEO_SMALL_STR
-             dw   config_video_small
-
-INPUT_CONFIG dw   INPUT_TITLE_STR
-             dw   VIDEO_CONFIG          ; previous menu item
-             dw   0                     ; next menu item
-
-             dw   1
-             dw   INPUT_ITEM_1
-
-INPUT_ITEM_1 dw   RADIO
-             dw   0
-             dw   0
-             dw   3,2
-             dw   INPUT_TYPE_STR
-             dw   config_input_p1_type
-             dw   2
-
-             dw   0
-             dw   INPUT_TYPE_OPT_1
-             dw   KEYBOARD_LIST
-
-             dw   2
-             dw   INPUT_TYPE_OPT_3
-             dw   SNESMAX_LIST
-
-SNESMAX_LIST  dw  NUMBER_SELECT
-              dw  INPUT_ITEM_1
-              dw  0
-              dw  3,8
-              dw  INPUT_SNESMAX_PORT_STR
-              dw  config_input_snesmax_port
-
-              dw  1            ; minimum value
-              dw  7            ; maximum value
-
-KEYBOARD_LIST dw  CTRL_LIST
-              dw  4
-              dw  INPUT_ITEM_2
-              dw  INPUT_ITEM_3
-              dw  INPUT_ITEM_4
-              dw  INPUT_ITEM_5
-
-INPUT_ITEM_2 dw   KEYMAP
-             dw   INPUT_ITEM_1
-             dw   INPUT_ITEM_3
-             dw   3,8
-             dw   INPUT_LEFT_MAP_STR
-             dw   config_input_key_left
-
-INPUT_ITEM_3 dw   KEYMAP
-             dw   INPUT_ITEM_2
-             dw   INPUT_ITEM_4
-             dw   3,9
-             dw   INPUT_RIGHT_MAP_STR
-             dw   config_input_key_right
-
-INPUT_ITEM_4 dw   KEYMAP
-             dw   INPUT_ITEM_3
-             dw   INPUT_ITEM_5
-             dw   3,10
-             dw   INPUT_UP_MAP_STR
-             dw   config_input_key_up
-
-INPUT_ITEM_5 dw   KEYMAP
-             dw   INPUT_ITEM_4
-             dw   0
-             dw   3,11
-             dw   INPUT_DOWN_MAP_STR
-             dw   config_input_key_down
-
-            DO    SHOW_DEBUG_VARS
+            DO    SHOW_DEBUG_VARS+RENDER_VBL_COUNT    ; debug text (DrawByte / DrawWord)
             put   ../../misc/App.Msg.s
-            put   ../../misc/font.s
             FIN
 
             mput  ../../ppu
@@ -941,32 +715,6 @@ INPUT_ITEM_5 dw   KEYMAP
             put    ../../ppu/scanline_bitmap.s
 ; AUTOINC:END
 
-
-            ds    \,$00                      ; pad to the next page boundary
-
-; Mapping tables to take a nametable address and return the appropriate attribute memory location.  This is a table with
-; 960 entries.  This table is just the 64 offsets above address $2xC0 stored as bytes to keep the table size reasonably
-; conpact
-* PPU_ATTR_ADDR
-* ]row        =     0
-*             lup   30
-*             db    $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1,
-*             db    $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3,
-*             db    $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5,
-*             db    $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7,
-* ]row        =     ]row+1
-*             --^
-            
-* PPU_ATTR_MASK
-*             lup   7
-*             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-*             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-*             db    $30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0
-*             db    $30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0
-*             --^
-*             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-*             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-
 ; If AreaStyle is 1 then load an alternate palette 'b'
 ;
 ; Palettes of NES color indexes
@@ -984,8 +732,6 @@ WaterPalette dw     $22, $00, $15, $12, $25, $3A, $1A, $0F, $30, $12, $27, $10, 
 ; AreaStyle = $01 (almost the same as Area1Palette)
 MushroomPalette dw  $22, $00, $27, $16, $0F, $36, $17, $30, $21, $27, $1A, $16, $00, $00, $16, $18
 
-; Palette remapping
-            put   pal_w11.s
             put   ../../apu/apu.s
 
 ; Core code
@@ -998,6 +744,7 @@ MushroomPalette dw  $22, $00, $27, $16, $0F, $36, $17, $30, $21, $27, $1A, $16, 
             put    ../../rom/rom_input.s
             put    ../../rom/rom_exec.s
             put    ../../rom/rom_config.s
+            put    ../../rom/rom_config_setup.s
 ; AUTOINC:END
 
             put   ../../core/CoreData.s
