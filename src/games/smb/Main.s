@@ -688,9 +688,8 @@ CopyStatusToScreen
 config_game_start
 config_game_end
 
-            DO    SHOW_DEBUG_VARS
+            DO    SHOW_DEBUG_VARS+RENDER_VBL_COUNT    ; debug text (DrawByte / DrawWord)
             put   ../../misc/App.Msg.s
-            put   ../../misc/font.s
             FIN
 
             mput  ../../ppu

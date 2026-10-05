@@ -588,9 +588,8 @@ BF_ApplyConfig
             rep   #$30
             rts
 
-            DO    SHOW_DEBUG_VARS
+            DO    SHOW_DEBUG_VARS+RENDER_VBL_COUNT    ; debug text (DrawByte / DrawWord)
             put   ../../misc/App.Msg.s
-            put   ../../misc/font.s
             FIN
             put   ../../misc/io.s
 

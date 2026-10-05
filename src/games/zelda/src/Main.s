@@ -359,6 +359,10 @@ SMB_3F11    ldal PPU_MEM+$3F11
 config_game_start
 config_game_end
 
+            DO    SHOW_DEBUG_VARS+RENDER_VBL_COUNT    ; debug text (DrawByte / DrawWord)
+            put   ../../../misc/App.Msg.s
+            FIN
+
             mput  ../../../ppu
 ; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
             put    ../../../ppu/ppu_macros.s
