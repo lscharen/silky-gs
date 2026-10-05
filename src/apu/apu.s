@@ -112,7 +112,7 @@ stop_interrupts
 
 stop_playing            = *
 
-                        ldy   #7                        ; Number of oscillators
+                        ldy   #10                       ; Number of oscillators (5 channels x L/R)
 
                         sep   #$20
                         mx    %10
@@ -184,23 +184,33 @@ setup_docram
                         rts
 
 ;--------------------------
+; The pulse waves average to zero, like the NES output after its high-pass filtering.  With
+; $01/$FF tables, every volume change (note on/off, envelope steps) also moved the DC level of
+; the narrow duties, which the IIgs output turns into a click.  All four have the same
+; peak-to-peak (145) as on the NES; the 12.5% duty sets the limit.
 make_eigth_pulse
                         ldy #32
+                        ldx #$FF6E                  ; 32 x +127, 224 x -18
                         jmp make_pulse
 
 make_quarter_pulse
                         ldy #64
+                        ldx #$ED5C                  ; 64 x +109, 192 x -36
                         jmp make_pulse
 
 make_half_pulse
                         ldy #128
+                        ldx #$C838                  ; 128 x +72, 128 x -72
                         jmp make_pulse
 
 make_inv_quarter_pulse
                         ldy #192
+                        ldx #$5CED                  ; 192 x -36, 64 x +109
                         jmp make_pulse
 
+; A = DOC page << 8, Y = samples at the first level, X = first level << 8 | second level
 make_pulse
+                        stx pulse_levels
                         sep #$30
                         mx  %11
 
@@ -211,14 +221,14 @@ make_pulse
                         ldx #0
 
 :loop1
-                        lda #$01
+                        lda pulse_levels+1
                         sta sound_data
                         inx
                         dey
                         bne :loop1
 
 :loop2
-                        lda #$FF
+                        lda pulse_levels
                         sta sound_data
                         inx
                         bne :loop2
@@ -226,6 +236,8 @@ make_pulse
                         rep #$30
                         mx  %00
                         rts
+
+pulse_levels            dw  0
 
 copy_triangle
                         sep #$30
@@ -350,6 +362,11 @@ setup_doc_registers
                         ldx   #noise_sound_settings_r
                         jsr   copy_register_config
 
+                        ldx   #dmc_sound_settings_l
+                        jsr   copy_register_config
+                        ldx   #dmc_sound_settings_r
+                        jsr   copy_register_config
+
                         rep #$20
                         mx  %00
 
@@ -392,6 +409,7 @@ setup_interrupt         = *
                         mx    %10
 
                         ldal  apu_mode
+                        cmp   #APU_240HZ
                         beq   :do_240hz
                         lda   #598
                         ldy   #598/256
@@ -438,6 +456,10 @@ pulse1_oscillator       =     0
 pulse2_oscillator       =     2
 triangle_oscillator     =     4
 noise_oscillator        =     6
+dmc_oscillator          =     8
+DMC_DOC_PAGE            =     $80                   ; DOC RAM page of the decoded DMC sample ($8000-$FFFF)
+DMC_TABLE_SIZE          =     $3F                   ; 32KB table, resolution 7 (one sample per FHL/512 scans)
+DMC_VOLUME              =     $FF
 default_freq            =     800
 pulse1_sound_settings_l =     *
                         dfb   $00+pulse1_oscillator,default_freq      ; frequency low register
@@ -503,6 +525,22 @@ noise_sound_settings_r =     *
                         dfb   $c1+noise_oscillator,0                 ; wavetable size register, 256 byte length
                         dfb   $a1+noise_oscillator,$10                 ; mode register, set to free run
 
+; The DMC oscillators start out halted.  dmc_play sets the frequency and volume and keys them on.
+dmc_sound_settings_l    =     *
+                        dfb   $00+dmc_oscillator,0                    ; frequency low register
+                        dfb   $20+dmc_oscillator,0                    ; frequency high register
+                        dfb   $40+dmc_oscillator,0                    ; volume register, volume = 0
+                        dfb   $80+dmc_oscillator,DMC_DOC_PAGE         ; wavetable pointer register, decoded sample at $8000
+                        dfb   $c0+dmc_oscillator,DMC_TABLE_SIZE       ; wavetable size register, 32KB table
+                        dfb   $a0+dmc_oscillator,$03                  ; mode register, one-shot + halted
+
+dmc_sound_settings_r    =     *
+                        dfb   $01+dmc_oscillator,0                    ; frequency low register
+                        dfb   $21+dmc_oscillator,0                    ; frequency high register
+                        dfb   $41+dmc_oscillator,0                    ; volume register, volume = 0
+                        dfb   $81+dmc_oscillator,DMC_DOC_PAGE         ; wavetable pointer register, decoded sample at $8000
+                        dfb   $c1+dmc_oscillator,DMC_TABLE_SIZE       ; wavetable size register, 32KB table
+                        dfb   $a1+dmc_oscillator,$13                  ; mode register, one-shot + halted
 
 backup_interrupt_ptr    ds  4
 apu_mode                ds  2
@@ -516,12 +554,8 @@ clock_length_counter    mac
                         bit   ]2
                         bne   no_count
                         lda   ]1+{APU_PULSE1_LENGTH_COUNTER-APU_PULSE1}
-                        bne   dec_count
-                        lda   ]2
-                        ora   ]1+{APU_PULSE1_REG1-APU_PULSE1}
-                        sta   ]1+{APU_PULSE1_REG1-APU_PULSE1}
-                        bra   no_count
-dec_count               dec
+                        beq   no_count                        ; stops at zero (channel is silenced)
+                        dec
                         sta   ]1+{APU_PULSE1_LENGTH_COUNTER-APU_PULSE1}
 no_count                <<<
 
@@ -662,7 +696,11 @@ quarter_frame_clock
 ; interupt handler
 ;-----------------------------------------------------------------------------------------
 
-apu_frame_steps      equ 5
+; The frame sequencer runs the 4-step pattern (Q, Q+H, Q, Q+H at 240Hz).  The NES 5-step mode
+; ($4017 bit 7) has a silent fifth step, but games such as Zelda write $4017 once per video frame,
+; which clocks Q+H immediately and restarts the sequence -- that also works out to exactly
+; 4 quarter-frame and 2 half-frame clocks per 1/60s, so the 4-step pattern is used for both.
+apu_frame_steps      equ 4
 PULSE_HALT_FLAG      equ $20
 NOISE_HALT_FLAG      equ $20     ; noise and pulse channels have halt flag in same bit position in REG1
 PULSE_CONST_VOL_FLAG equ $10
@@ -681,19 +719,8 @@ APU_quarter_speed_driver    = *
                         pea  $c000
                         pld
 
-                        ldx   apu_frame_counter
-                        inx
-                        inx
-                        cpx   #2*apu_frame_steps          ; TODO: This is set by MSB in $4017 (4 or 5).  4 = PAL, 5 = NTSC.
-                        bcc   *+4
-                        ldx   #0
-                        stx   apu_frame_counter
-                        jmp   (:frame_counter_proc,x)
-:frame_counter_proc     da    :quarter_frame,:half_frame,:quarter_frame,:no_frame_60,:half_frame
-
-; Quarter-speed interrupts (60Hz) -- clock four times in each handler
-:half_frame
-:quarter_frame
+; Quarter-speed driver (60Hz) -- one call covers a whole 4-step sequence: 2 half-frame and
+; 4 quarter-frame clocks
                         jsr   half_frame_clock
                         jsr   quarter_frame_clock
                         jsr   quarter_frame_clock
@@ -702,11 +729,6 @@ APU_quarter_speed_driver    = *
                         jsr   quarter_frame_clock
 
                         brl   update_doc_registers
-:no_frame_60
-                        pld
-                        plb
-                        clc
-                        rtl
 
                         mx %11
 interrupt_handler       = *
@@ -743,7 +765,7 @@ interrupt_handler       = *
                         ldx   apu_frame_counter
                         inx
                         inx
-                        cpx   #2*apu_frame_steps          ; TODO: This is set by MSB in $4017 (4 or 5).  4 = PAL, 5 = NTSC.
+                        cpx   #2*apu_frame_steps
                         bcc   *+4
                         ldx   #0
                         stx   apu_frame_counter
@@ -754,8 +776,8 @@ interrupt_handler       = *
                         beq   :do_240hz_mode
                         jmp   (:apu_120hz_table,x)
 :do_240hz_mode          jmp   (:apu_240hz_table,x)
-:apu_240hz_table        da    :quarter_frame_240,:half_frame_240,:quarter_frame_240,no_frame,:half_frame_240
-:apu_120hz_table        da    :quarter_frame_120,:half_frame_120,:quarter_frame_120,no_frame,:half_frame_120
+:apu_240hz_table        da    :quarter_frame_240,:half_frame_240,:quarter_frame_240,:half_frame_240
+:apu_120hz_table        da    :half_frame_120,:half_frame_120,:half_frame_120,:half_frame_120
 
 ; Full speed emulation (240Hz)
 :half_frame_240         jsr   half_frame_clock
@@ -910,14 +932,24 @@ update_doc_registers
                         ldx   #$40+triangle_oscillator
 ;                        sta   sound_address
                         lda   #12                             ; Triangle is a bit softer than pulse channels
-                        bra   :set_volume_triangle
+                        jsr   set_pulse_volume
+                        bra   :end_triangle
 
+; A silenced NES triangle doesn't drop to zero: it holds its current output level and resumes
+; from the same point.  Muting by volume cut the wave at a random point, with a pop at every
+; note start and stop.  Instead, a frequency of 0 stops the DOC oscillator stepping so it holds
+; its current sample.  The last-period cache is cleared so the next note rewrites the frequency.
 :mute_triangle
                         sep   #$30
-                        ldx   #$40+triangle_oscillator
-;                        sta   sound_address
                         lda   #0
-:set_volume_triangle    jsr   set_pulse_volume
+                        ldx   #$00+triangle_oscillator
+                        jsr   set_osc_register_pair
+                        ldx   #$20+triangle_oscillator
+                        jsr   set_osc_register_pair
+                        lda   #$FF
+                        sta   _apu_triangle_last_period
+                        sta   _apu_triangle_last_period+1
+:end_triangle
 
 ; Now the noise channel.  It's mixer volume output is ~half of the pulse channels
 
@@ -1292,6 +1324,11 @@ APU_TRIANGLE_REG4_WRITE ENT
     and   #$07
     stal  APU_TRIANGLE_CURRENT_PERIOD+1
 
+; A $400B write always sets the linear counter reload flag, even when the channel is disabled
+    lda   #1
+    stal  APU_TRIANGLE_START_FLAG
+
+; The length counter only loads when the channel is enabled in $4015
     ldal  APU_STATUS
     bit   #$04
     beq   :no_reload
@@ -1304,8 +1341,6 @@ APU_TRIANGLE_REG4_WRITE ENT
     tax
     ldal  LengthTable,x
     stal  APU_TRIANGLE_LENGTH_COUNTER  ; Immediately start the counter
-    lda   #1
-    stal  APU_TRIANGLE_START_FLAG
 
 :no_reload
     pla
@@ -1387,39 +1422,40 @@ APU_STATUS_FORCE
     sta   APU_STATUS
     bra   force_entry
 
+; Reading $4015 reports which channels have a length counter > 0 (bits 0-3)
 APU_STATUS_READ ENT
-    ldal  APU_NOISE
-    and   #NOISE_HALT_FLAG
-    bne   :noise_halted
-    lda   #$08
-:noise_halted
+    lda   #0
     pha                           ; build the return value
 
-    ldal  APU_TRIANGLE
-    and   #TRIANGLE_HALT_FLAG
-    bne   :triangle_halted
-    lda   #$04
+    ldal  APU_PULSE1_LENGTH_COUNTER
+    beq   :pulse1_done
+    lda   #$01
     ora   1,s
     sta   1,s
-:triangle_halted
+:pulse1_done
 
-    ldal  APU_PULSE2
-    and   #PULSE_HALT_FLAG
-    bne   :pulse2_halted
+    ldal  APU_PULSE2_LENGTH_COUNTER
+    beq   :pulse2_done
     lda   #$02
     ora   1,s
     sta   1,s
-:pulse2_halted
+:pulse2_done
 
-    ldal  APU_PULSE1
-    and   #PULSE_HALT_FLAG
-    bne   :pulse1_halted
-    pla
-    ora   #$01
-    rtl
+    ldal  APU_TRIANGLE_LENGTH_COUNTER
+    beq   :triangle_done
+    lda   #$04
+    ora   1,s
+    sta   1,s
+:triangle_done
 
-:pulse1_halted
-    pla
+    ldal  APU_NOISE_LENGTH_COUNTER
+    beq   :noise_done
+    lda   #$08
+    ora   1,s
+    sta   1,s
+:noise_done
+
+    pla                           ; N/Z flags reflect the returned value
     rtl
 
 
@@ -1466,6 +1502,15 @@ force_entry
     stz  APU_NOISE_LENGTH_COUNTER
 :noise_on
 
+; DMC -- clearing the bit stops the sample, setting it starts one if none is playing
+    bit  #$10
+    bne  :dmc_on
+    jsr  dmc_disable
+    bra  :dmc_done
+:dmc_on
+    jsr  dmc_enable
+:dmc_done
+
     pla
     plb
     plp
@@ -1477,3 +1522,658 @@ force_exit
     plb
     plp
     rtl
+
+;-----------------------------------------------------------------------------------------
+; DMC (delta modulation) channel
+;
+; The NES DMC plays a 1-bit delta sample: each bit moves a 7-bit output level by +/-2.  Samples
+; are decoded to 8-bit PCM in DOC RAM and played once on oscillators 8/9.
+;
+; Decimation: with 32 oscillators enabled the DOC can't step faster than 26.3kHz, so the DMC
+; bit rate is reduced -- 2:1 for rate index 0-11 and 4:1 for 12-15 (~16.9-33.1kHz).
+;
+; Two modes, picked by CACHE_DMC_SAMPLES in the game's Main.s:
+;
+;  CACHE_DMC_SAMPLES = 1  The game lists its samples in DMC_SAMPLE_LIST.  APUCacheDMC decodes
+;                         them all into DOC RAM at start-up, and $4015 plays the one whose
+;                         $4012/$4013 match.  A sample that isn't listed is not played.
+;
+;  CACHE_DMC_SAMPLES = 0  Generic fallback: the sample is decoded into DOC RAM $8000-$FFFF when
+;                         $4015 starts it, and re-decoded only when $4012/$4013 or the
+;                         decimation change.  The game pauses while a sample decodes.
+;
+; DMC_SAMPLE_LIST format: a count byte, then one 3-byte entry per sample -- the $4012 address
+; byte, the $4013 length byte and the $4010 rate index (which sets the decimation).
+;
+; $4011 (direct load) only sets the level a fallback sample starts decoding from; cached samples
+; start at the middle level.  It does not change the output by itself.
+;
+; Not implemented: the loop and IRQ flags in $4010, and the DMC bit when reading $4015.
+;-----------------------------------------------------------------------------------------
+
+DMC_DOC_FLOOR      =  $07      ; first DOC RAM page free for cached samples (pages 0-6 hold the timer and instrument waves)
+DMC_START_LEVEL    =  64       ; starting level for cached samples (no $4011 value at start-up)
+DMC_CACHE_MAX      =  16       ; most samples DMC_SAMPLE_LIST can hold
+
+APU_DMC_REG1 ds 1    ; IL-- RRRR - IRQ enable, loop, rate index
+APU_DMC_REG2 ds 1    ; -DDD DDDD - direct load (starting level for the next fallback decode)
+APU_DMC_REG3 ds 1    ; AAAA AAAA - sample address = $C000 + A * 64
+APU_DMC_REG4 ds 1    ; LLLL LLLL - sample length = L * 16 + 1 bytes
+
+; Decoder inputs
+dmc_src_start      dw  0       ; first NES sample byte
+dmc_src_end        dw  0       ; end of the NES sample data
+dmc_doc_base       dw  0       ; DOC RAM address of the decoded sample
+dmc_dec_shift      dw  0       ; 1 = 2:1, 2 = 4:1
+dmc_start_level    dw  0       ; level the decode starts from (0-127)
+dmc_bias           dw  0       ; low byte = $80 - starting level, added to each output level
+dmc_outs_left      dw  0       ; output samples left in the current source byte
+
+; Oscillator setup for the next sample
+dmc_play_page      dw  0       ; DOC RAM page of the sample
+dmc_play_size      dw  0       ; wavetable size register (table size and resolution)
+dmc_play_shift     dw  0       ; decimation of the sample (1 = 2:1, 2 = 4:1)
+
+; Fallback mode: the sample currently decoded at $8000
+dmc_cache_key      dw  $FFFF   ; $4012/$4013 of the sample in DOC RAM
+dmc_cache_shift    dw  0       ; decimation of the sample in DOC RAM (0 = nothing decoded)
+
+; DOC frequency (FHL) for each rate index, times 4.  Output rate = 51.4066 * FHL with 32
+; oscillators, so FHL = (1789773 / CPU cycles per bit) / decimation / 51.4066 -- dmc_play
+; divides this by 4 * decimation.
+DmcFreqTable dw  325,366,410,435,487,548,616,651,733,870,981,1088,1314,1658,1934,2579
+
+    mx %11
+APU_DMC_REG1_WRITE ENT
+    stal  APU_DMC_REG1
+    rtl
+
+APU_DMC_REG2_WRITE ENT
+    stal  APU_DMC_REG2
+    rtl
+
+APU_DMC_REG3_WRITE ENT
+    stal  APU_DMC_REG3
+    rtl
+
+APU_DMC_REG4_WRITE ENT
+    stal  APU_DMC_REG4
+    rtl
+
+; Clock one delta bit from the accumulator into the level in Y (0-127)
+                        mx    %10
+DMC_BIT                 mac
+                        lsr                             ; next delta bit -> carry
+                        bcc   dmc_bit_down
+                        cpy   #126                      ; +2, unless that passes 127
+                        bcs   dmc_bit_done
+                        iny
+                        iny
+                        bra   dmc_bit_done
+dmc_bit_down            cpy   #2                        ; -2, unless that passes 0
+                        bcc   dmc_bit_done
+                        dey
+                        dey
+dmc_bit_done            <<<
+
+; Write the level in Y to DOC RAM, preserving the remaining delta bits in the accumulator.  The
+; output is centred on the starting level ($80 + level - start), so a sample starts at silence
+; instead of jumping to its absolute level.  The range is 1-255; a $00 would halt the DOC.
+DMC_OUT                 mac
+                        xba                             ; park the delta bits in B
+                        tya
+                        clc
+                        adc   dmc_bias
+                        sta   sound_data
+                        xba
+                        <<<
+
+; $4015 bit 4 cleared: stop the sample
+;
+; Called from APU_STATUS_WRITE with B = K
+                        mx    %11
+dmc_disable
+                        php
+                        phd
+                        pea   $c000
+                        pld
+                        sei
+
+                        jsr   access_doc_registers
+                        lda   #$a0+dmc_oscillator
+                        sta   sound_address
+                        lda   #$03                      ; one-shot + halted
+                        sta   sound_data
+                        inc   sound_address
+                        lda   #$13
+                        sta   sound_data
+
+                        pld
+                        plp
+                        rts
+
+; $4015 bit 4 set: start the sample, unless one is still playing
+;
+; Called from APU_STATUS_WRITE with B = K.  Preserves X and Y for the ROM code.
+                        mx    %11
+dmc_enable
+                        php
+                        phx
+                        phy
+                        phd
+                        pea   $c000
+                        pld
+                        rep   #$10
+                        mx    %10
+
+; Writing a 1 has no effect while a sample is still playing.  The DOC sets the halt bit
+; itself when a one-shot reaches the $00 at the end of the sample.
+
+                        php
+                        sei
+                        jsr   access_doc_registers
+                        lda   #$a0+dmc_oscillator
+                        sta   sound_address
+                        lda   sound_data                ; DOC register reads return the previously latched value
+                        lda   sound_data
+                        plp
+                        lsr                             ; halt bit -> carry
+                        bcs   *+5
+                        brl   dmc_exit
+
+                        DO    CACHE_DMC_SAMPLES
+; Find the catalogued sample with this $4012/$4013.  Samples that aren't listed are not played.
+
+                        ldx   #0                        ; offset into DMC_SAMPLE_LIST
+                        ldy   #0                        ; sample number
+dmc_find                cpy   dmc_cat_count
+                        bcc   *+5
+                        brl   dmc_exit
+                        rep   #$20
+                        lda   DMC_SAMPLE_LIST+1,x       ; $4012 | $4013 << 8
+                        cmp   APU_DMC_REG3
+                        sep   #$20
+                        beq   dmc_found
+                        inx
+                        inx
+                        inx
+                        iny
+                        bra   dmc_find
+dmc_found
+                        lda   dmc_cat_page,y
+                        sta   dmc_play_page
+                        lda   dmc_cat_size,y
+                        sta   dmc_play_size
+                        lda   dmc_cat_shift,y
+                        sta   dmc_play_shift
+
+                        ELSE
+; Decode the sample into $8000 unless it is the one already there
+
+                        lda   APU_DMC_REG1
+                        jsr   dmc_rate_shift
+                        sta   dmc_play_shift
+                        lda   #$80                      ; $8000-$FFFF as one 32KB table
+                        sta   dmc_play_page
+                        lda   #$3F
+                        sta   dmc_play_size
+
+                        ldx   APU_DMC_REG3              ; $4012 | $4013 << 8
+                        cpx   dmc_cache_key
+                        bne   dmc_need_decode
+                        lda   dmc_play_shift
+                        cmp   dmc_cache_shift
+                        beq   dmc_play
+dmc_need_decode
+                        stx   dmc_cache_key
+                        lda   dmc_play_shift
+                        sta   dmc_cache_shift
+                        sta   dmc_dec_shift
+                        lda   APU_DMC_REG2
+                        sta   dmc_start_level
+                        rep   #$30
+                        mx    %00
+                        lda   #$8000
+                        sta   dmc_doc_base
+                        txa
+                        jsr   dmc_src_range
+                        sep   #$20
+                        mx    %10
+                        jsr   dmc_decode
+                        FIN
+
+; Set up oscillators 8/9 for the sample and key them on
+
+dmc_play
+                        sep   #$30
+                        mx    %11
+                        php
+                        sei
+                        jsr   access_doc_registers      ; (clobbers A)
+
+; FHL = DmcFreqTable / (4 * decimation), rounded
+
+                        rep   #$30
+                        mx    %00
+                        lda   APU_DMC_REG1
+                        and   #$000F
+                        asl
+                        tax
+                        ldy   dmc_play_shift
+                        lda   DmcFreqTable,x
+                        lsr
+                        lsr
+                        cpy   #2
+                        bcc   *+3
+                        lsr                             ; 4:1
+                        lsr
+                        adc   #0                        ; round with the last bit shifted out
+                        sep   #$30
+                        mx    %11
+
+                        ldx   #$00+dmc_oscillator       ; frequency low
+                        jsr   set_osc_register_pair
+                        xba
+                        ldx   #$20+dmc_oscillator       ; frequency high
+                        jsr   set_osc_register_pair
+                        ldx   #$40+dmc_oscillator
+                        lda   #DMC_VOLUME
+                        jsr   set_osc_register_pair
+                        ldx   #$80+dmc_oscillator
+                        lda   dmc_play_page
+                        jsr   set_osc_register_pair
+                        ldx   #$c0+dmc_oscillator
+                        lda   dmc_play_size
+                        jsr   set_osc_register_pair
+
+; A halted -> running transition resets the DOC accumulator, so the sample always starts from
+; the beginning.  Halt first in case the oscillator was stopped part way through.
+
+                        ldx   #$a0+dmc_oscillator
+                        stx   sound_address
+                        lda   #$03                      ; one-shot + halted
+                        sta   sound_data
+                        inc   sound_address
+                        lda   #$13
+                        sta   sound_data
+                        stx   sound_address
+                        lda   #$02                      ; one-shot, running
+                        sta   sound_data
+                        inc   sound_address
+                        lda   #$12
+                        sta   sound_data
+                        plp
+
+dmc_exit
+                        sep   #$30
+                        mx    %11
+                        pld
+                        ply
+                        plx
+                        plp
+                        rts
+
+; A = $4010 value.  Returns A = decimation shift: 1 (2:1) for rate index 0-11, 2 (4:1) for 12-15.
+                        mx    %10
+dmc_rate_shift
+                        and   #$0F
+                        cmp   #12
+                        lda   #1
+                        bcc   *+3
+                        inc
+                        rts
+
+; A = $4012 | $4013 << 8.  Sets dmc_src_start and dmc_src_end: DMC_SAMPLE_BASE + $4012 * 64,
+; $4013 * 16 + 1 bytes long.
+                        mx    %00
+dmc_src_range
+                        pha
+                        and   #$00FF
+                        asl
+                        asl
+                        asl
+                        asl
+                        asl
+                        asl
+                        clc
+                        adc   #DMC_SAMPLE_BASE
+                        sta   dmc_src_start
+                        pla
+                        xba
+                        and   #$00FF
+                        asl
+                        asl
+                        asl
+                        asl
+                        sec                             ; + 1
+                        adc   dmc_src_start
+                        sta   dmc_src_end
+                        rts
+
+; Decode the NES sample dmc_src_start..dmc_src_end into DOC RAM at dmc_doc_base, starting at
+; dmc_start_level and decimated by dmc_dec_shift.  The output ramps back to $80 and ends with a
+; $00 so the one-shot halts there.
+;
+; The DOC is written in chunks of 8 source bytes with interrupts disabled, so the sound
+; interrupt handler can't change the DOC address and mode registers in the middle of a chunk.
+;
+; Call with D = $C000, B = K.  Registers: X = NES source address, Y = output level (0-127),
+; A = delta bits of the current byte.
+                        mx    %10
+dmc_decode
+                        rep   #$30
+                        mx    %00
+                        lda   dmc_start_level
+                        and   #$007F
+                        tay
+                        sta   dmc_bias
+                        lda   #$0080
+                        sec
+                        sbc   dmc_bias
+                        sta   dmc_bias                  ; low byte = $80 - starting level
+                        ldx   dmc_src_start
+
+                        lda   #^ROMBase                 ; the samples are read from the ROMBase bank
+                        sep   #$20
+                        mx    %10
+                        sta   dmc_src2+3
+                        sta   dmc_src4+3
+
+                        lda   dmc_dec_shift
+                        cmp   #2
+                        bne   dmc_loop2
+                        jmp   dmc_loop4
+
+; 2:1 -- one output sample per two delta bits, 4 per byte
+dmc_loop2
+                        php
+                        sei
+                        jsr   dmc_chunk_addr4
+dmc_src2                ldal  $000000,x                 ; bank patched above
+                        pha
+                        lda   #4
+                        sta   dmc_outs_left
+                        pla
+dmc_out2                DMC_BIT
+                        DMC_BIT
+                        DMC_OUT
+                        dec   dmc_outs_left
+                        bne   dmc_out2
+                        inx
+                        cpx   dmc_src_end
+                        bcs   dmc_end2
+                        txa
+                        and   #$07                      ; end of an 8-byte chunk?
+                        bne   dmc_src2
+                        plp
+                        bra   dmc_loop2
+dmc_end2                bra   dmc_finish
+
+; 4:1 -- one output sample per four delta bits, 2 per byte
+dmc_loop4
+                        php
+                        sei
+                        jsr   dmc_chunk_addr2
+dmc_src4                ldal  $000000,x                 ; bank patched above
+                        pha
+                        lda   #2
+                        sta   dmc_outs_left
+                        pla
+dmc_out4                DMC_BIT
+                        DMC_BIT
+                        DMC_BIT
+                        DMC_BIT
+                        DMC_OUT
+                        dec   dmc_outs_left
+                        bne   dmc_out4
+                        inx
+                        cpx   dmc_src_end
+                        bcs   dmc_finish
+                        txa
+                        and   #$07                      ; end of an 8-byte chunk?
+                        bne   dmc_src4
+                        plp
+                        bra   dmc_loop4
+
+; Ramp the output back to $80 in steps of 2, so the oscillator halting at the end doesn't click
+; (the NES just holds the last level).  Outputs are always $80 + an even offset, so the ramp
+; lands on $80 exactly, and it adds at most 64 samples.  Then write the $00 terminator.  Entered
+; from the last chunk, with interrupts still disabled and the DOC address just past the sample.
+dmc_finish
+                        tya
+                        clc
+                        adc   dmc_bias                  ; last output value
+dmc_ramp                cmp   #$80
+                        beq   dmc_ramp_done
+                        bcc   dmc_ramp_up
+                        sbc   #2                        ; carry is set
+                        bra   dmc_ramp_out
+dmc_ramp_up             adc   #2                        ; carry is clear
+dmc_ramp_out            sta   sound_data
+                        bra   dmc_ramp
+dmc_ramp_done
+                        lda   #0
+                        sta   sound_data
+                        plp
+                        rts
+
+; Point the DOC at dmc_doc_base + (X - dmc_src_start) * outputs per byte, with auto-increment
+dmc_chunk_addr4
+                        rep   #$20
+                        mx    %00
+                        txa
+                        sec
+                        sbc   dmc_src_start
+                        asl
+                        bra   dmc_chunk_addr
+                        mx    %10
+dmc_chunk_addr2
+                        rep   #$20
+                        mx    %00
+                        txa
+                        sec
+                        sbc   dmc_src_start
+dmc_chunk_addr
+                        asl
+                        clc
+                        adc   dmc_doc_base
+                        pha
+                        sep   #$20
+                        mx    %10
+                        jsr   access_doc_ram            ; (clobbers A)
+                        pla
+                        sta   sound_address
+                        pla
+                        sta   sound_address+1
+                        rts
+
+                        DO    CACHE_DMC_SAMPLES
+; Per-sample DOC RAM placement, filled in by APUCacheDMC
+dmc_cat_count      dw  0
+dmc_cat_page       ds  DMC_CACHE_MAX       ; DOC RAM page
+dmc_cat_size       ds  DMC_CACHE_MAX       ; wavetable size register value
+dmc_cat_shift      ds  DMC_CACHE_MAX       ; decimation shift
+dmc_top_page       dw  0                   ; lowest DOC RAM page allocated so far
+
+; APUCacheDMC
+;
+; Decode every sample in DMC_SAMPLE_LIST into DOC RAM.  Each decoded sample needs a power-of-two
+; block (256 bytes - 32KB) aligned to its size, so the blocks are placed top-down from $FFFF,
+; largest first, which packs them with no gaps.  Running into the instrument waves at
+; DMC_DOC_FLOOR is fatal.
+;
+; Called once from NES_StartUp, after APUStartUp.
+                        mx    %00
+APUCacheDMC
+                        php
+                        phb
+                        phk
+                        plb
+                        phd
+                        pea   $c000
+                        pld
+                        sep   #$20
+                        mx    %10
+
+                        lda   DMC_SAMPLE_LIST
+                        cmp   #DMC_CACHE_MAX+1
+                        bcc   *+4
+                        brk   $D0                       ; too many samples for the table
+                        sta   dmc_cat_count
+                        stz   dmc_cat_count+1
+
+; Pass 1: work out each sample's decimation and table size
+
+                        ldx   #0                        ; offset into DMC_SAMPLE_LIST
+                        ldy   #0                        ; sample number
+dmc_size_loop
+                        cpy   dmc_cat_count
+                        bcs   dmc_size_done
+                        lda   DMC_SAMPLE_LIST+3,x       ; rate
+                        jsr   dmc_rate_shift
+                        sta   dmc_cat_shift,y
+
+; Bytes needed = source bytes * outputs per byte + ramp (64) + terminator
+
+                        rep   #$20
+                        mx    %00
+                        lda   DMC_SAMPLE_LIST+2,x       ; length byte
+                        and   #$00FF
+                        asl
+                        asl
+                        asl
+                        asl
+                        inc                             ; source bytes
+                        asl                             ; 2 outputs per byte at 4:1
+                        pha
+                        sep   #$20
+                        mx    %10
+                        lda   dmc_cat_shift,y
+                        cmp   #2                        ; carry set = 4:1
+                        rep   #$20
+                        mx    %00
+                        pla                             ; (pla leaves the carry alone)
+                        bcs   *+3
+                        asl                             ; 4 outputs per byte at 2:1
+                        clc
+                        adc   #65
+
+; Table size code = number of bits in (bytes - 1) >> 8, so the block (256 << code) holds them
+
+                        dec
+                        xba
+                        sep   #$20
+                        mx    %10
+                        phx
+                        ldx   #0
+dmc_size_find           cmp   #0
+                        beq   dmc_size_found
+                        lsr
+                        inx
+                        bra   dmc_size_find
+dmc_size_found          txa
+                        sta   dmc_cat_size,y            ; size code until pass 2
+                        plx
+                        inx
+                        inx
+                        inx
+                        iny
+                        bra   dmc_size_loop
+dmc_size_done
+
+; Pass 2: place and decode the samples, largest blocks first
+
+                        rep   #$30
+                        mx    %00
+                        lda   #$0100
+                        sta   dmc_top_page
+                        lda   #7                        ; size code (32KB)
+dmc_place_size
+                        pha
+                        ldy   #0
+dmc_place_loop
+                        cpy   dmc_cat_count
+                        bcc   *+5
+                        brl   dmc_place_next
+                        lda   dmc_cat_size,y
+                        and   #$00FF
+                        cmp   1,s
+                        beq   *+5
+                        brl   dmc_place_skip
+
+; Allocate a block of 1 << code pages below the last one.  (Once placed, the entry holds the
+; size register value, code * 9, which can't match a smaller code later.)
+
+                        tax
+                        lda   #1
+                        cpx   #0
+                        beq   *+6
+                        asl
+                        dex
+                        bne   *-2
+                        sta   dmc_doc_base              ; (pages for now)
+                        lda   dmc_top_page
+                        sec
+                        sbc   dmc_doc_base
+                        bmi   dmc_no_room
+                        cmp   #DMC_DOC_FLOOR
+                        bcs   *+4
+dmc_no_room             brk   $D1                       ; the samples don't fit in DOC RAM
+                        sta   dmc_top_page
+                        sep   #$20
+                        mx    %10
+                        sta   dmc_cat_page,y
+                        rep   #$20
+                        mx    %00
+                        xba
+                        and   #$FF00
+                        sta   dmc_doc_base
+
+; Size register: table size in bits 3-5, resolution = table size (one sample per FHL/512 scans)
+
+                        lda   1,s
+                        asl
+                        asl
+                        asl
+                        ora   1,s
+                        sep   #$20
+                        mx    %10
+                        sta   dmc_cat_size,y
+
+                        lda   dmc_cat_shift,y
+                        sta   dmc_dec_shift
+                        stz   dmc_dec_shift+1
+                        lda   #DMC_START_LEVEL
+                        sta   dmc_start_level
+                        rep   #$20
+                        mx    %00
+                        tya
+                        sta   dmc_place_y
+                        asl
+                        adc   dmc_place_y               ; carry clear from the asl (sample number < 128)
+                        tax
+                        lda   DMC_SAMPLE_LIST+1,x       ; $4012 | $4013 << 8
+                        jsr   dmc_src_range
+                        sep   #$20
+                        mx    %10
+                        jsr   dmc_decode
+                        rep   #$30
+                        mx    %00
+                        ldy   dmc_place_y
+
+dmc_place_skip
+                        iny
+                        brl   dmc_place_loop
+dmc_place_next
+                        pla
+                        dec
+                        bmi   *+5
+                        brl   dmc_place_size
+
+                        pld
+                        plb
+                        plp
+                        rts
+
+dmc_place_y        dw  0
+                        FIN

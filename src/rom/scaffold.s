@@ -115,6 +115,12 @@ NES_StartUp
             jsr   APUStartUp              ; 0 = 240Hz, 1 = 120Hz, 2 = 60Hz (external)
             FIN
 
+; Decode the game's DMC samples into DOC RAM up front (see DMC_SAMPLE_LIST in Main.s)
+
+            DO    CACHE_DMC_SAMPLES
+            jsr   APUCacheDMC
+            FIN
+
 ; Clear the IIgs screen and initialize the rendering infrastrucure
 
             lda   #0

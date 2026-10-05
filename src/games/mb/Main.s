@@ -109,6 +109,10 @@ NO_INTERRUPTS     equ 0
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 0
 
+; Decode the DMC samples listed in DMC_SAMPLE_LIST into DOC RAM at start-up (see apu/apu.s).
+; 0 = decode each sample when the game plays it.
+CACHE_DMC_SAMPLES equ 0
+
 ; Configuration screen setup (see rom/rom_config_setup.s)
 CONFIG_DEFAULT_AUDIO equ APU_60HZ   ; default audio quality
 CONFIG_VIDEO_MENU    equ 0          ; show the VIDEO menu

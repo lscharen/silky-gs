@@ -35,6 +35,10 @@ APU_NOISE_REG2_WRITE    EXT
 APU_NOISE_REG3_WRITE    EXT
 APU_NOISE_REG4_WRITE    EXT
 
+APU_DMC_REG1_WRITE      EXT
+APU_DMC_REG2_WRITE      EXT
+APU_DMC_REG3_WRITE      EXT
+APU_DMC_REG4_WRITE      EXT
 APU_STATUS_WRITE        EXT
 APU_STATUS_READ         EXT
 
@@ -458,18 +462,81 @@ STY_400f    php
             plp
             rts
 
-STA_4010
-STA_4011
-STA_4012
-STA_4013
-STX_4010
-STX_4011
-STX_4012
-STX_4013
-STY_4010
-STY_4011
-STY_4012
-STY_4013
+STA_4010    jsl  APU_DMC_REG1_WRITE
+            rts
+
+STX_4010    php
+            pha
+            txa
+            jsl  APU_DMC_REG1_WRITE
+            pla
+            plp
+            rts
+
+STY_4010    php
+            pha
+            tya
+            jsl  APU_DMC_REG1_WRITE
+            pla
+            plp
+            rts
+
+STA_4012    jsl  APU_DMC_REG3_WRITE
+            rts
+
+STX_4012    php
+            pha
+            txa
+            jsl  APU_DMC_REG3_WRITE
+            pla
+            plp
+            rts
+
+STY_4012    php
+            pha
+            tya
+            jsl  APU_DMC_REG3_WRITE
+            pla
+            plp
+            rts
+
+STA_4013    jsl  APU_DMC_REG4_WRITE
+            rts
+
+STX_4013    php
+            pha
+            txa
+            jsl  APU_DMC_REG4_WRITE
+            pla
+            plp
+            rts
+
+STY_4013    php
+            pha
+            tya
+            jsl  APU_DMC_REG4_WRITE
+            pla
+            plp
+            rts
+
+; $4011 (DMC direct load) only sets the starting level for the next decoded sample
+STA_4011    jsl  APU_DMC_REG2_WRITE
+            rts
+
+STX_4011    php
+            pha
+            txa
+            jsl  APU_DMC_REG2_WRITE
+            pla
+            plp
+            rts
+
+STY_4011    php
+            pha
+            tya
+            jsl  APU_DMC_REG2_WRITE
+            pla
+            plp
             rts
 
 LDA_4015    jsl   APU_STATUS_READ
