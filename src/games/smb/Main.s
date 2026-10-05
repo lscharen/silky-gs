@@ -9,6 +9,10 @@
             use   GTE.Macs.s
 
             put   ../../Externals.s
+AT0_T0      EXT                       ; Swizzle tables live in the PALDATA segment (pal_w11.s)
+AT1_T0      EXT
+AT2_T0      EXT
+AT3_T0      EXT
             put   ../../core/Defs.s
 
             mx    %00
@@ -937,32 +941,6 @@ INPUT_ITEM_5 dw   KEYMAP
             put    ../../ppu/scanline_bitmap.s
 ; AUTOINC:END
 
-
-            ds    \,$00                      ; pad to the next page boundary
-
-; Mapping tables to take a nametable address and return the appropriate attribute memory location.  This is a table with
-; 960 entries.  This table is just the 64 offsets above address $2xC0 stored as bytes to keep the table size reasonably
-; conpact
-* PPU_ATTR_ADDR
-* ]row        =     0
-*             lup   30
-*             db    $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+0, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1, $C0+{8*{]row/4}}+1,
-*             db    $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+2, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3, $C0+{8*{]row/4}}+3,
-*             db    $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+4, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5, $C0+{8*{]row/4}}+5,
-*             db    $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+6, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7, $C0+{8*{]row/4}}+7,
-* ]row        =     ]row+1
-*             --^
-            
-* PPU_ATTR_MASK
-*             lup   7
-*             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-*             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-*             db    $30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0
-*             db    $30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0,$30,$30,$C0,$C0
-*             --^
-*             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-*             db    $03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C,$03,$03,$0C,$0C
-
 ; If AreaStyle is 1 then load an alternate palette 'b'
 ;
 ; Palettes of NES color indexes
@@ -980,8 +958,6 @@ WaterPalette dw     $22, $00, $15, $12, $25, $3A, $1A, $0F, $30, $12, $27, $10, 
 ; AreaStyle = $01 (almost the same as Area1Palette)
 MushroomPalette dw  $22, $00, $27, $16, $0F, $36, $17, $30, $21, $27, $1A, $16, $00, $00, $16, $18
 
-; Palette remapping
-            put   pal_w11.s
             put   ../../apu/apu.s
 
 ; Core code

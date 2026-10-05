@@ -9,6 +9,7 @@
             use   GTE.Macs.s
 
             put   ../../Externals.s
+L1_T0       EXT                       ; Swizzle tables live in the PALDATA segment (palettes.s)
             put   ../../core/Defs.s
 
             mx    %00
@@ -514,9 +515,6 @@ INPUT_ITEM_7 dw   BTNMAP
             put    ../../ppu/scanline_bitmap.s
 ; AUTOINC:END
 
-; Palette remapping
-            ds    \,$00
-            put   palettes.s
             put   ../../apu/apu.s
 
 ; Core code

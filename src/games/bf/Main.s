@@ -9,6 +9,7 @@
             use   GTE.Macs.s
 
             put   ../../Externals.s
+L1_T0       EXT                       ; Swizzle tables live in the PALDATA segment (palettes.s)
             put   ../../core/Defs.s
 
             mx    %00
@@ -833,9 +834,6 @@ GAME_ITEM_1  dw   CHKBOX
             put    ../../ppu/scanline_bitmap.s
 ; AUTOINC:END
 
-; Palette remapping (the swizzle tables must be page-aligned)
-            ds    \,$00
-            put   palettes.s
             put   ../../apu/apu.s
 
 ; Core code

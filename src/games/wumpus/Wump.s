@@ -38,6 +38,12 @@
             KND   #$1100
             SNA   PPURAM
 
+; Palette swizzle tables (long-addressed data, kept out of the main segment)
+
+            ASM   palettes.s
+            KND   #$1100
+            SNA   PALDATA
+
 
 
 
