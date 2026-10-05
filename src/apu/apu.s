@@ -136,7 +136,7 @@ stop_playing            = *
                         mx    %00
                         rts
 
-; Copy in 4 different square wave duty cycles and a triangle wave
+; Copy in 4 different square wave duty cycles and a triangle wave, and generate the noise wave
 copy_instruments_to_doc
                         jsr setup_docram
 
@@ -155,11 +155,13 @@ copy_instruments_to_doc
                         lda #$0500
                         jsr copy_triangle
 
-                        lda #$0600
-                        jsr copy_noise
+                        lda #NOISE_DOC_PAGE*256
+                        ldx #noise_long_params
+                        jsr gen_noise
 
-;                        lda #$8000
-;                        jsr gen_noise
+                        lda #NOISE_SHORT_DOC_PAGE*256
+                        ldx #noise_short_params
+                        jsr gen_noise
 
                         rts
 
@@ -258,27 +260,88 @@ copy_triangle
                         mx  %00
                         rts
 
-; Generate random data from the NES APU LFSR. Make it long enough to sound good.
+; Generate a noise wave by running the NES noise channel's LFSR: a 15-bit shift register with
+; feedback = bit 0 XOR bit 1 (long mode) or bit 0 XOR bit 6 (short mode), shifted into bit 14.
+; The channel is silenced while bit 0 is set, so the wave alternates between the two levels of
+; the 50% pulse, which gives noise the same full-volume swing as the pulse channels.
+;
+;  Long mode   4KB, one sample per LFSR clock.  The NES repeats after 32767 clocks, so this is
+;              a window of the sequence, started at a state where it isn't too regular to loop.
+;  Short mode  256 bytes holding exactly one period of the 93-step sequence: each step lasts 2
+;              or 3 samples (256/93), like the one-period pulse and triangle waves.
+;
+; Short mode splits the states into 352 separate 93-step cycles (and one 31-step cycle), so on
+; the NES the pattern depends on the state when the game switches modes.  ~91% of the long mode
+; states lead to one of the irregular cycles with 48 of 93 bits set; $7F15 (a long mode state) is
+; on one of them.  Seed 1 is on a rare, sparse cycle with only 16 bits set, and $7FFF is on the
+; 31-step pattern stretched 3x.
+;
+; Called with A = DOC RAM address, X = parameter block (samples, seed, feedback taps, LFSR clocks
+; per 256 samples), DOC RAM access with auto-increment
+NOISE_WAVE_SIZE         =   4096
+
+noise_long_params       dw  NOISE_WAVE_SIZE,$4080,$0003,256    ; ($4080 = 16384 clocks after power-up)
+noise_short_params      dw  256,$7F15,$0041,93                 ; (see below)
+
 gen_noise
-
-copy_noise
-                        sep #$30
-                        mx  %11
-
-                        stz sound_address
+                        pha
+                        lda:  6,x
+                        sta   noise_step
+                        lda:  4,x
+                        sta   noise_taps
+                        lda:  2,x
+                        sta   noise_lfsr
+                        lda:  0,x
+                        tax                         ; X = samples
+                        stz   noise_acc
+                        pla
+                        sep   #$20
+                        mx    %10
+                        stz   sound_address
                         xba
-                        sta sound_address+1
-
-                        ldx #0
+                        sta   sound_address+1
 :loop
-                        lda noise_wave,x
-                        sta sound_data
-                        inx
-                        bne :loop
-
-                        rep #$30
-                        mx  %00
+                        lda   noise_lfsr
+                        lsr                         ; C = bit 0
+                        lda   #$C8                  ; bit 0 clear: +72
+                        bcc   :out
+                        lda   #$38                  ; bit 0 set: -72 (silenced)
+:out                    sta   sound_data
+                        rep   #$20
+                        mx    %00
+                        lda   noise_acc             ; time to clock the LFSR?
+                        clc
+                        adc   noise_step
+                        cmp   #256
+                        bcc   :no_clock
+                        sbc   #256                  ; carry is set
+                        sta   noise_acc
+                        lda   noise_lfsr
+                        and   noise_taps            ; feedback = 1 if exactly one tap is set
+                        beq   :fb0
+                        cmp   noise_taps
+                        beq   :fb0
+                        lda   noise_lfsr
+                        lsr
+                        ora   #$4000
+                        bra   :clocked
+:fb0                    lda   noise_lfsr
+                        lsr
+:clocked                sta   noise_lfsr
+                        bra   :next
+:no_clock               sta   noise_acc
+:next                   sep   #$20
+                        mx    %10
+                        dex
+                        bne   :loop
+                        rep   #$20
+                        mx    %00
                         rts
+
+noise_lfsr              dw  0
+noise_taps              dw  0
+noise_step              dw  0
+noise_acc               dw  0
 ;--------------------------
 
 triangle_wave
@@ -298,41 +361,6 @@ triangle_wave
     hex 21232527292b2d2f31333537393b3d3f
     hex 41424446484a4c4e50525456585a5c5e
     hex 60626466686a6c6e70727476787a7c7e
-
-noise_wave
-    hex 8f968f763e6fd49ab1e564e295a9bcc9
-    hex 717b6629e6970b865dc0e0d840d32a96
-    hex 3bd4c5d407b78923d8c9766bea128e8a
-    hex c9ee5ddbed3119ff14b4d9a44bfbb7c4
-    hex 7a56e26e8aac9ebf1653c0260446231b
-    hex 73431495fc585e943edacf8f5bb970e6
-    hex 118dc361bee99c98f32d25f06a33715a
-    hex 585344f7f3e2f3c36c37cfd78e40147f
-    hex a4b20624ac633b42b3aac5407fac4ba9
-    hex a4d71a1d020a7757ea244b103f0b7a76
-    hex 9b533a60cda31e0fa2ce3491b55c4f26
-    hex ea47a61f661deec128129372c3471a9b
-    hex f85c3c077168d413184a139440460950
-    hex dee3f9bdb65e162b08ed9231a72fb943
-    hex 1ba599be80dc2812afa63cc2317cdb1a
-    hex 8d99d56327bc50dc975bee94754f561b
-
-;   hex 01ffffff0101ffffff01ffff01ff0101
-;   hex ffffffffffff0101ff0101ff01ffff01
-;   hex 01ff0101ffff01ffff0101ff01ff01ff
-;   hex ffffffff0101010101ffff0101ff0101
-;   hex ffffff0101ff01ff010101ff01010101
-;   hex 0101ffffff01ffff01ff01ffff01ffff
-;   hex ff01ffff0101ffff01ffffffffff01ff
-;   hex ffffffffffff010101ffff01ff01ffff
-;   hex 01ffffffff0101ffffffff0101ffff01
-;   hex ff01ff01ff01ffff0101ff01ffffffff
-;   hex ffff010101ffffffff01010101ff0101
-;   hex ffffffffffffff01ff0101ffffff0101
-;   hex 01ff010101ff01ffffffffff01ffffff
-;   hex 01ffffffff010101ff01ffff01ff01ff
-;   hex ffffffff0101ff010101ff01ffffff01
-;   hex 0101010101ffff01ffff01010101ffff
 
 ;--------------------------
 
@@ -366,6 +394,15 @@ setup_doc_registers
                         jsr   copy_register_config
                         ldx   #dmc_sound_settings_r
                         jsr   copy_register_config
+
+; Enable 32 oscillators in every mode.  The pitch and DMC tables assume the 26.3kHz scan rate this
+; gives, and the 60Hz mode would otherwise inherit whatever the system left in the register.
+                        lda   #$e1                                 ; oscillator enable register
+                        sta   sound_address
+                        lda   #$3e                                 ; (32-1)*2
+                        sta   sound_data
+
+                        stz   _apu_noise_last_mode                 ; the noise oscillators are on the long mode wave
 
                         rep #$20
                         mx  %00
@@ -431,7 +468,7 @@ setup_interrupt         = *
                         lda   timer_sound_settings,y
                         sta   sound_data
                         iny
-                        cpy   #7*2
+                        cpy   #6*2
                         bne   :loop
 
                         rep #$20
@@ -449,13 +486,16 @@ timer_sound_settings    =     *                     ; set up oscillator 30 for i
                         dfb   $40+interrupt_oscillator,0                  ; volume register, volume = 0
                         dfb   $80+interrupt_oscillator,0                  ; wavetable pointer register, point to 0
                         dfb   $c0+interrupt_oscillator,0                  ; wavetable size register, 256 byte length
-                        dfb   $e1,$3e                                     ; oscillator enable register
                         dfb   $a0+interrupt_oscillator,$08                ; mode register, set to free run
 
 pulse1_oscillator       =     0
 pulse2_oscillator       =     2
 triangle_oscillator     =     4
 noise_oscillator        =     6
+NOISE_DOC_PAGE          =     $10                   ; DOC RAM page of the 4KB noise wave ($1000-$1FFF)
+NOISE_TABLE_SIZE        =     $24                   ; 4KB table, resolution 4 (one sample per FHL/512 scans)
+NOISE_SHORT_DOC_PAGE    =     $06                   ; DOC RAM page of the short mode (93-step) noise wave
+NOISE_SHORT_TABLE_SIZE  =     $00                   ; 256 byte table, resolution 0
 dmc_oscillator          =     8
 DMC_DOC_PAGE            =     $80                   ; DOC RAM page of the decoded DMC sample ($8000-$FFFF)
 DMC_TABLE_SIZE          =     $3F                   ; 32KB table, resolution 7 (one sample per FHL/512 scans)
@@ -513,16 +553,16 @@ noise_sound_settings_l =     *
                         dfb   $00+noise_oscillator,default_freq      ; frequency low register
                         dfb   $20+noise_oscillator,default_freq/256  ; frequency high register
                         dfb   $40+noise_oscillator,128                 ; volume register, volume = 0
-                        dfb   $80+noise_oscillator,6                 ; wavetable pointer register, point to $0600
-                        dfb   $c0+noise_oscillator,0                 ; wavetable size register, 256 byte length
+                        dfb   $80+noise_oscillator,NOISE_DOC_PAGE    ; wavetable pointer register, LFSR noise at $1000
+                        dfb   $c0+noise_oscillator,NOISE_TABLE_SIZE  ; wavetable size register, 4KB table
                         dfb   $a0+noise_oscillator,0                 ; mode register, set to free run
 
 noise_sound_settings_r =     *
                         dfb   $01+noise_oscillator,default_freq      ; frequency low register
                         dfb   $21+noise_oscillator,default_freq/256  ; frequency high register
                         dfb   $41+noise_oscillator,128                 ; volume register, volume = 0
-                        dfb   $81+noise_oscillator,6                 ; wavetable pointer register, point to $0600
-                        dfb   $c1+noise_oscillator,0                 ; wavetable size register, 256 byte length
+                        dfb   $81+noise_oscillator,NOISE_DOC_PAGE    ; wavetable pointer register, LFSR noise at $1000
+                        dfb   $c1+noise_oscillator,NOISE_TABLE_SIZE  ; wavetable size register, 4KB table
                         dfb   $a1+noise_oscillator,$10                 ; mode register, set to free run
 
 ; The DMC oscillators start out halted.  dmc_play sets the frequency and volume and keys them on.
@@ -544,6 +584,36 @@ dmc_sound_settings_r    =     *
 
 backup_interrupt_ptr    ds  4
 apu_mode                ds  2
+
+; APU_STATS (core/Defs.s): call counters for checking the APU clock rates against the VBL rate
+; (apu_stat_vbl is counted by schedTask in rom/rom_exec.s).  16-bit, wrapping; compare the change over a period of time.  Per VBL
+; the expected counts are:
+;
+;                    60Hz   120Hz   240Hz
+;   timer ticks        0      2       4
+;   quarter driver     1      0       0
+;   quarter clocks     4      4       4
+;   half clocks        2      2       2
+;   DOC updates        1      2       4
+                        DO  APU_STATS
+apu_stats
+apu_stat_vbl            dw  0     ; VBL heartbeats
+apu_stat_irq            dw  0     ; DOC interrupts seen by interrupt_handler
+apu_stat_timer          dw  0     ;   ... that were the timer oscillator (120 / 240Hz modes)
+apu_stat_qsd            dw  0     ; APU_quarter_speed_driver calls (60Hz mode)
+apu_stat_quarter        dw  0     ; quarter_frame_clock calls
+apu_stat_half           dw  0     ; half_frame_clock calls
+apu_stat_update         dw  0     ; update_doc_registers runs
+                        FIN
+
+; Count one call in a 16-bit counter, with an 8-bit accumulator and DBR = K.  Nothing without APU_STATS.
+APU_COUNT               mac
+                        DO    APU_STATS
+                        inc   ]1
+                        bne   *+5
+                        inc   ]1+1
+                        FIN
+                        <<<
 
 ;-----------------------------------------------------------------------------------------
 ; APU internals
@@ -604,7 +674,10 @@ clock_sweep             mac
                         bcc   no_sweep0                 ; current period must be >= 8
                         jmp   (bitshift,x)              ; shift it by the shifter amount
 bitshift                da    bitshift_0,bitshift_1,bitshift_2,bitshift_3,bitshift_4,bitshift_5,bitshift_6,bitshift_7
-bitshift_7              lsr
+bitshift_7              asl                             ; >> 7 = (<< 1) >> 8, period <= $7FF
+                        xba
+                        and   #$00FF
+                        bra   bitshift_0
 bitshift_6              lsr
 bitshift_5              lsr
 bitshift_4              lsr
@@ -672,6 +745,7 @@ tick_envelope
 envelope_out            <<<
 
 half_frame_clock
+                        APU_COUNT apu_stat_half
 ; clock the length counters
                         clock_length_counter APU_PULSE1;#PULSE_HALT_FLAG
                         clock_length_counter APU_PULSE2;#PULSE_HALT_FLAG
@@ -684,6 +758,7 @@ half_frame_clock
                         rts
 
 quarter_frame_clock
+                        APU_COUNT apu_stat_quarter
 ; clock the envelopes and triangle linear counter
                         clock_linear_counter APU_TRIANGLE
 
@@ -715,6 +790,7 @@ APU_quarter_speed_driver    = *
 
                         phk
                         plb
+                        APU_COUNT apu_stat_qsd
 
                         pea  $c000
                         pld
@@ -746,6 +822,7 @@ interrupt_handler       = *
 
                         phk
                         plb
+                        APU_COUNT apu_stat_irq
 
                         clc
                         xce
@@ -760,6 +837,7 @@ interrupt_handler       = *
                         cmp   #2*interrupt_oscillator
                         beq   *+5
                         brl   :not_timer                ; Only service timer interrupts
+                        APU_COUNT apu_stat_timer
 
 ; Update the frame counter and leave the doubled countin x-register for dispatch
                         ldx   apu_frame_counter
@@ -793,6 +871,7 @@ interrupt_handler       = *
 
 ; Apply any changes to the DOC registers
 update_doc_registers
+                        APU_COUNT apu_stat_update
 
                         jsr   access_doc_registers
 
@@ -800,13 +879,21 @@ update_doc_registers
 ;
 ; First, set the frequency, if the period is <8 then the pulse channel is muted,
 ; to test that first
-                        lda   APU_PULSE1_MUTE                ; If the sweep muted the channel, no output
-                        bne   :mute_pulse1
                         lda   APU_PULSE1_LENGTH_COUNTER      ; If the length counter is zero, no output
                         beq   :mute_pulse1
                         rep   #$30
+                        lda   APU_PULSE1_REG2                ; The sweep unit mutes the channel when the
+                        bit   #$0008                          ; target period is > $7FF, whether or not the
+                        bne   :no_sweep_mute1                ; sweep is enabled (see SweepMuteLimit)
+                        and   #$0007
+                        asl
+                        tax
                         lda   APU_PULSE1_CURRENT_PERIOD
-                        cmp   #8
+                        cmp   SweepMuteLimit,x
+                        bcs   :mute_pulse1
+:no_sweep_mute1
+                        lda   APU_PULSE1_CURRENT_PERIOD
+                        cmp   #8                              ; It also mutes periods < 8
                         bcc   :mute_pulse1
 
                         cmp   _apu_pulse1_last_period         ; it's expensive to recalc frequencies, so avoid it when possible
@@ -848,13 +935,21 @@ update_doc_registers
 
 
 ; Now do the second square wave
-                        lda   APU_PULSE2_MUTE                ; If the sweep muted the channel, no output
-                        bne   :mute_pulse2
                         lda   APU_PULSE2_LENGTH_COUNTER      ; If the length counter is zero, no output
                         beq   :mute_pulse2
                         rep   #$30
+                        lda   APU_PULSE2_REG2                ; The sweep unit mutes the channel when the
+                        bit   #$0008                          ; target period is > $7FF, whether or not the
+                        bne   :no_sweep_mute2                ; sweep is enabled (see SweepMuteLimit)
+                        and   #$0007
+                        asl
+                        tax
                         lda   APU_PULSE2_CURRENT_PERIOD
-                        cmp   #8
+                        cmp   SweepMuteLimit,x
+                        bcs   :mute_pulse2
+:no_sweep_mute2
+                        lda   APU_PULSE2_CURRENT_PERIOD
+                        cmp   #8                              ; It also mutes periods < 8
                         bcc   :mute_pulse2
 
                         cmp   _apu_pulse2_last_period
@@ -915,8 +1010,7 @@ update_doc_registers
                         cmp   _apu_triangle_last_period
                         beq   :freq_end_triangle
                         sta   _apu_triangle_last_period
-                        jsr   get_pulse_freq                  ; return freq in 16-bic accumulator
-                        lsr
+                        jsr   get_triangle_freq               ; return freq in 16-bit accumulator
                         sep   #$30
                         ldx   #$00+triangle_oscillator
 ;                        stx   sound_address
@@ -952,6 +1046,30 @@ update_doc_registers
 :end_triangle
 
 ; Now the noise channel.  It's mixer volume output is ~half of the pulse channels
+;
+; First, point the oscillators at the wave for the mode (long / short) if it changed
+                        lda   APU_NOISE_REG3
+                        and   #$80
+                        cmp   _apu_noise_last_mode
+                        beq   :noise_mode_done
+                        sta   _apu_noise_last_mode
+                        cmp   #0
+                        bne   :noise_short
+                        ldx   #$80+noise_oscillator
+                        lda   #NOISE_DOC_PAGE
+                        jsr   set_osc_register_pair
+                        ldx   #$c0+noise_oscillator
+                        lda   #NOISE_TABLE_SIZE
+                        jsr   set_osc_register_pair
+                        bra   :noise_mode_done
+:noise_short            ldx   #$80+noise_oscillator
+                        lda   #NOISE_SHORT_DOC_PAGE
+                        jsr   set_osc_register_pair
+                        ldx   #$c0+noise_oscillator
+                        lda   #NOISE_SHORT_TABLE_SIZE
+                        jsr   set_osc_register_pair
+:noise_mode_done
+
 
                         lda   APU_NOISE_LENGTH_COUNTER      ; If the length counter is zero, no output
                         beq   :mute_noise
@@ -983,15 +1101,6 @@ update_doc_registers
                         asl
                         asl
                         asl
-                        pha
-                        lda   APU_NOISE_REG3               ; Up the volume for low sounds
-                        bit   #$08
-                        beq   :high_pitch
-                        pla
-                        asl
-                        pha
-:high_pitch             pla
-;                        sta   sound_data
                         jsr   set_osc_register_pair
 
 :not_timer
@@ -1067,37 +1176,138 @@ get_noise_freq
 ;
 ; if t < 8 this value is out of range and the oscillator should be silenced
 ;
-; otherwise, break apart the ratio
+; There is no divide: v = t + 1 is shifted into [512, 1023] (k shifts left, or right for v >= 1024),
+; and PulseFreqTable holds round(557056.338 * 32 / m) for m in that range, so
 ;
-; f_HL = 10 * (55706 / (t + 1))
-; 
+;   F_HL = PulseFreqTable[m] * 2^(k - 5)
+;
+; The triangle is an octave lower than a pulse with the same timer value, so it uses 2^(k - 6).
+; Right shifts round with the last bit shifted out; left shifts saturate at $FFFF (only the
+; ultrasonic triangle periods 2 and 3 get there).  The error is under 4 cents for the pulse and
+; 7 cents for the triangle, at the lowest notes, close to the rounding of F_HL itself.
+; The sweep unit mutes a pulse channel when its target period, period + (period >> shift), is
+; over $7FF, unless the negate flag is set.  That sum only grows with the period, so the channel
+; is muted when period >= the smallest period that overflows for the shift count.  Shift 0 is
+; included: its target is period * 2, so periods >= $400 are muted (games set the negate flag
+; when they need those notes).
+SweepMuteLimit          dw    $400,$556,$667,$71D,$788,$7C2,$7E1,$7F1
+
 get_pulse_freq
-                        mx %00
-                        and   #$7FF                     ; prevent overflow...
+                        mx    %00
+                        and   #$7FF
+                        inc                             ; v = t + 1
+                        ldx   #2*5+4                    ; X = 2 * (5 - k) + 4 as v is normalized
+                        bra   freq_lookup
+
+get_triangle_freq
+                        mx    %00
+                        and   #$7FF
                         inc
-                        sta   divisor
-                        lda   #55706
-                        sta   dividend
+                        ldx   #2*6+4
 
-                        lda   #0
-                        ldx   #16                       ; 16 bits of division
-                        asl   dividend
-:dl1                    rol
-                        cmp   divisor
-                        bcc   :dl2
-                        sbc   divisor
-:dl2                    rol   dividend
+freq_lookup
+:up                     cmp   #$200                     ; v < 512: shift left
+                        bcs   :down
+                        asl
                         dex
-                        bne   :dl1
+                        dex
+                        bra   :up
+:down                   cmp   #$400                     ; v >= 1024: shift right
+                        bcc   :lookup
+                        lsr
+                        inx
+                        inx
+                        bra   :down
+:lookup                 asl
+                        tay
+                        lda   PulseFreqTable-1024,y     ; (PulseFreqTable is > $400 into the segment)
+                        jmp   (:shift,x)                ; X = 2 * (net right shift + 2), shift -2 to 8
 
-                        lda   dividend
-                        sta   dividend
-                        asl
-                        asl
-                        clc
-                        adc   dividend                  ; multiple by 10 to get the DOC value
-                        asl
+:shift                  da    :left2,:left1,:done,:right1,:right2,:right3,:right4,:right5,:right6,:right7,:right8
+:left2                  asl
+                        bcs   :max
+:left1                  asl
+                        bcs   :max
+:done                   rts
+:max                    lda   #$FFFF
                         rts
+:right8                 lsr
+:right7                 lsr
+:right6                 lsr
+:right5                 lsr
+:right4                 lsr
+:right3                 lsr
+:right2                 lsr
+:right1                 lsr
+                        adc   #0                        ; round with the last bit shifted out
+                        rts
+
+; F_HL for v = 512 to 1023, times 32 (see above)
+PulseFreqTable
+                        dw    34816,34748,34681,34613,34546,34479,34413,34346
+                        dw    34280,34215,34149,34084,34019,33954,33889,33825
+                        dw    33761,33697,33634,33570,33507,33444,33382,33319
+                        dw    33257,33195,33133,33072,33011,32950,32889,32828
+                        dw    32768,32708,32648,32588,32529,32470,32411,32352
+                        dw    32293,32235,32177,32119,32061,32003,31946,31889
+                        dw    31832,31775,31719,31662,31606,31550,31494,31439
+                        dw    31383,31328,31273,31219,31164,31110,31055,31001
+                        dw    30948,30894,30840,30787,30734,30681,30629,30576
+                        dw    30524,30471,30419,30368,30316,30265,30213,30162
+                        dw    30111,30060,30010,29959,29909,29859,29809,29759
+                        dw    29710,29660,29611,29562,29513,29464,29416,29367
+                        dw    29319,29271,29223,29175,29127,29080,29032,28985
+                        dw    28938,28891,28844,28798,28751,28705,28659,28613
+                        dw    28567,28521,28476,28430,28385,28340,28295,28250
+                        dw    28205,28161,28116,28072,28028,27984,27940,27896
+                        dw    27853,27809,27766,27723,27680,27637,27594,27551
+                        dw    27509,27467,27424,27382,27340,27298,27257,27215
+                        dw    27173,27132,27091,27050,27009,26968,26927,26887
+                        dw    26846,26806,26765,26725,26685,26645,26606,26566
+                        dw    26526,26487,26448,26409,26370,26331,26292,26253
+                        dw    26214,26176,26138,26099,26061,26023,25985,25947
+                        dw    25910,25872,25834,25797,25760,25723,25686,25649
+                        dw    25612,25575,25538,25502,25465,25429,25393,25357
+                        dw    25321,25285,25249,25213,25178,25142,25107,25071
+                        dw    25036,25001,24966,24931,24896,24862,24827,24792
+                        dw    24758,24724,24689,24655,24621,24587,24553,24520
+                        dw    24486,24452,24419,24386,24352,24319,24286,24253
+                        dw    24220,24187,24154,24122,24089,24056,24024,23992
+                        dw    23959,23927,23895,23863,23831,23799,23768,23736
+                        dw    23705,23673,23642,23610,23579,23548,23517,23486
+                        dw    23455,23424,23393,23363,23332,23302,23271,23241
+                        dw    23211,23180,23150,23120,23090,23061,23031,23001
+                        dw    22971,22942,22912,22883,22854,22824,22795,22766
+                        dw    22737,22708,22679,22650,22622,22593,22564,22536
+                        dw    22507,22479,22451,22422,22394,22366,22338,22310
+                        dw    22282,22254,22227,22199,22171,22144,22116,22089
+                        dw    22062,22034,22007,21980,21953,21926,21899,21872
+                        dw    21845,21819,21792,21765,21739,21712,21686,21660
+                        dw    21633,21607,21581,21555,21529,21503,21477,21451
+                        dw    21425,21400,21374,21348,21323,21297,21272,21246
+                        dw    21221,21196,21171,21146,21121,21096,21071,21046
+                        dw    21021,20996,20972,20947,20922,20898,20873,20849
+                        dw    20825,20800,20776,20752,20728,20704,20680,20656
+                        dw    20632,20608,20584,20560,20537,20513,20489,20466
+                        dw    20442,20419,20396,20372,20349,20326,20303,20280
+                        dw    20257,20234,20211,20188,20165,20142,20119,20097
+                        dw    20074,20052,20029,20007,19984,19962,19939,19917
+                        dw    19895,19873,19851,19828,19806,19784,19763,19741
+                        dw    19719,19697,19675,19654,19632,19610,19589,19567
+                        dw    19546,19524,19503,19482,19460,19439,19418,19397
+                        dw    19376,19355,19334,19313,19292,19271,19250,19230
+                        dw    19209,19188,19168,19147,19126,19106,19085,19065
+                        dw    19045,19024,19004,18984,18964,18943,18923,18903
+                        dw    18883,18863,18843,18823,18804,18784,18764,18744
+                        dw    18725,18705,18685,18666,18646,18627,18607,18588
+                        dw    18569,18549,18530,18511,18491,18472,18453,18434
+                        dw    18415,18396,18377,18358,18339,18320,18302,18283
+                        dw    18264,18245,18227,18208,18190,18171,18153,18134
+                        dw    18116,18097,18079,18061,18042,18024,18006,17988
+                        dw    17970,17951,17933,17915,17897,17879,17862,17844
+                        dw    17826,17808,17790,17772,17755,17737,17719,17702
+                        dw    17684,17667,17649,17632,17614,17597,17580,17562
+                        dw    17545,17528,17511,17493,17476,17459,17442,17425
 
 turn_off_interrupts
                         php
@@ -1119,8 +1329,6 @@ apu_frame_counter dw 0                  ; frame counter, clocked at 240Hz from t
 duty_cycle_page dfb $01,$02,$03,$04     ; Page of DOC RAM that holds the different duty cycle wavforms
 show_border     dw 0
 border_color    dw 0
-dividend        dw 0                    ; Used when converting from NES APU values to DOC values
-divisor         dw 0
 
 ; Pulse Channel 1
 APU_PULSE1      ENT
@@ -1134,7 +1342,6 @@ APU_PULSE1_RELOAD_FLAG      dfb 0 ; internal register to reload the sweep divide
 APU_PULSE1_SWEEP_DIVIDER    dfb 0 ; internal register to track the sweep divider value
 APU_PULSE1_TARGET_PERIOD    dw  0 ; internal register to hold the sweep unit target period
 APU_PULSE1_CURRENT_PERIOD   dw  0 ; internal register to hold the current period driving the oscillator
-APU_PULSE1_MUTE             dfb 0
 APU_PULSE1_START_FLAG       dfb 0 
 APU_PULSE1_ENVELOPE_DIVIDER dfb 0
 APU_PULSE1_ENVELOPE         dfb 0
@@ -1153,7 +1360,6 @@ APU_PULSE2_RELOAD_FLAG    dfb 0 ; internal register to reload the sweep divider 
 APU_PULSE2_SWEEP_DIVIDER  dfb 0 ; internal register to track the sweep divider value
 APU_PULSE2_TARGET_PERIOD  dw  0 ; internal register to hold the sweep unit target period
 APU_PULSE2_CURRENT_PERIOD dw  0 ; internal register to hold the current period driving the oscillator
-APU_PULSE2_MUTE             dfb 0
 APU_PULSE2_START_FLAG       dfb 0 
 APU_PULSE2_ENVELOPE_DIVIDER dfb 0
 APU_PULSE2_ENVELOPE         dfb 0
@@ -1192,6 +1398,7 @@ APU_NOISE_ENVELOPE_DIVIDER dfb 0
 APU_NOISE_ENVELOPE         dfb 0
 
 _apu_noise_last_period   dw  $FFFF ; optimization
+_apu_noise_last_mode     dfb $00   ; $400E bit 7 of the wave the noise oscillators play (setup_doc_registers: long)
 
 
 APU_STATUS      ds 1
@@ -1363,8 +1570,10 @@ APU_NOISE_REG3_WRITE ENT
     pha
 
     stal  APU_NOISE_REG3
-    and   #$0F
-    asl
+    and   #$8F
+    asl                           ; C = mode
+    bcc   *+4
+    ora   #EsqNoiseShortFreqTable-EsqNoiseFreqTable
     tax
 ;    ldal  NoisePeriodTable,x
     ldal  EsqNoiseFreqTable,x
@@ -1407,9 +1616,15 @@ APU_NOISE_REG4_WRITE ENT
     rtl
 
 ; Lookup from bottom 4 bits of NOISE_REG3 and pre-calculated ensoniq parameters
+;
+; F_HL = 1789772 / (51.406 * P) = 34816 / P, so the DOC steps through the noise wave at the
+; NES noise clock rate (see get_noise_freq)
 NoisePeriodTable  dw 4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068
-;EsqNoiseFreqTable dw 8704, 4352, 2176, 1088, 544, 363, 272, 218, 172, 137, 92, 69, 46, 34, 17, 9
-EsqNoiseFreqTable dw 1088, 544, 272, 136, 68, 45,34,27,22,17,12,9,6,4,2,1
+EsqNoiseFreqTable dw 8704, 4352, 2176, 1088, 544, 363, 272, 218, 172, 137, 92, 69, 46, 34, 17, 9
+
+; Short mode: the 256 byte wave holds 93 LFSR clocks, so F_HL = 34816 * 256 / 93 / P = 95838 / P.
+; Must follow EsqNoiseFreqTable (APU_NOISE_REG3_WRITE indexes it at +32).
+EsqNoiseShortFreqTable dw 23959, 11980, 5990, 2995, 1497, 998, 749, 599, 474, 377, 252, 189, 126, 94, 47, 24
 
 APU_FORCE_OFF dw 0
 
@@ -1551,9 +1766,14 @@ force_exit
 ; Not implemented: the loop and IRQ flags in $4010, and the DMC bit when reading $4015.
 ;-----------------------------------------------------------------------------------------
 
-DMC_DOC_FLOOR      =  $07      ; first DOC RAM page free for cached samples (pages 0-6 hold the timer and instrument waves)
+DMC_DOC_FLOOR      =  $20      ; first DOC RAM page free for cached samples (below: the timer, instrument and noise waves)
 DMC_START_LEVEL    =  64       ; starting level for cached samples (no $4011 value at start-up)
 DMC_CACHE_MAX      =  16       ; most samples DMC_SAMPLE_LIST can hold
+
+; Output units per DMC level.  On the NES, a full volume pulse swings about as much as 34 DMC
+; levels; here it swings about 135 DOC units, so 4 would match the NES mix.  2 is as loud as the
+; samples can go before the drift away from the starting level (up to ~60 levels) clips.
+DMC_GAIN           =  2
 
 APU_DMC_REG1 ds 1    ; IL-- RRRR - IRQ enable, loop, rate index
 APU_DMC_REG2 ds 1    ; -DDD DDDD - direct load (starting level for the next fallback decode)
@@ -1566,8 +1786,8 @@ dmc_src_end        dw  0       ; end of the NES sample data
 dmc_doc_base       dw  0       ; DOC RAM address of the decoded sample
 dmc_dec_shift      dw  0       ; 1 = 2:1, 2 = 4:1
 dmc_start_level    dw  0       ; level the decode starts from (0-127)
-dmc_bias           dw  0       ; low byte = $80 - starting level, added to each output level
 dmc_outs_left      dw  0       ; output samples left in the current source byte
+dmc_out_table      ds  128     ; DOC sample for each level (0-127), built by dmc_decode
 
 ; Oscillator setup for the next sample
 dmc_play_page      dw  0       ; DOC RAM page of the sample
@@ -1617,13 +1837,11 @@ dmc_bit_down            cpy   #2                        ; -2, unless that passes
 dmc_bit_done            <<<
 
 ; Write the level in Y to DOC RAM, preserving the remaining delta bits in the accumulator.  The
-; output is centred on the starting level ($80 + level - start), so a sample starts at silence
-; instead of jumping to its absolute level.  The range is 1-255; a $00 would halt the DOC.
+; output comes from dmc_out_table: centred on the starting level ($80 + DMC_GAIN * (level - start)),
+; so a sample starts at silence instead of jumping to its absolute level.
 DMC_OUT                 mac
                         xba                             ; park the delta bits in B
-                        tya
-                        clc
-                        adc   dmc_bias
+                        lda   dmc_out_table,y
                         sta   sound_data
                         xba
                         <<<
@@ -1863,14 +2081,43 @@ dmc_src_range
 dmc_decode
                         rep   #$30
                         mx    %00
+; Build dmc_out_table: $80 + DMC_GAIN * (level - start), clamped to $02-$FE.  The levels a sample
+; reaches are all the same parity as the start, so every output used is $80 + an even offset
+; (which the end ramp relies on) and never $00, which would halt the DOC.
                         lda   dmc_start_level
                         and   #$007F
                         tay
-                        sta   dmc_bias
-                        lda   #$0080
-                        sec
-                        sbc   dmc_bias
-                        sta   dmc_bias                  ; low byte = $80 - starting level
+                        lda   #$0080                    ; A = output for level 0
+                        cpy   #0
+                        beq   :lvl0
+:start                  sec
+                        sbc   #DMC_GAIN
+                        dey
+                        bne   :start
+:lvl0                   ldx   #0
+:table                  pha
+                        cmp   #$8000                    ; negative: below the range
+                        bcs   :lo
+                        cmp   #$02
+                        bcc   :lo
+                        cmp   #$FF
+                        bcc   :store
+                        lda   #$FE
+                        bra   :store
+:lo                     lda   #$02
+:store                  sep   #$20
+                        sta   dmc_out_table,x
+                        rep   #$20
+                        pla
+                        clc
+                        adc   #DMC_GAIN
+                        inx
+                        cpx   #128
+                        bcc   :table
+
+                        lda   dmc_start_level
+                        and   #$007F
+                        tay
                         ldx   dmc_src_start
 
                         lda   #^ROMBase                 ; the samples are read from the ROMBase bank
@@ -1940,9 +2187,7 @@ dmc_out4                DMC_BIT
 ; lands on $80 exactly, and it adds at most 64 samples.  Then write the $00 terminator.  Entered
 ; from the last chunk, with interrupts still disabled and the DOC address just past the sample.
 dmc_finish
-                        tya
-                        clc
-                        adc   dmc_bias                  ; last output value
+                        lda   dmc_out_table,y           ; last output value
 dmc_ramp                cmp   #$80
                         beq   dmc_ramp_done
                         bcc   dmc_ramp_up

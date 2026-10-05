@@ -286,7 +286,7 @@ NES_TriggerNMI
 
 ; If the audio engine is not running off of its own ESQ interrups at 240Hz or 120Hz, then it must be manually drive
 ; at 60Hz
-            lda   config_audio_quality
+            lda   apu_mode                ; The running mode (config_audio_quality is the menu setting)
             bne   :audio_uses_interrupts
             sep   #$30
             jsl   APU_quarter_speed_driver
@@ -318,6 +318,10 @@ schedTask
             lda   DPSave
             tcd
 
+            DO    APU_STATS
+            inc   apu_stat_vbl            ; APU rate check (see apu_stats in apu/apu.s)
+            FIN
+
             lda   skipInterruptHandling
             bne   :out
 
@@ -330,7 +334,7 @@ schedTask
 
 ; If the audio engine is not running off of its own ESQ interrups at 240Hz or 120Hz, then it must be manually drive
 ; at 60Hz.  This is done on every VBL so the audio stays real-time, even when the NES code is running slowly.
-            lda   config_audio_quality
+            lda   apu_mode                ; The running mode (config_audio_quality is the menu setting)
             bne   :audio_uses_interrupts
             sep   #$30
             jsl   APU_quarter_speed_driver
@@ -397,10 +401,16 @@ schedTask
 
 ; IRQ hook
 ;
-; Installed at $E1/0010, ahead of the firmware interrupt handler.  For native-mode
-; IRQs it records the location of the hardware interrupt frame and pushes a fake
-; RTI frame so that the firmware returns to irqPost instead of the interrupted code.
-; BRKs (V=1) and emulation-mode interrupts are passed through untouched.
+; Installed at $E1/0010, ahead of the firmware interrupt handler.  Task switches only happen
+; on the VBL (schedTask is a VBL heartbeat task), so for a native-mode VBL IRQ it records the
+; location of the hardware interrupt frame and pushes a fake RTI frame so that the firmware
+; returns to irqPost instead of the interrupted code.  Every other IRQ (the DOC timer for the
+; 120/240Hz audio, keyboard, ADB, ...) goes straight to the firmware, as do BRKs (V=1) and
+; emulation-mode interrupts.
+;
+; The VBL test reads the Mega II interrupt flags at $C046 (bit 3 = VBL interrupt pending),
+; which has no side effects.  If a VBL arrives between this test and the firmware's own check,
+; schedTask sees irqFrameS = 0 and just skips the switch until the next VBL.
             mx    %00
 irqHook
             clc
@@ -410,6 +420,11 @@ irqHook
 
             rep   #$30                    ; The firmware switches to 16-bit registers too
             pha
+            sep   #$20
+            ldal  $E0C046                 ; Mega II interrupt flags (an 8-bit read; $C047 clears them)
+            rep   #$20
+            and   #$0008                  ; VBL interrupt?
+            beq   :not_vbl
             tsc
             inc
             inc
@@ -420,6 +435,9 @@ irqHook
             per   irqPost
             php
 :chain      jml   irqChain
+
+:not_vbl    pla
+            jml   irqChain
 
 :emu        sec
             xce
