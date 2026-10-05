@@ -165,7 +165,8 @@ COMPILED_SPRITE_LIST       mac
 NO_TILE_EXCLUDE equ 0
 
 ; Do we have a custom routine to execite RenderScreen.  If yes, put its address here
-CUSTOM_RENDER_SCREEN equ 0
+CUSTOM_RENDER_SCREEN equ 1
+CUSTOM_RENDER_SCREEN_ADDR equ _RenderScreen     ; split screen during room transitions
 
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 3
@@ -295,6 +296,224 @@ MerchPalette  db   $0f,$30,$00,$12,$16,$27,$36,$07,$17,$29,$02,$22,$1c ; 13 colo
 ;                  BG0             BG1         BG2         SP0     SP1     
 Dungeon1Pal   db   $0f,$30,$00,$12,$16,$27,$36,$0c,$1c,$2c,$29,$17,$02,$22 ; 14 colors :)
 
+
+; Room transitions scroll the play area under a fixed status bar.  The NES does it with a sprite-0
+; hit at the bottom of the status bar: the NMI shows the status bar at scroll (0,0), then
+; WaitAndScrollToSplitBottom (bank 5) changes the scroll for the play area from NES scanline 64.
+; The engine isn't cycle accurate, so while IsSprite0CheckActive is set this renderer redraws just the
+; play area, at the scroll position that routine would set (worked out from the same game state), and
+; leaves the status bar on the screen as it is.  The rest of the time the default renderer is used.
+
+Z_GameMode            equ $12               ; NES zero page variables
+Z_GameSubmode         equ $13
+Z_VScrollAddrHi       equ $58
+Z_OddBaseNTOverride   equ $5F
+Z_ObjDir              equ $98
+Z_VScrollAddrLo       equ $E2
+Z_IsSprite0Active     equ $E3
+Z_CurHScroll          equ $FD
+Z_CurPpuControl       equ $FF
+
+ZELDA_SPLIT_LINE      equ 64-y_offset       ; screen line of NES scanline 64, the top of the play area
+ZELDA_PF_LINES        equ y_height-ZELDA_SPLIT_LINE
+
+zPfNT       dw    0                         ; play area nametable select and scroll
+zPfX        dw    0
+zPfY        dw    0
+zWasSplit   dw    0                         ; the previous frame was drawn split
+zPfOffset   dw    0                         ; exit offset returned by _BltSetupAlt
+
+            mx    %00
+_RenderScreen
+            ldx   DP_NES
+            ldal  Z_IsSprite0Active,x
+            and   #$00FF
+            bne   :split
+
+; Coming out of a transition the play area was last drawn at another scroll position, so redraw
+; everything once rather than letting the dirty renderer keep it.
+
+            lda   zWasSplit
+            beq   :default
+            stz   zWasSplit
+            lda   #DIRTY_BIT_BG0_REFRESH
+            tsb   DirtyBits
+:default    jmp   RenderScreen
+
+; Work out the play area's scroll position the way the NMI and WaitAndScrollToSplitBottom set it
+
+:split      lda   #1
+            sta   zWasSplit
+            ldal  Z_CurPpuControl,x         ; The NMI shows the status bar from nametable 0 or 2 at (0,0)
+            and   #$0002
+            sta   zPfNT                     ; Default: the play area isn't split off
+            stz   zPfX
+            stz   zPfY
+
+            ldal  Z_GameMode,x
+            and   #$00FF
+            cmp   #$08
+            bcs   :late_modes
+            ldal  Z_GameSubmode,x
+            and   #$00FF
+            beq   :draw                     ; Submode 0: the scroll isn't changed
+            ldal  Z_ObjDir,x
+            and   #$00FF
+            cmp   #$04
+            bcs   :vertical
+
+; Horizontal: nametable (CurPpuControl & $FE) | OddBaseNameTableOverride, X = CurHScroll.  The Y
+; scroll written mid-frame doesn't move the rows, so they stay where they are.
+
+            ldal  Z_OddBaseNTOverride,x
+            and   #$0001
+            tsb   zPfNT
+            ldal  Z_CurHScroll,x
+            and   #$00FF
+            sta   zPfX
+            bra   :draw
+
+; Vertical (horizontal mirroring): PPUADDR = VScrollAddr, so that nametable row is drawn from NES
+; scanline 64.  Nametable 0 is lines 0-239 of the code field and nametable 2 lines 240-479.
+
+:vertical   ldal  Z_VScrollAddrLo,x
+            and   #$00FF
+            sta   tmp0
+            ldal  Z_VScrollAddrHi,x
+            and   #$00FF
+            xba
+            ora   tmp0                      ; A = PPU address
+            pha
+            and   #$03E0                    ; coarse Y << 5
+            lsr
+            lsr                             ; coarse Y * 8
+            sta   tmp0
+            pla
+            and   #$0800                    ; nametable 2?
+            beq   *+5
+            lda   #240
+            clc
+            adc   tmp0                      ; V = line of the row in the code field
+            sec
+            sbc   #ZELDA_SPLIT_LINE+y_offset ; scroll that puts line V at NES scanline 64
+            bpl   *+6
+            clc
+            adc   #480
+            ldy   #0
+            cmp   #240
+            bcc   :v_set
+            sbc   #240                      ; (carry is set)
+            ldy   #2
+:v_set      sta   zPfY
+            sty   zPfNT
+            bra   :draw
+
+; GameMode 8 - $10 turn the video off below the split (drawn unsplit here); $11 and up switch the
+; base nametable (0 -> 1, 2 -> 3).
+
+:late_modes cmp   #$11
+            bcc   :draw
+            lda   #$0001
+            tsb   zPfNT
+
+; Draw only the play area, at its own scroll position.  The status bar doesn't move during a
+; transition, so it is left as it is on the screen.  This is drawScreen limited to the play area
+; lines: the code field is only set up for those, so no other line may be blitted.
+
+:draw
+            jsr   _ShowDebugInfo
+
+            lda   #DIRTY_BIT_PAL_CHANGE     ; Palette changes need the background tiles redrawn
+            bit   DirtyBits
+            beq   :no_refresh
+            ldx   #$0000
+            jsr   RefreshPPUTiles
+            ldx   #$0400
+            jsr   RefreshPPUTiles
+:no_refresh
+
+            lda   zPfNT
+            ldx   zPfX
+            ldy   zPfY
+            jsr   NES_SetScroll
+            lda   #ZELDA_SPLIT_LINE
+            ldx   #ZELDA_PF_LINES
+            ldy   StartX
+            jsr   _BltSetupAlt
+            sta   zPfOffset
+
+            stz   DirtyState                ; (as drawScreen)
+            lda   SprSaveTop
+            sta   SprSaveAddr
+
+; Drop the status bar rows from the sprite bitmap, so the sprite line ranges are all in the play area
+
+            ldx   CurrShadowBitmap
+            sep   #$20
+]row        =     y_offset_rows
+            lup   {64/8}-y_offset_rows
+            stz:  ]row,x
+]row        =     ]row+1
+            --^
+            rep   #$20
+
+            jsr   shadowBitmapToList
+            jsr   _ShadowOff
+            jsr   drawShadowList            ; Lines with sprites
+            jsr   drawSprites
+            jsr   _ShadowOn
+            jsr   zExposePlayArea           ; Reveal the play area
+
+            DO    GRID_DIRTY_RENDERING
+            jsr   gridEndFull               ; drawSprites recorded this frame's sprite cells
+            FIN
+
+            lda   #ZELDA_SPLIT_LINE         ; Restore the code field
+            ldx   #ZELDA_PF_LINES
+            ldy   zPfOffset
+            jsr   _RestoreBG0OpcodesAltLite
+
+            stz   DirtyBits
+            rts
+
+; exposeShadowList for the play area: alternate background blits and PEI slams of the sprite lines,
+; starting at the top of the play area instead of the top of the screen.
+            mx    %00
+zExposePlayArea
+:last       equ   tmp3
+:top        equ   tmp4
+:bottom     equ   tmp5
+
+            ldx   #ZELDA_SPLIT_LINE
+            stx   :last
+            ldx   #0
+            cpx   shadowListCount
+            beq   :exit
+:loop
+            phx
+            lda   shadowListTop,x
+            and   #$00FF
+            sta   :top
+            lda   shadowListBot,x
+            and   #$00FF
+            sta   :bottom
+
+            ldx   :last
+            ldy   :top
+            jsr   _BltRangeLite             ; Background up to this range
+            ldx   :top
+            ldy   :bottom
+            sty   :last
+            jsr   _PEISlam                  ; Expose the sprites
+
+            plx
+            inx
+            cpx   shadowListCount
+            bcc   :loop
+:exit
+            ldx   :last                     ; The rest of the play area
+            ldy   #y_height
+            jmp   _BltRangeLite
 
 SwizzleTables adrl AT1_T0
 
