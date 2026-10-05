@@ -524,7 +524,8 @@ NES_RenderFrame
             stz   renderActive
             lda   renderVblTicks
             ldx   #0                      ; SHR $2000
-            jsr   DrawHexByte
+            ldy   #$FFFF                  ; colour 15
+            jsr   DrawByte
             FIN
 
 ; Game specific post-render logic
@@ -838,79 +839,6 @@ gridFallbackBorder
             pla
             rep   #$20
             rts
-            FIN
-
-            DO    RENDER_VBL_COUNT
-; Minimal hex byte display (the full font in misc/font.s does not fit in Zelda's main segment).
-; A = byte value, X = offset from SHR $2000.  Draws two 8x6 digits, white on black, directly to
-; the screen.  DBR = this bank.
-            mx    %00
-DrawHexByte
-            pha
-            lsr
-            lsr
-            lsr
-            lsr
-            jsr   :digit                  ; High nibble
-            txa
-            clc
-            adc   #4                      ; Next 8 pixels
-            tax
-            pla                           ; Low nibble
-:digit      and   #$000F
-            asl
-            asl
-            asl
-            pha                           ; nibble * 8
-            asl
-            clc
-            adc   1,s                     ; nibble * 24 = offset of the glyph
-            tay
-            pla
-            lda   HexGlyphs+0,y
-            stal  $E12000,x
-            lda   HexGlyphs+2,y
-            stal  $E12000+2,x
-            lda   HexGlyphs+4,y
-            stal  $E12000+160,x
-            lda   HexGlyphs+6,y
-            stal  $E12000+160+2,x
-            lda   HexGlyphs+8,y
-            stal  {$E12000+160*2},x
-            lda   HexGlyphs+10,y
-            stal  {$E12000+160*2+2},x
-            lda   HexGlyphs+12,y
-            stal  {$E12000+160*3},x
-            lda   HexGlyphs+14,y
-            stal  {$E12000+160*3+2},x
-            lda   HexGlyphs+16,y
-            stal  {$E12000+160*4},x
-            lda   HexGlyphs+18,y
-            stal  {$E12000+160*4+2},x
-            lda   HexGlyphs+20,y
-            stal  {$E12000+160*5},x
-            lda   HexGlyphs+22,y
-            stal  {$E12000+160*5+2},x
-            rts
-
-; 0-F from misc/font.s: 6 rows of 4 bytes (8 pixels) per glyph
-HexGlyphs
-            hex   00FFFF000F000FF00F00F0F00F0F00F00FF000F000FFFF00   ; 0
-            hex   000F000000FF0000000F0000000F0000000F000000FFF000   ; 1
-            hex   00FFFF000F0000F000000F00000FF00000F000000FFFFFF0   ; 2
-            hex   00FFFF00000000F0000FFF00000000F0000000F000FFFF00   ; 3
-            hex   0000FF00000F0F0000F00F000FFFFFF000000F0000000F00   ; 4
-            hex   0FFFFFF00F0000000FFFFF00000000F00F0000F000FFFF00   ; 5
-            hex   000FFF0000F000000F0000000FFFFF000F0000F000FFFFF0   ; 6
-            hex   0FFFFFF0000000F000000F000000F000000F0000000F0000   ; 7
-            hex   00FFFF000F0000F000FFFF000F0000F00F0000F000FFFF00   ; 8
-            hex   00FFFF000F0000F000FFFF000000F000000F000000F00000   ; 9
-            hex   000FF00000F00F000F0000F00FFFFFF00F0000F00F0000F0   ; A
-            hex   0FFFFF000F0000F00FFFFF000F0000F00F0000F00FFFFF00   ; B
-            hex   00FFFFF00F0000000F0000000F0000000F00000000FFFFF0   ; C
-            hex   0FFFFF000F0000F00F0000F00F0000F00F0000F00FFFFF00   ; D
-            hex   0FFFFFF00F0000000FFFF0000F0000000F0000000FFFFFF0   ; E
-            hex   0FFFFFF00F0000000FFFF0000F0000000F0000000F000000   ; F
             FIN
 
 ; Track if the PEA field is patched or not (for dirty rendering)

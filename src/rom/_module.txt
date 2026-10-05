@@ -6,3 +6,4 @@ rom_helpers.s
 rom_input.s
 rom_exec.s
 rom_config.s
+rom_config_setup.s
