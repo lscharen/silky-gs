@@ -1256,18 +1256,28 @@ gqRepNop    rts
 ; ---------------------------------------------------------------------------
 ; Erase: X = SHR address, Y = code field address, DBR = code field bank.  Expose: Y = SHR address,
 ; DBR = $01.  Both return straight to the cell code array.
-gridQE0
-            rts
-gridQE1
-            lda:  {0*_LINE_SPAN}+4,y
-            stal  $010000+{0*SHR_LINE_WIDTH},x
-            lda:  {1*_LINE_SPAN}+4,y
-            stal  $010000+{1*SHR_LINE_WIDTH},x
-            lda:  {2*_LINE_SPAN}+4,y
-            stal  $010000+{2*SHR_LINE_WIDTH},x
-            lda:  {3*_LINE_SPAN}+4,y
-            stal  $010000+{3*SHR_LINE_WIDTH},x
-            rts
+; Each mask is its highest quadrant's block followed by the routine for the remaining quadrants,
+; so the routines share their tails: a chain falls through to the next smaller mask, and ends with
+; an RTS at mask 0 or a branch into a routine laid out earlier.  (Generated; every entry point copies
+; exactly its mask's quadrants.)
+gridQE14
+            lda:  {4*_LINE_SPAN}+1,y
+            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
+            lda:  {5*_LINE_SPAN}+1,y
+            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
+            lda:  {6*_LINE_SPAN}+1,y
+            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
+            lda:  {7*_LINE_SPAN}+1,y
+            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
+gridQE6
+            lda:  {4*_LINE_SPAN}+4,y
+            stal  $010000+{4*SHR_LINE_WIDTH},x
+            lda:  {5*_LINE_SPAN}+4,y
+            stal  $010000+{5*SHR_LINE_WIDTH},x
+            lda:  {6*_LINE_SPAN}+4,y
+            stal  $010000+{6*SHR_LINE_WIDTH},x
+            lda:  {7*_LINE_SPAN}+4,y
+            stal  $010000+{7*SHR_LINE_WIDTH},x
 gridQE2
             lda:  {0*_LINE_SPAN}+1,y
             stal  $010000+{0*SHR_LINE_WIDTH}+2,x
@@ -1277,25 +1287,17 @@ gridQE2
             stal  $010000+{2*SHR_LINE_WIDTH}+2,x
             lda:  {3*_LINE_SPAN}+1,y
             stal  $010000+{3*SHR_LINE_WIDTH}+2,x
+gridQE0
             rts
-gridQE3
-            lda:  {0*_LINE_SPAN}+4,y
-            stal  $010000+{0*SHR_LINE_WIDTH},x
-            lda:  {1*_LINE_SPAN}+4,y
-            stal  $010000+{1*SHR_LINE_WIDTH},x
-            lda:  {2*_LINE_SPAN}+4,y
-            stal  $010000+{2*SHR_LINE_WIDTH},x
-            lda:  {3*_LINE_SPAN}+4,y
-            stal  $010000+{3*SHR_LINE_WIDTH},x
-            lda:  {0*_LINE_SPAN}+1,y
-            stal  $010000+{0*SHR_LINE_WIDTH}+2,x
-            lda:  {1*_LINE_SPAN}+1,y
-            stal  $010000+{1*SHR_LINE_WIDTH}+2,x
-            lda:  {2*_LINE_SPAN}+1,y
-            stal  $010000+{2*SHR_LINE_WIDTH}+2,x
-            lda:  {3*_LINE_SPAN}+1,y
-            stal  $010000+{3*SHR_LINE_WIDTH}+2,x
-            rts
+gridQE12
+            lda:  {4*_LINE_SPAN}+1,y
+            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
+            lda:  {5*_LINE_SPAN}+1,y
+            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
+            lda:  {6*_LINE_SPAN}+1,y
+            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
+            lda:  {7*_LINE_SPAN}+1,y
+            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
 gridQE4
             lda:  {4*_LINE_SPAN}+4,y
             stal  $010000+{4*SHR_LINE_WIDTH},x
@@ -1306,7 +1308,35 @@ gridQE4
             lda:  {7*_LINE_SPAN}+4,y
             stal  $010000+{7*SHR_LINE_WIDTH},x
             rts
+gridQE10
+            lda:  {4*_LINE_SPAN}+1,y
+            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
+            lda:  {5*_LINE_SPAN}+1,y
+            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
+            lda:  {6*_LINE_SPAN}+1,y
+            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
+            lda:  {7*_LINE_SPAN}+1,y
+            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
+            bra   gridQE2
+gridQE13
+            lda:  {4*_LINE_SPAN}+1,y
+            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
+            lda:  {5*_LINE_SPAN}+1,y
+            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
+            lda:  {6*_LINE_SPAN}+1,y
+            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
+            lda:  {7*_LINE_SPAN}+1,y
+            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
 gridQE5
+            lda:  {4*_LINE_SPAN}+4,y
+            stal  $010000+{4*SHR_LINE_WIDTH},x
+            lda:  {5*_LINE_SPAN}+4,y
+            stal  $010000+{5*SHR_LINE_WIDTH},x
+            lda:  {6*_LINE_SPAN}+4,y
+            stal  $010000+{6*SHR_LINE_WIDTH},x
+            lda:  {7*_LINE_SPAN}+4,y
+            stal  $010000+{7*SHR_LINE_WIDTH},x
+gridQE1
             lda:  {0*_LINE_SPAN}+4,y
             stal  $010000+{0*SHR_LINE_WIDTH},x
             lda:  {1*_LINE_SPAN}+4,y
@@ -1315,16 +1345,17 @@ gridQE5
             stal  $010000+{2*SHR_LINE_WIDTH},x
             lda:  {3*_LINE_SPAN}+4,y
             stal  $010000+{3*SHR_LINE_WIDTH},x
-            lda:  {4*_LINE_SPAN}+4,y
-            stal  $010000+{4*SHR_LINE_WIDTH},x
-            lda:  {5*_LINE_SPAN}+4,y
-            stal  $010000+{5*SHR_LINE_WIDTH},x
-            lda:  {6*_LINE_SPAN}+4,y
-            stal  $010000+{6*SHR_LINE_WIDTH},x
-            lda:  {7*_LINE_SPAN}+4,y
-            stal  $010000+{7*SHR_LINE_WIDTH},x
             rts
-gridQE6
+gridQE11
+            lda:  {4*_LINE_SPAN}+1,y
+            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
+            lda:  {5*_LINE_SPAN}+1,y
+            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
+            lda:  {6*_LINE_SPAN}+1,y
+            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
+            lda:  {7*_LINE_SPAN}+1,y
+            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
+gridQE3
             lda:  {0*_LINE_SPAN}+1,y
             stal  $010000+{0*SHR_LINE_WIDTH}+2,x
             lda:  {1*_LINE_SPAN}+1,y
@@ -1333,32 +1364,27 @@ gridQE6
             stal  $010000+{2*SHR_LINE_WIDTH}+2,x
             lda:  {3*_LINE_SPAN}+1,y
             stal  $010000+{3*SHR_LINE_WIDTH}+2,x
-            lda:  {4*_LINE_SPAN}+4,y
-            stal  $010000+{4*SHR_LINE_WIDTH},x
-            lda:  {5*_LINE_SPAN}+4,y
-            stal  $010000+{5*SHR_LINE_WIDTH},x
-            lda:  {6*_LINE_SPAN}+4,y
-            stal  $010000+{6*SHR_LINE_WIDTH},x
-            lda:  {7*_LINE_SPAN}+4,y
-            stal  $010000+{7*SHR_LINE_WIDTH},x
-            rts
+            bra   gridQE1
+gridQE9
+            lda:  {4*_LINE_SPAN}+1,y
+            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
+            lda:  {5*_LINE_SPAN}+1,y
+            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
+            lda:  {6*_LINE_SPAN}+1,y
+            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
+            lda:  {7*_LINE_SPAN}+1,y
+            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
+            bra   gridQE1
+gridQE15
+            lda:  {4*_LINE_SPAN}+1,y
+            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
+            lda:  {5*_LINE_SPAN}+1,y
+            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
+            lda:  {6*_LINE_SPAN}+1,y
+            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
+            lda:  {7*_LINE_SPAN}+1,y
+            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
 gridQE7
-            lda:  {0*_LINE_SPAN}+4,y
-            stal  $010000+{0*SHR_LINE_WIDTH},x
-            lda:  {1*_LINE_SPAN}+4,y
-            stal  $010000+{1*SHR_LINE_WIDTH},x
-            lda:  {2*_LINE_SPAN}+4,y
-            stal  $010000+{2*SHR_LINE_WIDTH},x
-            lda:  {3*_LINE_SPAN}+4,y
-            stal  $010000+{3*SHR_LINE_WIDTH},x
-            lda:  {0*_LINE_SPAN}+1,y
-            stal  $010000+{0*SHR_LINE_WIDTH}+2,x
-            lda:  {1*_LINE_SPAN}+1,y
-            stal  $010000+{1*SHR_LINE_WIDTH}+2,x
-            lda:  {2*_LINE_SPAN}+1,y
-            stal  $010000+{2*SHR_LINE_WIDTH}+2,x
-            lda:  {3*_LINE_SPAN}+1,y
-            stal  $010000+{3*SHR_LINE_WIDTH}+2,x
             lda:  {4*_LINE_SPAN}+4,y
             stal  $010000+{4*SHR_LINE_WIDTH},x
             lda:  {5*_LINE_SPAN}+4,y
@@ -1367,7 +1393,7 @@ gridQE7
             stal  $010000+{6*SHR_LINE_WIDTH},x
             lda:  {7*_LINE_SPAN}+4,y
             stal  $010000+{7*SHR_LINE_WIDTH},x
-            rts
+            bra   gridQE3
 gridQE8
             lda:  {4*_LINE_SPAN}+1,y
             stal  $010000+{4*SHR_LINE_WIDTH}+2,x
@@ -1378,174 +1404,34 @@ gridQE8
             lda:  {7*_LINE_SPAN}+1,y
             stal  $010000+{7*SHR_LINE_WIDTH}+2,x
             rts
-gridQE9
-            lda:  {0*_LINE_SPAN}+4,y
-            stal  $010000+{0*SHR_LINE_WIDTH},x
-            lda:  {1*_LINE_SPAN}+4,y
-            stal  $010000+{1*SHR_LINE_WIDTH},x
-            lda:  {2*_LINE_SPAN}+4,y
-            stal  $010000+{2*SHR_LINE_WIDTH},x
-            lda:  {3*_LINE_SPAN}+4,y
-            stal  $010000+{3*SHR_LINE_WIDTH},x
-            lda:  {4*_LINE_SPAN}+1,y
-            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
-            lda:  {5*_LINE_SPAN}+1,y
-            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
-            lda:  {6*_LINE_SPAN}+1,y
-            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
-            lda:  {7*_LINE_SPAN}+1,y
-            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
-            rts
-gridQE10
-            lda:  {0*_LINE_SPAN}+1,y
-            stal  $010000+{0*SHR_LINE_WIDTH}+2,x
-            lda:  {1*_LINE_SPAN}+1,y
-            stal  $010000+{1*SHR_LINE_WIDTH}+2,x
-            lda:  {2*_LINE_SPAN}+1,y
-            stal  $010000+{2*SHR_LINE_WIDTH}+2,x
-            lda:  {3*_LINE_SPAN}+1,y
-            stal  $010000+{3*SHR_LINE_WIDTH}+2,x
-            lda:  {4*_LINE_SPAN}+1,y
-            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
-            lda:  {5*_LINE_SPAN}+1,y
-            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
-            lda:  {6*_LINE_SPAN}+1,y
-            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
-            lda:  {7*_LINE_SPAN}+1,y
-            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
-            rts
-gridQE11
-            lda:  {0*_LINE_SPAN}+4,y
-            stal  $010000+{0*SHR_LINE_WIDTH},x
-            lda:  {1*_LINE_SPAN}+4,y
-            stal  $010000+{1*SHR_LINE_WIDTH},x
-            lda:  {2*_LINE_SPAN}+4,y
-            stal  $010000+{2*SHR_LINE_WIDTH},x
-            lda:  {3*_LINE_SPAN}+4,y
-            stal  $010000+{3*SHR_LINE_WIDTH},x
-            lda:  {0*_LINE_SPAN}+1,y
-            stal  $010000+{0*SHR_LINE_WIDTH}+2,x
-            lda:  {1*_LINE_SPAN}+1,y
-            stal  $010000+{1*SHR_LINE_WIDTH}+2,x
-            lda:  {2*_LINE_SPAN}+1,y
-            stal  $010000+{2*SHR_LINE_WIDTH}+2,x
-            lda:  {3*_LINE_SPAN}+1,y
-            stal  $010000+{3*SHR_LINE_WIDTH}+2,x
-            lda:  {4*_LINE_SPAN}+1,y
-            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
-            lda:  {5*_LINE_SPAN}+1,y
-            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
-            lda:  {6*_LINE_SPAN}+1,y
-            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
-            lda:  {7*_LINE_SPAN}+1,y
-            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
-            rts
-gridQE12
-            lda:  {4*_LINE_SPAN}+4,y
-            stal  $010000+{4*SHR_LINE_WIDTH},x
-            lda:  {5*_LINE_SPAN}+4,y
-            stal  $010000+{5*SHR_LINE_WIDTH},x
-            lda:  {6*_LINE_SPAN}+4,y
-            stal  $010000+{6*SHR_LINE_WIDTH},x
-            lda:  {7*_LINE_SPAN}+4,y
-            stal  $010000+{7*SHR_LINE_WIDTH},x
-            lda:  {4*_LINE_SPAN}+1,y
-            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
-            lda:  {5*_LINE_SPAN}+1,y
-            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
-            lda:  {6*_LINE_SPAN}+1,y
-            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
-            lda:  {7*_LINE_SPAN}+1,y
-            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
-            rts
-gridQE13
-            lda:  {0*_LINE_SPAN}+4,y
-            stal  $010000+{0*SHR_LINE_WIDTH},x
-            lda:  {1*_LINE_SPAN}+4,y
-            stal  $010000+{1*SHR_LINE_WIDTH},x
-            lda:  {2*_LINE_SPAN}+4,y
-            stal  $010000+{2*SHR_LINE_WIDTH},x
-            lda:  {3*_LINE_SPAN}+4,y
-            stal  $010000+{3*SHR_LINE_WIDTH},x
-            lda:  {4*_LINE_SPAN}+4,y
-            stal  $010000+{4*SHR_LINE_WIDTH},x
-            lda:  {5*_LINE_SPAN}+4,y
-            stal  $010000+{5*SHR_LINE_WIDTH},x
-            lda:  {6*_LINE_SPAN}+4,y
-            stal  $010000+{6*SHR_LINE_WIDTH},x
-            lda:  {7*_LINE_SPAN}+4,y
-            stal  $010000+{7*SHR_LINE_WIDTH},x
-            lda:  {4*_LINE_SPAN}+1,y
-            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
-            lda:  {5*_LINE_SPAN}+1,y
-            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
-            lda:  {6*_LINE_SPAN}+1,y
-            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
-            lda:  {7*_LINE_SPAN}+1,y
-            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
-            rts
-gridQE14
-            lda:  {0*_LINE_SPAN}+1,y
-            stal  $010000+{0*SHR_LINE_WIDTH}+2,x
-            lda:  {1*_LINE_SPAN}+1,y
-            stal  $010000+{1*SHR_LINE_WIDTH}+2,x
-            lda:  {2*_LINE_SPAN}+1,y
-            stal  $010000+{2*SHR_LINE_WIDTH}+2,x
-            lda:  {3*_LINE_SPAN}+1,y
-            stal  $010000+{3*SHR_LINE_WIDTH}+2,x
-            lda:  {4*_LINE_SPAN}+4,y
-            stal  $010000+{4*SHR_LINE_WIDTH},x
-            lda:  {5*_LINE_SPAN}+4,y
-            stal  $010000+{5*SHR_LINE_WIDTH},x
-            lda:  {6*_LINE_SPAN}+4,y
-            stal  $010000+{6*SHR_LINE_WIDTH},x
-            lda:  {7*_LINE_SPAN}+4,y
-            stal  $010000+{7*SHR_LINE_WIDTH},x
-            lda:  {4*_LINE_SPAN}+1,y
-            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
-            lda:  {5*_LINE_SPAN}+1,y
-            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
-            lda:  {6*_LINE_SPAN}+1,y
-            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
-            lda:  {7*_LINE_SPAN}+1,y
-            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
-            rts
-gridQE15
-            lda:  {0*_LINE_SPAN}+4,y
-            stal  $010000+{0*SHR_LINE_WIDTH},x
-            lda:  {1*_LINE_SPAN}+4,y
-            stal  $010000+{1*SHR_LINE_WIDTH},x
-            lda:  {2*_LINE_SPAN}+4,y
-            stal  $010000+{2*SHR_LINE_WIDTH},x
-            lda:  {3*_LINE_SPAN}+4,y
-            stal  $010000+{3*SHR_LINE_WIDTH},x
-            lda:  {0*_LINE_SPAN}+1,y
-            stal  $010000+{0*SHR_LINE_WIDTH}+2,x
-            lda:  {1*_LINE_SPAN}+1,y
-            stal  $010000+{1*SHR_LINE_WIDTH}+2,x
-            lda:  {2*_LINE_SPAN}+1,y
-            stal  $010000+{2*SHR_LINE_WIDTH}+2,x
-            lda:  {3*_LINE_SPAN}+1,y
-            stal  $010000+{3*SHR_LINE_WIDTH}+2,x
-            lda:  {4*_LINE_SPAN}+4,y
-            stal  $010000+{4*SHR_LINE_WIDTH},x
-            lda:  {5*_LINE_SPAN}+4,y
-            stal  $010000+{5*SHR_LINE_WIDTH},x
-            lda:  {6*_LINE_SPAN}+4,y
-            stal  $010000+{6*SHR_LINE_WIDTH},x
-            lda:  {7*_LINE_SPAN}+4,y
-            stal  $010000+{7*SHR_LINE_WIDTH},x
-            lda:  {4*_LINE_SPAN}+1,y
-            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
-            lda:  {5*_LINE_SPAN}+1,y
-            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
-            lda:  {6*_LINE_SPAN}+1,y
-            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
-            lda:  {7*_LINE_SPAN}+1,y
-            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
-            rts
-gridQX0
-            rts
+
+gridQX15
+            lda:  {4*SHR_LINE_WIDTH}+2,y
+            sta:  {4*SHR_LINE_WIDTH}+2,y
+            lda:  {5*SHR_LINE_WIDTH}+2,y
+            sta:  {5*SHR_LINE_WIDTH}+2,y
+            lda:  {6*SHR_LINE_WIDTH}+2,y
+            sta:  {6*SHR_LINE_WIDTH}+2,y
+            lda:  {7*SHR_LINE_WIDTH}+2,y
+            sta:  {7*SHR_LINE_WIDTH}+2,y
+gridQX7
+            lda:  {4*SHR_LINE_WIDTH},y
+            sta:  {4*SHR_LINE_WIDTH},y
+            lda:  {5*SHR_LINE_WIDTH},y
+            sta:  {5*SHR_LINE_WIDTH},y
+            lda:  {6*SHR_LINE_WIDTH},y
+            sta:  {6*SHR_LINE_WIDTH},y
+            lda:  {7*SHR_LINE_WIDTH},y
+            sta:  {7*SHR_LINE_WIDTH},y
+gridQX3
+            lda:  {0*SHR_LINE_WIDTH}+2,y
+            sta:  {0*SHR_LINE_WIDTH}+2,y
+            lda:  {1*SHR_LINE_WIDTH}+2,y
+            sta:  {1*SHR_LINE_WIDTH}+2,y
+            lda:  {2*SHR_LINE_WIDTH}+2,y
+            sta:  {2*SHR_LINE_WIDTH}+2,y
+            lda:  {3*SHR_LINE_WIDTH}+2,y
+            sta:  {3*SHR_LINE_WIDTH}+2,y
 gridQX1
             lda:  {0*SHR_LINE_WIDTH},y
             sta:  {0*SHR_LINE_WIDTH},y
@@ -1555,7 +1441,65 @@ gridQX1
             sta:  {2*SHR_LINE_WIDTH},y
             lda:  {3*SHR_LINE_WIDTH},y
             sta:  {3*SHR_LINE_WIDTH},y
+gridQX0
             rts
+gridQX13
+            lda:  {4*SHR_LINE_WIDTH}+2,y
+            sta:  {4*SHR_LINE_WIDTH}+2,y
+            lda:  {5*SHR_LINE_WIDTH}+2,y
+            sta:  {5*SHR_LINE_WIDTH}+2,y
+            lda:  {6*SHR_LINE_WIDTH}+2,y
+            sta:  {6*SHR_LINE_WIDTH}+2,y
+            lda:  {7*SHR_LINE_WIDTH}+2,y
+            sta:  {7*SHR_LINE_WIDTH}+2,y
+gridQX5
+            lda:  {4*SHR_LINE_WIDTH},y
+            sta:  {4*SHR_LINE_WIDTH},y
+            lda:  {5*SHR_LINE_WIDTH},y
+            sta:  {5*SHR_LINE_WIDTH},y
+            lda:  {6*SHR_LINE_WIDTH},y
+            sta:  {6*SHR_LINE_WIDTH},y
+            lda:  {7*SHR_LINE_WIDTH},y
+            sta:  {7*SHR_LINE_WIDTH},y
+            bra   gridQX1
+gridQX11
+            lda:  {4*SHR_LINE_WIDTH}+2,y
+            sta:  {4*SHR_LINE_WIDTH}+2,y
+            lda:  {5*SHR_LINE_WIDTH}+2,y
+            sta:  {5*SHR_LINE_WIDTH}+2,y
+            lda:  {6*SHR_LINE_WIDTH}+2,y
+            sta:  {6*SHR_LINE_WIDTH}+2,y
+            lda:  {7*SHR_LINE_WIDTH}+2,y
+            sta:  {7*SHR_LINE_WIDTH}+2,y
+            bra   gridQX3
+gridQX9
+            lda:  {4*SHR_LINE_WIDTH}+2,y
+            sta:  {4*SHR_LINE_WIDTH}+2,y
+            lda:  {5*SHR_LINE_WIDTH}+2,y
+            sta:  {5*SHR_LINE_WIDTH}+2,y
+            lda:  {6*SHR_LINE_WIDTH}+2,y
+            sta:  {6*SHR_LINE_WIDTH}+2,y
+            lda:  {7*SHR_LINE_WIDTH}+2,y
+            sta:  {7*SHR_LINE_WIDTH}+2,y
+            bra   gridQX1
+gridQX14
+            lda:  {4*SHR_LINE_WIDTH}+2,y
+            sta:  {4*SHR_LINE_WIDTH}+2,y
+            lda:  {5*SHR_LINE_WIDTH}+2,y
+            sta:  {5*SHR_LINE_WIDTH}+2,y
+            lda:  {6*SHR_LINE_WIDTH}+2,y
+            sta:  {6*SHR_LINE_WIDTH}+2,y
+            lda:  {7*SHR_LINE_WIDTH}+2,y
+            sta:  {7*SHR_LINE_WIDTH}+2,y
+gridQX6
+            lda:  {4*SHR_LINE_WIDTH},y
+            sta:  {4*SHR_LINE_WIDTH},y
+            lda:  {5*SHR_LINE_WIDTH},y
+            sta:  {5*SHR_LINE_WIDTH},y
+            lda:  {6*SHR_LINE_WIDTH},y
+            sta:  {6*SHR_LINE_WIDTH},y
+            lda:  {7*SHR_LINE_WIDTH},y
+            sta:  {7*SHR_LINE_WIDTH},y
 gridQX2
             lda:  {0*SHR_LINE_WIDTH}+2,y
             sta:  {0*SHR_LINE_WIDTH}+2,y
@@ -1566,24 +1510,15 @@ gridQX2
             lda:  {3*SHR_LINE_WIDTH}+2,y
             sta:  {3*SHR_LINE_WIDTH}+2,y
             rts
-gridQX3
-            lda:  {0*SHR_LINE_WIDTH},y
-            sta:  {0*SHR_LINE_WIDTH},y
-            lda:  {1*SHR_LINE_WIDTH},y
-            sta:  {1*SHR_LINE_WIDTH},y
-            lda:  {2*SHR_LINE_WIDTH},y
-            sta:  {2*SHR_LINE_WIDTH},y
-            lda:  {3*SHR_LINE_WIDTH},y
-            sta:  {3*SHR_LINE_WIDTH},y
-            lda:  {0*SHR_LINE_WIDTH}+2,y
-            sta:  {0*SHR_LINE_WIDTH}+2,y
-            lda:  {1*SHR_LINE_WIDTH}+2,y
-            sta:  {1*SHR_LINE_WIDTH}+2,y
-            lda:  {2*SHR_LINE_WIDTH}+2,y
-            sta:  {2*SHR_LINE_WIDTH}+2,y
-            lda:  {3*SHR_LINE_WIDTH}+2,y
-            sta:  {3*SHR_LINE_WIDTH}+2,y
-            rts
+gridQX12
+            lda:  {4*SHR_LINE_WIDTH}+2,y
+            sta:  {4*SHR_LINE_WIDTH}+2,y
+            lda:  {5*SHR_LINE_WIDTH}+2,y
+            sta:  {5*SHR_LINE_WIDTH}+2,y
+            lda:  {6*SHR_LINE_WIDTH}+2,y
+            sta:  {6*SHR_LINE_WIDTH}+2,y
+            lda:  {7*SHR_LINE_WIDTH}+2,y
+            sta:  {7*SHR_LINE_WIDTH}+2,y
 gridQX4
             lda:  {4*SHR_LINE_WIDTH},y
             sta:  {4*SHR_LINE_WIDTH},y
@@ -1594,105 +1529,7 @@ gridQX4
             lda:  {7*SHR_LINE_WIDTH},y
             sta:  {7*SHR_LINE_WIDTH},y
             rts
-gridQX5
-            lda:  {0*SHR_LINE_WIDTH},y
-            sta:  {0*SHR_LINE_WIDTH},y
-            lda:  {1*SHR_LINE_WIDTH},y
-            sta:  {1*SHR_LINE_WIDTH},y
-            lda:  {2*SHR_LINE_WIDTH},y
-            sta:  {2*SHR_LINE_WIDTH},y
-            lda:  {3*SHR_LINE_WIDTH},y
-            sta:  {3*SHR_LINE_WIDTH},y
-            lda:  {4*SHR_LINE_WIDTH},y
-            sta:  {4*SHR_LINE_WIDTH},y
-            lda:  {5*SHR_LINE_WIDTH},y
-            sta:  {5*SHR_LINE_WIDTH},y
-            lda:  {6*SHR_LINE_WIDTH},y
-            sta:  {6*SHR_LINE_WIDTH},y
-            lda:  {7*SHR_LINE_WIDTH},y
-            sta:  {7*SHR_LINE_WIDTH},y
-            rts
-gridQX6
-            lda:  {0*SHR_LINE_WIDTH}+2,y
-            sta:  {0*SHR_LINE_WIDTH}+2,y
-            lda:  {1*SHR_LINE_WIDTH}+2,y
-            sta:  {1*SHR_LINE_WIDTH}+2,y
-            lda:  {2*SHR_LINE_WIDTH}+2,y
-            sta:  {2*SHR_LINE_WIDTH}+2,y
-            lda:  {3*SHR_LINE_WIDTH}+2,y
-            sta:  {3*SHR_LINE_WIDTH}+2,y
-            lda:  {4*SHR_LINE_WIDTH},y
-            sta:  {4*SHR_LINE_WIDTH},y
-            lda:  {5*SHR_LINE_WIDTH},y
-            sta:  {5*SHR_LINE_WIDTH},y
-            lda:  {6*SHR_LINE_WIDTH},y
-            sta:  {6*SHR_LINE_WIDTH},y
-            lda:  {7*SHR_LINE_WIDTH},y
-            sta:  {7*SHR_LINE_WIDTH},y
-            rts
-gridQX7
-            lda:  {0*SHR_LINE_WIDTH},y
-            sta:  {0*SHR_LINE_WIDTH},y
-            lda:  {1*SHR_LINE_WIDTH},y
-            sta:  {1*SHR_LINE_WIDTH},y
-            lda:  {2*SHR_LINE_WIDTH},y
-            sta:  {2*SHR_LINE_WIDTH},y
-            lda:  {3*SHR_LINE_WIDTH},y
-            sta:  {3*SHR_LINE_WIDTH},y
-            lda:  {0*SHR_LINE_WIDTH}+2,y
-            sta:  {0*SHR_LINE_WIDTH}+2,y
-            lda:  {1*SHR_LINE_WIDTH}+2,y
-            sta:  {1*SHR_LINE_WIDTH}+2,y
-            lda:  {2*SHR_LINE_WIDTH}+2,y
-            sta:  {2*SHR_LINE_WIDTH}+2,y
-            lda:  {3*SHR_LINE_WIDTH}+2,y
-            sta:  {3*SHR_LINE_WIDTH}+2,y
-            lda:  {4*SHR_LINE_WIDTH},y
-            sta:  {4*SHR_LINE_WIDTH},y
-            lda:  {5*SHR_LINE_WIDTH},y
-            sta:  {5*SHR_LINE_WIDTH},y
-            lda:  {6*SHR_LINE_WIDTH},y
-            sta:  {6*SHR_LINE_WIDTH},y
-            lda:  {7*SHR_LINE_WIDTH},y
-            sta:  {7*SHR_LINE_WIDTH},y
-            rts
-gridQX8
-            lda:  {4*SHR_LINE_WIDTH}+2,y
-            sta:  {4*SHR_LINE_WIDTH}+2,y
-            lda:  {5*SHR_LINE_WIDTH}+2,y
-            sta:  {5*SHR_LINE_WIDTH}+2,y
-            lda:  {6*SHR_LINE_WIDTH}+2,y
-            sta:  {6*SHR_LINE_WIDTH}+2,y
-            lda:  {7*SHR_LINE_WIDTH}+2,y
-            sta:  {7*SHR_LINE_WIDTH}+2,y
-            rts
-gridQX9
-            lda:  {0*SHR_LINE_WIDTH},y
-            sta:  {0*SHR_LINE_WIDTH},y
-            lda:  {1*SHR_LINE_WIDTH},y
-            sta:  {1*SHR_LINE_WIDTH},y
-            lda:  {2*SHR_LINE_WIDTH},y
-            sta:  {2*SHR_LINE_WIDTH},y
-            lda:  {3*SHR_LINE_WIDTH},y
-            sta:  {3*SHR_LINE_WIDTH},y
-            lda:  {4*SHR_LINE_WIDTH}+2,y
-            sta:  {4*SHR_LINE_WIDTH}+2,y
-            lda:  {5*SHR_LINE_WIDTH}+2,y
-            sta:  {5*SHR_LINE_WIDTH}+2,y
-            lda:  {6*SHR_LINE_WIDTH}+2,y
-            sta:  {6*SHR_LINE_WIDTH}+2,y
-            lda:  {7*SHR_LINE_WIDTH}+2,y
-            sta:  {7*SHR_LINE_WIDTH}+2,y
-            rts
 gridQX10
-            lda:  {0*SHR_LINE_WIDTH}+2,y
-            sta:  {0*SHR_LINE_WIDTH}+2,y
-            lda:  {1*SHR_LINE_WIDTH}+2,y
-            sta:  {1*SHR_LINE_WIDTH}+2,y
-            lda:  {2*SHR_LINE_WIDTH}+2,y
-            sta:  {2*SHR_LINE_WIDTH}+2,y
-            lda:  {3*SHR_LINE_WIDTH}+2,y
-            sta:  {3*SHR_LINE_WIDTH}+2,y
             lda:  {4*SHR_LINE_WIDTH}+2,y
             sta:  {4*SHR_LINE_WIDTH}+2,y
             lda:  {5*SHR_LINE_WIDTH}+2,y
@@ -1701,128 +1538,8 @@ gridQX10
             sta:  {6*SHR_LINE_WIDTH}+2,y
             lda:  {7*SHR_LINE_WIDTH}+2,y
             sta:  {7*SHR_LINE_WIDTH}+2,y
-            rts
-gridQX11
-            lda:  {0*SHR_LINE_WIDTH},y
-            sta:  {0*SHR_LINE_WIDTH},y
-            lda:  {1*SHR_LINE_WIDTH},y
-            sta:  {1*SHR_LINE_WIDTH},y
-            lda:  {2*SHR_LINE_WIDTH},y
-            sta:  {2*SHR_LINE_WIDTH},y
-            lda:  {3*SHR_LINE_WIDTH},y
-            sta:  {3*SHR_LINE_WIDTH},y
-            lda:  {0*SHR_LINE_WIDTH}+2,y
-            sta:  {0*SHR_LINE_WIDTH}+2,y
-            lda:  {1*SHR_LINE_WIDTH}+2,y
-            sta:  {1*SHR_LINE_WIDTH}+2,y
-            lda:  {2*SHR_LINE_WIDTH}+2,y
-            sta:  {2*SHR_LINE_WIDTH}+2,y
-            lda:  {3*SHR_LINE_WIDTH}+2,y
-            sta:  {3*SHR_LINE_WIDTH}+2,y
-            lda:  {4*SHR_LINE_WIDTH}+2,y
-            sta:  {4*SHR_LINE_WIDTH}+2,y
-            lda:  {5*SHR_LINE_WIDTH}+2,y
-            sta:  {5*SHR_LINE_WIDTH}+2,y
-            lda:  {6*SHR_LINE_WIDTH}+2,y
-            sta:  {6*SHR_LINE_WIDTH}+2,y
-            lda:  {7*SHR_LINE_WIDTH}+2,y
-            sta:  {7*SHR_LINE_WIDTH}+2,y
-            rts
-gridQX12
-            lda:  {4*SHR_LINE_WIDTH},y
-            sta:  {4*SHR_LINE_WIDTH},y
-            lda:  {5*SHR_LINE_WIDTH},y
-            sta:  {5*SHR_LINE_WIDTH},y
-            lda:  {6*SHR_LINE_WIDTH},y
-            sta:  {6*SHR_LINE_WIDTH},y
-            lda:  {7*SHR_LINE_WIDTH},y
-            sta:  {7*SHR_LINE_WIDTH},y
-            lda:  {4*SHR_LINE_WIDTH}+2,y
-            sta:  {4*SHR_LINE_WIDTH}+2,y
-            lda:  {5*SHR_LINE_WIDTH}+2,y
-            sta:  {5*SHR_LINE_WIDTH}+2,y
-            lda:  {6*SHR_LINE_WIDTH}+2,y
-            sta:  {6*SHR_LINE_WIDTH}+2,y
-            lda:  {7*SHR_LINE_WIDTH}+2,y
-            sta:  {7*SHR_LINE_WIDTH}+2,y
-            rts
-gridQX13
-            lda:  {0*SHR_LINE_WIDTH},y
-            sta:  {0*SHR_LINE_WIDTH},y
-            lda:  {1*SHR_LINE_WIDTH},y
-            sta:  {1*SHR_LINE_WIDTH},y
-            lda:  {2*SHR_LINE_WIDTH},y
-            sta:  {2*SHR_LINE_WIDTH},y
-            lda:  {3*SHR_LINE_WIDTH},y
-            sta:  {3*SHR_LINE_WIDTH},y
-            lda:  {4*SHR_LINE_WIDTH},y
-            sta:  {4*SHR_LINE_WIDTH},y
-            lda:  {5*SHR_LINE_WIDTH},y
-            sta:  {5*SHR_LINE_WIDTH},y
-            lda:  {6*SHR_LINE_WIDTH},y
-            sta:  {6*SHR_LINE_WIDTH},y
-            lda:  {7*SHR_LINE_WIDTH},y
-            sta:  {7*SHR_LINE_WIDTH},y
-            lda:  {4*SHR_LINE_WIDTH}+2,y
-            sta:  {4*SHR_LINE_WIDTH}+2,y
-            lda:  {5*SHR_LINE_WIDTH}+2,y
-            sta:  {5*SHR_LINE_WIDTH}+2,y
-            lda:  {6*SHR_LINE_WIDTH}+2,y
-            sta:  {6*SHR_LINE_WIDTH}+2,y
-            lda:  {7*SHR_LINE_WIDTH}+2,y
-            sta:  {7*SHR_LINE_WIDTH}+2,y
-            rts
-gridQX14
-            lda:  {0*SHR_LINE_WIDTH}+2,y
-            sta:  {0*SHR_LINE_WIDTH}+2,y
-            lda:  {1*SHR_LINE_WIDTH}+2,y
-            sta:  {1*SHR_LINE_WIDTH}+2,y
-            lda:  {2*SHR_LINE_WIDTH}+2,y
-            sta:  {2*SHR_LINE_WIDTH}+2,y
-            lda:  {3*SHR_LINE_WIDTH}+2,y
-            sta:  {3*SHR_LINE_WIDTH}+2,y
-            lda:  {4*SHR_LINE_WIDTH},y
-            sta:  {4*SHR_LINE_WIDTH},y
-            lda:  {5*SHR_LINE_WIDTH},y
-            sta:  {5*SHR_LINE_WIDTH},y
-            lda:  {6*SHR_LINE_WIDTH},y
-            sta:  {6*SHR_LINE_WIDTH},y
-            lda:  {7*SHR_LINE_WIDTH},y
-            sta:  {7*SHR_LINE_WIDTH},y
-            lda:  {4*SHR_LINE_WIDTH}+2,y
-            sta:  {4*SHR_LINE_WIDTH}+2,y
-            lda:  {5*SHR_LINE_WIDTH}+2,y
-            sta:  {5*SHR_LINE_WIDTH}+2,y
-            lda:  {6*SHR_LINE_WIDTH}+2,y
-            sta:  {6*SHR_LINE_WIDTH}+2,y
-            lda:  {7*SHR_LINE_WIDTH}+2,y
-            sta:  {7*SHR_LINE_WIDTH}+2,y
-            rts
-gridQX15
-            lda:  {0*SHR_LINE_WIDTH},y
-            sta:  {0*SHR_LINE_WIDTH},y
-            lda:  {1*SHR_LINE_WIDTH},y
-            sta:  {1*SHR_LINE_WIDTH},y
-            lda:  {2*SHR_LINE_WIDTH},y
-            sta:  {2*SHR_LINE_WIDTH},y
-            lda:  {3*SHR_LINE_WIDTH},y
-            sta:  {3*SHR_LINE_WIDTH},y
-            lda:  {0*SHR_LINE_WIDTH}+2,y
-            sta:  {0*SHR_LINE_WIDTH}+2,y
-            lda:  {1*SHR_LINE_WIDTH}+2,y
-            sta:  {1*SHR_LINE_WIDTH}+2,y
-            lda:  {2*SHR_LINE_WIDTH}+2,y
-            sta:  {2*SHR_LINE_WIDTH}+2,y
-            lda:  {3*SHR_LINE_WIDTH}+2,y
-            sta:  {3*SHR_LINE_WIDTH}+2,y
-            lda:  {4*SHR_LINE_WIDTH},y
-            sta:  {4*SHR_LINE_WIDTH},y
-            lda:  {5*SHR_LINE_WIDTH},y
-            sta:  {5*SHR_LINE_WIDTH},y
-            lda:  {6*SHR_LINE_WIDTH},y
-            sta:  {6*SHR_LINE_WIDTH},y
-            lda:  {7*SHR_LINE_WIDTH},y
-            sta:  {7*SHR_LINE_WIDTH},y
+            bra   gridQX2
+gridQX8
             lda:  {4*SHR_LINE_WIDTH}+2,y
             sta:  {4*SHR_LINE_WIDTH}+2,y
             lda:  {5*SHR_LINE_WIDTH}+2,y
