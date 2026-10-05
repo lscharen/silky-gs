@@ -46,6 +46,14 @@
             ASM   PPU.s
             SNA   PPURAM
 
+; Segment #7 -- Palette swizzle tables
+
+            TYP   $06
+            DSK   PALDATA
+            ORG   $090000
+            ASM   pal_w11.s
+            SNA   PALDATA
+
 
 
 
