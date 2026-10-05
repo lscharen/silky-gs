@@ -12,10 +12,8 @@ HORIZONTAL_MIRRORING equ $01        ; From core/Defs.s, which is not included in
 VERTICAL_MIRRORING   equ $02
         put  ../../rom/rom_inject.s
 
-y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
-    ds 24,$01
-    ds 200,$00
-    ds 32,$01
+y_exclude ENT                     ; Table of excluded sprite Y values -- filled in by InitYExclude at start-up
+            ds 256
 
 tile_exclude ENT                  ; Tble of excluded tiles
     ds 256,$00

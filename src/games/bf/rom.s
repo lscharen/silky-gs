@@ -252,13 +252,13 @@
 ROMBase ENT
     ds   $B000-*            ; Pad up to $B000; the exclusion tables and injected code below must end before $C000
 
-y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
-    ds 24,$01
-    ds 200,$00
-    ds 32,$01
+y_exclude ENT                     ; Table of excluded sprite Y values -- filled in by InitYExclude at start-up
+            ds 256
 
-tile_exclude ENT                  ; Tble of excluded tiles
-    ds 256,$00
+tile_exclude ENT                  ; Table of excluded tiles (non-zero = skip sprites using that tile)
+            ds $FC,$00
+            db $01                ; Tile $FC - blank tile in this ROM
+            ds 3,$00
 
 HORIZONTAL_MIRRORING equ $01        ; From core/Defs.s, which is not included in the ROM segment
 VERTICAL_MIRRORING   equ $02

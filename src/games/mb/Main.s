@@ -47,14 +47,6 @@ POST_RENDER  mac
 ;
              <<<
 
-; Put in additional conditions to skip sprites when scanning the OAM table to decide what to
-; render.  Set the carry flag to keep, clear the carry flag to skip
-;
-; Input: The accumulator holds the first two OAM bytes (y-position and tile id)
-SCAN_OAM_XTRA_FILTER mac
-            sec               ; pass everything
-            <<<
-
 ; Define which PPU address has the background and sprite tiles
 PPU_BG_TILE_ADDR  equ $1000
 PPU_SPR_TILE_ADDR equ $0000

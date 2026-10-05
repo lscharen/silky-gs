@@ -24,10 +24,8 @@ ROMBase ENT
 
             ds \,$00              ; page-align the tables
 
-y_exclude ENT                     ; Table of excluded scanlines -- kept in NES RAM bank for efficiency
-            ds 24,$01
-            ds 200,$00
-            ds 32,$01
+y_exclude ENT                     ; Table of excluded sprite Y values -- filled in by InitYExclude at start-up
+            ds 256
 
 tile_exclude ENT                  ; Table of excluded tiles
             ds $61,$00

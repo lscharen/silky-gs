@@ -46,15 +46,6 @@ POST_RENDER  mac
 ;
              <<<
 
-; Put in additional conditions to skip sprites when scanning the OAM table to decide what to
-; render.  Set the carry flag to keep, clear the carry flag to skip
-;
-; Input: The accumulator holds the first two OAM bytes (y-position and tile id)
-SCAN_OAM_XTRA_FILTER mac
-            eor    #$FC00             ; Is the tile == $FC? This is a blank tile in this ROM
-            cmp    #$0100
-            <<<
-
 ; Define which PPU address has the background and sprite tiles
 PPU_BG_TILE_ADDR  equ $1000
 PPU_SPR_TILE_ADDR equ $0000
@@ -148,7 +139,7 @@ COMPILED_SPRITE_LIST       mac
                            <<<
 
 ; Do not check for specific Tile IDs to exclude from drawing
-NO_TILE_EXCLUDE equ 1
+NO_TILE_EXCLUDE equ 0
 
 ; Do we have a custom routine to execute RenderScreen.  If yes, put its address here
 CUSTOM_RENDER_SCREEN equ 1
