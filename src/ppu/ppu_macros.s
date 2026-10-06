@@ -68,6 +68,39 @@ wrep8    mac
         <<<
 
 ; ---------------------------------------------------------------------------
+; Compiled sprite cache list macros (see SPR_NEXT / SPR_PREV in Defs.s)
+; ---------------------------------------------------------------------------
+
+; Remove a node from the recency list.  X = node (tile index * 2), preserved.  A/Y trashed.
+; 16-bit A/X/Y.  The list is circular through the sentinel node, so there are no end cases.
+SPR_UNLINK mac
+        phx
+        ldal  PPU_MEM+SPR_NEXT,x      ; n = next[x]
+        tay
+        ldal  PPU_MEM+SPR_PREV,x      ; p = prev[x]
+        tax
+        tya
+        stal  PPU_MEM+SPR_NEXT,x      ; next[p] = n
+        txa
+        tyx
+        stal  PPU_MEM+SPR_PREV,x      ; prev[n] = p
+        plx
+        <<<
+
+; Insert an unlinked node at the MRU end of the list.  X = node (tile index * 2).  A/X/Y trashed.
+SPR_INSERT_HEAD mac
+        ldal  PPU_MEM+SPR_HEAD        ; h = next[SENT]
+        stal  PPU_MEM+SPR_NEXT,x      ; next[x] = h
+        tay
+        lda   #SPR_SENT
+        stal  PPU_MEM+SPR_PREV,x      ; prev[x] = SENT
+        txa
+        stal  PPU_MEM+SPR_HEAD        ; next[SENT] = x
+        tyx
+        stal  PPU_MEM+SPR_PREV,x      ; prev[h] = x
+        <<<
+
+; ---------------------------------------------------------------------------
 ; Assertion macros
 ; ---------------------------------------------------------------------------
 

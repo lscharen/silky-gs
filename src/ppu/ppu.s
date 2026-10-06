@@ -283,7 +283,7 @@ drawSprites
 
         plb
         plb
-        rts
+        jmp   SprCacheService         ; Compile the sprite tiles that missed (returns to the caller)
 
 :is_8x16
         plb
@@ -323,7 +323,7 @@ drawSprites
 
         plb
         plb
-        rts
+        jmp   SprCacheService         ; Compile the sprite tiles that missed (returns to the caller)
 
 :setupSprite8
         lda   #$2000+x_offset
@@ -586,9 +586,8 @@ drawSprites
 :blitResolvedSprite
 
 ; CHR-RAM support: recompile this sprite tile now if it was marked dirty by a
-; PPUDATA write sinkce it was last drawn. HAS_CHR_RAM games always take the
-; bitmap (as_bitmap/as_bitmap_clip) path below, never the compiled-sprite
-; path above, so this one call covers both.
+; PPUDATA write since it was last drawn.  This also drops the tile's compiled
+; sprite, so it has to run before the compiled-sprite check below.
         DO   HAS_CHR_RAM
         jsr  CheckSprTileDirty
         lda  sprTmp2              ; restore
@@ -607,17 +606,14 @@ drawSprites
         asl
         tax
         ldal PPU_MEM+SPR_COMP_TBL,x
-        DO   SHOW_DEBUG_VARS
-        ldx  #$2222         ; color for missing compiled sprite
-        cmp  #0             ; re-establish the equality test
-        FIN
-        beq  as_bitmap      ; zero value means no compiled sprite for this tile IDs
+        beq  sprCacheMiss   ; zero value means no compiled sprite for this tile IDs
 
 ; Vector through the compiled sprite table.  The compiled sprites are in a different bank, so just check
 ; for a sentinel value and manually jump into the compiled sprite code to avoid a double-jump and having to
 ; have a second jump table in the compile sprite code bank.
 
         stal csd+1                     ; patch in the long address directly
+        jsr  SprTouch                  ; X = tile index * 2; move it to the MRU end of the cache list
         lda  sprTmp2+1                 ; load OAM[2] into accumulator
         pei  CMPL_BANK
         plb
@@ -631,6 +627,26 @@ draw_rtn2
         jmp  drawOutline
         FIN
         rts
+
+; Compiled sprite cache miss.  X = tile index * 2.  Queue the tile to be compiled after drawSprites
+; (SprCacheService), unless this render's compile quota is already used up, and draw the sprite from
+; its bitmap this time.
+sprCacheMiss
+        ldal PPU_MEM+SPR_PEND_CNT
+        cmp  #2*SPR_COMPILE_PER_RENDER
+        bcs  :no_queue
+        tay                            ; Y = end of the pending list
+        txa                            ; A = tile index * 2
+        tyx
+        stal PPU_MEM+SPR_PEND,x
+        inx
+        inx
+        txa
+        stal PPU_MEM+SPR_PEND_CNT
+:no_queue
+        DO   SHOW_DEBUG_VARS
+        ldx  #$2222         ; color for missing compiled sprite
+        FIN                            ; fall through to as_bitmap
 
 ; Finish calculating the jump address. We dispatch differently based on the horizontal flip, vertical
 ; flip and priority bits. when calling the rendering function, Y = screen address, X = tile data address
@@ -678,9 +694,8 @@ as_bitmap_clip
         ora  sprTmp5                  ; fold in the pattern-table offset ($0000 or $8000)
         jmp  (drawProcsClipped,x)
 
-; CHR-RAM support: recompile one sprite tile (FastROMMaskedTileToLookup,
-; no CompileSprite -- HAS_CHR_RAM games don't support compiled sprites) if
-; its dirty flag is set. Input: sprTmp2 low byte = tile ID (OAM[1]). 16-bit
+; CHR-RAM support: reconvert one sprite tile (FastROMMaskedTileToLookup) and
+; invalidate its compiled sprite (SprInvalidate) if its dirty flag is set. Input: sprTmp2 low byte = tile ID (OAM[1]). 16-bit
 ; A/X/Y required and preserved.
         DO    HAS_CHR_RAM
         mx    %00
@@ -700,6 +715,7 @@ CheckSprTileDirty
         stal  ChrRamDirty,x
         rep   #$20
 
+        phx                           ; save the tile index (0 - $1FF) for the cache invalidation below
         txa                           ; get back the value $0 - $1FF
         asl   a
         asl   a
@@ -711,7 +727,16 @@ CheckSprTileDirty
         asl   a
         asl   a                       ; A = tile ID * 128 (tiledata offset)
 
-        jmp   FastROMMaskedTileToLookup
+        jsr   FastROMMaskedTileToLookup
+
+; The tile's pixels changed, so any compiled copy of it is stale.  Drop it from the compiled sprite
+; cache; the next time it is drawn, it is a miss and gets compiled again from the new data.
+
+        plx
+        txa
+        asl   a
+        tax                           ; X = tile index * 2
+        jmp   SprInvalidate
 
 :sprclean
         rep   #$20

@@ -507,3 +507,188 @@ word_addr_flip
 
 bit_mask
         dw $8000,$4000,$2000,$1000,$0800,$0400,$0200,$0100,$0080,$0040,$0020,$0010,$0008,$0004,$0002,$0001
+; ---------------------------------------------------------------------------------------------------
+; Compiled sprite cache
+;
+; The sprite compile bank is not big enough to hold a compiled version of every sprite tile, so the
+; tiles are compiled on demand into a fixed number of slots (see SPR_* in Defs.s):
+;
+; * Slots are not packed.  A compiled sprite is at most 938 bytes (26 byte preamble + 4 variants of 16
+;   words * 14 bytes + a 4 byte return), so each slot is SPR_SLOT_SIZE = 1KB and slot 0 is left unused
+;   because address $0000 is the "not compiled" value in SPR_COMP_TBL.
+; * SPR_COMP_TBL maps a tile index (tile | pattern table << 8, times 2) to its slot address.
+; * Tiles with a slot are on a circular doubly linked list ordered by use.  The list is stored as
+;   structure of arrays (SPR_NEXT / SPR_PREV) with a sentinel node, so the move-to-front on a hit and
+;   taking the least recently used tile on a miss are both O(1).
+; * The slots that no tile owns are on a stack (SPR_FREE).
+; * drawSprites draws a sprite that misses from its bitmap and queues it (SPR_PEND, at most
+;   SPR_COMPILE_PER_RENDER entries).  SprCacheService compiles the queue when drawSprites is done.
+; * CHR-RAM writes invalidate the compiled sprite through the existing dirty flags (SprInvalidate,
+;   called by CheckSprTileDirty).
+; ---------------------------------------------------------------------------------------------------
+
+; Start with an empty cache where every slot is free.  Called once from PPUStartUp.
+        mx    %00
+SprCacheInit
+        lda   #SPR_SENT                  ; the empty list is the sentinel pointing at itself
+        stal  PPU_MEM+SPR_HEAD
+        stal  PPU_MEM+SPR_TAIL
+
+        lda   #0                         ; nothing is compiled
+        ldx   #1022
+:clear
+        stal  PPU_MEM+SPR_COMP_TBL,x
+        dex
+        dex
+        bpl   :clear
+
+        ldx   #0                         ; push the slot addresses $0400, $0800, ... $FC00
+        lda   #SPR_SLOT_SIZE
+:fill
+        stal  PPU_MEM+SPR_FREE,x
+        inx
+        inx
+        clc
+        adc   #SPR_SLOT_SIZE
+        cpx   #2*SPR_SLOTS
+        bcc   :fill
+
+        lda   #2*SPR_SLOTS
+        stal  PPU_MEM+SPR_FREE_TOP
+        lda   #0
+        stal  PPU_MEM+SPR_PEND_CNT
+        rts
+
+; A compiled sprite was just dispatched to; make it the most recently used.
+;
+; X = tile index * 2.  A/X/Y trashed.
+        mx    %00
+SprTouch
+        txa
+        cmpl  PPU_MEM+SPR_HEAD           ; Already the most recently used?  Then there is nothing to do
+        beq   :done
+        SPR_UNLINK
+        SPR_INSERT_HEAD
+:done
+        rts
+
+; Make sure a sprite tile has a compiled version.  If a slot is free, it is used.  If not, the least
+; recently used tile is evicted and its slot is taken over.  The new tile becomes the most recently used.
+; The tile data in the tiledata bank must be valid.
+;
+; X = tile index * 2.  All registers trashed.
+        mx    %00
+SprCompileTile
+        ldal  PPU_MEM+SPR_COMP_TBL,x
+        bne   :done                      ; already compiled (a tile can be queued more than once)
+
+        phx                              ; save the tile index * 2
+        ldal  PPU_MEM+SPR_FREE_TOP
+        beq   :evict
+        sec
+        sbc   #2
+        stal  PPU_MEM+SPR_FREE_TOP       ; pop a free slot
+        tax
+        ldal  PPU_MEM+SPR_FREE,x
+        bra   :have_slot
+
+:evict
+        ldal  PPU_MEM+SPR_TAIL           ; the least recently used tile owns a slot to take over
+        tax
+        ldal  PPU_MEM+SPR_COMP_TBL,x
+        pha                              ; the slot
+        lda   #0
+        stal  PPU_MEM+SPR_COMP_TBL,x     ; it no longer has a compiled version
+        SPR_UNLINK
+        pla
+
+:have_slot
+        pha                              ; slot at 1,s and tile index * 2 at 3,s
+        tay                              ; Y = address in the compile bank
+        lda   3,s
+        asl
+        asl
+        asl
+        asl
+        asl
+        asl                              ; A = tile index * 128 = tiledata source address
+        jsr   CompileSprite              ; trashes tmp7 - tmp11 (SprCacheService saves them)
+
+        pla                              ; A = slot
+        plx                              ; X = tile index * 2
+        stal  PPU_MEM+SPR_COMP_TBL,x
+        SPR_INSERT_HEAD
+:done
+        rts
+
+; A tile's pixels changed (CHR-RAM write), so its compiled sprite is stale.  If it has one, drop it and
+; return the slot to the free stack so it is reused before any live tile is evicted.
+;
+; X = tile index * 2.  All registers trashed.
+        mx    %00
+SprInvalidate
+        ldal  PPU_MEM+SPR_COMP_TBL,x
+        beq   :done                      ; never compiled, or already evicted
+        pha                              ; the slot
+        lda   #0
+        stal  PPU_MEM+SPR_COMP_TBL,x
+        SPR_UNLINK
+
+        ldal  PPU_MEM+SPR_FREE_TOP
+        tax
+        pla
+        stal  PPU_MEM+SPR_FREE,x         ; push the slot
+        inx
+        inx
+        txa
+        stal  PPU_MEM+SPR_FREE_TOP
+:done
+        rts
+
+; Compile the tiles that missed during drawSprites (at most SPR_COMPILE_PER_RENDER of them).  The
+; tiles are drawn from their bitmaps until then, so the cost is spread over the next renders.  It is
+; run at the end of drawSprites, in whatever data bank and with whatever direct page temps the
+; caller has, so both are preserved.
+        mx    %00
+SprCacheService
+        ldal  PPU_MEM+SPR_PEND_CNT
+        beq   :exit
+
+        phb
+        phk
+        plb                              ; CompileSprite's data tables are addressed with the program bank
+        pei   tmp7
+        pei   tmp8
+        pei   tmp9
+        pei   tmp10
+        pei   tmp11
+
+        ldx   #0                         ; X = offset in the pending list
+:next
+        phx
+        ldal  PPU_MEM+SPR_PEND,x
+        tax
+        jsr   SprCompileTile
+        plx
+        inx
+        inx
+        txa
+        cmpl  PPU_MEM+SPR_PEND_CNT
+        bcc   :next
+
+        lda   #0
+        stal  PPU_MEM+SPR_PEND_CNT
+
+        pla
+        sta   tmp11
+        pla
+        sta   tmp10
+        pla
+        sta   tmp9
+        pla
+        sta   tmp8
+        pla
+        sta   tmp7
+        plb
+:exit
+        rts

@@ -59,10 +59,29 @@ The governing rule is: **how the engine reads/tracks CHR-RAM must match what the
 big enough for all 512 (tile ID, table) combinations in one bank" layout is a convenience that falls out of
 that rule, not a second, independent design choice -- but the *compiled-code* destination banks (background:
 `patch1-4`'s targets in `ppu_metatiles.s`/`ppu_attributes.s`, written via `CompileTile`; sprites:
-`spr_comp_tbl`/`CompileSprite`) are genuinely separate, smaller caches, split by sprite vs. background purely
+`SPR_COMP_TBL`/`CompileSprite`) are genuinely separate, smaller caches, split by sprite vs. background purely
 for engine data-management convenience (sprites and background tiles are compiled and dispatched in
-completely different ways). Each only has room for 256 tile IDs, not 512 -- so unlike `tiledata`, the
-destination page passed to `CompileTile`/`CompileSprite` is tile-ID-only and must **not** have the
-pattern-table bit folded in. A tile ID that's reused across both pattern tables for background/sprite
+completely different ways). The background code field only has room for 256 tile IDs, not 512 -- so unlike
+`tiledata`, the destination page passed to `CompileTile` is tile-ID-only and must **not** have the
+pattern-table bit folded in. (The compiled sprite cache below *is* indexed by the 512-entry
+tile | table index.)
+
+## Compiled sprite cache
+
+The sprite compile bank holds `SPR_SLOTS` (63) fixed 1KB slots, not a packed stream: the worst-case compiled
+sprite is 938 bytes (26 byte preamble + 4 variants x (16 words x 14 bytes + 4 byte return)). Slot 0 is unused
+because `$0000` means "not compiled". Sprites are compiled on demand:
+
+- `SPR_COMP_TBL` (512 words in `PPU_MEM`) maps `(tile | table << 8) * 2` to the slot address, or 0.
+- Tiles that own a slot are on a circular doubly linked recency list (`SPR_NEXT`/`SPR_PREV`, with a sentinel
+  node at `SPR_SENT`; `next[SENT]` = MRU, `prev[SENT]` = LRU). Dispatching a compiled sprite moves it to the
+  head (`SprTouch`); nothing is ever scanned.
+- Slots that no tile owns are on the `SPR_FREE` stack. When it is empty, the LRU tile is evicted and its slot
+  is reused.
+- A tile that misses is drawn from its bitmap and queued (`SPR_PEND`); `SprCacheService` compiles at most
+  `SPR_COMPILE_PER_RENDER` queued tiles at the end of each `drawSprites`.
+- CHR-RAM: `CheckSprTileDirty` calls `SprInvalidate` after reconverting a dirty tile, which drops the compiled
+  sprite and pushes its slot back on the free stack. `PPUDATA_WRITE` is unchanged.
+- `COMPILED_SPRITE_LIST` only warms the cache at startup (`SprCompileTile`). A tile ID that's reused across both pattern tables for background/sprite
 purposes just forces recompilation into the same 256-entry compiled-code slot every time the active table
 changes; that's expected, not a bug.

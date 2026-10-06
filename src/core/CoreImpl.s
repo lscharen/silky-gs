@@ -167,9 +167,6 @@ EngineReset
                   stz       OneSecondCounter
                   stz       LastKey
 
-                  lda       #1                     ; $0000 is a sentinel address, so start at $0001 for
-                  sta       SpriteBankPos          ; compiled sprites
-
                   stz       frameCount             ; Maintain which shadow bitmap to use for a given frame
                   lda       #shadowBitmap0
                   sta       CurrShadowBitmap

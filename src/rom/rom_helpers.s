@@ -43,9 +43,9 @@ ROM_CompileBackgroundTiles
 ; the bank is chosen by the sprite pattern table (spadr) selected at startup.
 ;
 ; The compiled sprite buffer only uses a single bank, so there is not enough space to
-; compile all of the sprite tiles, but this is useful for optimizing the drawing of the
-; player character or other sprites that are commonly on screen and never have their
-; sprite priority bit set.
+; compile all of the sprite tiles.  The tiles here only warm up the compiled sprite cache
+; (SprCompileTile); at most SPR_SLOTS of them stay compiled, the rest are evicted in list order,
+; and sprites that miss are compiled on demand while the game runs.
 ROM_CompileSpriteTiles
 
             lda #2*{COMPILED_SPRITE_LIST_COUNT-1}         ; are any compiled sprite tiles defined?
@@ -93,24 +93,14 @@ ROM_CompileSpriteTiles
 ; Y = tile index * 2
 ; All registers are changed
 :compile_sprite_tile
-            lda  SpriteBankPos                            ; this is the current free address in the bank
-            tyx                                           ; put the compiled sprite address in the table
-            stal PPU_MEM+SPR_COMP_TBL,x                   ; (in the PPU_MEM bank; X is reloaded below)
-
-            tya                                           ; convert the tile index * 2 into an address in the tiledata bank
-            lsr                                           ; put it back as the normal tile_index
-            xba                                           ; each tile takes up 128 bytes
-
+            tya                                           ; A = tile index * 2
             ldx  spadr                                    ; load the sprite pattern table address ($0000 or $1000)
             cpx  #$1000                                   ; put the pattern table select in the carry
-            ror  a                                        ; roll the pattern table select into high bit and divide tile_index * 256 by 2 at the same time
-
-            ldy  SpriteBankPos                            ; the CompileSprite routine uses the y-register
-            ldx  #^tiledata                               ; read directly from the tiledata bank
-
-            jsr  CompileSprite
-            sty  SpriteBankPos                            ; save the updated address for the next compiled sprite
-            rts
+            bcc  :table0
+            adc  #$1FF                                    ; carry is set: add $200 for the 512 entry (tile | table << 8) index
+:table0
+            tax
+            jmp  SprCompileTile                           ; allocate a slot in the sprite cache and compile into it
 
 :compiled_sprite_list COMPILED_SPRITE_LIST
 
