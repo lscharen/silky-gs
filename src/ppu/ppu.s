@@ -241,6 +241,14 @@ drawSprites
 :draw8
         FIN
 
+; The game can hide the sprite's top lines (sprClipTop, see SPRITE_PRE_DRAW).  A sprite that is
+; hidden entirely is not set up, marked or drawn.
+
+        SPRITE_PRE_DRAW 8
+        ldal  sprClipTop
+        cmp   #8
+        bcs   :next8
+
 ; Regardless of whether the PPUCTRL is in 8x8 or 8x16 mode, the 
 ; starting SHR address and palette selection is the same
 
@@ -251,8 +259,15 @@ drawSprites
         ldal  OAM_COPY+1,x
         sta   sprTmp2
 
-; Draw the tile
+; Draw the tile.  Top lines to hide go in the high byte of sprTmp4, which sends the tile through the
+; clipped draw routines.
 
+        ldal  sprClipTop
+        beq   :draw8x8
+        sep   #$20
+        sta   sprTmp4+1
+        rep   #$20
+:draw8x8
         jsr   :drawSprite8x8
 
 ; Restore and continue processing the OAMtable
@@ -276,6 +291,14 @@ drawSprites
 :oam_loop_8x16
         phx                    ; Save x
 
+; The game can hide the sprite's top lines (sprClipTop, see SPRITE_PRE_DRAW).  A sprite that is
+; hidden entirely is not set up, marked or drawn.
+
+        SPRITE_PRE_DRAW 16
+        ldal  sprClipTop
+        cmp   #16
+        bcs   :next16
+
 ; Setup the sprite
 
         jsr   :setupSprite16
@@ -283,8 +306,13 @@ drawSprites
 ; Draw both halves of the 8x16 sprite (pattern table select comes from bit 0
 ; of the tile ID, not from spadr/PPUCTRL -- see :drawSprite16)
 
+        ldal  sprClipTop
+        bne   :clip16
         jsr   :drawSprite16
+        bra   :next16
+:clip16 jsr   :drawSprite16c
 
+:next16
         plx
         inx
         inx
@@ -482,6 +510,58 @@ drawSprites
         jsr   :blitResolvedSprite
         rts
 
+; :drawSprite16 with the top sprClipTop lines (1-15) hidden: a half with all of its lines hidden is
+; skipped, a half with some hidden has them in the high byte of sprTmp4 (clipped draw routines)
+:drawSprite16c
+        ldal  OAM_COPY+1,x
+        sta   sprTmp2                  ; {attribute, tile_id}
+
+        and   #$0001                   ; isolate the pattern-table select bit
+        beq   :c16tbl0
+        lda   #$8000
+        sta   sprTmp5
+        lda   #$0100
+        sta   sprTmp6
+        bra   :c16tbl
+:c16tbl0
+        stz   sprTmp5
+        stz   sprTmp6
+:c16tbl
+        lda   sprTmp2
+        and   #$FFFE                   ; top-half tile id
+        sta   sprTmp2
+        bit   #$8000                   ; vertical flip: the low+1 tile is on top
+        beq   *+4
+        inc   sprTmp2
+
+        ldal  sprClipTop               ; Top half: min(clip, 8) lines hidden
+        cmp   #8
+        bcs   :c16bot
+        sep   #$20
+        sta   sprTmp4+1
+        rep   #$20
+        lda   sprTmp2
+        jsr   :blitResolvedSprite
+
+:c16bot
+        lda   sprTmp1
+        clc
+        adc   #8*160
+        sta   sprTmp1
+        lda   sprTmp2
+        eor   #$0001                   ; the other tile
+        sta   sprTmp2
+        ldal  sprClipTop               ; Bottom half: max(clip - 8, 0) lines hidden
+        sec
+        sbc   #8
+        bcs   *+5
+        lda   #0
+        sep   #$20
+        sta   sprTmp4+1
+        rep   #$20
+        lda   sprTmp2
+        jmp   :blitResolvedSprite
+
 ; Draw a single 8x8 sprite
 ;
 ; X = OAM index (0, 4, 8, ..., 248, 252)
@@ -637,6 +717,10 @@ CheckSprTileDirty
         rep   #$20
         rts
         FIN
+
+; Lines to hide at the top of the sprite being drawn, set by the game's SPRITE_PRE_DRAW callback
+; (stays 0 if the game never sets it).  At least the sprite's height hides it entirely.
+sprClipTop    dw 0
 
 drawProcs
         dw drawTileToScreen,drawTileToScreenP,drawTileToScreenH,drawTileToScreenPH

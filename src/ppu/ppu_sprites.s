@@ -28,6 +28,12 @@ oam_stack dw    0                   ; stack pointer before pass 1 pushes the spr
          mx   %00
 scanOAMSprites
 
+; With the grid renderer, the sprite lines bitmap is only needed by a full render (and some custom
+; renderers), so it is built from OAM_COPY when first asked for (ensureShadowBitmap) instead of here.
+
+         DO    GRID_DIRTY_RENDERING
+         stz   shadowBitmapValid
+         ELSE
          ldx   CurrShadowBitmap
 
 ; Erase the bitmap array for the current frame
@@ -37,6 +43,7 @@ scanOAMSprites
          stz:  ]n,x
 ]n       =     ]n+2
          --^
+         FIN
 
 ; Check if sprites are disabled
 
@@ -48,12 +55,15 @@ scanOAMSprites
 
 ; Point the shadow bitmap updates at the current bitmap
 
+         DO    GRID_DIRTY_RENDERING
+         ELSE
          stx   oam_pb1+1
          stx   oam_pb2+1
          stx   oam_pb3+1
          stx   oam_pb4+1
          stx   oam_pb5+1
          stx   oam_pb6+1
+         FIN
 
          phb
          tsc
@@ -138,6 +148,8 @@ oam_copy8x8
          inc                        ; Increment the y-coordinate to match the PPU delay
          sta   OAM_COPY,y
 
+         DO    GRID_DIRTY_RENDERING
+         ELSE
          phx
          phy
 
@@ -154,6 +166,7 @@ oam_pb2  sta:  $0000,x
 
          ply
          plx
+         FIN
 
          ldal  ROMBase+DIRECT_OAM_READ+2,x  ; attributes and X coordinate
          sta   OAM_COPY+2,y
@@ -183,6 +196,8 @@ oam_copy8x16
          inc                        ; Increment the y-coordinate to match the PPU delay
          sta   OAM_COPY,y
 
+         DO    GRID_DIRTY_RENDERING
+         ELSE
          phx
          phy
 
@@ -203,6 +218,7 @@ oam_pb6  sta:  $0000,x
 
          ply
          plx
+         FIN
 
          ldal  ROMBase+DIRECT_OAM_READ+2,x  ; attributes and X coordinate
          sta   OAM_COPY+2,y
@@ -210,6 +226,77 @@ oam_pb6  sta:  $0000,x
          tya
          bne   oam_copy8x16
          bra   oam_copy_done
+
+; ensureShadowBitmap (grid renderer builds)
+;
+; Make sure CurrShadowBitmap marks the lines of this frame's sprites: build it from OAM_COPY the
+; first time it is asked for after scanOAMSprites.  Called by shadowBitmapToList and by custom
+; renderers that read the bitmap.  DBR = the code bank.
+         DO     GRID_DIRTY_RENDERING
+shadowBitmapValid dw 0
+sbBits   dw     0
+
+         mx     %00
+ensureShadowBitmap
+         lda    shadowBitmapValid
+         beq    *+3
+         rts
+         inc    shadowBitmapValid
+
+         ldx    CurrShadowBitmap     ; Erase the bitmap
+]n       equ    0
+         lup    15
+         stz:   ]n,x
+]n       =      ]n+2
+         --^
+
+         ldx    spriteCount          ; (count * 4)
+         beq    :done
+         lda    _ppuctrl
+         bit    #NES_PPUCTRL_SPRSIZE
+         bne    :tall
+
+:short   dex
+         dex
+         dex
+         dex
+         lda    OAM_COPY,x           ; first line (OAM Y + 1)
+         and    #$00FF
+         asl
+         tay
+         lda    y2bits,y
+         sta    sbBits
+         lda    y2idx,y
+         tay
+         lda    sbBits
+         ora    (CurrShadowBitmap),y
+         sta    (CurrShadowBitmap),y
+         txa
+         bne    :short
+:done    rts
+
+:tall    dex
+         dex
+         dex
+         dex
+         lda    OAM_COPY,x
+         and    #$00FF
+         asl
+         phx
+         tax                         ; both halves
+         lda    y2bits,x
+         ldy    y2idx,x
+         ora    (CurrShadowBitmap),y
+         sta    (CurrShadowBitmap),y
+         lda    y2bits+16,x
+         ldy    y2idx+16,x
+         ora    (CurrShadowBitmap),y
+         sta    (CurrShadowBitmap),y
+         plx
+         txa
+         bne    :tall
+         rts
+         FIN
 
 ; InitYExclude
 ;

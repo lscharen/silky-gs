@@ -64,12 +64,26 @@ The runtime sets up a dual-context environment: the IIgs runs as host, with a se
 
 Each port has a consistent structure:
 - `Master.s` — Merlin32 build descriptor (segment list)
-- `Main.s` — Game-specific config constants and callback hooks (`PRE_EVT_LOOP`, `POST_EVT_LOOP`, `PRE_RENDER`, `POST_RENDER`, `SCAN_OAM_XTRA_FILTER`)
+- `Main.s` — Game-specific config constants and callback hooks (`PRE_EVT_LOOP`, `POST_EVT_LOOP`, `PRE_RENDER`, `POST_RENDER`, `SCAN_OAM_XTRA_FILTER`, and `SPRITE_PRE_DRAW` before each sprite is drawn — it can set `sprClipTop` to hide the sprite's top lines, which the sprite renderer clips while drawing; Zelda uses it to emulate the NES 8-sprites-per-line limit at its doors). Every game must define every callback macro; an empty macro means no callback
 - `rom.s` — Converted NES PRG-ROM code/data
 - `chr.s` — NES CHR-ROM tile graphics
 - `PPU.s` — NES PPU/OAM memory allocations
-- `pal_*.s` — Palette definitions
+- `pal_*.s` — Palette definitions (older ports; Zelda uses the generated palette pipeline below)
 - `Stack.s` — Stack allocation
+
+### Palette Pipeline (Zelda; the model for new ports)
+
+The IIgs shows 16 colors at once (one palette of 16 slots); the NES shows up to 25. Palettes are described as data and compiled into the game by a tool — **don't hand-write palette code or copy the older ports' per-address `$3Fxx` handlers.**
+
+- **Source of truth:** `src/games/zelda/palettes/*.txt` (one file per palette the game shows: `BG0:`–`SP3:`, 4 NES colors each) and `palettes/transitions.txt` (INI-style graph: each `[palette]` lists the palettes that can follow it).
+  - `*$xx` — **reserved**: the game changes this color on the fly (color cycling, Link's tunic/rings, per-room enemy palettes in SP3). It gets an IIgs slot of its own and matches any value during detection.
+  - `$xx~$yy` — **approximated**: palette RAM holds `$xx` (used for detection) but it is drawn in `$yy`'s slot; used only when a palette can't fit 16 slots otherwise. It never writes the CLUT.
+  - Parser: `scripts/palette-transition.js` (`parsePaletteFile`).
+- **Generator:** `scripts/generate-palette-transitions.js` (run by `src/games/zelda/build.js`; skipped when its outputs are newer than the palette files and scripts — expect ~20s when it does run; `--report` prints layouts, slot use and the redraw matrix). It gives every palette **one fixed IIgs slot layout**, chosen jointly so the background groups that keep the same slots across the graph's transitions don't need redrawing. Outputs (never edit by hand):
+  - `src/palettes.s` — 8 swizzle tables × 512 bytes per palette (PALDATA segment; 4KB per palette, so at most 16 palettes per bank).
+  - `src/pal_transitions.s` — `PAL_*` ids, `DetectNESPalette`, `UpdatePalette`, `LoadPaletteColors` and their tables (put into MAIN).
+- **Runtime:** color 0 (`$3F00`/`$3F10`) is always IIgs CLUT slot 0 and is written straight to the hardware (`ppu_3F00`); it is never matched or reloaded, and the other color 0s are ignored. Any other palette RAM write (`Z_PalWrite`, Zelda `Main.s`, NES task) only sets `zPalDirty` — no checks, since palette uploads are 32 writes in a row. At the next render, `ApplyPaletteChange` (`PRE_RENDER`, GS task) runs once if the palette is dirty and the background is on (while it's off, the game is rebuilding the screen and the old colors stay). It calls `DetectNESPalette`, which compares colors 1-3 of each group (24 bytes at most, minus reserved cells), trying the current palette, then its successors in the graph, then all (palettes can share colors — e.g. dungeon 1 and the select screen have identical backgrounds). A new palette goes through `UpdatePalette`: it switches the swizzle tables, loads the CLUT from **live** palette RAM through the palette's cell→slot map (`LoadPaletteColors`), and calls `RefreshPPUAttributes` (`src/ppu/ppu_metatiles.s`) to redraw only the background groups whose slots changed. Otherwise (fades, color cycling, an unknown palette) `LoadPaletteColors` just reloads the current layout. Nothing writes the IIgs CLUT outside the render, so colors change together with the tiles and PPUMASK state they belong to.
+- **Adding a palette:** add `<name>.txt`, list it in `transitions.txt`, build. If the generator reports a palette needs more than 16 colors, mark a close color with `~`. Pull exact colors from the ROM's palette transfer records (e.g. Zelda's `LevelInfo` blocks) rather than guessing.
 
 ### Key Configuration Constants (in `Main.s` per game)
 

@@ -1,0 +1,11 @@
+; Dungeon 4 (LevelInfoUW4 in the ROM)
+; SP0[1] is Link's tunic (rings), SP3 is reloaded with each room's enemy colors (reserved)
+; SP0[3] $17 is shown as $16 to fit in 16 colors
+BG0: $0F $30 $00 $12
+BG1: $0F $16 $27 $36
+BG2: $0F $08 $18 $28
+BG3: $0F $12 $18 $28
+SP0: $0F *$29 $27 $17~$16
+SP1: $0F $02 $22 $30
+SP2: $0F $16 $27 $30
+SP3: $0F *$0F *$18 *$28

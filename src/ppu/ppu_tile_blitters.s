@@ -24,8 +24,26 @@ drawClippedTileToScreen
 _clippedCommon
         jsr   clipBuffer
         txy
+        lda   sprTmp4                 ; High byte: top lines to leave out (vertical clipping)
+        and   #$FF00
+        bne   :vclip
         ldx   sprTmp1
         jmp   _copyBufferToScreen
+:vclip  xba                           ; Enter _copyBufferToScreen at that line
+        asl
+        tax
+        ldal  vclipCopyEntry,x
+        pha
+        ldx   sprTmp1
+        rts
+
+; _copyBufferToScreen - 1 + line * 26 (the size of one line of it), for line = 0 - 7
+vclipCopyEntry
+]line   equ   0
+        lup   8
+        da    _copyBufferToScreen-1+{]line*26}
+]line   equ   ]line+1
+        --^
 
 ; Drawing to the screen can happen two ways.
 ;
@@ -125,12 +143,41 @@ _copyBufferToScreenNoMask
         --^
         rts
 
+; Vertical clipping for the priority routines: zero the masks of the top lines left out (the high
+; byte of sprTmp4, 1 - 7), so _copyBufferToScreenP skips those lines.  Enters the unrolled stores
+; below at the block for line k - 1, which runs down to line 0.  Keeps X and Y.
+        mx    %00
+vclipMaskBuffer
+        lda   sprTmp4
+        and   #$FF00
+        bne   *+3
+        rts
+        xba                           ; A = k
+        eor   #$FFFF
+        sec
+        adc   #8                      ; 8 - k
+        asl
+        asl
+        clc
+        adc   #vclipZeroLines-1
+        pha
+        rts
+vclipZeroLines
+]line   equ   7
+        lup   8
+        stz   blttmp+{]line*4}
+        stz   blttmp+{]line*4}+2
+]line   equ   ]line-1
+        --^
+        rts
+
 ; If the tile needs to be clipped, then set the pixels in the direct page buffer to zero.  This is not exact clipping, but
 ; creates the illusion of the sprite being clipped.  The only time this actually matters is when dirty rendering is engaged
 ; and a sprite is placed with x in [125, 126, 127].
         mx    %00
 clipBuffer
-        lda   sprTmp4
+        lda   sprTmp4                 ; (low byte: horizontal clipping; high byte: vertical, see below)
+        and   #$00FF
         bne   *+3
         rts
         dec
@@ -238,11 +285,13 @@ drawClippedTileToScreenPH
 drawClippedTileToScreenPV
 drawClippedTileToScreenP
 
+        sta   sprTmp0                 ; Tile address, for _copyBufferToScreenP
         tay
         ldx   sprTmp1
 
         jsr   _copyMaskToBufferP      ; Build a screen mask in the direct page
         jsr   clipBuffer
+        jsr   vclipMaskBuffer
 ;        jmp   _copyBufferToScreenP
 
         mx    %00

@@ -1,0 +1,10 @@
+; Dungeon 2 (LevelInfoUW2 in the ROM)
+; SP0[1] is Link's tunic (rings), SP3 is reloaded with each room's enemy colors (reserved)
+BG0: $0F $30 $00 $12
+BG1: $0F $16 $27 $36
+BG2: $0F $02 $12 $22
+BG3: $0F $16 $12 $22
+SP0: $0F *$29 $27 $17
+SP1: $0F $02 $22 $30
+SP2: $0F $16 $27 $30
+SP3: $0F *$02 *$12 *$22

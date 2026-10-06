@@ -6,6 +6,7 @@
 ;
 ; Key routines:
 ;   ForceMetatileRefresh  - Debug helper: re-syncs all metatiles from shadow RAM
+;   RefreshPPUAttributes  - Redraw the metatiles that use the given background palettes
 ;   SyncPPUMetatile       - Update one metatile (4 tiles) in the PEA field and
 ;                           its shadow RAM from a new attribute value
 ;   RefreshMetatile       - Alternate entry: refresh without changing the value
@@ -16,90 +17,60 @@
 ; patch1-4 are jsl instruction labels patched at startup (PPUStartUp) with the
 ; correct bank addresses for the tile compilation banks.
 
-; Wrapper to run through and re-sync the metatiles with the graphics screen.  Mostly used
-; as a debugging aid.
+; Re-sync every metatile with the graphics screen.  Used by the 'f' key.
         mx %00
 ForceMetatileRefresh
-        ldy  #0
-        pha                         ; work space on stack
+        lda  #%1111
+
+; Redraw the metatiles of both physical (CIRAM) nametables that use the given background palettes,
+; with the current swizzle tables.  Used when a palette change moves a background palette's colors
+; to other IIgs palette slots.  The tile tables are indexed by CIRAM address: page $000 and $400,
+; 15 rows of 16 metatiles each (the attribute bytes start at $3C0).
+;
+; A = background palettes to redraw (bit 0 = palette 0 .. bit 3 = palette 3)
+        mx %00
+RefreshPPUAttributes
+        and  #$000F
+        bne  :go
+        rts
+:go     sta  :mask
+        ldx  #$0000                 ; CIRAM address of the metatile's top-left tile
 :loop
-        lda  #$2000
-        ora  metatile_corner,y      ; calculate the tile address of the metatile corner
-        tax                         ; use for indexing
-        sta  1,s                    ; save for later
-
-        phy
-
-        jsr  :do_metatile
-        lda  3,s
-        clc
-        adc  #$0002
+        ldal PPU_MEM+ATTR_SHADOW,x  ; palette select * 2
+        and  #$0006
+        tay
+        lda  :bits,y
+        and  :mask
+        beq  :skip
+        tya
+        phx
+        sep  #$20
+        jsr  RefreshMetatile        ; A = palette select * 2, X = corner (trashes X and Y)
+        rep  #$20
+        plx
+:skip   inx                         ; next metatile in the row
+        inx
+        txa
+        bit  #$001F
+        bne  :loop
+        clc                         ; end of a row: skip the row of bottom tiles
+        adc  #$0020
         tax
-        jsr  :do_metatile
-        lda  3,s
-        clc
-        adc  #$0040
+        and  #$03FF
+        cmp  #$03C0
+        bcc  :loop
+        txa                         ; end of a page: skip its attribute bytes
+        adc  #$003F                 ; (carry is set)
         tax
-        jsr  :do_metatile
-        lda  3,s
-        clc
-        adc  #$0042
-        tax
-        jsr  :do_metatile
-
-        ply
-        iny
-        iny
-        cpy  #64*2                  ; end of the metatile array?
+        cpx  #$0800
         bcc  :loop
 
-; Refresh the second page
-:loop2
-
-        lda  BltMirrorP
-        bne  :horz
-        lda  #$2800
-        bra  :next
-:horz   lda  #$2400
-:next
-        ora  metatile_corner,y      ; calculate the tile address of the metatile corner
-        tax                         ; use for indexing
-        sta  1,s                    ; save for later
-
-        phy
-
-        jsr  :do_metatile
-        lda  3,s
-        clc
-        adc  #$0002
-        tax
-        jsr  :do_metatile
-        lda  3,s
-        clc
-        adc  #$0040
-        tax
-        jsr  :do_metatile
-        lda  3,s
-        clc
-        adc  #$0042
-        tax
-        jsr  :do_metatile
-
-        ply
-        iny
-        iny
-        cpy  #64*2                  ; end of the metatile array?
-        bcc  :loop2
-
-        pla                         ; pop the work space
+        lda  #DIRTY_BIT_BG0_REFRESH
+        tsb  DirtyBits
         rts
 
-:do_metatile
-        sep  #$20
-        ldal PPU_MEM+ATTR_SHADOW,x
-        jsr  RefreshMetatile
-        rep  #$20
-        rts
+:mask   ds   2
+:bits   dw   %0001,%0010,%0100,%1000
 
 ; Sync a metatile value to the PPU data bank and to the code field
 ;
