@@ -40,10 +40,21 @@ EVT_LOOP_END mac
 PRE_RENDER   mac
              jsr  ApplyMirrorMode   ; finish any mirroring-mode change requested since the last frame
              jsr  ApplyPaletteChange ; switch to a new palette detected since the last frame
+             jsr  HideDoorBands      ; the NES 8-sprites-per-line limit at the top and bottom doors
              <<<
 
 POST_RENDER  mac
 ;
+             <<<
+
+; Callback before each sprite is set up and drawn (drawSprites, ppu.s): X = OAM index, ]1 = the
+; sprite height (8 or 16), DBR = the tiledata bank, 16-bit registers.  Sets sprClipTop, the lines
+; to hide at the top of the sprite: here, the lines in the door bands (see HideDoorBands).
+SPRITE_PRE_DRAW  mac
+             ldal  zDoorBands
+             beq   *+8
+             lda   #]1
+             jsr   ZSpriteClip
              <<<
 
 ; Define which PPU address has the background and sprite tiles
@@ -142,7 +153,7 @@ SHOW_ROM_EXECUTION_TIME equ 0
 SHOW_DEBUG_VARS equ 0
 
 ; Show the number of VBLs each screen render takes at the top-left of the screen (debug)
-RENDER_VBL_COUNT equ 1
+RENDER_VBL_COUNT equ 0
 
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 0
@@ -237,11 +248,11 @@ PREF_FILENAME strl '1/zelda.prefs'   ; unused
 
 ; Palette management.  The palettes the game uses are described in ../palettes/, and
 ; pal_transitions.s (generated from them) gives each one a fixed IIgs slot layout and swizzle
-; tables.  Every palette RAM write goes through Z_PalWrite: when the palette RAM becomes one of
-; the known palettes, the switch is made at the next render (by the GS task, since it redraws
-; tiles); any other change is shown straight away in the current palette's layout.
+; tables.  A palette RAM write (Z_PalWrite) only marks the palette dirty; at the next render,
+; ApplyPaletteChange (GS task) identifies the palette in palette RAM and switches to it (redrawing
+; tiles when needed), or shows the changed colors in the current palette's layout.
 zCurPal     dw    0                         ; PAL_* id of the palette on screen (0 = none yet)
-zPendingPal dw    0                         ; PAL_* id to switch to at the next render (0 = none)
+zPalDirty   dw    0                         ; palette RAM changed since the last render
 
 ; Point the swizzle tables at the first palette until the game sets one.  InitPlayfield is called
 ; by NES_StartUp.
@@ -251,49 +262,116 @@ SetDefaultPalette
             lda   PAL_SWIZZLE_HI+2
             jmp   NES_SetPaletteMap
 
-; Palette RAM write ($3F00-$3F1F), on the NES task.  A = NES color, X = 2 * palette RAM offset.
-; The palette RAM is already updated.
+; Palette RAM write ($3F00-$3F1F), on the NES task.  The palette RAM is already updated: just note
+; that it changed.  Everything else happens at the next render (ApplyPaletteChange), so the colors
+; change together with the tiles and the PPUMASK state they go with (a game typically loads a new
+; palette while the screen is blank, or before the new screen's tiles are drawn).
 Z_PalWrite
-            pha                             ; 1,s = color
-            txa
-            lsr
-            pha                             ; 1,s = offset, 3,s = color
-            ldx   zPendingPal               ; the palette that the RAM is changing from
-            bne   :detect
-            ldx   zCurPal
-:detect     jsr   DetectNESPalette
-            beq   :show                     ; not a known palette
-            cmp   zCurPal
-            beq   :current
-            sta   zPendingPal               ; switch at the next render, which loads every color
-            bra   :done
-:current    stz   zPendingPal               ; back to the palette on screen before it switched
-:show       lda   zPendingPal
-            bne   :done
-            ldx   zCurPal
-            beq   :done
-            ply                             ; Y = offset
-            pla                             ; A = color
-            jmp   SetPaletteColor
-:done       pla
-            pla
-            rts
+            lda   #1
+            sta   zPalDirty
+Z_PalNone   rts
 
-; PRE_RENDER, on the GS task: make a palette switch that Z_PalWrite detected
+; PRE_RENDER, on the GS task: if the palette RAM changed, identify the palette in it and switch to
+; it, or show its changed colors in the current palette's layout
 ApplyPaletteChange
-            php
-            sei                             ; take the request without racing the NES task
-            ldy   zPendingPal
+            lda   zPalDirty
             beq   :none
+            lda   _ppumask                  ; While the background is off (the game is rebuilding the
+            and   #NES_PPUMASK_BG           ; screen), keep the old colors on whatever is left on the
+            beq   :none                     ; screen; the new ones come with the new screen
+            stz   zPalDirty                 ; (first, so a write from here on is seen next time)
+            ldx   zCurPal
+            jsr   DetectNESPalette          ; A = Y = palette id, 0 if none
+            beq   :colors                   ; not a known palette (e.g. a step of a fade)
+            cmp   zCurPal
+            beq   :colors
             ldx   zCurPal
             sty   zCurPal
-            stz   zPendingPal
-            plp
             jmp   UpdatePalette             ; X = from, Y = to
-:none       plp
-            rts
+:colors     ldy   zCurPal
+            beq   :none
+            jmp   LoadPaletteColors
+:none       rts
 
             put   pal_transitions.s
+
+; Link goes under the top and bottom doors of the dungeons by the NES limit of 8 sprites per
+; scanline: WriteBlankPrioritySprites (bank 1) puts 8 transparent sprites (tile $1C, behind the
+; background, X 0) at Y $3D and 8 at Y $DD in the first 16 OAM slots, Link's highest and lowest
+; positions, so the NES drops every other sprite on those 16 lines.  The engine has no sprite limit,
+; so ZSpriteClip hides the sprites' lines in those bands as they are drawn (sprClipTop, ppu.s).  Tile
+; $1C is in tile_exclude, so the 16 blank sprites themselves are never drawn.
+zDoorBands  dw    0                         ; non-zero if either band is active this frame
+zTopBand    dw    0                         ; first line of the top door band (OAM Y + 1), or 0
+zBotBand    dw    0                         ; first line of the bottom door band, or 0
+
+            mx    %00
+HideDoorBands
+            stz   zDoorBands
+            stz   zTopBand
+            stz   zBotBand
+            stz   sprClipTop                ; (ZSpriteClip sets it for each sprite while a band is on)
+            ldal  ROMBase+DIRECT_OAM_READ+0  ; OAM 0: Y $3D, tile $1C
+            cmp   #$1C3D
+            bne   :bottom
+            ldal  ROMBase+DIRECT_OAM_READ+2  ; attributes $20, X 0
+            cmp   #$0020
+            bne   :bottom
+            lda   #$3D+1
+            sta   zTopBand
+            sta   zDoorBands
+:bottom     ldal  ROMBase+DIRECT_OAM_READ+4  ; OAM 1: Y $DD, tile $1C
+            cmp   #$1CDD
+            bne   :done
+            ldal  ROMBase+DIRECT_OAM_READ+6
+            cmp   #$0020
+            bne   :done
+            lda   #$DD+1
+            sta   zBotBand
+            sta   zDoorBands
+:done       rts
+
+; SPRITE_PRE_DRAW, while a door band is on.  X = OAM index, A = sprite height.  A sprite that starts
+; in the top band has its lines down to the end of the band hidden (Link walking up into the door);
+; one that starts in the bottom band is hidden entirely (only the band's first two lines are on the
+; IIgs screen).  Sprites never start above the top band: that is the status bar.
+            mx    %00
+ZSpriteClip
+            phb
+            phk
+            plb
+            sta   :h
+            stz   :clip
+            ldal  OAM_COPY,x                ; first line (OAM Y + 1)
+            and   #$00FF
+            sta   :y
+            lda   zTopBand
+            beq   :bot
+            lda   :y
+            cmp   zTopBand
+            bcc   :bot                      ; above the band
+            lda   zTopBand
+            clc
+            adc   #16
+            sec
+            sbc   :y                        ; lines from the sprite's top to the end of the band
+            beq   :bot
+            bmi   :bot                      ; below the band
+            sta   :clip
+:bot        lda   zBotBand
+            beq   :done
+            lda   :y
+            cmp   zBotBand
+            bcc   :done
+            lda   :h                        ; starts in the bottom band: hide it all
+            sta   :clip
+:done       lda   :clip
+            sta   sprClipTop
+            plb
+            rts
+:h          dw    0
+:y          dw    0
+:clip       dw    0
 
 ; Room transitions scroll the play area under a fixed status bar.  The NES does it with a sprite-0
 ; hit at the bottom of the status bar: the NMI shows the status bar at scroll (0,0), then
@@ -351,10 +429,12 @@ _RenderScreen
             ldal  Z_GameMode,x
             and   #$00FF
             cmp   #$08
-            bcs   :late_modes
+            bcc   *+5
+            brl   :late_modes
             ldal  Z_GameSubmode,x
             and   #$00FF
-            beq   :draw                     ; Submode 0: the scroll isn't changed
+            bne   *+5
+            brl   :draw                     ; Submode 0: the scroll isn't changed
             ldal  Z_ObjDir,x
             and   #$00FF
             cmp   #$04
@@ -371,8 +451,8 @@ _RenderScreen
             sta   zPfX
             bra   :draw
 
-; Vertical (horizontal mirroring): PPUADDR = VScrollAddr, so that nametable row is drawn from NES
-; scanline 64.  Nametable 0 is lines 0-239 of the code field and nametable 2 lines 240-479.
+; Vertical (horizontal mirroring): PPUADDR = VScrollAddr, so that nametable row (from its fine Y
+; line) is drawn from NES scanline 64.  Nametable 0 is lines 0-239 of the code field and nametable 2 lines 240-479.
 
 :vertical   ldal  Z_VScrollAddrLo,x
             and   #$00FF
@@ -386,6 +466,17 @@ _RenderScreen
             lsr
             lsr                             ; coarse Y * 8
             sta   tmp0
+            lda   1,s                       ; The $2006 write also sets the fine Y scroll, to
+            xba                             ; address bits 12-14 (2 for $2xxx), and the two $2007
+            lsr                             ; reads after it, during rendering, each move it down
+            lsr                             ; one more line
+            lsr
+            lsr
+            and   #$0007
+            clc
+            adc   #2
+            adc   tmp0
+            sta   tmp0                      ; tmp0 = row line + fine Y
             pla
             and   #$0800                    ; nametable 2?
             beq   *+5
@@ -446,6 +537,7 @@ _RenderScreen
 
 ; Drop the status bar rows from the sprite bitmap, so the sprite line ranges are all in the play area
 
+            jsr   ensureShadowBitmap        ; (built on demand with the grid renderer)
             ldx   CurrShadowBitmap
             sep   #$20
 ]row        =     y_offset_rows
@@ -513,15 +605,17 @@ zExposePlayArea
             ldy   #y_height
             jmp   _BltRangeLite
 
+; Color 0: $3F00 / $3F10 is always IIgs slot 0, so it is set straight away (ppu_palette.s); the
+; other color 0s aren't shown.  The rest go to Z_PalWrite.
 ZELDA_PALETTE_DISPATCH
-        dw   Z_PalWrite,Z_PalWrite,Z_PalWrite,Z_PalWrite
-        dw   Z_PalWrite,Z_PalWrite,Z_PalWrite,Z_PalWrite
-        dw   Z_PalWrite,Z_PalWrite,Z_PalWrite,Z_PalWrite
-        dw   Z_PalWrite,Z_PalWrite,Z_PalWrite,Z_PalWrite
-        dw   Z_PalWrite,Z_PalWrite,Z_PalWrite,Z_PalWrite
-        dw   Z_PalWrite,Z_PalWrite,Z_PalWrite,Z_PalWrite
-        dw   Z_PalWrite,Z_PalWrite,Z_PalWrite,Z_PalWrite
-        dw   Z_PalWrite,Z_PalWrite,Z_PalWrite,Z_PalWrite
+        dw   ppu_3F00,Z_PalWrite,Z_PalWrite,Z_PalWrite
+        dw   Z_PalNone,Z_PalWrite,Z_PalWrite,Z_PalWrite
+        dw   Z_PalNone,Z_PalWrite,Z_PalWrite,Z_PalWrite
+        dw   Z_PalNone,Z_PalWrite,Z_PalWrite,Z_PalWrite
+        dw   ppu_3F10,Z_PalWrite,Z_PalWrite,Z_PalWrite
+        dw   Z_PalNone,Z_PalWrite,Z_PalWrite,Z_PalWrite
+        dw   Z_PalNone,Z_PalWrite,Z_PalWrite,Z_PalWrite
+        dw   Z_PalNone,Z_PalWrite,Z_PalWrite,Z_PalWrite
 
 ; Game-specific configuration values, saved after the built-in values by misc/io.s.  The
 ; built-in values, menus and ApplyConfig are defined in rom/rom_config_setup.s

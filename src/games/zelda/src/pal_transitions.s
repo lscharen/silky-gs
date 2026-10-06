@@ -174,9 +174,8 @@ PAL_DUNGEON9 equ 28
 ;
 ; X = from palette id (PAL_*, or 0 for none), Y = to palette id
 ;
-; Switches the swizzle tables to the new palette, loads its colors into IIgs palette 0 from the
-; current NES palette RAM (so colors the game changes on the fly are kept), then redraws the
-; background groups whose slots changed.  Call from the GS task (it redraws tiles).
+; Switches the swizzle tables to the new palette, loads its colors (LoadPaletteColors), then redraws
+; the background groups whose slots changed.  Call from the GS task (it redraws tiles).
 UpdatePalette
             lda   BG_UPDATE_MASKS,x
             pha
@@ -189,9 +188,19 @@ UpdatePalette
             jsr   NES_SetPaletteMap
             ply
 
+            jsr   LoadPaletteColors
+            pla
+            jmp   RefreshPPUAttributes
+
+; LoadPaletteColors
+;
+; Y = palette id.  Loads IIgs palette 0 from the current NES palette RAM, in the palette's layout,
+; so the colors the game changes on the fly (fades, color cycling, ...) are shown too.  Slot 0 (the
+; universal background color) is left alone: the game's $3F00 writes set it directly.
+LoadPaletteColors
             lda   PAL_CELLS,y
-            pha                       ; 1,s = slot map, 3,s = groups to redraw
-            ldy   #31                 ; Backwards, so the BG colors win a shared slot and $3F00 is last
+            pha                       ; 1,s = slot map
+            ldy   #31                 ; Backwards, so the BG colors win a shared slot
 :loop       lda   (1,s),y
             and   #$00FF
             cmp   #$00FF
@@ -205,37 +214,13 @@ UpdatePalette
 :next       dey
             bpl   :loop
             pla
-            pla
-            jmp   RefreshPPUAttributes
-
-; SetPaletteColor
-;
-; A = NES color, Y = NES palette RAM offset (0-31), X = palette id.  Shows one changed color in
-; palette X's layout.  Colors that aren't shown are ignored.
-SetPaletteColor
-            pha
-            lda   PAL_CELLS,x
-            pha                       ; 1,s = slot map, 3,s = color
-            lda   (1,s),y
-            and   #$00FF
-            cmp   #$00FF
-            beq   :skip
-            sta   1,s                 ; 1,s = slot * 2
-            lda   3,s
-            jsr   NES_ColorToIIgs_X
-            plx
-            stal  SHR_PALETTES,x
-            pla
-            rts
-:skip       pla
-            pla
             rts
 
 ; DetectNESPalette
 ;
 ; X = the current palette id (0 = none).  Returns A = Y = the PAL_* id of the palette whose
-; colors are all in palette RAM ($3F00-$3F1F, other than the reserved ones and the unused
-; color 0s), or 0 if there is none (e.g. a step of a fade).  The current palette is tried first,
+; colors 1-3 are all in palette RAM (other than the reserved ones), or 0 if there is none (e.g. a
+; step of a fade).  The current palette is tried first,
 ; then the palettes that follow it in the transitions, then the rest.
 DetectNESPalette
             php
@@ -271,23 +256,38 @@ DetectNESPalette
             tya
             rts
 
-; X = palette id.  Carry set if its colors are in palette RAM.  X is kept.
+; X = palette id.  Carry set if its colors are in palette RAM.  X is kept.  Only colors 1-3 of
+; each group are compared (24 at most): color 0 is always IIgs slot 0.  One pass per group, from
+; SP3 back to BG0, with its three colors compared inline.  NES colors are $00-$3F, so the $FF of a
+; reserved color is the only table byte with bit 7 set, and bmi skips it.
 :match      phx
             lda   PAL_MATCH,x
             clc
-            adc   #31
-            tay                       ; Y -> the palette's bytes, from the last
-            ldx   #31                 ; X = palette RAM offset
+            adc   #21
+            tay                       ; Y -> the last group's 3 bytes
+            ldx   #28                 ; X = the last group's palette RAM offset
             sep   #$20
             mx    %10
-:mbyte      lda:  0,y
-            cmp   #$FF                ; any value
-            beq   :mnext
-            cmpl  PPU_MEM+$3F00,x
+:group      lda:  0,y                 ; color 1
+            bmi   *+8                 ; $FF = any value
+            cmpl  PPU_MEM+$3F01,x
             bne   :mfail
-:mnext      dey
+            lda:  1,y                 ; color 2
+            bmi   *+8
+            cmpl  PPU_MEM+$3F02,x
+            bne   :mfail
+            lda:  2,y                 ; color 3
+            bmi   *+8
+            cmpl  PPU_MEM+$3F03,x
+            bne   :mfail
+            dey
+            dey
+            dey
             dex
-            bpl   :mbyte
+            dex
+            dex
+            dex
+            bpl   :group
             rep   #$20
             mx    %00
             plx
@@ -301,7 +301,7 @@ DetectNESPalette
 :from       ds    2
 :ptr        ds    2
 
-; id -> palette RAM bytes to match ($3F00-$3F1F; $FF = any value: not shown, or reserved)
+; id -> colors 1-3 of each group to match (BG0-BG3, SP0-SP3; $FF = any value: reserved)
 PAL_MATCH
             dw    0
             dw    PAL_TITLE_SCREEN_MATCH
@@ -319,47 +319,47 @@ PAL_MATCH
             dw    PAL_DUNGEON8_MATCH
             dw    PAL_DUNGEON9_MATCH
 PAL_TITLE_SCREEN_MATCH
-            db    $36,$0F,$00,$10,$FF,$17,$FF,$0F,$FF,$08,$1A,$28,$FF,$30,$3B,$22   ; BG0-BG3
-            db    $FF,$30,$3B,$16,$FF,$17,$27,$0F,$FF,$08,$1A,$28,$FF,$30,$3B,$22   ; SP0-SP3
+            db    $0F,$00,$10,$17,$FF,$0F,$08,$1A,$28,$30,$3B,$22   ; BG0-BG3
+            db    $30,$3B,$16,$17,$27,$0F,$08,$1A,$28,$30,$3B,$22   ; SP0-SP3
 PAL_INTRO_MATCH
-            db    $0F,$30,$30,$30,$FF,$21,$30,$30,$FF,$16,$30,$30,$FF,$29,$1A,$09   ; BG0-BG3
-            db    $FF,$29,$37,$17,$FF,$02,$22,$30,$FF,$16,$27,$30,$FF,$0B,$1B,$2B   ; SP0-SP3
+            db    $30,$30,$30,$21,$30,$30,$16,$30,$30,$29,$1A,$09   ; BG0-BG3
+            db    $29,$37,$17,$02,$22,$30,$16,$27,$30,$0B,$1B,$2B   ; SP0-SP3
 PAL_SELECT_SCREEN_MATCH
-            db    $0F,$30,$00,$12,$FF,$16,$27,$36,$FF,$0C,$1C,$2C,$FF,$12,$1C,$2C   ; BG0-BG3
-            db    $FF,$FF,$27,$07,$FF,$FF,$27,$07,$FF,$FF,$27,$07,$FF,$FF,$27,$30   ; SP0-SP3
+            db    $30,$00,$12,$16,$27,$36,$0C,$1C,$2C,$12,$1C,$2C   ; BG0-BG3
+            db    $FF,$27,$07,$FF,$27,$07,$FF,$27,$07,$FF,$27,$30   ; SP0-SP3
 PAL_OVERWORLD_MATCH
-            db    $0F,$30,$00,$12,$FF,$16,$27,$36,$FF,$1A,$37,$12,$FF,$17,$37,$12   ; BG0-BG3
-            db    $FF,$FF,$27,$17,$FF,$02,$22,$30,$FF,$16,$27,$30,$FF,$FF,$FF,$FF   ; SP0-SP3
+            db    $30,$00,$12,$16,$27,$36,$1A,$37,$12,$17,$37,$12   ; BG0-BG3
+            db    $FF,$27,$17,$02,$22,$30,$16,$27,$30,$FF,$FF,$FF   ; SP0-SP3
 PAL_CAVE_MATCH
-            db    $0F,$30,$00,$12,$FF,$16,$27,$36,$FF,$30,$00,$12,$FF,$07,$0F,$17   ; BG0-BG3
-            db    $FF,$FF,$27,$17,$FF,$02,$22,$30,$FF,$16,$27,$30,$FF,$FF,$FF,$FF   ; SP0-SP3
+            db    $30,$00,$12,$16,$27,$36,$30,$00,$12,$07,$0F,$17   ; BG0-BG3
+            db    $FF,$27,$17,$02,$22,$30,$16,$27,$30,$FF,$FF,$FF   ; SP0-SP3
 PAL_DUNGEON1_MATCH
-            db    $0F,$30,$00,$12,$FF,$16,$27,$36,$FF,$0C,$1C,$2C,$FF,$12,$1C,$2C   ; BG0-BG3
-            db    $FF,$FF,$27,$17,$FF,$02,$22,$30,$FF,$16,$27,$30,$FF,$FF,$FF,$FF   ; SP0-SP3
+            db    $30,$00,$12,$16,$27,$36,$0C,$1C,$2C,$12,$1C,$2C   ; BG0-BG3
+            db    $FF,$27,$17,$02,$22,$30,$16,$27,$30,$FF,$FF,$FF   ; SP0-SP3
 PAL_DUNGEON2_MATCH
-            db    $0F,$30,$00,$12,$FF,$16,$27,$36,$FF,$02,$12,$22,$FF,$16,$12,$22   ; BG0-BG3
-            db    $FF,$FF,$27,$17,$FF,$02,$22,$30,$FF,$16,$27,$30,$FF,$FF,$FF,$FF   ; SP0-SP3
+            db    $30,$00,$12,$16,$27,$36,$02,$12,$22,$16,$12,$22   ; BG0-BG3
+            db    $FF,$27,$17,$02,$22,$30,$16,$27,$30,$FF,$FF,$FF   ; SP0-SP3
 PAL_DUNGEON3_MATCH
-            db    $0F,$30,$00,$12,$FF,$16,$27,$36,$FF,$0B,$1B,$2B,$FF,$16,$1B,$2B   ; BG0-BG3
-            db    $FF,$FF,$37,$17,$FF,$02,$22,$30,$FF,$16,$27,$30,$FF,$FF,$FF,$FF   ; SP0-SP3
+            db    $30,$00,$12,$16,$27,$36,$0B,$1B,$2B,$16,$1B,$2B   ; BG0-BG3
+            db    $FF,$37,$17,$02,$22,$30,$16,$27,$30,$FF,$FF,$FF   ; SP0-SP3
 PAL_DUNGEON4_MATCH
-            db    $0F,$30,$00,$12,$FF,$16,$27,$36,$FF,$08,$18,$28,$FF,$12,$18,$28   ; BG0-BG3
-            db    $FF,$FF,$27,$17,$FF,$02,$22,$30,$FF,$16,$27,$30,$FF,$FF,$FF,$FF   ; SP0-SP3
+            db    $30,$00,$12,$16,$27,$36,$08,$18,$28,$12,$18,$28   ; BG0-BG3
+            db    $FF,$27,$17,$02,$22,$30,$16,$27,$30,$FF,$FF,$FF   ; SP0-SP3
 PAL_DUNGEON5_MATCH
-            db    $0F,$30,$00,$12,$FF,$16,$27,$36,$FF,$0A,$1A,$2A,$FF,$16,$1A,$2A   ; BG0-BG3
-            db    $FF,$FF,$27,$17,$FF,$02,$22,$30,$FF,$16,$27,$30,$FF,$FF,$FF,$FF   ; SP0-SP3
+            db    $30,$00,$12,$16,$27,$36,$0A,$1A,$2A,$16,$1A,$2A   ; BG0-BG3
+            db    $FF,$27,$17,$02,$22,$30,$16,$27,$30,$FF,$FF,$FF   ; SP0-SP3
 PAL_DUNGEON6_MATCH
-            db    $0F,$30,$00,$12,$FF,$16,$27,$36,$FF,$08,$18,$28,$FF,$16,$18,$28   ; BG0-BG3
-            db    $FF,$FF,$27,$17,$FF,$02,$22,$30,$FF,$16,$27,$30,$FF,$FF,$FF,$FF   ; SP0-SP3
+            db    $30,$00,$12,$16,$27,$36,$08,$18,$28,$16,$18,$28   ; BG0-BG3
+            db    $FF,$27,$17,$02,$22,$30,$16,$27,$30,$FF,$FF,$FF   ; SP0-SP3
 PAL_DUNGEON7_MATCH
-            db    $0F,$30,$00,$12,$FF,$16,$27,$36,$FF,$0A,$1A,$2A,$FF,$12,$1A,$2A   ; BG0-BG3
-            db    $FF,$FF,$27,$17,$FF,$02,$22,$30,$FF,$16,$27,$30,$FF,$FF,$FF,$FF   ; SP0-SP3
+            db    $30,$00,$12,$16,$27,$36,$0A,$1A,$2A,$12,$1A,$2A   ; BG0-BG3
+            db    $FF,$27,$17,$02,$22,$30,$16,$27,$30,$FF,$FF,$FF   ; SP0-SP3
 PAL_DUNGEON8_MATCH
-            db    $0F,$30,$00,$12,$FF,$16,$27,$36,$FF,$00,$10,$30,$FF,$22,$10,$30   ; BG0-BG3
-            db    $FF,$FF,$27,$17,$FF,$02,$22,$30,$FF,$16,$27,$30,$FF,$FF,$FF,$FF   ; SP0-SP3
+            db    $30,$00,$12,$16,$27,$36,$00,$10,$30,$22,$10,$30   ; BG0-BG3
+            db    $FF,$27,$17,$02,$22,$30,$16,$27,$30,$FF,$FF,$FF   ; SP0-SP3
 PAL_DUNGEON9_MATCH
-            db    $0F,$30,$00,$12,$FF,$16,$27,$36,$FF,$00,$10,$30,$FF,$16,$10,$30   ; BG0-BG3
-            db    $FF,$FF,$27,$17,$FF,$02,$22,$30,$FF,$16,$27,$30,$FF,$FF,$FF,$FF   ; SP0-SP3
+            db    $30,$00,$12,$16,$27,$36,$00,$10,$30,$16,$10,$30   ; BG0-BG3
+            db    $FF,$27,$17,$02,$22,$30,$16,$27,$30,$FF,$FF,$FF   ; SP0-SP3
 
 ; id -> the ids of the palettes that can follow it (transitions), 0-terminated
 PAL_SUCC
@@ -443,9 +443,9 @@ PAL_SWIZZLE_HI
             dw    ^PAL_DUNGEON8_SWIZZLE
             dw    ^PAL_DUNGEON9_SWIZZLE
 
-; id -> slot map: for each NES palette RAM entry, the IIgs slot * 2, or $FF if it isn't shown
-; (color 0 of the groups other than BG0, colors that share slot 0 with $3F00, and approximated
-; colors, which are shown in another color's slot)
+; id -> slot map: for each NES palette RAM entry, the IIgs slot * 2, or $FF if it isn't loaded
+; (color 0, which the game writes straight to slot 0, colors that share slot 0 with it, and
+; approximated colors, which are shown in another color's slot)
 PAL_CELLS
             dw    0
             dw    PAL_TITLE_SCREEN_CELLS
@@ -463,46 +463,46 @@ PAL_CELLS
             dw    PAL_DUNGEON8_CELLS
             dw    PAL_DUNGEON9_CELLS
 PAL_TITLE_SCREEN_CELLS
-            db    $00,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$16,$18,$FF,$14,$10,$12   ; BG0-BG3
+            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$16,$18,$FF,$14,$10,$12   ; BG0-BG3
             db    $FF,$14,$10,$1A,$FF,$08,$1C,$02,$FF,$0E,$16,$18,$FF,$14,$10,$12   ; SP0-SP3
 PAL_INTRO_CELLS
-            db    $00,$0A,$0A,$0A,$FF,$08,$0A,$0C,$FF,$02,$0A,$0A,$FF,$14,$10,$12   ; BG0-BG3
+            db    $FF,$0A,$0A,$0A,$FF,$08,$0A,$0C,$FF,$02,$0A,$0A,$FF,$14,$10,$12   ; BG0-BG3
             db    $FF,$14,$04,$06,$FF,$0E,$16,$0A,$FF,$02,$18,$0A,$FF,$1A,$1C,$1E   ; SP0-SP3
 PAL_SELECT_SCREEN_CELLS
-            db    $00,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
+            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
             db    $FF,$16,$0A,$18,$FF,$1A,$0A,$18,$FF,$1C,$0A,$18,$FF,$1E,$0A,$02   ; SP0-SP3
 PAL_OVERWORLD_CELLS
-            db    $00,$02,$04,$12,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
+            db    $FF,$02,$04,$12,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
             db    $FF,$06,$0A,$14,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
 PAL_CAVE_CELLS
-            db    $00,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$02,$04,$06,$FF,$14,$10,$12   ; BG0-BG3
+            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$02,$04,$06,$FF,$14,$10,$12   ; BG0-BG3
             db    $FF,$0E,$0A,$12,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
 PAL_DUNGEON1_CELLS
-            db    $00,$02,$04,$14,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
+            db    $FF,$02,$04,$14,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
             db    $FF,$06,$0A,$FF,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
 PAL_DUNGEON2_CELLS
-            db    $00,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
+            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
             db    $FF,$16,$0A,$18,$FF,$0E,$12,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
 PAL_DUNGEON3_CELLS
-            db    $00,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$08,$10,$12   ; BG0-BG3
+            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$08,$10,$12   ; BG0-BG3
             db    $FF,$14,$FF,$FF,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
 PAL_DUNGEON4_CELLS
-            db    $00,$02,$04,$14,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
+            db    $FF,$02,$04,$14,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
             db    $FF,$06,$0A,$FF,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
 PAL_DUNGEON5_CELLS
-            db    $00,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$08,$10,$12   ; BG0-BG3
+            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$08,$10,$12   ; BG0-BG3
             db    $FF,$14,$0A,$FF,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
 PAL_DUNGEON6_CELLS
-            db    $00,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$08,$10,$12   ; BG0-BG3
+            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$08,$10,$12   ; BG0-BG3
             db    $FF,$14,$0A,$FF,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
 PAL_DUNGEON7_CELLS
-            db    $00,$02,$04,$14,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
+            db    $FF,$02,$04,$14,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
             db    $FF,$06,$0A,$FF,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
 PAL_DUNGEON8_CELLS
-            db    $00,$12,$0E,$02,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
+            db    $FF,$12,$0E,$02,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
             db    $FF,$04,$0A,$06,$FF,$16,$14,$12,$FF,$08,$0A,$12,$FF,$18,$1A,$1C   ; SP0-SP3
 PAL_DUNGEON9_CELLS
-            db    $00,$12,$0E,$02,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
+            db    $FF,$12,$0E,$02,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
             db    $FF,$04,$0A,$06,$FF,$16,$18,$12,$FF,$08,$0A,$12,$FF,$1A,$1C,$1E   ; SP0-SP3
 
 ; from id -> its row of to id -> background groups to redraw (bit 0 = BG0 .. bit 3 = BG3).

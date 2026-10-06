@@ -12,7 +12,7 @@
  * Output (Merlin32 source):
  *   palettes.s         The swizzle tables of every palette, 8 x 512 bytes (BG0-BG3, SP0-SP3) each,
  *                      for the game's PALDATA segment.
- *   pal_transitions.s  The palette ids, UpdatePalette / SetPaletteColor / DetectNESPalette and their
+ *   pal_transitions.s  The palette ids, UpdatePalette / LoadPaletteColors / DetectNESPalette and their
  *                      tables, for the main segment.
  *
  * The IIgs shows 16 colors (one palette of 16 slots) and the NES up to 25, so every palette gets one
@@ -368,9 +368,8 @@ function transitionsSource(graph, best, source, warnings) {
 ;
 ; X = from palette id (PAL_*, or 0 for none), Y = to palette id
 ;
-; Switches the swizzle tables to the new palette, loads its colors into IIgs palette 0 from the
-; current NES palette RAM (so colors the game changes on the fly are kept), then redraws the
-; background groups whose slots changed.  Call from the GS task (it redraws tiles).
+; Switches the swizzle tables to the new palette, loads its colors (LoadPaletteColors), then redraws
+; the background groups whose slots changed.  Call from the GS task (it redraws tiles).
 UpdatePalette
             lda   BG_UPDATE_MASKS,x
             pha
@@ -383,9 +382,19 @@ UpdatePalette
             jsr   NES_SetPaletteMap
             ply
 
+            jsr   LoadPaletteColors
+            pla
+            jmp   RefreshPPUAttributes
+
+; LoadPaletteColors
+;
+; Y = palette id.  Loads IIgs palette 0 from the current NES palette RAM, in the palette's layout,
+; so the colors the game changes on the fly (fades, color cycling, ...) are shown too.  Slot 0 (the
+; universal background color) is left alone: the game's $3F00 writes set it directly.
+LoadPaletteColors
             lda   PAL_CELLS,y
-            pha                       ; 1,s = slot map, 3,s = groups to redraw
-            ldy   #31                 ; Backwards, so the BG colors win a shared slot and $3F00 is last
+            pha                       ; 1,s = slot map
+            ldy   #31                 ; Backwards, so the BG colors win a shared slot
 :loop       lda   (1,s),y
             and   #$00FF
             cmp   #$00FF
@@ -399,37 +408,13 @@ UpdatePalette
 :next       dey
             bpl   :loop
             pla
-            pla
-            jmp   RefreshPPUAttributes
-
-; SetPaletteColor
-;
-; A = NES color, Y = NES palette RAM offset (0-31), X = palette id.  Shows one changed color in
-; palette X's layout.  Colors that aren't shown are ignored.
-SetPaletteColor
-            pha
-            lda   PAL_CELLS,x
-            pha                       ; 1,s = slot map, 3,s = color
-            lda   (1,s),y
-            and   #$00FF
-            cmp   #$00FF
-            beq   :skip
-            sta   1,s                 ; 1,s = slot * 2
-            lda   3,s
-            jsr   NES_ColorToIIgs_X
-            plx
-            stal  SHR_PALETTES,x
-            pla
-            rts
-:skip       pla
-            pla
             rts
 
 ; DetectNESPalette
 ;
 ; X = the current palette id (0 = none).  Returns A = Y = the PAL_* id of the palette whose
-; colors are all in palette RAM ($3F00-$3F1F, other than the reserved ones and the unused
-; color 0s), or 0 if there is none (e.g. a step of a fade).  The current palette is tried first,
+; colors 1-3 are all in palette RAM (other than the reserved ones), or 0 if there is none (e.g. a
+; step of a fade).  The current palette is tried first,
 ; then the palettes that follow it in the transitions, then the rest.
 DetectNESPalette
             php
@@ -465,23 +450,38 @@ DetectNESPalette
             tya
             rts
 
-; X = palette id.  Carry set if its colors are in palette RAM.  X is kept.
+; X = palette id.  Carry set if its colors are in palette RAM.  X is kept.  Only colors 1-3 of
+; each group are compared (24 at most): color 0 is always IIgs slot 0.  One pass per group, from
+; SP3 back to BG0, with its three colors compared inline.  NES colors are $00-$3F, so the $FF of a
+; reserved color is the only table byte with bit 7 set, and bmi skips it.
 :match      phx
             lda   PAL_MATCH,x
             clc
-            adc   #31
-            tay                       ; Y -> the palette's bytes, from the last
-            ldx   #31                 ; X = palette RAM offset
+            adc   #21
+            tay                       ; Y -> the last group's 3 bytes
+            ldx   #28                 ; X = the last group's palette RAM offset
             sep   #$20
             mx    %10
-:mbyte      lda:  0,y
-            cmp   #$FF                ; any value
-            beq   :mnext
-            cmpl  PPU_MEM+$3F00,x
+:group      lda:  0,y                 ; color 1
+            bmi   *+8                 ; $FF = any value
+            cmpl  PPU_MEM+$3F01,x
             bne   :mfail
-:mnext      dey
+            lda:  1,y                 ; color 2
+            bmi   *+8
+            cmpl  PPU_MEM+$3F02,x
+            bne   :mfail
+            lda:  2,y                 ; color 3
+            bmi   *+8
+            cmpl  PPU_MEM+$3F03,x
+            bne   :mfail
+            dey
+            dey
+            dey
             dex
-            bpl   :mbyte
+            dex
+            dex
+            dex
+            bpl   :group
             rep   #$20
             mx    %00
             plx
@@ -496,19 +496,15 @@ DetectNESPalette
 :ptr        ds    2
 `);
 
-  T.push('; id -> palette RAM bytes to match ($3F00-$3F1F; $FF = any value: not shown, or reserved)');
+  T.push('; id -> colors 1-3 of each group to match (BG0-BG3, SP0-SP3; $FF = any value: reserved)');
   T.push('PAL_MATCH');
   T.push('            dw    0');
   names.forEach(n => T.push(`            dw    PAL_${U(n)}_MATCH`));
   names.forEach((n, p) => {
-    const bytes = ALL_GROUPS.flatMap((G, gi) => [0, 1, 2, 3].map(i => {
-      if (i === 0 && gi > 0) return '$FF';                   // only $3F00 of the color 0s is shown
-      if (pals[p].reserved.has(G + ':' + i)) return '$FF';
-      return pals[p][G][i];
-    }));
+    const bytes = ALL_GROUPS.flatMap(G => [1, 2, 3].map(i => (pals[p].reserved.has(G + ':' + i) ? '$FF' : pals[p][G][i])));
     T.push(`PAL_${U(n)}_MATCH`);
-    T.push('            db    ' + bytes.slice(0, 16).join(',') + '   ; BG0-BG3');
-    T.push('            db    ' + bytes.slice(16).join(',') + '   ; SP0-SP3');
+    T.push('            db    ' + bytes.slice(0, 12).join(',') + '   ; BG0-BG3');
+    T.push('            db    ' + bytes.slice(12).join(',') + '   ; SP0-SP3');
   });
   T.push('');
 
@@ -533,9 +529,9 @@ DetectNESPalette
   names.forEach(n => T.push(`            dw    ^PAL_${U(n)}_SWIZZLE`));
   T.push('');
 
-  T.push("; id -> slot map: for each NES palette RAM entry, the IIgs slot * 2, or $FF if it isn't shown");
-  T.push('; (color 0 of the groups other than BG0, colors that share slot 0 with $3F00, and approximated');
-  T.push("; colors, which are shown in another color's slot)");
+  T.push("; id -> slot map: for each NES palette RAM entry, the IIgs slot * 2, or $FF if it isn't loaded");
+  T.push('; (color 0, which the game writes straight to slot 0, colors that share slot 0 with it, and');
+  T.push("; approximated colors, which are shown in another color's slot)");
   T.push('PAL_CELLS');
   T.push('            dw    0');
   names.forEach(n => T.push(`            dw    PAL_${U(n)}_CELLS`));
@@ -544,7 +540,7 @@ DetectNESPalette
     const bytes = [];
     ALL_GROUPS.forEach((G, gi) => [0, 1, 2, 3].forEach(i => {
       const slot = L.cellSlot[G + ':' + i];
-      if ((slot === 0 && !(gi === 0 && i === 0)) || pals[p].approx.has(G + ':' + i)) bytes.push('$FF');
+      if (slot === 0 || pals[p].approx.has(G + ':' + i)) bytes.push('$FF');
       else bytes.push(hex2(2 * slot));
     }));
     // Every slot a color is shown in needs a cell that writes it

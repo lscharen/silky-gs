@@ -28,7 +28,9 @@ y_exclude ENT                     ; Table of excluded sprite Y values -- filled 
             ds 256
 
 tile_exclude ENT                  ; Table of excluded tiles
-            ds $61,$00
+            ds $1C,$00
+            db $01                ; Tile $1C - transparent: WriteBlankPrioritySprites' 16 sprites (see HideDoorBands)
+            ds $61-$1D,$00
             db $01                ; Tile $61 - fake "bomb" used for sprite-0 hit detection when scrolling
             ds $9E,$00
 

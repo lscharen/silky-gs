@@ -152,6 +152,10 @@ shadowBitmapToList
 :bottom   equ  tmp2
 :bitfield equ  tmp4
 
+        DO   GRID_DIRTY_RENDERING
+        jsr  ensureShadowBitmap           ; (built on demand with the grid renderer)
+        FIN
+
         sep  #$30
 
         ldy  #y_offset_rows               ; Start at the top of the physical screen and walk the bitmap for 25 bytes (200 lines of height)
