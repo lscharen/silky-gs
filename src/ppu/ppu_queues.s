@@ -14,9 +14,10 @@
 ;   bit 3 = bottom-right (+33)
 ;
 ; Double-buffered shadows.  PPUDATA_WRITE stores every changed nametable byte into PPU_CIRAM *and* into
-; the current buffer: the byte itself (PPU_MEM) and, for a tile, its bit in the group mask (main bank).
-; A group is queued on at_list when the first bit of a mask half is set, or when its attribute byte is
-; first written (flag), so a group can appear up to three times; repeat visits find nothing to do.
+; the current buffer: the byte itself (PPU_MEM) and, for a tile, its bit in the group mask, or for the
+; attribute byte, the group's attribute-written flag (main bank).  The group's flag byte also has a
+; queued bit: the first write to a group in a period puts it on at_list, so at_list holds every group
+; that needs drawing exactly once.
 ; PPUFreezeNametableUpdates (interrupts off) only flips the write path to the other buffer by patching
 ; its operands.  PPUFlushQueuesAlt reads the previous buffer with interrupts on while the ROM fills the
 ; other one.  A buffer's data is valid exactly where its masks / flags say a byte was written; every
@@ -27,7 +28,7 @@
 ;
 ;   PPU_MEM+NTM_SB0     data, indexed by CIRAM address
 ;   NTM_MASK0           16-bit tile masks, one word per group (index * 2; T2IDX = index * 2 + half)
-;   NTM_FLAG0           attribute-written flag per group (index * 2)
+;   NTM_FLAG0           flags per group (index * 2): NTM_QUEUED | NTM_ATTR
 ;
 ; Attribute index = CIRAM page << 6 | attribute offset ($00-$3F).
 ;
@@ -41,8 +42,11 @@ NTM_SB0     equ   $C800                     ; Shadow data buffer 0 (PPU_MEM offs
 NTM_SB1     equ   NTM_SB0+$2000
 
 ; Attribute indices queued for rendering.  Two halves: the ROM fills curr while the render reads prev;
-; NES_RenderFrame swaps them with interrupts off.  Up to 3 entries per group (2 mask halves, attribute).
-AT_LIST_LEN        equ 384
+; NES_RenderFrame swaps them with interrupts off.  A group is queued at most once per period, so there
+; are at most 128 entries (2 CIRAM pages x 64 attribute bytes).
+AT_LIST_LEN        equ 128
+NTM_QUEUED         equ $80                  ; NTM_FLAG bits: the group is on at_list
+NTM_ATTR           equ $01                  ;                its attribute byte was written
 curr_at_list_start dw 0
 curr_at_list_end   dw 0
 prev_at_list_start dw {AT_LIST_LEN*2}
@@ -54,6 +58,7 @@ ntmDelta    dw    0                         ; Operand adjustment for the PPU_MEM
 ntmDelta2   dw    0                         ; Operand adjustment for the main bank sites ($01 / $FF)
 ntmY        dw    0
 ntmBit      dw    0
+ntmOld      dw    0
 
 ; Masks and flags of both buffers, each array page-aligned (no page-crossing cycles; buffer 1 = +$100)
             ds    \,$00
@@ -75,30 +80,27 @@ ntmSiteD    stal  PPU_MEM+NTM_SB0,x           ; The byte, for the render that re
             sty   ntmY
             lda   #0
             xba                               ; B = 0 for the transfers to Y
-            lda   T2BIT,x
-            beq   atmWrite                    ; Attribute bytes have no tile bit
-            sta   ntmBit
             lda   T2IDX,x
-            tay                               ; Y = group index * 2 + half
-ntmSiteM0   lda   NTM_MASK0,y
-            beq   ntmFirst
-            ora   ntmBit
+            tay                               ; Y = group index * 2 (+1 for the HI half of a tile mask)
+            lda   T2BIT,x
+            beq   :attr                       ; Attribute bytes have no tile bit
+ntmSiteM0   ora   NTM_MASK0,y                 ; Tile: add its bit to the group's mask
 ntmSiteM1   sta   NTM_MASK0,y
-            ldy   ntmY
-            bra   ntmExit
-
-ntmFirst    lda   ntmBit                      ; First tile in this half of the group: queue the group
-ntmSiteM2   sta   NTM_MASK0,y
-            bra   ntmPush
-
-atmWrite    lda   T2IDX,x
+            tya
+            and   #$FE
             tay                               ; Y = group index * 2
-atmSiteF0   lda   NTM_FLAG0,y
-            bne   ntmDone                     ; Already flagged (and queued) this period
-            inc
-atmSiteF1   sta   NTM_FLAG0,y
+            lda   #NTM_QUEUED
+            bra   :flag
+:attr       lda   #NTM_QUEUED+NTM_ATTR
+:flag       sta   ntmBit
+ntmSiteF0   lda   NTM_FLAG0,y
+            sta   ntmOld
+            ora   ntmBit
+ntmSiteF1   sta   NTM_FLAG0,y
+            lda   ntmOld
+            bmi   ntmDone                     ; Already on at_list this period
 
-ntmPush     rep   #$20                        ; Append the group index to at_list
+            rep   #$20                        ; First write to the group: append its index to at_list
             tya
             lsr
             ldx   curr_at_list_end
@@ -148,18 +150,14 @@ PPUFreezeNametableUpdates
         clc
         adc  ntmDelta2
         sta  ntmSiteM1+2
-        lda  ntmSiteM2+2
+        lda  ntmSiteF0+2
         clc
         adc  ntmDelta2
-        sta  ntmSiteM2+2
-        lda  atmSiteF0+2
+        sta  ntmSiteF0+2
+        lda  ntmSiteF1+2
         clc
         adc  ntmDelta2
-        sta  atmSiteF0+2
-        lda  atmSiteF1+2
-        clc
-        adc  ntmDelta2
-        sta  atmSiteF1+2
+        sta  ntmSiteF1+2
         rep  #$20
         rts
 
@@ -210,18 +208,18 @@ PPUFlushQueuesAlt
         adc   NtmPrev
         tay                                   ; Y = the group's mask / flag in the buffer being drawn
 
-; 1. Mask and flag, cleared for the buffer's next period.  A group queued more than once (both mask halves
-;    and / or the attribute) finds them already consumed on the later visits.
+; 1. Mask and flags, cleared for the buffer's next period.  Every group is on at_list once, and has a
+;    non-zero mask or its attribute flag.
 
         lda   NTM_FLAG0,y                     ; (the odd byte is never written: high byte 0)
+        bit   #NTM_ATTR
         bne   :attr_written
         lda   NTM_MASK0,y                     ; Tiles only: palette unchanged
-        bne   *+5
-        brl   :next                           ; Repeat visit
         sta   NtmTMask
         sta   NtmMask
         lda   #0
         sta   NTM_MASK0,y
+        sta   NTM_FLAG0,y
         lda   #$8000                          ; Attribute value loaded on demand (whole-metatile redraw)
         sta   NtmAttr
         stz   NtmDiff

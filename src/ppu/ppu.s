@@ -606,7 +606,7 @@ drawSprites
         ora  sprTmp6         ; fold in the pattern-table select (0 or $0100) -> full 0-511 index
         asl
         tax
-        ldal spr_comp_tbl,x
+        ldal PPU_MEM+SPR_COMP_TBL,x
         DO   SHOW_DEBUG_VARS
         ldx  #$2222         ; color for missing compiled sprite
         cmp  #0             ; re-establish the equality test
@@ -730,14 +730,13 @@ drawProcsClipped
         dw drawClippedTileToScreen,drawClippedTileToScreenP,drawClippedTileToScreenH,drawClippedTileToScreenPH
         dw drawClippedTileToScreenV,drawClippedTileToScreenPV,drawClippedTileToScreenHV,drawClippedTileToScreenPHV
 
-; Array of dispatch addresses.  There is a special address of $0000 in the table that immediately returns
-; from the compiled sprite code bank for sprites that do not have a compiled representation.
+; The compiled sprite dispatch table is in the PPU_MEM bank (PPU_MEM+SPR_COMP_TBL, Defs.s).  An entry of
+; $0000 means the sprite tile has no compiled representation.
 ;
 ; 512 word entries (1024 bytes): the low 256 entries are tile ids 0-255 in pattern
 ; table 0, the high 256 entries (index 256-511, i.e. byte offset 512-1023) are tile
 ; ids 0-255 in pattern table 1 -- indexed via (tile_id | sprTmp6) above, matching the
 ; ChrRamDirty/spadr_lo convention.
-spr_comp_tbl ds 1024,$00
 
         mx    %00
 _blitTileNoMask

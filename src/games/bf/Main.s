@@ -50,6 +50,7 @@ POST_RENDER  mac
 ; sprite height (8 or 16), DBR = the tiledata bank, 16-bit registers.  It can set sprClipTop to
 ; hide the sprite's top lines.
 SPRITE_PRE_DRAW  mac
+;
              <<<
 
 ; Define which PPU address has the background and sprite tiles

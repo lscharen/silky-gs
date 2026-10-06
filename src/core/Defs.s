@@ -304,7 +304,11 @@ TILE_BANK     equ $6000          ; pre-calculated data bank value for the locati
 TILE_ADDR_LO  equ $7000          ; pre-calculated address (low byte) of the location of the PEA field tile
 TILE_ADDR_HI  equ $8000          ; pre-calculated address (high byte) of the location of the PEA field tile
 
-; $9000-$AFFF: free (formerly the TILE_VERSION0/1 dedup tables)
+; Compiled sprite dispatch table (ppu.s / ROM_CompileSpriteTiles): 512 words, the compiled code address
+; of each sprite tile (pattern table 0, then 1), or 0 if it isn't compiled
+SPR_COMP_TBL  equ $9000
+
+; $9400-$AFFF: free (formerly the TILE_VERSION0/1 dedup tables)
 
 ;TILE_ROW      equ $B000          ; pre-calculated row of the PPU address
 ;TILE_COL      equ $C000          ; pre-calculated column of the PPU address

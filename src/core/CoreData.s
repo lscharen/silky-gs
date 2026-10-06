@@ -188,7 +188,7 @@ RTable            ds    400
 ; A single tile ID can be drawn as both a background tile and a sprite (e.g.
 ; the same CHR-RAM tile reused for a title-screen sprite and a level-map
 ; tile), and each form is recompiled into a *different* destination (the
-; compiled background code field vs. spr_comp_tbl/tiledata's sprite layout)
+; compiled background code field vs. SPR_COMP_TBL/tiledata's sprite layout)
 ; by a different consumer. Whichever consumer runs first must NOT clear the
 ; other consumer's need to recompile -- that was the bug: a single "dirty"
 ; flag got zeroed by whichever of CheckSprTileDirty/DrawPPUTile/

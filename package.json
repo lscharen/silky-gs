@@ -41,6 +41,7 @@
     "debug:zelda": "cd src/games/zelda/src && %npm_package_config_crossrunner% ZeldaGS -source ZeldaGS_S02__Output.txt ZeldaGS_S03__Output.txt ZeldaGS_S04__Output.txt ZeldaGS_S05__Output.txt -map Master.s -Debug -CompatibilityLayer",
     "cyrene:bf": "npm run build-image && concurrently '%npm_package_config_cyrene%' '%npm_package_config_kegscyrene%'",
     "build-image": ".\\build-image.bat %npm_package_config_cadius% .\\emu\\Target.2mg /ClassicsGS/",
+    "build-image:zelda": ".\\build-image-zelda.bat %npm_package_config_cadius% .\\emu\\ZeldaGS.2mg /ZeldaGS/",
     "gen-includes": "node scripts/gen-includes.js",
     "bench": "node scripts/run-bench.js",
     "test:unit": "vitest run --config vitest.config.mjs",

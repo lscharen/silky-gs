@@ -94,7 +94,8 @@ ROM_CompileSpriteTiles
 ; All registers are changed
 :compile_sprite_tile
             lda  SpriteBankPos                            ; this is the current free address in the bank
-            sta  spr_comp_tbl,y                           ; put the compiled sprite address in the table
+            tyx                                           ; put the compiled sprite address in the table
+            stal PPU_MEM+SPR_COMP_TBL,x                   ; (in the PPU_MEM bank; X is reloaded below)
 
             tya                                           ; convert the tile index * 2 into an address in the tiledata bank
             lsr                                           ; put it back as the normal tile_index
