@@ -601,19 +601,27 @@ drawSprites
         bit  #$2000         ; Is the priority bit set?
         bne  as_bitmap
 
-        and  #$00FF
-        ora  sprTmp6         ; fold in the pattern-table select (0 or $0100) -> full 0-511 index
+; The cache key is (pattern table << 9) | (tile << 1) | vertical flip, and X is the key offset in the table of
+; words: the key * 2.  The vertical flip is bit 15 of the attribute and tile word, and the horizontal flip is
+; selected inside the compiled sprite.
+
+        and  #$80FF         ; tile and vertical flip
+        ora  sprTmp6        ; fold in the pattern-table select (0 or $0100)
+        asl                 ; carry = vertical flip, A = (pattern table << 9) | (tile << 1)
+        adc  #0             ; A = key
         asl
         tax
         ldal PPU_MEM+SPR_COMP_TBL,x
-        beq  sprCacheMiss   ; zero value means no compiled sprite for this tile IDs
+        beq  sprCacheMiss   ; zero value means no compiled sprite for this key
 
 ; Vector through the compiled sprite table.  The compiled sprites are in a different bank, so just check
 ; for a sentinel value and manually jump into the compiled sprite code to avoid a double-jump and having to
 ; have a second jump table in the compile sprite code bank.
 
         stal csd+1                     ; patch in the long address directly
-        jsr  SprTouch                  ; X = tile index * 2; move it to the MRU end of the cache list
+
+; A hit changes nothing in the cache: it is replaced in the order it was compiled (see SPR_* in Defs.s)
+
         lda  sprTmp2+1                 ; load OAM[2] into accumulator
         pei  CMPL_BANK
         plb
@@ -628,7 +636,7 @@ draw_rtn2
         FIN
         rts
 
-; Compiled sprite cache miss.  X = tile index * 2.  Queue the tile to be compiled after drawSprites
+; Compiled sprite cache miss.  X = key offset.  Queue the sprite to be compiled after drawSprites
 ; (SprCacheService), unless this render's compile quota is already used up, and draw the sprite from
 ; its bitmap this time.
 sprCacheMiss
@@ -636,7 +644,7 @@ sprCacheMiss
         cmp  #2*SPR_COMPILE_PER_RENDER
         bcs  :no_queue
         tay                            ; Y = end of the pending list
-        txa                            ; A = tile index * 2
+        txa                            ; A = key offset
         tyx
         stal PPU_MEM+SPR_PEND,x
         inx
@@ -715,10 +723,11 @@ CheckSprTileDirty
         stal  ChrRamDirty,x
         rep   #$20
 
-        phx                           ; save the tile index (0 - $1FF) for the cache invalidation below
         txa                           ; get back the value $0 - $1FF
         asl   a
         asl   a
+        pha                           ; the key offset of the tile with no vertical flip (tile index * 4), for the
+                                      ; compiled sprite cache invalidation below
         asl   a
         asl   a
         tax                           ; X = CHR-RAM source address (tile ID * 16)
@@ -729,13 +738,15 @@ CheckSprTileDirty
 
         jsr   FastROMMaskedTileToLookup
 
-; The tile's pixels changed, so any compiled copy of it is stale.  Drop it from the compiled sprite
-; cache; the next time it is drawn, it is a miss and gets compiled again from the new data.
+; The tile's pixels changed, so any compiled copy of it is stale.  Drop both of its compiled sprites from the
+; compiled sprite cache; the next time it is drawn, it is a miss and gets compiled again from the new data.
 
         plx
-        txa
-        asl   a
-        tax                           ; X = tile index * 2
+        phx
+        jsr   SprInvalidate
+        plx
+        inx
+        inx                           ; ... and with the vertical flip
         jmp   SprInvalidate
 
 :sprclean

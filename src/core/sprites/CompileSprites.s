@@ -1,7 +1,8 @@
-; Compile an 8x8 bitmap into executable code into the SpriteBank
+; Compile an 8x8 bitmap into executable code in the SpriteBank
 ;
 ; Y = address in the compile bank
 ; A = low address of bitmap in tiledata bank
+; X = 0 for the sprite as it is, non-zero for the vertically flipped sprite
 ;
 ; Algorithm is simple O(n^2), but there are only 16 words
 ;   Load first word
@@ -13,9 +14,11 @@
 ;
 ; This routine differs from the CompileTile routine in a few ways.  First, duplicate
 ; words that have a mask are cached to save the lookup time, but can't be used
-; immediately.  Second, the compilation needs to produce vertical and horizontally
-; flipped versions of the sprite, which take up more space.  So the compiled sprite
-; actually has an 8-byte header with the offsets for each variant.
+; immediately.  Second, the compilation produces a horizontally flipped version of the
+; sprite as well, which takes up more space.  The vertical flip is part of the cache key
+; (see SPR_* in Defs.s), so one compiled sprite is for one vertical orientation only: either
+; the normal and horizontally flipped code, or the vertically flipped and both-ways flipped
+; code.  The compiled sprite starts with a small preamble that selects between the two.
 ; Emitted code is:
 ;
 ;  ldy #data
@@ -30,32 +33,22 @@
 ;
 ;  ...
 
-BOTH_ADDR_OFFSET equ 13
-VERT_ADDR_OFFSET equ 21
-HORZ_ADDR_OFFSET equ 24
-PREAMBLE_SIZE    equ 26
+HORZ_ADDR_OFFSET equ 8                 ; offset of the horizontal variant's address in the preamble
+PREAMBLE_SIZE    equ 10
 
         mx    %00
 CompileSprite
 :base    equ tmp9                 ; start of the sprite
 :src     equ tmp10
 
-; Sprite are called with OAM Byte 2 in the accumulator and X set to the sprite index. The
-; direct page location sprTmp1 holds the SHR address.  The compiled sprite has a preamble
-; that dispatches to the correct compiled tile based on the value in the accumulator
-;
-; This is the template code that each compiled sprite starts with
+; Sprites are called with OAM Byte 2 in the accumulator and the direct page location sprTmp1 holds
+; the SHR address.  The compiled sprite has a preamble that dispatches on the horizontal flip bit
+; in the accumulator.  This is the template code that each compiled sprite starts with
 ;
 ;            ldx   sprTmp1         ; 2 bytes
-;            and   #$00C0          ; 3 bytes
+;            bit   #$0040          ; 3 bytes
 ;            beq   normal          ; 2 bytes
-;            cmp   #$00C0          ; 3 bytes
-;            bne   *+5             ; 2 bytes
-;            jmp   both            ; 3 bytes
-;            bit   #$0080          ; 3 bytes
-;            beq   *+5             ; 2 bytes
-;            jmp   vertical        ; 3 bytes
-;            jmp   horizontal      ; 3 bytes = 26 bytes
+;            jmp   horizontal      ; 3 bytes = 10 bytes
 ; normal     ...
 ; horizontal ...
 ;            ...
@@ -63,18 +56,18 @@ CompileSprite
 
         sty  :base               ; base address of the sprite code in the CompileSprite bank
         sta  :src                ; address of the source tile data in the tiledata bank (updated)
+        phx                      ; vertical flip flag: 0 or 2, which is also the offset in the tables of variants below
 
 ; Gerenate the preamble
 
         jsr  CompileSpritePreamble
 
-; Build each sprite and insert it's address into the preamble code.  The normal sprite
-; (no horizontal or vertical flip) doesn't need any patching because it's always located
-; immediately after the preable
+; Build the first variant, which doesn't need any patching because it's always located
+; immediately after the preable.  (X is still the flag.)
 
-        jsr  CompileSpriteNormal
+        jsr  (:first,x)
 
-; Build the horizontally flipped version
+; Insert the address of the second variant into the preamble
 
         phy
         lda  :base
@@ -84,97 +77,38 @@ CompileSprite
         lda  1,s
         sta  [SpriteBank0],y
         ply
-        jsr  CompileSpriteHorz
 
-; Build the vertically flipped version
+; Build the horizontally flipped version of the first variant and return with the new address in the Y-register
 
-        phy
-        lda  :base
-        clc
-        adc  #VERT_ADDR_OFFSET
-        tay
-        lda  1,s
-        sta  [SpriteBank0],y
-        ply
-        jsr  CompileSpriteVert
+        plx
+        jmp  (:second,x)
 
-; Build the vertically and horizontally flipped version
-
-        phy
-        lda  :base
-        clc
-        adc  #BOTH_ADDR_OFFSET
-        tay
-        lda  1,s
-        sta  [SpriteBank0],y
-        ply
-        jsr  CompileSpriteBoth
-
-; Return with the new address in the Y-register
-
-        rts
+:first  dw   CompileSpriteNormal,CompileSpriteVert
+:second dw   CompileSpriteHorz,CompileSpriteBoth
 
         mx    %00
 CompileSpritePreamble
+
+; The template code as words (little endian): A6 sprTmp1 | 89 40 | 00 F0 | 03 4C | horizontal address
 
         lda  #$A6+{256*sprTmp1}  ; LDX dp
         sta  [SpriteBank0],y
         iny
         iny
 
-        lda  #$0029              ; AND #$00C0
-        sta  [SpriteBank0],y
-        iny
-        lda  #$00C0
+        lda  #$4089              ; BIT #$0040 (the high byte of the operand is in the next word)
         sta  [SpriteBank0],y
         iny
         iny
 
-        lda  #$13F0              ; BEQ normal
+        lda  #$F000              ; ... / BEQ *+5
         sta  [SpriteBank0],y
         iny
         iny
 
-        lda  #$00C9              ; CMP #$00C0
+        lda  #$4C03              ; ... / JMP horizontal (the address is filled in once it is known)
         sta  [SpriteBank0],y
         iny
-        lda  #$00C0
-        sta  [SpriteBank0],y
-        iny
-        iny
-
-        lda  #$03D0              ; BNE *+5
-        sta  [SpriteBank0],y
-        iny
-        iny
-
-        lda  #$004C              ; JMP both
-        sta  [SpriteBank0],y
-        iny
-        iny
-        iny
-
-        lda  #$0089              ; BIT #$0080
-        sta  [SpriteBank0],y
-        iny
-        lda  #$0080
-        sta  [SpriteBank0],y
-        iny
-        iny
-
-        lda  #$03F0              ; BEQ *+5
-        sta  [SpriteBank0],y
-        iny
-        iny
-
-        lda  #$004C              ; JMP horizontal
-        sta  [SpriteBank0],y
-        iny
-        iny
-        iny
-
-        lda  #$004C              ; JMP vertical
-        sta  [SpriteBank0],y
         iny
         iny
         iny
@@ -511,20 +445,26 @@ bit_mask
 ; Compiled sprite cache
 ;
 ; The sprite compile bank is not big enough to hold a compiled version of every sprite tile, so the
-; tiles are compiled on demand into a fixed number of slots (see SPR_* in Defs.s):
+; sprites are compiled on demand into a fixed number of slots (see SPR_* in Defs.s):
 ;
-; * Slots are not packed.  A compiled sprite is at most 938 bytes (26 byte preamble + 4 variants of 16
-;   words * 14 bytes + a 4 byte return), so each slot is SPR_SLOT_SIZE = 1KB and slot 0 is left unused
+; * A compiled sprite is for one tile and one vertical orientation, and has the normal and the horizontally
+;   flipped code (a preamble picks one by the horizontal flip bit).  Most games flip horizontally all the
+;   time, but a vertical flip is rare, so the vertical flip is part of the cache key.
+; * Slots are not packed.  A compiled sprite is at most 466 bytes (10 byte preamble + 2 variants of 16
+;   words * 14 bytes + a 4 byte return), so each slot is SPR_SLOT_SIZE = 512 bytes and slot 0 is left unused
 ;   because address $0000 is the "not compiled" value in SPR_COMP_TBL.
-; * SPR_COMP_TBL maps a tile index (tile | pattern table << 8, times 2) to its slot address.
-; * Tiles with a slot are on a circular doubly linked list ordered by use.  The list is stored as
-;   structure of arrays (SPR_NEXT / SPR_PREV) with a sentinel node, so the move-to-front on a hit and
-;   taking the least recently used tile on a miss are both O(1).
-; * The slots that no tile owns are on a stack (SPR_FREE).
+; * SPR_COMP_TBL maps a key (tile | pattern table << 8, vertical flip) to its slot address.  Keys are
+;   handled as "key offsets": the key doubled again, as an index in a table of words.
+; * Keys with a slot are on a circular doubly linked list, in the order they were compiled: a new key goes to the
+;   head and the key at the tail, the oldest, is the one replaced when there are no free slots.  The list is
+;   stored as structure of arrays (SPR_NEXT / SPR_PREV) with a sentinel node, so all of this is O(1), including
+;   taking out a key from the middle when a CHR-RAM write invalidates it.  A hit does nothing: it takes 127 new
+;   compiles (SPR_SLOTS) to replace a compiled sprite, which makes this a FIFO, not an LRU, and a lot cheaper.
+; * The slots that no key owns are on a stack (SPR_FREE).
 ; * drawSprites draws a sprite that misses from its bitmap and queues it (SPR_PEND, at most
 ;   SPR_COMPILE_PER_RENDER entries).  SprCacheService compiles the queue when drawSprites is done.
-; * CHR-RAM writes invalidate the compiled sprite through the existing dirty flags (SprInvalidate,
-;   called by CheckSprTileDirty).
+; * CHR-RAM writes invalidate the compiled sprites of the tile (both vertical orientations) through the
+;   existing dirty flags (SprInvalidate, called by CheckSprTileDirty).
 ; ---------------------------------------------------------------------------------------------------
 
 ; Start with an empty cache where every slot is free.  Called once from PPUStartUp.
@@ -535,23 +475,22 @@ SprCacheInit
         stal  PPU_MEM+SPR_TAIL
 
         lda   #0                         ; nothing is compiled
-        ldx   #1022
+        ldx   #2046
 :clear
         stal  PPU_MEM+SPR_COMP_TBL,x
         dex
         dex
         bpl   :clear
 
-        ldx   #0                         ; push the slot addresses $0400, $0800, ... $FC00
-        lda   #SPR_SLOT_SIZE
+        ldx   #2*{SPR_SLOTS-1}           ; push the slot addresses $FE00 ... $0400, $0200 (at most 127 slots)
+        lda   #SPR_SLOTS*SPR_SLOT_SIZE
+        sec                              ; (stays set: A never goes below zero)
 :fill
         stal  PPU_MEM+SPR_FREE,x
-        inx
-        inx
-        clc
-        adc   #SPR_SLOT_SIZE
-        cpx   #2*SPR_SLOTS
-        bcc   :fill
+        sbc   #SPR_SLOT_SIZE
+        dex
+        dex
+        bpl   :fill
 
         lda   #2*SPR_SLOTS
         stal  PPU_MEM+SPR_FREE_TOP
@@ -559,41 +498,30 @@ SprCacheInit
         stal  PPU_MEM+SPR_PEND_CNT
         rts
 
-; A compiled sprite was just dispatched to; make it the most recently used.
-;
-; X = tile index * 2.  A/X/Y trashed.
-        mx    %00
-SprTouch
-        txa
-        cmpl  PPU_MEM+SPR_HEAD           ; Already the most recently used?  Then there is nothing to do
-        beq   :done
-        SPR_UNLINK
-        SPR_INSERT_HEAD
-:done
-        rts
-
-; Make sure a sprite tile has a compiled version.  If a slot is free, it is used.  If not, the least
-; recently used tile is evicted and its slot is taken over.  The new tile becomes the most recently used.
+; Make sure a sprite has a compiled version.  If a slot is free, it is used.  If not, the oldest key
+; is evicted and its slot is taken over.  The new key becomes the newest.
 ; The tile data in the tiledata bank must be valid.
 ;
-; X = tile index * 2.  All registers trashed.
+; X = key offset.  All registers trashed.
         mx    %00
 SprCompileTile
         ldal  PPU_MEM+SPR_COMP_TBL,x
-        bne   :done                      ; already compiled (a tile can be queued more than once)
+        beq   :compile
+        rts                              ; already compiled (a tile can be queued more than once)
 
-        phx                              ; save the tile index * 2
+:compile
+        phx                              ; save the key offset
         ldal  PPU_MEM+SPR_FREE_TOP
         beq   :evict
-        sec
-        sbc   #2
+        dec
+        dec
         stal  PPU_MEM+SPR_FREE_TOP       ; pop a free slot
         tax
         ldal  PPU_MEM+SPR_FREE,x
         bra   :have_slot
 
 :evict
-        ldal  PPU_MEM+SPR_TAIL           ; the least recently used tile owns a slot to take over
+        ldal  PPU_MEM+SPR_TAIL           ; the oldest key owns a slot to take over
         tax
         ldal  PPU_MEM+SPR_COMP_TBL,x
         pha                              ; the slot
@@ -603,28 +531,31 @@ SprCompileTile
         pla
 
 :have_slot
-        pha                              ; slot at 1,s and tile index * 2 at 3,s
+        pha                              ; slot at 1,s and key offset at 3,s
         tay                              ; Y = address in the compile bank
         lda   3,s
+        and   #$0002
+        tax                              ; X = 2 for a vertically flipped sprite, else 0
+        lda   3,s
+        and   #$07FC                     ; (pattern table << 8 | tile) * 4
         asl
         asl
         asl
         asl
-        asl
-        asl                              ; A = tile index * 128 = tiledata source address
+        asl                              ; A = (pattern table << 8 | tile) * 128 = tiledata source address
         jsr   CompileSprite              ; trashes tmp7 - tmp11 (SprCacheService saves them)
 
         pla                              ; A = slot
-        plx                              ; X = tile index * 2
+        plx                              ; X = key offset
         stal  PPU_MEM+SPR_COMP_TBL,x
         SPR_INSERT_HEAD
-:done
         rts
 
-; A tile's pixels changed (CHR-RAM write), so its compiled sprite is stale.  If it has one, drop it and
-; return the slot to the free stack so it is reused before any live tile is evicted.
+; A tile's pixels changed (CHR-RAM write), so its compiled sprites are stale.  If a key has one, drop it and
+; return the slot to the free stack so it is reused before any live key is evicted.  This is for one key;
+; the caller does both vertical orientations of the tile.
 ;
-; X = tile index * 2.  All registers trashed.
+; X = key offset.  All registers trashed.
         mx    %00
 SprInvalidate
         ldal  PPU_MEM+SPR_COMP_TBL,x
@@ -636,12 +567,11 @@ SprInvalidate
 
         ldal  PPU_MEM+SPR_FREE_TOP
         tax
+        inc
+        inc
+        stal  PPU_MEM+SPR_FREE_TOP
         pla
         stal  PPU_MEM+SPR_FREE,x         ; push the slot
-        inx
-        inx
-        txa
-        stal  PPU_MEM+SPR_FREE_TOP
 :done
         rts
 
@@ -663,18 +593,16 @@ SprCacheService
         pei   tmp10
         pei   tmp11
 
-        ldx   #0                         ; X = offset in the pending list
+        tax                              ; X = the end of the pending list; compile the last key first
 :next
+        dex
+        dex
         phx
         ldal  PPU_MEM+SPR_PEND,x
         tax
         jsr   SprCompileTile
         plx
-        inx
-        inx
-        txa
-        cmpl  PPU_MEM+SPR_PEND_CNT
-        bcc   :next
+        bne   :next                      ; (not the first entry yet)
 
         lda   #0
         stal  PPU_MEM+SPR_PEND_CNT

@@ -80,6 +80,13 @@ ROM_DRIVER_MODE   equ 1
 ; across all games and must default to normal (non-bench) behavior.
 BENCH_MODE        equ 0
 
+; Compiled sprite cache (see core/sprites/CompileSprites.s)
+;
+; SPR_SLOTS               number of 512 byte slots in the sprite compile bank that are used (1 - 127)
+; SPR_COMPILE_PER_RENDER  sprite tiles compiled per drawSprites call (0 - 4).  0 never compiles
+SPR_SLOTS              equ 127
+SPR_COMPILE_PER_RENDER equ 1
+
 ; Flag whether the backend should use the OAMDMA to get the sprite information,
 ; or if it can scan the NES RAM area directly
 ;

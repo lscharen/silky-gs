@@ -304,36 +304,40 @@ TILE_BANK     equ $6000          ; pre-calculated data bank value for the locati
 TILE_ADDR_LO  equ $7000          ; pre-calculated address (low byte) of the location of the PEA field tile
 TILE_ADDR_HI  equ $8000          ; pre-calculated address (high byte) of the location of the PEA field tile
 
-; Compiled sprite dispatch table (ppu.s / ROM_CompileSpriteTiles): 512 words, the compiled code address
-; of each sprite tile (pattern table 0, then 1), or 0 if it isn't compiled
-SPR_COMP_TBL  equ $9000
-
-; Compiled sprite cache (core/sprites/CompileSprites.s).  The sprite compile bank is divided into
-; fixed, unpacked slots sized for the worst-case compiled sprite (938 bytes, rounded up to 1KB).
-; Slot 0 is not used because address $0000 in SPR_COMP_TBL means "not compiled".
+; Compiled sprite cache (core/sprites/CompileSprites.s).
 ;
-; Live tiles are kept on a circular, doubly linked recency list.  The nodes are tile indices
-; (tile | pattern table << 8), stored as index*2 like SPR_COMP_TBL, plus one sentinel node at
-; SPR_SENT.  next[SENT] is the most recently used tile, prev[SENT] the least recently used.
-; Free slots live on a stack of slot addresses.  SPR_COMP_TBL doubles as the tile -> slot map.
-SPR_SLOT_SIZE equ $0400
-SPR_SLOTS     equ 63
-SPR_SENT      equ 1024                ; sentinel node (the 513th entry of SPR_NEXT / SPR_PREV)
+; A compiled sprite is the code for one tile with one vertical orientation, in two variants: as is and
+; flipped horizontally.  A small preamble selects one of the two from the sprite's attribute byte.  The
+; sprite compile bank is divided into fixed, unpacked slots sized for the worst case:
+;
+;     10 byte preamble + 2 variants * (16 words * 14 bytes + 4 byte return) = 466 bytes -> 512 byte slots
+;
+; Slot 0 is not used because address $0000 in SPR_COMP_TBL means "not compiled", so there are at most 127.
+;
+; The cache key is (tile | pattern table << 8) << 1 | vertical flip: 1024 keys.  Everywhere a key is used as
+; an index into a table of words it is doubled (the "key offset", 0 - 2046):
+;   key offset = (pattern table << 10) | (tile << 2) | (vertical flip << 1)
+;
+; SPR_COMP_TBL maps a key to the address of its compiled code, or 0 if it isn't compiled.  The keys that are
+; compiled are on a circular, doubly linked list in the order they were compiled (SPR_NEXT / SPR_PREV, plus one
+; sentinel node at SPR_SENT).  next[SENT] is the newest key, prev[SENT] the oldest, which is the one that is
+; replaced when there is no free slot.  A cache hit does not change the list, so it is a FIFO.  The slots that
+; no key owns are on a stack of slot addresses.
+SPR_COMP_TBL  equ $9000               ; 1024 words
+SPR_SLOT_SIZE equ $0200               ; (SPR_SLOTS, the number of slots in use, is set in each game's Main.s)
+SPR_SENT      equ 2048                ; sentinel node (the 1025th entry of SPR_NEXT / SPR_PREV)
 
-SPR_NEXT      equ $9400               ; 513 words: next node, toward the LRU end
-SPR_PREV      equ $9A00               ; 513 words: previous node, toward the MRU end
-SPR_HEAD      equ SPR_NEXT+SPR_SENT   ; MRU tile
-SPR_TAIL      equ SPR_PREV+SPR_SENT   ; LRU tile
+SPR_NEXT      equ $9800               ; 1025 words: next node, toward the oldest end
+SPR_PREV      equ $A010               ; 1025 words: previous node, toward the newest end
+SPR_HEAD      equ SPR_NEXT+SPR_SENT   ; the newest key
+SPR_TAIL      equ SPR_PREV+SPR_SENT   ; the oldest key
 
-SPR_FREE      equ $A000               ; stack of free slot addresses (63 words)
-SPR_FREE_TOP  equ $A080               ; byte offset of the stack top (2 * number of free slots)
-SPR_PEND_CNT  equ $A082               ; byte offset of the end of the pending list
-SPR_PEND      equ $A084               ; tiles that missed this render, waiting to be compiled
+SPR_FREE      equ $A820               ; stack of free slot addresses (127 words)
+SPR_FREE_TOP  equ $A920               ; byte offset of the stack top (2 * number of free slots)
+SPR_PEND_CNT  equ $A922               ; byte offset of the end of the pending list
+SPR_PEND      equ $A924               ; keys that missed this render, waiting to be compiled (4 words)
 
-; Maximum number of sprite tiles compiled per drawSprites call (1 - 4)
-SPR_COMPILE_PER_RENDER equ 1
-
-; $A090-$AFFF: free (formerly the TILE_VERSION0/1 dedup tables)
+; $A930-$AFFF: free (formerly the TILE_VERSION0/1 dedup tables)
 
 ;TILE_ROW      equ $B000          ; pre-calculated row of the PPU address
 ;TILE_COL      equ $C000          ; pre-calculated column of the PPU address

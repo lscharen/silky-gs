@@ -68,20 +68,21 @@ tile | table index.)
 
 ## Compiled sprite cache
 
-The sprite compile bank holds `SPR_SLOTS` (63) fixed 1KB slots, not a packed stream: the worst-case compiled
-sprite is 938 bytes (26 byte preamble + 4 variants x (16 words x 14 bytes + 4 byte return)). Slot 0 is unused
-because `$0000` means "not compiled". Sprites are compiled on demand:
+The sprite compile bank holds up to `SPR_SLOTS` (127) fixed 512 byte slots, not a packed stream.  A compiled sprite is for
+one tile and one *vertical* orientation, and contains two variants: as is and flipped horizontally.  A 10 byte preamble
+(`ldx sprTmp1` / `bit #$0040` / `beq` / `jmp`) selects one from the sprite's attribute byte.  The worst case is
+10 + 2 x (16 words x 14 bytes + 4 byte return) = 466 bytes; the sprites in Zelda's run were 18 - 454 bytes with a median of 306.
+Slot 0 is unused because `$0000` means "not compiled".  Sprites are compiled on demand:
 
-- `SPR_COMP_TBL` (512 words in `PPU_MEM`) maps `(tile | table << 8) * 2` to the slot address, or 0.
-- Tiles that own a slot are on a circular doubly linked recency list (`SPR_NEXT`/`SPR_PREV`, with a sentinel
-  node at `SPR_SENT`; `next[SENT]` = MRU, `prev[SENT]` = LRU). Dispatching a compiled sprite moves it to the
-  head (`SprTouch`); nothing is ever scanned.
-- Slots that no tile owns are on the `SPR_FREE` stack. When it is empty, the LRU tile is evicted and its slot
-  is reused.
-- A tile that misses is drawn from its bitmap and queued (`SPR_PEND`); `SprCacheService` compiles at most
-  `SPR_COMPILE_PER_RENDER` queued tiles at the end of each `drawSprites`.
-- CHR-RAM: `CheckSprTileDirty` calls `SprInvalidate` after reconverting a dirty tile, which drops the compiled
-  sprite and pushes its slot back on the free stack. `PPUDATA_WRITE` is unchanged.
-- `COMPILED_SPRITE_LIST` only warms the cache at startup (`SprCompileTile`). A tile ID that's reused across both pattern tables for background/sprite
-purposes just forces recompilation into the same 256-entry compiled-code slot every time the active table
-changes; that's expected, not a bug.
+- The key is `(pattern table << 9) | (tile << 1) | vertical flip` (1024 keys).  `SPR_COMP_TBL` (1024 words in `PPU_MEM`) maps a
+  key to the slot address, or 0.  Tables are indexed by the "key offset" (the key * 2); see `SPR_*` in `Defs.s`.
+- Keys that own a slot are on a circular doubly linked list in the order they were compiled (`SPR_NEXT`/`SPR_PREV`, with a
+  sentinel node at `SPR_SENT`; `next[SENT]` = newest, `prev[SENT]` = oldest).  A cache hit does nothing, so the cache is a
+  FIFO: it takes `SPR_SLOTS` new compiles to replace a compiled sprite.  The list makes taking the oldest key, adding a key and
+  removing one from the middle (CHR-RAM invalidation) all O(1).
+- Slots that no key owns are on the `SPR_FREE` stack.  When it is empty, the oldest key is replaced and its slot is reused.
+- A sprite that misses is drawn from its bitmap and queued (`SPR_PEND`); `SprCacheService` compiles at most
+  `SPR_COMPILE_PER_RENDER` queued keys at the end of each `drawSprites`.
+- CHR-RAM: `CheckSprTileDirty` calls `SprInvalidate` for both vertical orientations of a tile after reconverting it, which
+  drops the compiled sprites and pushes their slots back on the free stack.  `PPUDATA_WRITE` is unchanged.
+- `COMPILED_SPRITE_LIST` only warms the cache at startup (`SprCompileTile`).
