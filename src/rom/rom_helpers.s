@@ -94,11 +94,12 @@ ROM_CompileSpriteTiles
 ; All registers are changed
 :compile_sprite_tile
             tya                                           ; A = tile index * 2
-            asl                                           ; A = key offset (tile * 4) of the sprite without a vertical flip
+            asl
+            asl                                           ; A = key offset (tile * 8) of the sprite without flips
             ldx  spadr                                    ; load the sprite pattern table address ($0000 or $1000)
             cpx  #$1000                                   ; put the pattern table select in the carry
             bcc  :table0
-            adc  #$3FF                                    ; carry is set: add $400 for the pattern table select (see SPR_* in Defs.s)
+            adc  #$7FF                                    ; carry is set: add $800 for the pattern table select (see SPR_* in Defs.s)
 :table0
             tax
             jmp  SprCompileTile                           ; allocate a slot in the sprite cache and compile into it

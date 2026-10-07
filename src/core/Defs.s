@@ -307,37 +307,34 @@ TILE_ADDR_HI  equ $8000          ; pre-calculated address (high byte) of the loc
 ; Compiled sprite cache (core/sprites/CompileSprites.s).
 ;
 ; A compiled sprite is the code for one tile with one vertical orientation, in two variants: as is and
-; flipped horizontally.  A small preamble selects one of the two from the sprite's attribute byte.  The
-; sprite compile bank is divided into fixed, unpacked slots sized for the worst case:
+; flipped horizontally.  The sprite compile bank is divided into fixed, unpacked slots sized for the worst case:
 ;
-;     10 byte preamble + 2 variants * (16 words * 14 bytes + 4 byte return) = 466 bytes -> 512 byte slots
+;     2 variants * (16 words * 14 bytes + 4 byte return) = 456 bytes -> 512 byte slots
 ;
 ; Slot 0 is not used because address $0000 in SPR_COMP_TBL means "not compiled", so there are at most 127.
 ;
-; The cache key is (tile | pattern table << 8) << 1 | vertical flip: 1024 keys.  Everywhere a key is used as
-; an index into a table of words it is doubled (the "key offset", 0 - 2046):
-;   key offset = (pattern table << 10) | (tile << 2) | (vertical flip << 1)
+; SPR_COMP_TBL maps a sprite to the address of its compiled code, or 0.  It is indexed by the "key offset":
+;   key offset = (pattern table << 11) | (tile << 3) | (vertical flip << 2) | (horizontal flip << 1)
+; The two horizontal flips of a key are compiled together, into one slot, so their entries are set and cleared
+; together.  Everywhere else the key offset has the horizontal flip bit clear.
 ;
-; SPR_COMP_TBL maps a key to the address of its compiled code, or 0 if it isn't compiled.  The keys that are
-; compiled are on a circular, doubly linked list in the order they were compiled (SPR_NEXT / SPR_PREV, plus one
-; sentinel node at SPR_SENT).  next[SENT] is the newest key, prev[SENT] the oldest, which is the one that is
-; replaced when there is no free slot.  A cache hit does not change the list, so it is a FIFO.  The slots that
-; no key owns are on a stack of slot addresses.
-SPR_COMP_TBL  equ $9000               ; 1024 words
-SPR_SLOT_SIZE equ $0200               ; (SPR_SLOTS, the number of slots in use, is set in each game's Main.s)
-SPR_SENT      equ 2048                ; sentinel node (the 1025th entry of SPR_NEXT / SPR_PREV)
+; Slots are replaced in the order they were filled (a FIFO): SPR_CURSOR goes round the slots, and the slot it
+; points to is the next one used; if a key owns it (SPR_OWNER), that key is evicted.  A cache hit does not
+; change anything.  A CHR-RAM write frees a key's slot, which is reused when the cursor gets back to it.
+SPR_COMP_TBL  equ $9000               ; 2048 words
+SPR_SLOT_SIZE equ $0200
+SPR_SLOTS     equ 127                 ; the number of slots used (1 - 127)
 
-SPR_NEXT      equ $9800               ; 1025 words: next node, toward the oldest end
-SPR_PREV      equ $A010               ; 1025 words: previous node, toward the newest end
-SPR_HEAD      equ SPR_NEXT+SPR_SENT   ; the newest key
-SPR_TAIL      equ SPR_PREV+SPR_SENT   ; the oldest key
+; The number of sprite tiles compiled per drawSprites call (0 - 4; 0 never compiles).  The sprites that miss
+; are drawn from their bitmaps until they are compiled.  2 was measured to be the best (docs/BENCH_ZELDA.md).
+SPR_COMPILE_PER_RENDER equ 2
+SPR_OWNER     equ $A000               ; 128 words, indexed by slot address >> 8: the key offset that owns the slot,
+                                      ; or $FFFF if none
+SPR_CURSOR    equ $A100               ; the address of the slot that is used next
+SPR_PEND_CNT  equ $A102               ; byte offset of the end of the pending list
+SPR_PEND      equ $A104               ; keys that missed this render, waiting to be compiled (4 words)
 
-SPR_FREE      equ $A820               ; stack of free slot addresses (127 words)
-SPR_FREE_TOP  equ $A920               ; byte offset of the stack top (2 * number of free slots)
-SPR_PEND_CNT  equ $A922               ; byte offset of the end of the pending list
-SPR_PEND      equ $A924               ; keys that missed this render, waiting to be compiled (4 words)
-
-; $A930-$AFFF: free (formerly the TILE_VERSION0/1 dedup tables)
+; $A10C-$AFFF: free (formerly the TILE_VERSION0/1 dedup tables)
 
 ;TILE_ROW      equ $B000          ; pre-calculated row of the PPU address
 ;TILE_COL      equ $C000          ; pre-calculated column of the PPU address

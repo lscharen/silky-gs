@@ -585,11 +585,20 @@ drawSprites
 ; (screen address / clip amount) already set up by :setupSprite.
 :blitResolvedSprite
 
-; CHR-RAM support: recompile this sprite tile now if it was marked dirty by a
+; CHR-RAM support: reconvert this sprite tile now if it was marked dirty by a
 ; PPUDATA write since it was last drawn.  This also drops the tile's compiled
-; sprite, so it has to run before the compiled-sprite check below.
+; sprites, so it has to run before the compiled-sprite check below.  The flag is
+; tested here, in 16-bit mode (the high byte is the next tile's flags), since it
+; is almost always clear; CheckSprTileDirty only runs for a dirty tile.
         DO   HAS_CHR_RAM
+        and  #$00FF
+        ora  sprTmp6              ; tile | pattern table select: the 0-511 index of ChrRamDirty
+        tax
+        ldal ChrRamDirty,x
+        bit  #CHRRAM_SPR_DIRTY
+        beq  :spr_clean
         jsr  CheckSprTileDirty
+:spr_clean
         lda  sprTmp2              ; restore
         FIN
 
@@ -601,14 +610,16 @@ drawSprites
         bit  #$2000         ; Is the priority bit set?
         bne  as_bitmap
 
-; The cache key is (pattern table << 9) | (tile << 1) | vertical flip, and X is the key offset in the table of
-; words: the key * 2.  The vertical flip is bit 15 of the attribute and tile word, and the horizontal flip is
-; selected inside the compiled sprite.
+; The key offset is (pattern table << 11) | (tile << 3) | (vertical flip << 2) | (horizontal flip << 1), an
+; index in the table of words.  The flips are bits 15 and 14 of the attribute and tile word (the priority bit,
+; 13, is clear here).  Each shift moves the next flip bit into the carry, and the ADC adds it at the bottom.
 
-        and  #$80FF         ; tile and vertical flip
+        and  #$C0FF         ; tile and the two flips
         ora  sprTmp6        ; fold in the pattern-table select (0 or $0100)
-        asl                 ; carry = vertical flip, A = (pattern table << 9) | (tile << 1)
-        adc  #0             ; A = key
+        asl                 ; carry = vertical flip
+        adc  #0
+        asl                 ; carry = horizontal flip
+        adc  #0
         asl
         tax
         ldal PPU_MEM+SPR_COMP_TBL,x
@@ -622,7 +633,7 @@ drawSprites
 
 ; A hit changes nothing in the cache: it is replaced in the order it was compiled (see SPR_* in Defs.s)
 
-        lda  sprTmp2+1                 ; load OAM[2] into accumulator
+        ldx  sprTmp1                   ; the SHR address for the compiled code
         pei  CMPL_BANK
         plb
 csd     jml  $000000
@@ -638,13 +649,14 @@ draw_rtn2
 
 ; Compiled sprite cache miss.  X = key offset.  Queue the sprite to be compiled after drawSprites
 ; (SprCacheService), unless this render's compile quota is already used up, and draw the sprite from
-; its bitmap this time.
+; its bitmap this time.  Both horizontal flips are compiled together, so the key is queued without it.
 sprCacheMiss
         ldal PPU_MEM+SPR_PEND_CNT
         cmp  #2*SPR_COMPILE_PER_RENDER
         bcs  :no_queue
         tay                            ; Y = end of the pending list
-        txa                            ; A = key offset
+        txa
+        and  #$FFFD                    ; A = key offset, horizontal flip bit clear
         tyx
         stal PPU_MEM+SPR_PEND,x
         inx
@@ -702,23 +714,22 @@ as_bitmap_clip
         ora  sprTmp5                  ; fold in the pattern-table offset ($0000 or $8000)
         jmp  (drawProcsClipped,x)
 
-; CHR-RAM support: reconvert one sprite tile (FastROMMaskedTileToLookup) and
-; invalidate its compiled sprite (SprInvalidate) if its dirty flag is set. Input: sprTmp2 low byte = tile ID (OAM[1]). 16-bit
-; A/X/Y required and preserved.
+; CHR-RAM support: reconvert one sprite tile whose sprite dirty flag is set (the
+; caller, :blitResolvedSprite, tests it), with FastROMMaskedTileToLookup, and
+; invalidate its compiled sprites (SprInvalidate).
+;
+; X = the 0-511 index of the tile in ChrRamDirty (tile | pattern table << 8).
+; 16-bit A/X/Y; all are trashed.
         DO    HAS_CHR_RAM
         mx    %00
 CheckSprTileDirty
-        and   #$00FF
-        ora   sprTmp6                 ; are we within the first or second set of tiles?
-        tax
 
 ; The ChrRamDirty array is indexed 0-511, spanning *both* CHR-RAM pattern
-; tables
+; tables.  Clear the flag with an 8-bit store: a 16-bit one would also write the next
+; tile's flags, which the NES task may set in between.
 
-        sep   #$20                    ; 8-bit A for the byte-table check/clear
+        sep   #$20
         ldal  ChrRamDirty,x
-        bit   #CHRRAM_SPR_DIRTY       ; test only the sprite-form-dirty bit
-        beq   :sprclean
         and   #CHRRAM_SPR_DIRTY!$FF   ; clear only the sprite bit, preserve the BG bit
         stal  ChrRamDirty,x
         rep   #$20
@@ -726,9 +737,9 @@ CheckSprTileDirty
         txa                           ; get back the value $0 - $1FF
         asl   a
         asl   a
-        pha                           ; the key offset of the tile with no vertical flip (tile index * 4), for the
-                                      ; compiled sprite cache invalidation below
         asl   a
+        pha                           ; the key offset of the tile with no flips (tile index * 8), for the
+                                      ; compiled sprite cache invalidation below
         asl   a
         tax                           ; X = CHR-RAM source address (tile ID * 16)
 
@@ -746,12 +757,10 @@ CheckSprTileDirty
         jsr   SprInvalidate
         plx
         inx
+        inx
+        inx
         inx                           ; ... and with the vertical flip
         jmp   SprInvalidate
-
-:sprclean
-        rep   #$20
-        rts
         FIN
 
 ; Lines to hide at the top of the sprite being drawn, set by the game's SPRITE_PRE_DRAW callback

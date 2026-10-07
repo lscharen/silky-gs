@@ -69,20 +69,19 @@ tile | table index.)
 ## Compiled sprite cache
 
 The sprite compile bank holds up to `SPR_SLOTS` (127) fixed 512 byte slots, not a packed stream.  A compiled sprite is for
-one tile and one *vertical* orientation, and contains two variants: as is and flipped horizontally.  A 10 byte preamble
-(`ldx sprTmp1` / `bit #$0040` / `beq` / `jmp`) selects one from the sprite's attribute byte.  The worst case is
-10 + 2 x (16 words x 14 bytes + 4 byte return) = 466 bytes; the sprites in Zelda's run were 18 - 454 bytes with a median of 306.
-Slot 0 is unused because `$0000` means "not compiled".  Sprites are compiled on demand:
+one tile and one *vertical* orientation, and contains two variants: as is and flipped horizontally.  The worst case is
+2 x (16 words x 14 bytes + 4 byte return) = 456 bytes.  Slot 0 is unused because `$0000` means "not compiled".  Sprites are
+compiled on demand:
 
-- The key is `(pattern table << 9) | (tile << 1) | vertical flip` (1024 keys).  `SPR_COMP_TBL` (1024 words in `PPU_MEM`) maps a
-  key to the slot address, or 0.  Tables are indexed by the "key offset" (the key * 2); see `SPR_*` in `Defs.s`.
-- Keys that own a slot are on a circular doubly linked list in the order they were compiled (`SPR_NEXT`/`SPR_PREV`, with a
-  sentinel node at `SPR_SENT`; `next[SENT]` = newest, `prev[SENT]` = oldest).  A cache hit does nothing, so the cache is a
-  FIFO: it takes `SPR_SLOTS` new compiles to replace a compiled sprite.  The list makes taking the oldest key, adding a key and
-  removing one from the middle (CHR-RAM invalidation) all O(1).
-- Slots that no key owns are on the `SPR_FREE` stack.  When it is empty, the oldest key is replaced and its slot is reused.
+- `SPR_COMP_TBL` (2048 words in `PPU_MEM`) is indexed by the key offset
+  `(pattern table << 11) | (tile << 3) | (vertical flip << 2) | (horizontal flip << 1)` and holds the address of the
+  variant's code, or 0.  A hit jumps straight into the variant; there is no dispatch code in the slot.  The two horizontal
+  flips of a key are compiled into one slot, and their entries are set and cleared together.
+- The slots are used in turn (`SPR_CURSOR`): a FIFO.  `SPR_OWNER` (indexed by slot address >> 8) has the key that owns
+  each slot, whose entries are cleared when the slot is reused.  A cache hit does nothing.
 - A sprite that misses is drawn from its bitmap and queued (`SPR_PEND`); `SprCacheService` compiles at most
   `SPR_COMPILE_PER_RENDER` queued keys at the end of each `drawSprites`.
-- CHR-RAM: `CheckSprTileDirty` calls `SprInvalidate` for both vertical orientations of a tile after reconverting it, which
-  drops the compiled sprites and pushes their slots back on the free stack.  `PPUDATA_WRITE` is unchanged.
+- CHR-RAM: `:blitResolvedSprite` tests the sprite dirty flag inline, and `CheckSprTileDirty` reconverts a dirty tile and calls
+  `SprInvalidate` for both of its vertical orientations, which clears their entries and frees their slots (reused when the
+  cursor gets to them).  `PPUDATA_WRITE` is unchanged.
 - `COMPILED_SPRITE_LIST` only warms the cache at startup (`SprCompileTile`).
