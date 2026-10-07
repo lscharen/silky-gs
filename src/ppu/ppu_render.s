@@ -14,7 +14,8 @@
 ;   3. Sprites are drawn on top.
 ;   4. Shadowing is turned ON and the sprite/background runs are exposed
 ;      to the real SHR screen with alternating BltRange/PEISlam passes.
-; After drawScreen completes, DirtyState is reset to 0.
+; After drawScreen completes, DirtyState is reset to 0.  drawScreenRange does the same for a range
+; of lines, including the code field setup and restore around it.
 ;
 ; drawDirtyScreen -- Optimized redraw (static background)
 ; -------------------------------------------------------
@@ -163,3 +164,58 @@ drawScreen
 ; Step 3: Reveal the sprites and background using alternating render and PEI slams
 
         jmp   exposeShadowList
+
+; Full redraw of a range of screen lines at the current scroll position (NES_SetScroll), as drawScreen
+; does for the whole screen.  This also sets up and restores the code field, for these lines only.
+; The other lines are not touched, so a custom renderer can draw each part of a split screen with
+; its own scroll position, or leave a part of the screen as it is.
+;
+; A = first screen line
+; X = number of lines
+        mx   %00
+drawScreenRange
+        sta   dsrTop
+        stx   dsrCount
+        clc
+        adc   dsrCount
+        sta   dsrEnd
+
+        ldy   StartX
+        lda   dsrTop
+        jsr   _BltSetupAlt
+        sta   dsrExit
+
+        stz   DirtyState              ; (as drawScreen)
+        lda   SprSaveTop
+        sta   SprSaveAddr
+
+        jsr   shadowBitmapToList      ; Sprite lines, clipped to the range
+        ldx   dsrEnd
+        lda   dsrTop
+        bne   :clip
+        cpx   #y_height               ; (the list is already within the whole screen)
+        bcs   :no_clip
+:clip   jsr   clipShadowList
+:no_clip
+
+        jsr   _ShadowOff
+        jsr   drawShadowList
+        jsr   drawSprites
+        jsr   _ShadowOn
+        ldx   dsrTop
+        ldy   dsrEnd
+        jsr   exposeShadowListRange
+
+        DO    GRID_DIRTY_RENDERING
+        jsr   gridEndFull             ; drawSprites recorded this frame's sprite cells
+        FIN
+
+        lda   dsrTop
+        ldx   dsrCount
+        ldy   dsrExit
+        jmp   _RestoreBG0OpcodesAltLite
+
+dsrTop    dw  0
+dsrCount  dw  0
+dsrEnd    dw  0
+dsrExit   dw  0

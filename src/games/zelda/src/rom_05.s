@@ -44,6 +44,7 @@ TriforceRow0TransferBuf  EXT
 TriforceRow0Content  EXT
 
 SetMirrorMode  EXT
+Z_RecordSplit  EXT
 
             put   ../../../core/Defs.s
 
@@ -1284,7 +1285,7 @@ WaitAndScrollToSplitBottom ENT
             JSR   LDA_2002
 ;    AND #$40
 ;    BEQ WaitAndScrollToSplitBottom
-    bra  :out                           ; IIgs -- no busy waiting
+    bra  :record                        ; IIgs -- no busy waiting
     ds   2
 
             JSR   LDA_2002
@@ -1306,10 +1307,8 @@ WaitAndScrollToSplitBottom ENT
     NOP
     NOP
     NOP
-    NOP
-    NOP
-    NOP
-    NOP
+:record                         ; IIgs -- record the split for the renderer (in place of 4 NOPs)
+    jsl  Z_RecordSplit
 :out                            ; IIgs -- skip all the wait states
     LDA GameMode
     CMP #$08

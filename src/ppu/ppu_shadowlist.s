@@ -93,12 +93,19 @@ drawShadowList
 ; Bug in BF after running for a long period of time -- hits BRK $66
         mx   %00
 exposeShadowList
+        ldx  #0
+        ldy  #y_height
+
+; Expose the lines [X, Y) only.  The list must lie within the range (clipShadowList).
+exposeShadowListRange
 :last   equ  tmp3
 :top    equ  tmp4
 :bottom equ  tmp5
+:end    equ  tmp6
 
-        ldx  #0
         stx  :last
+        sty  :end
+        ldx  #0
         cpx  shadowListCount
         beq  :exit
 :loop
@@ -140,8 +147,52 @@ exposeShadowList
 
 :exit
         ldx  :last              ; Expose the final part
-        ldy  #y_height
+        ldy  :end
         jmp  _BltRangeLite
+
+; Clip the shadow list to the lines [A, X): ranges outside are dropped and the others are cut to fit,
+; so a renderer that only sets up part of the code field never blits a line outside of it.
+        mx   %00
+clipShadowList
+:first  equ  tmp6
+:end    equ  tmp7
+
+        sta  :first
+        stx  :end
+        ldx  #0                 ; Read index
+        ldy  #0                 ; Write index
+:loop   cpx  shadowListCount
+        bcs  :done
+
+        lda  shadowListBot,x
+        and  #$00FF
+        cmp  :first
+        beq  :next              ; Ends at or above the first line
+        bcc  :next
+        cmp  :end
+        bcc  *+4
+        lda  :end
+        sep  #$20
+        sta  shadowListBot,y
+        rep  #$20
+
+        lda  shadowListTop,x
+        and  #$00FF
+        cmp  :end
+        bcs  :next              ; Starts at or below the end
+        cmp  :first
+        bcs  *+4
+        lda  :first
+        sep  #$20
+        sta  shadowListTop,y
+        rep  #$20
+        iny
+
+:next   inx
+        bra  :loop
+
+:done   sty  shadowListCount
+        rts
 
 * ; Converts the shadow bitmap (accessed via CurrShadowBitmap pointer) into a list of
 * ; contiguous [top, bottom) scanline pairs in shadowListTop/shadowListBot.

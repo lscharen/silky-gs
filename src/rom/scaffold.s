@@ -758,7 +758,7 @@ RenderScreen
             jsr   gridFallbackBorder
             FIN
             jsr   gridDrawDirty
-            bra   :grid_done
+            bra   :done
             FIN
 
 ; This is code path for performing dirty rendering.
@@ -768,24 +768,17 @@ RenderScreen
             jsr   drawDirtyScreen
             ldy   exitOffset
             jsr   _RestoreBG0OpcodesLite
-            bra   :dirty_done
+            bra   :done
 
 :full_update
             DO    GRID_DIRTY_RENDERING*GRID_FALLBACK_BORDER
             jsr   gridFallbackColor       ; Border color = why we fell back to a full render
             jsr   gridFallbackBorder
             FIN
-            jsr   _BltSetup
-            sta   exitOffset
-            jsr   drawScreen
-            ldy   exitOffset
-            jsr   _RestoreBG0OpcodesLite
-
-:dirty_done
-            DO    GRID_DIRTY_RENDERING
-            jsr   gridEndFull             ; drawScreen recorded the sprite cells for the next frame
-:grid_done
-            FIN
+            lda   #0                      ; (grid builds: drawScreenRange records the sprite cells
+            ldx   ScreenHeight            ; for the next frame)
+            jsr   drawScreenRange
+:done
 
             ELSE
 
