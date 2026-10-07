@@ -96,7 +96,7 @@ LastRead               equ   104
 
 SpriteBank0            equ   106          ; Always zero to allow [SpriteBank0],y addressing
 SpriteBank             equ   108          ; Data bank that holds compiled sprite code
-SpriteBankPos          equ   110          ; Current free location in the sprite compile bank
+unused110              equ   110          ; (formerly SpriteBankPos; the sprite bank is now a fixed-slot cache)
 
 UserId                 equ   112          ; Memory manager user Id to use
 LastKey                equ   116
@@ -304,11 +304,37 @@ TILE_BANK     equ $6000          ; pre-calculated data bank value for the locati
 TILE_ADDR_LO  equ $7000          ; pre-calculated address (low byte) of the location of the PEA field tile
 TILE_ADDR_HI  equ $8000          ; pre-calculated address (high byte) of the location of the PEA field tile
 
-; Compiled sprite dispatch table (ppu.s / ROM_CompileSpriteTiles): 512 words, the compiled code address
-; of each sprite tile (pattern table 0, then 1), or 0 if it isn't compiled
-SPR_COMP_TBL  equ $9000
+; Compiled sprite cache (core/sprites/CompileSprites.s).
+;
+; A compiled sprite is the code for one tile with one vertical orientation, in two variants: as is and
+; flipped horizontally.  The sprite compile bank is divided into fixed, unpacked slots sized for the worst case:
+;
+;     2 variants * (16 words * 14 bytes + 4 byte return) = 456 bytes -> 512 byte slots
+;
+; Slot 0 is not used because address $0000 in SPR_COMP_TBL means "not compiled", so there are at most 127.
+;
+; SPR_COMP_TBL maps a sprite to the address of its compiled code, or 0.  It is indexed by the "key offset":
+;   key offset = (pattern table << 11) | (tile << 3) | (vertical flip << 2) | (horizontal flip << 1)
+; The two horizontal flips of a key are compiled together, into one slot, so their entries are set and cleared
+; together.  Everywhere else the key offset has the horizontal flip bit clear.
+;
+; Slots are replaced in the order they were filled (a FIFO): SPR_CURSOR goes round the slots, and the slot it
+; points to is the next one used; if a key owns it (SPR_OWNER), that key is evicted.  A cache hit does not
+; change anything.  A CHR-RAM write frees a key's slot, which is reused when the cursor gets back to it.
+SPR_COMP_TBL  equ $9000               ; 2048 words
+SPR_SLOT_SIZE equ $0200
+SPR_SLOTS     equ 127                 ; the number of slots used (1 - 127)
 
-; $9400-$AFFF: free (formerly the TILE_VERSION0/1 dedup tables)
+; The number of sprite tiles compiled per drawSprites call (0 - 4; 0 never compiles).  The sprites that miss
+; are drawn from their bitmaps until they are compiled.  2 was measured to be the best (docs/BENCH_ZELDA.md).
+SPR_COMPILE_PER_RENDER equ 2
+SPR_OWNER     equ $A000               ; 128 words, indexed by slot address >> 8: the key offset that owns the slot,
+                                      ; or $FFFF if none
+SPR_CURSOR    equ $A100               ; the address of the slot that is used next
+SPR_PEND_CNT  equ $A102               ; byte offset of the end of the pending list
+SPR_PEND      equ $A104               ; keys that missed this render, waiting to be compiled (4 words)
+
+; $A10C-$AFFF: free (formerly the TILE_VERSION0/1 dedup tables)
 
 ;TILE_ROW      equ $B000          ; pre-calculated row of the PPU address
 ;TILE_COL      equ $C000          ; pre-calculated column of the PPU address

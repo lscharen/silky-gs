@@ -59,10 +59,29 @@ The governing rule is: **how the engine reads/tracks CHR-RAM must match what the
 big enough for all 512 (tile ID, table) combinations in one bank" layout is a convenience that falls out of
 that rule, not a second, independent design choice -- but the *compiled-code* destination banks (background:
 `patch1-4`'s targets in `ppu_metatiles.s`/`ppu_attributes.s`, written via `CompileTile`; sprites:
-`spr_comp_tbl`/`CompileSprite`) are genuinely separate, smaller caches, split by sprite vs. background purely
+`SPR_COMP_TBL`/`CompileSprite`) are genuinely separate, smaller caches, split by sprite vs. background purely
 for engine data-management convenience (sprites and background tiles are compiled and dispatched in
-completely different ways). Each only has room for 256 tile IDs, not 512 -- so unlike `tiledata`, the
-destination page passed to `CompileTile`/`CompileSprite` is tile-ID-only and must **not** have the
-pattern-table bit folded in. A tile ID that's reused across both pattern tables for background/sprite
-purposes just forces recompilation into the same 256-entry compiled-code slot every time the active table
-changes; that's expected, not a bug.
+completely different ways). The background code field only has room for 256 tile IDs, not 512 -- so unlike
+`tiledata`, the destination page passed to `CompileTile` is tile-ID-only and must **not** have the
+pattern-table bit folded in. (The compiled sprite cache below *is* indexed by the 512-entry
+tile | table index.)
+
+## Compiled sprite cache
+
+The sprite compile bank holds up to `SPR_SLOTS` (127) fixed 512 byte slots, not a packed stream.  A compiled sprite is for
+one tile and one *vertical* orientation, and contains two variants: as is and flipped horizontally.  The worst case is
+2 x (16 words x 14 bytes + 4 byte return) = 456 bytes.  Slot 0 is unused because `$0000` means "not compiled".  Sprites are
+compiled on demand:
+
+- `SPR_COMP_TBL` (2048 words in `PPU_MEM`) is indexed by the key offset
+  `(pattern table << 11) | (tile << 3) | (vertical flip << 2) | (horizontal flip << 1)` and holds the address of the
+  variant's code, or 0.  A hit jumps straight into the variant; there is no dispatch code in the slot.  The two horizontal
+  flips of a key are compiled into one slot, and their entries are set and cleared together.
+- The slots are used in turn (`SPR_CURSOR`): a FIFO.  `SPR_OWNER` (indexed by slot address >> 8) has the key that owns
+  each slot, whose entries are cleared when the slot is reused.  A cache hit does nothing.
+- A sprite that misses is drawn from its bitmap and queued (`SPR_PEND`); `SprCacheService` compiles at most
+  `SPR_COMPILE_PER_RENDER` queued keys at the end of each `drawSprites`.
+- CHR-RAM: `:blitResolvedSprite` tests the sprite dirty flag inline, and `CheckSprTileDirty` reconverts a dirty tile and calls
+  `SprInvalidate` for both of its vertical orientations, which clears their entries and frees their slots (reused when the
+  cursor gets to them).  `PPUDATA_WRITE` is unchanged.
+- `COMPILED_SPRITE_LIST` only warms the cache at startup (`SprCompileTile`).

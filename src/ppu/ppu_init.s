@@ -24,6 +24,8 @@ PPUStartUp
         lda   SpriteBank0+1             ; Patch some dispatch addresses with the sprite compilation bank
         sta   csd+2
 
+        jsr   SprCacheInit              ; Empty compiled sprite cache; all of the slots are free
+
 ; Clear / initialize any of the tracking queues
 
         jsr   PPUResetQueues
