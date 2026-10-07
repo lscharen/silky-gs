@@ -42,68 +42,68 @@ PAL_DUNGEON9 equ 28
 
 ; Layouts (NES color -> [slots] per group; *reserved, ~shown as):
 ;   title_screen
-;     BG0 $36 $0F $00 $10 -> [0,1,2,3]
+;     BG0 $36 $0F $00 $10 -> [0,6,1,2]
 ;     BG1 $36 $17 *$07 $0F -> [0,4,5,6]
-;     BG2 $36 $08 $1A $28 -> [0,7,11,12]
-;     BG3 $36 $30 $3B $22 -> [0,10,8,9]
-;     SP0 $36 $30 $3B $16 -> [0,10,8,13]
-;     SP1 $36 $17 $27 $0F -> [0,4,14,1]
-;     SP2 $36 $08 $1A $28 -> [0,7,11,12]
-;     SP3 $36 $30 $3B $22 -> [0,10,8,9]
+;     BG2 $36 $08 $1A $28 -> [0,7,10,11]
+;     BG3 $36 $30 $3B $22 -> [0,3,8,9]
+;     SP0 $36 $30 $3B $16 -> [0,3,8,12]
+;     SP1 $36 $17 $27 $0F -> [0,4,13,6]
+;     SP2 $36 $08 $1A $28 -> [0,7,10,11]
+;     SP3 $36 $30 $3B $22 -> [0,3,8,9]
 ;   intro
 ;     BG0 $0F $30 $30 $30 -> [0,5,5,5]
 ;     BG1 $0F $21 $30 $30 -> [0,4,5,6]
 ;     BG2 $0F $16 $30 $30 -> [0,1,5,5]
-;     BG3 $0F $29 $1A $09 -> [0,10,8,9]
-;     SP0 $0F $29 $37 $17 -> [0,10,2,3]
-;     SP1 $0F $02 $22 $30 -> [0,7,11,5]
+;     BG3 $0F $29 $1A $09 -> [0,3,8,9]
+;     SP0 $0F $29 $37 $17 -> [0,3,2,7]
+;     SP1 $0F $02 $22 $30 -> [0,10,11,5]
 ;     SP2 $0F $16 $27 $30 -> [0,1,12,5]
 ;     SP3 $0F $0B $1B $2B -> [0,13,14,15]
 ;   select_screen
 ;     BG0 $0F $30 $00 $12 -> [0,1,2,3]
 ;     BG1 $0F $16 $27 $36 -> [0,4,5,6]
 ;     BG2 $0F $0C $1C $2C -> [0,7,8,9]
-;     BG3 $0F $12 $1C $2C -> [0,10,8,9]
-;     SP0 $0F *$29 $27 $07 -> [0,11,5,12]
-;     SP1 $0F *$29 $27 $07 -> [0,13,5,12]
-;     SP2 $0F *$29 $27 $07 -> [0,14,5,12]
-;     SP3 $0F *$15 $27 $30 -> [0,15,5,1]
+;     BG3 $0F $12 $1C $2C -> [0,3,8,9]
+;     SP0 $0F *$29 $27 $07 -> [0,10,5,11]
+;     SP1 $0F *$29 $27 $07 -> [0,12,5,11]
+;     SP2 $0F *$29 $27 $07 -> [0,13,5,11]
+;     SP3 $0F *$15 $27 $30 -> [0,14,5,1]
 ;   overworld
-;     BG0 $0F $30 $00 $12 -> [0,1,2,9]
+;     BG0 $0F $30 $00 $12 -> [0,1,2,3]
 ;     BG1 $0F $16 $27 $36 -> [0,4,5,6]
-;     BG2 $0F $1A $37 $12 -> [0,7,8,9]
-;     BG3 $0F $17 $37 $12 -> [0,10,8,9]
-;     SP0 $0F *$29 $27 $17 -> [0,3,5,10]
+;     BG2 $0F $1A $37 $12 -> [0,7,8,3]
+;     BG3 $0F $17 $37 $12 -> [0,13,8,3]
+;     SP0 $0F *$29 $27 $17 -> [0,10,5,13]
 ;     SP1 $0F $02 $22 $30 -> [0,11,12,1]
 ;     SP2 $0F $16 $27 $30 -> [0,4,5,1]
-;     SP3 $0F *$0F *$1C *$16 -> [0,13,14,15]
+;     SP3 $0F *$0F *$1C *$16 -> [0,9,14,15]
 ;   cave
 ;     BG0 $0F $30 $00 $12 -> [0,1,2,3]
 ;     BG1 $0F $16 $27 $36 -> [0,4,5,6]
 ;     BG2 $0F $30 $00 $12 -> [0,1,2,3]
-;     BG3 $0F $07 $0F $17 -> [0,10,8,9]
-;     SP0 $0F *$29 $27 $17 -> [0,7,5,9]
+;     BG3 $0F $07 $0F $17 -> [0,7,0,13]
+;     SP0 $0F *$29 $27 $17 -> [0,10,5,13]
 ;     SP1 $0F $02 $22 $30 -> [0,11,12,1]
 ;     SP2 $0F $16 $27 $30 -> [0,4,5,1]
-;     SP3 $0F *$0F *$1C *$16 -> [0,13,14,15]
+;     SP3 $0F *$0F *$1C *$16 -> [0,8,9,14]
 ;   dungeon1
-;     BG0 $0F $30 $00 $12 -> [0,1,2,10]
+;     BG0 $0F $30 $00 $12 -> [0,1,2,3]
 ;     BG1 $0F $16 $27 $36 -> [0,4,5,6]
 ;     BG2 $0F $0C $1C $2C -> [0,7,8,9]
-;     BG3 $0F $12 $1C $2C -> [0,10,8,9]
-;     SP0 $0F *$29 $27 $17~$16 -> [0,3,5,4]
+;     BG3 $0F $12 $1C $2C -> [0,3,8,9]
+;     SP0 $0F *$29 $27 $17~$16 -> [0,10,5,4]
 ;     SP1 $0F $02 $22 $30 -> [0,11,12,1]
 ;     SP2 $0F $16 $27 $30 -> [0,4,5,1]
 ;     SP3 $0F *$0C *$1C *$2C -> [0,13,14,15]
 ;   dungeon2
 ;     BG0 $0F $30 $00 $12 -> [0,1,2,3]
 ;     BG1 $0F $16 $27 $36 -> [0,4,5,6]
-;     BG2 $0F $02 $12 $22 -> [0,7,8,9]
-;     BG3 $0F $16 $12 $22 -> [0,10,8,9]
-;     SP0 $0F *$29 $27 $17 -> [0,11,5,12]
-;     SP1 $0F $02 $22 $30 -> [0,7,9,1]
+;     BG2 $0F $02 $12 $22 -> [0,11,3,12]
+;     BG3 $0F $16 $12 $22 -> [0,4,3,12]
+;     SP0 $0F *$29 $27 $17 -> [0,10,5,13]
+;     SP1 $0F $02 $22 $30 -> [0,11,12,1]
 ;     SP2 $0F $16 $27 $30 -> [0,4,5,1]
-;     SP3 $0F *$02 *$12 *$22 -> [0,13,14,15]
+;     SP3 $0F *$02 *$12 *$22 -> [0,7,8,9]
 ;   dungeon3
 ;     BG0 $0F $30 $00 $12 -> [0,1,2,3]
 ;     BG1 $0F $16 $27 $36 -> [0,4,5,6]
@@ -114,11 +114,11 @@ PAL_DUNGEON9 equ 28
 ;     SP2 $0F $16 $27 $30 -> [0,4,5,1]
 ;     SP3 $0F *$0B *$1B *$2B -> [0,13,14,15]
 ;   dungeon4
-;     BG0 $0F $30 $00 $12 -> [0,1,2,10]
+;     BG0 $0F $30 $00 $12 -> [0,1,2,3]
 ;     BG1 $0F $16 $27 $36 -> [0,4,5,6]
 ;     BG2 $0F $08 $18 $28 -> [0,7,8,9]
-;     BG3 $0F $12 $18 $28 -> [0,10,8,9]
-;     SP0 $0F *$29 $27 $17~$16 -> [0,3,5,4]
+;     BG3 $0F $12 $18 $28 -> [0,3,8,9]
+;     SP0 $0F *$29 $27 $17~$16 -> [0,10,5,4]
 ;     SP1 $0F $02 $22 $30 -> [0,11,12,1]
 ;     SP2 $0F $16 $27 $30 -> [0,4,5,1]
 ;     SP3 $0F *$0F *$18 *$28 -> [0,13,14,15]
@@ -141,32 +141,32 @@ PAL_DUNGEON9 equ 28
 ;     SP2 $0F $16 $27 $30 -> [0,4,5,1]
 ;     SP3 $0F *$08 *$18 *$28 -> [0,13,14,15]
 ;   dungeon7
-;     BG0 $0F $30 $00 $12 -> [0,1,2,10]
+;     BG0 $0F $30 $00 $12 -> [0,1,2,3]
 ;     BG1 $0F $16 $27 $36 -> [0,4,5,6]
 ;     BG2 $0F $0A $1A $2A -> [0,7,8,9]
-;     BG3 $0F $12 $1A $2A -> [0,10,8,9]
-;     SP0 $0F *$29 $27 $17~$16 -> [0,3,5,4]
+;     BG3 $0F $12 $1A $2A -> [0,3,8,9]
+;     SP0 $0F *$29 $27 $17~$16 -> [0,10,5,4]
 ;     SP1 $0F $02 $22 $30 -> [0,11,12,1]
 ;     SP2 $0F $16 $27 $30 -> [0,4,5,1]
 ;     SP3 $0F *$0A *$1A *$2A -> [0,13,14,15]
 ;   dungeon8
-;     BG0 $0F $30 $00 $12 -> [0,9,7,1]
+;     BG0 $0F $30 $00 $12 -> [0,1,2,3]
 ;     BG1 $0F $16 $27 $36 -> [0,4,5,6]
-;     BG2 $0F $00 $10 $30 -> [0,7,8,9]
-;     BG3 $0F $22 $10 $30 -> [0,10,8,9]
-;     SP0 $0F *$29 $27 $17 -> [0,2,5,3]
-;     SP1 $0F $02 $22 $30 -> [0,11,10,9]
-;     SP2 $0F $16 $27 $30 -> [0,4,5,9]
-;     SP3 $0F *$00 *$10 *$30 -> [0,12,13,14]
+;     BG2 $0F $00 $10 $30 -> [0,2,7,1]
+;     BG3 $0F $22 $10 $30 -> [0,12,7,1]
+;     SP0 $0F *$29 $27 $17 -> [0,10,5,13]
+;     SP1 $0F $02 $22 $30 -> [0,11,12,1]
+;     SP2 $0F $16 $27 $30 -> [0,4,5,1]
+;     SP3 $0F *$00 *$10 *$30 -> [0,8,9,14]
 ;   dungeon9
-;     BG0 $0F $30 $00 $12 -> [0,9,7,1]
+;     BG0 $0F $30 $00 $12 -> [0,1,2,3]
 ;     BG1 $0F $16 $27 $36 -> [0,4,5,6]
-;     BG2 $0F $00 $10 $30 -> [0,7,8,9]
-;     BG3 $0F $16 $10 $30 -> [0,10,8,9]
-;     SP0 $0F *$29 $27 $17 -> [0,2,5,3]
-;     SP1 $0F $02 $22 $30 -> [0,11,12,9]
-;     SP2 $0F $16 $27 $30 -> [0,4,5,9]
-;     SP3 $0F *$0F *$10 *$30 -> [0,13,14,15]
+;     BG2 $0F $00 $10 $30 -> [0,2,7,1]
+;     BG3 $0F $16 $10 $30 -> [0,4,7,1]
+;     SP0 $0F *$29 $27 $17 -> [0,10,5,13]
+;     SP1 $0F $02 $22 $30 -> [0,11,12,1]
+;     SP2 $0F $16 $27 $30 -> [0,4,5,1]
+;     SP3 $0F *$0F *$10 *$30 -> [0,8,9,14]
 
             mx    %00
 
@@ -463,32 +463,32 @@ PAL_CELLS
             dw    PAL_DUNGEON8_CELLS
             dw    PAL_DUNGEON9_CELLS
 PAL_TITLE_SCREEN_CELLS
-            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$16,$18,$FF,$14,$10,$12   ; BG0-BG3
-            db    $FF,$14,$10,$1A,$FF,$08,$1C,$02,$FF,$0E,$16,$18,$FF,$14,$10,$12   ; SP0-SP3
+            db    $FF,$0C,$02,$04,$FF,$08,$0A,$0C,$FF,$0E,$14,$16,$FF,$06,$10,$12   ; BG0-BG3
+            db    $FF,$06,$10,$18,$FF,$08,$1A,$0C,$FF,$0E,$14,$16,$FF,$06,$10,$12   ; SP0-SP3
 PAL_INTRO_CELLS
-            db    $FF,$0A,$0A,$0A,$FF,$08,$0A,$0C,$FF,$02,$0A,$0A,$FF,$14,$10,$12   ; BG0-BG3
-            db    $FF,$14,$04,$06,$FF,$0E,$16,$0A,$FF,$02,$18,$0A,$FF,$1A,$1C,$1E   ; SP0-SP3
+            db    $FF,$0A,$0A,$0A,$FF,$08,$0A,$0C,$FF,$02,$0A,$0A,$FF,$06,$10,$12   ; BG0-BG3
+            db    $FF,$06,$04,$0E,$FF,$14,$16,$0A,$FF,$02,$18,$0A,$FF,$1A,$1C,$1E   ; SP0-SP3
 PAL_SELECT_SCREEN_CELLS
-            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
-            db    $FF,$16,$0A,$18,$FF,$1A,$0A,$18,$FF,$1C,$0A,$18,$FF,$1E,$0A,$02   ; SP0-SP3
+            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$06,$10,$12   ; BG0-BG3
+            db    $FF,$14,$0A,$16,$FF,$18,$0A,$16,$FF,$1A,$0A,$16,$FF,$1C,$0A,$02   ; SP0-SP3
 PAL_OVERWORLD_CELLS
-            db    $FF,$02,$04,$12,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
-            db    $FF,$06,$0A,$14,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
+            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$06,$FF,$1A,$10,$06   ; BG0-BG3
+            db    $FF,$14,$0A,$1A,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$12,$1C,$1E   ; SP0-SP3
 PAL_CAVE_CELLS
-            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$02,$04,$06,$FF,$14,$10,$12   ; BG0-BG3
-            db    $FF,$0E,$0A,$12,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
+            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$02,$04,$06,$FF,$0E,$FF,$1A   ; BG0-BG3
+            db    $FF,$14,$0A,$1A,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$10,$12,$1C   ; SP0-SP3
 PAL_DUNGEON1_CELLS
-            db    $FF,$02,$04,$14,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
-            db    $FF,$06,$0A,$FF,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
+            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$06,$10,$12   ; BG0-BG3
+            db    $FF,$14,$0A,$FF,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
 PAL_DUNGEON2_CELLS
-            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
-            db    $FF,$16,$0A,$18,$FF,$0E,$12,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
+            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$16,$06,$18,$FF,$08,$06,$18   ; BG0-BG3
+            db    $FF,$14,$0A,$1A,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$0E,$10,$12   ; SP0-SP3
 PAL_DUNGEON3_CELLS
             db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$08,$10,$12   ; BG0-BG3
             db    $FF,$14,$FF,$FF,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
 PAL_DUNGEON4_CELLS
-            db    $FF,$02,$04,$14,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
-            db    $FF,$06,$0A,$FF,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
+            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$06,$10,$12   ; BG0-BG3
+            db    $FF,$14,$0A,$FF,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
 PAL_DUNGEON5_CELLS
             db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$08,$10,$12   ; BG0-BG3
             db    $FF,$14,$0A,$FF,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
@@ -496,14 +496,14 @@ PAL_DUNGEON6_CELLS
             db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$08,$10,$12   ; BG0-BG3
             db    $FF,$14,$0A,$FF,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
 PAL_DUNGEON7_CELLS
-            db    $FF,$02,$04,$14,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
-            db    $FF,$06,$0A,$FF,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
+            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$06,$10,$12   ; BG0-BG3
+            db    $FF,$14,$0A,$FF,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$1A,$1C,$1E   ; SP0-SP3
 PAL_DUNGEON8_CELLS
-            db    $FF,$12,$0E,$02,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
-            db    $FF,$04,$0A,$06,$FF,$16,$14,$12,$FF,$08,$0A,$12,$FF,$18,$1A,$1C   ; SP0-SP3
+            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$04,$0E,$02,$FF,$18,$0E,$02   ; BG0-BG3
+            db    $FF,$14,$0A,$1A,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$10,$12,$1C   ; SP0-SP3
 PAL_DUNGEON9_CELLS
-            db    $FF,$12,$0E,$02,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$10,$12   ; BG0-BG3
-            db    $FF,$04,$0A,$06,$FF,$16,$18,$12,$FF,$08,$0A,$12,$FF,$1A,$1C,$1E   ; SP0-SP3
+            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$04,$0E,$02,$FF,$08,$0E,$02   ; BG0-BG3
+            db    $FF,$14,$0A,$1A,$FF,$16,$18,$02,$FF,$08,$0A,$02,$FF,$10,$12,$1C   ; SP0-SP3
 
 ; from id -> its row of to id -> background groups to redraw (bit 0 = BG0 .. bit 3 = BG3).
 ; From no palette (0), everything is redrawn.
@@ -529,223 +529,223 @@ BG_UPDATE_MASKS_TITLE_SCREEN
             dw    $0000
             dw    %0000   ; to title_screen
             dw    %0101   ; to intro
-            dw    %0100   ; to select_screen
-            dw    %0101   ; to overworld
-            dw    %0100   ; to cave
-            dw    %0101   ; to dungeon1
-            dw    %0100   ; to dungeon2
-            dw    %1100   ; to dungeon3
-            dw    %0101   ; to dungeon4
-            dw    %1100   ; to dungeon5
-            dw    %1100   ; to dungeon6
-            dw    %0101   ; to dungeon7
-            dw    %0101   ; to dungeon8
-            dw    %0101   ; to dungeon9
-BG_UPDATE_MASKS_INTRO
-            dw    $0000
-            dw    %0101   ; to title_screen
-            dw    %0000   ; to intro
             dw    %0101   ; to select_screen
-            dw    %0101   ; to overworld
-            dw    %0101   ; to cave
+            dw    %1101   ; to overworld
+            dw    %1101   ; to cave
             dw    %0101   ; to dungeon1
-            dw    %0101   ; to dungeon2
+            dw    %1101   ; to dungeon2
             dw    %1101   ; to dungeon3
             dw    %0101   ; to dungeon4
             dw    %1101   ; to dungeon5
             dw    %1101   ; to dungeon6
             dw    %0101   ; to dungeon7
-            dw    %0101   ; to dungeon8
-            dw    %0101   ; to dungeon9
-BG_UPDATE_MASKS_SELECT_SCREEN
+            dw    %1101   ; to dungeon8
+            dw    %1101   ; to dungeon9
+BG_UPDATE_MASKS_INTRO
             dw    $0000
-            dw    %0100   ; to title_screen
-            dw    %0101   ; to intro
-            dw    %0000   ; to select_screen
-            dw    %0001   ; to overworld
-            dw    %0100   ; to cave
-            dw    %0001   ; to dungeon1
-            dw    %0000   ; to dungeon2
-            dw    %1000   ; to dungeon3
-            dw    %0001   ; to dungeon4
-            dw    %1000   ; to dungeon5
-            dw    %1000   ; to dungeon6
-            dw    %0001   ; to dungeon7
-            dw    %0001   ; to dungeon8
-            dw    %0001   ; to dungeon9
-BG_UPDATE_MASKS_OVERWORLD
+            dw    %0101   ; to title_screen
+            dw    %0000   ; to intro
+            dw    %0101   ; to select_screen
+            dw    %1101   ; to overworld
+            dw    %1101   ; to cave
+            dw    %0101   ; to dungeon1
+            dw    %1101   ; to dungeon2
+            dw    %1101   ; to dungeon3
+            dw    %0101   ; to dungeon4
+            dw    %1101   ; to dungeon5
+            dw    %1101   ; to dungeon6
+            dw    %0101   ; to dungeon7
+            dw    %1101   ; to dungeon8
+            dw    %1101   ; to dungeon9
+BG_UPDATE_MASKS_SELECT_SCREEN
             dw    $0000
             dw    %0101   ; to title_screen
             dw    %0101   ; to intro
-            dw    %0001   ; to select_screen
-            dw    %0000   ; to overworld
-            dw    %0101   ; to cave
-            dw    %0001   ; to dungeon1
-            dw    %0001   ; to dungeon2
-            dw    %1001   ; to dungeon3
-            dw    %0001   ; to dungeon4
-            dw    %1001   ; to dungeon5
-            dw    %1001   ; to dungeon6
-            dw    %0001   ; to dungeon7
-            dw    %0001   ; to dungeon8
-            dw    %0001   ; to dungeon9
-BG_UPDATE_MASKS_CAVE
+            dw    %0000   ; to select_screen
+            dw    %1100   ; to overworld
+            dw    %1100   ; to cave
+            dw    %0000   ; to dungeon1
+            dw    %1100   ; to dungeon2
+            dw    %1000   ; to dungeon3
+            dw    %0000   ; to dungeon4
+            dw    %1000   ; to dungeon5
+            dw    %1000   ; to dungeon6
+            dw    %0000   ; to dungeon7
+            dw    %1100   ; to dungeon8
+            dw    %1100   ; to dungeon9
+BG_UPDATE_MASKS_OVERWORLD
             dw    $0000
-            dw    %0100   ; to title_screen
-            dw    %0101   ; to intro
-            dw    %0100   ; to select_screen
-            dw    %0101   ; to overworld
-            dw    %0000   ; to cave
-            dw    %0101   ; to dungeon1
-            dw    %0100   ; to dungeon2
+            dw    %1101   ; to title_screen
+            dw    %1101   ; to intro
+            dw    %1100   ; to select_screen
+            dw    %0000   ; to overworld
+            dw    %1100   ; to cave
+            dw    %1100   ; to dungeon1
+            dw    %1100   ; to dungeon2
             dw    %1100   ; to dungeon3
-            dw    %0101   ; to dungeon4
+            dw    %1100   ; to dungeon4
             dw    %1100   ; to dungeon5
             dw    %1100   ; to dungeon6
-            dw    %0101   ; to dungeon7
-            dw    %0101   ; to dungeon8
-            dw    %0101   ; to dungeon9
+            dw    %1100   ; to dungeon7
+            dw    %1100   ; to dungeon8
+            dw    %1100   ; to dungeon9
+BG_UPDATE_MASKS_CAVE
+            dw    $0000
+            dw    %1101   ; to title_screen
+            dw    %1101   ; to intro
+            dw    %1100   ; to select_screen
+            dw    %1100   ; to overworld
+            dw    %0000   ; to cave
+            dw    %1100   ; to dungeon1
+            dw    %1100   ; to dungeon2
+            dw    %1100   ; to dungeon3
+            dw    %1100   ; to dungeon4
+            dw    %1100   ; to dungeon5
+            dw    %1100   ; to dungeon6
+            dw    %1100   ; to dungeon7
+            dw    %1100   ; to dungeon8
+            dw    %1100   ; to dungeon9
 BG_UPDATE_MASKS_DUNGEON1
             dw    $0000
             dw    %0101   ; to title_screen
             dw    %0101   ; to intro
-            dw    %0001   ; to select_screen
-            dw    %0001   ; to overworld
-            dw    %0101   ; to cave
-            dw    %0000   ; to dungeon1
-            dw    %0001   ; to dungeon2
-            dw    %1001   ; to dungeon3
-            dw    %0000   ; to dungeon4
-            dw    %1001   ; to dungeon5
-            dw    %1001   ; to dungeon6
-            dw    %0000   ; to dungeon7
-            dw    %0001   ; to dungeon8
-            dw    %0001   ; to dungeon9
-BG_UPDATE_MASKS_DUNGEON2
-            dw    $0000
-            dw    %0100   ; to title_screen
-            dw    %0101   ; to intro
             dw    %0000   ; to select_screen
-            dw    %0001   ; to overworld
-            dw    %0100   ; to cave
-            dw    %0001   ; to dungeon1
-            dw    %0000   ; to dungeon2
+            dw    %1100   ; to overworld
+            dw    %1100   ; to cave
+            dw    %0000   ; to dungeon1
+            dw    %1100   ; to dungeon2
             dw    %1000   ; to dungeon3
-            dw    %0001   ; to dungeon4
+            dw    %0000   ; to dungeon4
             dw    %1000   ; to dungeon5
             dw    %1000   ; to dungeon6
-            dw    %0001   ; to dungeon7
-            dw    %0001   ; to dungeon8
-            dw    %0001   ; to dungeon9
+            dw    %0000   ; to dungeon7
+            dw    %1100   ; to dungeon8
+            dw    %1100   ; to dungeon9
+BG_UPDATE_MASKS_DUNGEON2
+            dw    $0000
+            dw    %1101   ; to title_screen
+            dw    %1101   ; to intro
+            dw    %1100   ; to select_screen
+            dw    %1100   ; to overworld
+            dw    %1100   ; to cave
+            dw    %1100   ; to dungeon1
+            dw    %0000   ; to dungeon2
+            dw    %1100   ; to dungeon3
+            dw    %1100   ; to dungeon4
+            dw    %1100   ; to dungeon5
+            dw    %1100   ; to dungeon6
+            dw    %1100   ; to dungeon7
+            dw    %1100   ; to dungeon8
+            dw    %1100   ; to dungeon9
 BG_UPDATE_MASKS_DUNGEON3
             dw    $0000
-            dw    %1100   ; to title_screen
+            dw    %1101   ; to title_screen
             dw    %1101   ; to intro
             dw    %1000   ; to select_screen
-            dw    %1001   ; to overworld
+            dw    %1100   ; to overworld
             dw    %1100   ; to cave
-            dw    %1001   ; to dungeon1
-            dw    %1000   ; to dungeon2
+            dw    %1000   ; to dungeon1
+            dw    %1100   ; to dungeon2
             dw    %0000   ; to dungeon3
-            dw    %1001   ; to dungeon4
+            dw    %1000   ; to dungeon4
             dw    %0000   ; to dungeon5
             dw    %0000   ; to dungeon6
-            dw    %1001   ; to dungeon7
-            dw    %1001   ; to dungeon8
-            dw    %1001   ; to dungeon9
+            dw    %1000   ; to dungeon7
+            dw    %1100   ; to dungeon8
+            dw    %1100   ; to dungeon9
 BG_UPDATE_MASKS_DUNGEON4
             dw    $0000
             dw    %0101   ; to title_screen
             dw    %0101   ; to intro
-            dw    %0001   ; to select_screen
-            dw    %0001   ; to overworld
-            dw    %0101   ; to cave
+            dw    %0000   ; to select_screen
+            dw    %1100   ; to overworld
+            dw    %1100   ; to cave
             dw    %0000   ; to dungeon1
-            dw    %0001   ; to dungeon2
-            dw    %1001   ; to dungeon3
+            dw    %1100   ; to dungeon2
+            dw    %1000   ; to dungeon3
             dw    %0000   ; to dungeon4
-            dw    %1001   ; to dungeon5
-            dw    %1001   ; to dungeon6
+            dw    %1000   ; to dungeon5
+            dw    %1000   ; to dungeon6
             dw    %0000   ; to dungeon7
-            dw    %0001   ; to dungeon8
-            dw    %0001   ; to dungeon9
+            dw    %1100   ; to dungeon8
+            dw    %1100   ; to dungeon9
 BG_UPDATE_MASKS_DUNGEON5
             dw    $0000
-            dw    %1100   ; to title_screen
+            dw    %1101   ; to title_screen
             dw    %1101   ; to intro
             dw    %1000   ; to select_screen
-            dw    %1001   ; to overworld
+            dw    %1100   ; to overworld
             dw    %1100   ; to cave
-            dw    %1001   ; to dungeon1
-            dw    %1000   ; to dungeon2
+            dw    %1000   ; to dungeon1
+            dw    %1100   ; to dungeon2
             dw    %0000   ; to dungeon3
-            dw    %1001   ; to dungeon4
+            dw    %1000   ; to dungeon4
             dw    %0000   ; to dungeon5
             dw    %0000   ; to dungeon6
-            dw    %1001   ; to dungeon7
-            dw    %1001   ; to dungeon8
-            dw    %1001   ; to dungeon9
+            dw    %1000   ; to dungeon7
+            dw    %1100   ; to dungeon8
+            dw    %1100   ; to dungeon9
 BG_UPDATE_MASKS_DUNGEON6
             dw    $0000
-            dw    %1100   ; to title_screen
+            dw    %1101   ; to title_screen
             dw    %1101   ; to intro
             dw    %1000   ; to select_screen
-            dw    %1001   ; to overworld
+            dw    %1100   ; to overworld
             dw    %1100   ; to cave
-            dw    %1001   ; to dungeon1
-            dw    %1000   ; to dungeon2
+            dw    %1000   ; to dungeon1
+            dw    %1100   ; to dungeon2
             dw    %0000   ; to dungeon3
-            dw    %1001   ; to dungeon4
+            dw    %1000   ; to dungeon4
             dw    %0000   ; to dungeon5
             dw    %0000   ; to dungeon6
-            dw    %1001   ; to dungeon7
-            dw    %1001   ; to dungeon8
-            dw    %1001   ; to dungeon9
+            dw    %1000   ; to dungeon7
+            dw    %1100   ; to dungeon8
+            dw    %1100   ; to dungeon9
 BG_UPDATE_MASKS_DUNGEON7
             dw    $0000
             dw    %0101   ; to title_screen
             dw    %0101   ; to intro
-            dw    %0001   ; to select_screen
-            dw    %0001   ; to overworld
-            dw    %0101   ; to cave
+            dw    %0000   ; to select_screen
+            dw    %1100   ; to overworld
+            dw    %1100   ; to cave
             dw    %0000   ; to dungeon1
-            dw    %0001   ; to dungeon2
-            dw    %1001   ; to dungeon3
+            dw    %1100   ; to dungeon2
+            dw    %1000   ; to dungeon3
             dw    %0000   ; to dungeon4
-            dw    %1001   ; to dungeon5
-            dw    %1001   ; to dungeon6
+            dw    %1000   ; to dungeon5
+            dw    %1000   ; to dungeon6
             dw    %0000   ; to dungeon7
-            dw    %0001   ; to dungeon8
-            dw    %0001   ; to dungeon9
+            dw    %1100   ; to dungeon8
+            dw    %1100   ; to dungeon9
 BG_UPDATE_MASKS_DUNGEON8
             dw    $0000
-            dw    %0101   ; to title_screen
-            dw    %0101   ; to intro
-            dw    %0001   ; to select_screen
-            dw    %0001   ; to overworld
-            dw    %0101   ; to cave
-            dw    %0001   ; to dungeon1
-            dw    %0001   ; to dungeon2
-            dw    %1001   ; to dungeon3
-            dw    %0001   ; to dungeon4
-            dw    %1001   ; to dungeon5
-            dw    %1001   ; to dungeon6
-            dw    %0001   ; to dungeon7
+            dw    %1101   ; to title_screen
+            dw    %1101   ; to intro
+            dw    %1100   ; to select_screen
+            dw    %1100   ; to overworld
+            dw    %1100   ; to cave
+            dw    %1100   ; to dungeon1
+            dw    %1100   ; to dungeon2
+            dw    %1100   ; to dungeon3
+            dw    %1100   ; to dungeon4
+            dw    %1100   ; to dungeon5
+            dw    %1100   ; to dungeon6
+            dw    %1100   ; to dungeon7
             dw    %0000   ; to dungeon8
-            dw    %0000   ; to dungeon9
+            dw    %1000   ; to dungeon9
 BG_UPDATE_MASKS_DUNGEON9
             dw    $0000
-            dw    %0101   ; to title_screen
-            dw    %0101   ; to intro
-            dw    %0001   ; to select_screen
-            dw    %0001   ; to overworld
-            dw    %0101   ; to cave
-            dw    %0001   ; to dungeon1
-            dw    %0001   ; to dungeon2
-            dw    %1001   ; to dungeon3
-            dw    %0001   ; to dungeon4
-            dw    %1001   ; to dungeon5
-            dw    %1001   ; to dungeon6
-            dw    %0001   ; to dungeon7
-            dw    %0000   ; to dungeon8
+            dw    %1101   ; to title_screen
+            dw    %1101   ; to intro
+            dw    %1100   ; to select_screen
+            dw    %1100   ; to overworld
+            dw    %1100   ; to cave
+            dw    %1100   ; to dungeon1
+            dw    %1100   ; to dungeon2
+            dw    %1100   ; to dungeon3
+            dw    %1100   ; to dungeon4
+            dw    %1100   ; to dungeon5
+            dw    %1100   ; to dungeon6
+            dw    %1100   ; to dungeon7
+            dw    %1000   ; to dungeon8
             dw    %0000   ; to dungeon9

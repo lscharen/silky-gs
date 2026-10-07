@@ -7,7 +7,10 @@
  * Input: a directory of NES palette files (one per palette the game shows, see
  * palette-transition.js for the format, including the *reserved and ~approximated colors) and an
  * INI-style transitions file, where each [section] names a palette and lists the palettes that can
- * follow it (see src/games/zelda/palettes/transitions.txt).
+ * follow it (see src/games/zelda/palettes/transitions.txt).  A [fixed BG0 ... SP0:1 ...] section instead
+ * lists palettes that must keep those background groups (BGn), or single cells (group:index, e.g. a
+ * sprite color), in the same slots, so they look the same on the screen through a palette change
+ * without being drawn again (e.g. the tiles and sprites of a status bar that isn't redrawn then).
  *
  * Output (Merlin32 source):
  *   palettes.s         The swizzle tables of every palette, 8 x 512 bytes (BG0-BG3, SP0-SP3) each,
@@ -71,6 +74,8 @@ function parseTransitions(filePath) {
   for (const rawLine of fs.readFileSync(filePath, 'utf8').split(/\r?\n/)) {
     const line = rawLine.trim();
     if (line === '' || line.startsWith(';') || line.startsWith('#')) continue;
+    const fixed = line.match(/^\[fixed((?:\s+(?:BG[0-3]|(?:BG|SP)[0-3]:[1-3]))+)\]$/);
+    if (fixed) { current = { fixed: fixed[1].trim().split(/\s+/), tos: [] }; sections.push(current); continue; }
     const header = line.match(/^\[([A-Za-z0-9_]+)\]$/);
     if (header) { current = { from: header[1], tos: [] }; sections.push(current); continue; }
     const target = line.match(/^([A-Za-z0-9_]+)$/);
@@ -93,11 +98,12 @@ function loadGraph(transitionsFile, palettesDir, warnings) {
     if (fs.existsSync(path.join(palettesDir, n + '.txt'))) names.push(n);
     else if (isTarget && !warnings.some(w => w.includes(`"${n}"`))) warnings.push(`skipping "${n}": no palette file`);
   };
-  for (const s of sections) { consider(s.from, false); s.tos.forEach(t => consider(t, true)); }
+  const transitions = sections.filter(s => !s.fixed);
+  for (const s of transitions) { consider(s.from, false); s.tos.forEach(t => consider(t, true)); }
 
   const edges = [];
   const succ = names.map(() => []);
-  for (const s of sections) for (const t of s.tos) {
+  for (const s of transitions) for (const t of s.tos) {
     const a = names.indexOf(s.from), b = names.indexOf(t);
     if (a < 0 || b < 0) continue;
     if (!succ[a].includes(b)) succ[a].push(b);
@@ -105,7 +111,25 @@ function loadGraph(transitionsFile, palettesDir, warnings) {
     if (!edges.some(e => e.a === lo && e.b === hi)) edges.push({ a: lo, b: hi });
   }
   const pals = names.map(n => parsePaletteFile(path.join(palettesDir, n + '.txt')));
-  return { names, edges, succ, pals };
+
+  // fixed[p] = the background groups (bitmask) that palette p must keep canonical; pinsOf[p] = the cells
+  // ("SP0:1") that palette p keeps in their pinned slots; pins = all of the pinned cells
+  const fixed = names.map(() => 0);
+  const pinsOf = names.map(() => new Set());
+  const pins = [];
+  for (const s of sections.filter(x => x.fixed)) {
+    const groups = s.fixed.filter(x => !x.includes(':'));
+    const cells = s.fixed.filter(x => x.includes(':'));
+    cells.forEach(c => { if (!pins.includes(c)) pins.push(c); });
+    const mask = groups.reduce((m, G) => m | (1 << BG_GROUPS.indexOf(G)), 0);
+    for (const n of s.tos) {
+      const p = names.indexOf(n);
+      if (p < 0) fail(`${transitionsFile}: [fixed ${s.fixed.join(' ')}] lists "${n}", which is not a palette in the transitions`);
+      fixed[p] |= mask;
+      cells.forEach(c => pinsOf[p].add(c));
+    }
+  }
+  return { names, edges, succ, pals, fixed, pins, pinsOf };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -120,7 +144,7 @@ function maskOf(La, Lb) {
   return m;
 }
 
-function makeSolver({ pals }) {
+function makeSolver({ pals, pins = [], pinsOf = [] }) {
   const NP = pals.length;
   const univ = pals.map(p => p.BG0[0]);
   const res = (p, G, i) => pals[p].reserved.has(G + ':' + i);
@@ -161,7 +185,11 @@ function makeSolver({ pals }) {
       }
       if (!placed) { members.push([c]); slotOf[c] = members.length; }
     }
-    if (members.length > MAX_SLOTS - 1) return { ok: false, overflow: 100 * (members.length - MAX_SLOTS + 1) };
+    // The pinned cells get the global slots after the canonical ones
+    const pinSlot = c => members.length + 1 + pins.indexOf(c);
+    if (members.length + pins.length > MAX_SLOTS - 1) {
+      return { ok: false, overflow: 100 * (members.length + pins.length - MAX_SLOTS + 1) };
+    }
 
     // Complete each palette's layout around its canonical cells
     const layouts = [];
@@ -179,6 +207,14 @@ function makeSolver({ pals }) {
         clut[s] = col(p, g, i);
         cellSlot[BG_GROUPS[g] + ':' + i] = s;
         if (res(p, BG_GROUPS[g], i)) locked.add(s);
+      }
+      for (const c of (pinsOf[p] || [])) {
+        if (cellSlot[c] !== undefined) continue;          // (a canonical background cell)
+        const [G, i] = c.split(':');
+        const s = pinSlot(c);
+        clut[s] = shown(p, G, +i);
+        cellSlot[c] = s;
+        if (res(p, G, +i)) locked.add(s);
       }
       const alloc = (color, reserved) => {
         let s = reserved ? -1 : clut.findIndex((c, k) => c === color && !locked.has(k));
@@ -209,7 +245,7 @@ function makeSolver({ pals }) {
 // back (or swap one for another) while that lowers the redraws on the transitions.  Restarts with
 // different (deterministic) tie-breaks and keeps the best.
 function chooseLayouts(graph) {
-  const { names, edges } = graph;
+  const { names, edges, fixed } = graph;
   const NP = names.length;
   const solveK = makeSolver(graph);
   const memo = new Map();             // the restarts revisit the same choices a lot
@@ -230,13 +266,16 @@ function chooseLayouts(graph) {
     }
   });
 
+  const fixedNames = p => BG_GROUPS.filter((G, g) => (fixed[p] >> g) & 1).join(' ');
   const K0 = names.map((n, p) => {
-    let best = 0;
-    for (let k = 15; k > 0; k--) {
+    let best = -1;
+    for (let k = 15; k >= 0; k--) {
+      if ((k & fixed[p]) !== fixed[p]) continue;
       const K = new Array(NP).fill(0);
       K[p] = k;
-      if (solve(K).ok && popcount(k) > popcount(best)) best = k;
+      if (solve(K).ok && (best < 0 || popcount(k) > popcount(best))) best = k;
     }
+    if (best < 0) fail(`${n}: does not fit in ${MAX_SLOTS} colors with ${fixedNames(p)} in fixed slots`);
     return best;
   });
 
@@ -251,13 +290,14 @@ function chooseLayouts(graph) {
     while (!r.ok) {
       let pick = null;
       for (const [p, g] of shuffled()) {
-        if (!((K[p] >> g) & 1)) continue;
+        if (!((K[p] >> g) & 1) || ((fixed[p] >> g) & 1)) continue;
         K[p] ^= 1 << g;
         const t = solve(K);
         const score = t.overflow * 1000 + (t.ok ? costOf(t) : 0);
         if (!pick || score < pick.score) pick = { p, g, score };
         K[p] ^= 1 << g;
       }
+      if (!pick) fail('the palettes do not fit in ' + MAX_SLOTS + ' colors with their [fixed] groups in the same slots');
       K[pick.p] ^= 1 << pick.g;
       r = solve(K);
     }
@@ -271,7 +311,7 @@ function chooseLayouts(graph) {
         if (t.ok && costOf(t) < cost) { r = t; cost = costOf(t); improved = true; continue; }
         let swapped = false;
         for (const [q, h] of shuffled()) {
-          if (!((K[q] >> h) & 1) || (q === p && h === g)) continue;
+          if (!((K[q] >> h) & 1) || (q === p && h === g) || ((fixed[q] >> h) & 1)) continue;
           K[q] ^= 1 << h;
           const u = solve(K);
           if (u.ok && costOf(u) < cost) { r = u; cost = costOf(u); improved = swapped = true; break; }

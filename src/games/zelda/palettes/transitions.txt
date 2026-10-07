@@ -68,3 +68,30 @@ select_screen
 [dungeon9]
 overworld
 select_screen
+
+; The status bar (the hearts, rupees, item boxes, map) is drawn with BG0 and BG1, and their colors are the same
+; in all of the palettes the game shows it in.  Its sprites (the sword and item icons, the map marker) use SP0's
+; tunic color (*$29, reserved: changed with the rings) and SP1.  A palette change shows the new colors at once,
+; but pixels only move to their new slots when their line of the screen is drawn again, and the status bar isn't
+; drawn while the play area is split off (e.g. entering or leaving a cave): keep all of these in the same slots,
+; so the status bar looks the same through the change.
+[fixed BG0 BG1 SP0:1 SP1:1 SP1:2]
+overworld
+cave
+dungeon1
+dungeon2
+dungeon3
+dungeon4
+dungeon5
+dungeon6
+dungeon7
+dungeon8
+dungeon9
+
+; SP0:3 ($17, the brown of the sword) as well, in the palettes where it is $17 (the others show it as $16)
+[fixed SP0:3]
+overworld
+cave
+dungeon2
+dungeon8
+dungeon9

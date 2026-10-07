@@ -75,7 +75,7 @@ Each port has a consistent structure:
 
 The IIgs shows 16 colors at once (one palette of 16 slots); the NES shows up to 25. Palettes are described as data and compiled into the game by a tool — **don't hand-write palette code or copy the older ports' per-address `$3Fxx` handlers.**
 
-- **Source of truth:** `src/games/zelda/palettes/*.txt` (one file per palette the game shows: `BG0:`–`SP3:`, 4 NES colors each) and `palettes/transitions.txt` (INI-style graph: each `[palette]` lists the palettes that can follow it).
+- **Source of truth:** `src/games/zelda/palettes/*.txt` (one file per palette the game shows: `BG0:`–`SP3:`, 4 NES colors each) and `palettes/transitions.txt` (INI-style graph: each `[palette]` lists the palettes that can follow it). A `[fixed BG0 BG1 SP0:1 ...]` section lists the palettes that must keep those background groups, or single cells (`group:index`, e.g. a sprite color), in the same slots (Zelda: the status bar's tiles and sprites, since the status bar is not redrawn while the play area is split off, so a slot change would show it in the wrong colors). Sprite slots are otherwise free to move between palettes.
   - `*$xx` — **reserved**: the game changes this color on the fly (color cycling, Link's tunic/rings, per-room enemy palettes in SP3). It gets an IIgs slot of its own and matches any value during detection.
   - `$xx~$yy` — **approximated**: palette RAM holds `$xx` (used for detection) but it is drawn in `$yy`'s slot; used only when a palette can't fit 16 slots otherwise. It never writes the CLUT.
   - Parser: `scripts/palette-transition.js` (`parsePaletteFile`).
