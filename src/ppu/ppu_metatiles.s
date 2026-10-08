@@ -95,6 +95,11 @@ SyncPPUMetatile
 
         mx    %10
 RefreshMetatile                            ; Alternate entry point is not setting a new value, just drawing
+        pha                                ; The PEA field must not have patched exits under the tiles
+        ldal  stkAnyPatched
+        beq   :stable
+        jsr   _PEAFieldStable
+:stable pla
         DO    GRID_DIRTY_RENDERING
         jsr   gridRecordMetatile           ; Let the grid renderer expose these 4 tiles (preserves A, X, Y)
         FIN

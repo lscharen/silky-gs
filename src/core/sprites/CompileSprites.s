@@ -13,17 +13,18 @@
 ; vertical orientation and one palette: the code as is (or flipped vertically) and flipped
 ; horizontally.  Each of the two has its own entry in SPR_COMP_TBL, so there is no dispatch code.
 ;
-; Sprites are called with X = the SHR address (sprTmp1) and the data bank set to the shadow screen
-; ($01).  Each variant ends with a JML back to draw_rtn2.  Emitted code:
+; Sprites are called with Y = the SHR address (sprTmp1) and the data bank set to the shadow screen
+; ($01); X is not touched (drawSprites keeps the OAM index in it).  Each variant ends with a JML back to
+; draw_rtn2.  Emitted code:
 ;
-;  lda $0000,x            ; each word with transparent pixels
+;  lda $0000,y            ; each word with transparent pixels
 ;  and #mask
 ;  ora #pixels            ; (left out when the pixels are all 0)
-;  sta $0000,x
+;  sta $0000,y
 ;
 ;  lda #pixels            ; the opaque words, grouped by value: one load for each value
-;  sta $0000,x
-;  sta $0002,x
+;  sta $0000,y
+;  sta $0002,y
 ;  ...
 
 sprPalPtr equ tmp12              ; (3 bytes) swizzle table of the palette being compiled
@@ -99,7 +100,7 @@ EmitSpriteVariant
         txy
         lda  (:atbl),y
         sta  :v                  ; (the screen offset)
-        ldx  #$BD                ; lda abs,x
+        ldx  #$B9                ; lda abs,y
         jsr  :emit3
         ldx  :j
         lda  cs_msk,x
@@ -112,7 +113,7 @@ EmitSpriteVariant
         jsr  :emit3
 :no_ora
         lda  :v
-        ldx  #$9D                ; sta abs,x
+        ldx  #$99                ; sta abs,y
         jsr  :emit3
         ldx  :j
 :m_next
@@ -143,7 +144,7 @@ EmitSpriteVariant
         txy
         lda  (:atbl),y
         phx
-        ldx  #$9D                ; sta abs,x
+        ldx  #$99                ; sta abs,y
         jsr  :emit3
         plx
 :s_next
@@ -291,6 +292,7 @@ SprCacheInit
 ; X = key offset (horizontal flip bit clear).  All registers trashed.
         mx    %00
 SprCompileTile
+sprCompSite                              ; (drawSprites reads the table's long address from this operand)
         ldal  PPU_MEM+SPR_COMP_TBL,x
         beq   :compile
         rts                              ; already compiled (a key can be queued more than once)

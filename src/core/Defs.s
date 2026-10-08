@@ -108,9 +108,7 @@ ShowFPS                equ   126
 MaxX                   equ   128          ; Horizontal Mirroring = 256, Vertical Mirroring = 512
 MaxY                   equ   130          ; Horizontal Mirroring = 480, Vertical Mirroring = 240
 
-sprKeyTbl              equ   132         ; Sprite pattern table select for the compiled sprite key: $0000 or $0400
-unused133              equ   133
-unused134              equ   134
+sprCompTbl             equ   132         ; (3 bytes) drawSprites: long pointer to SPR_COMP_TBL, + $1000 for pattern table 1
 unused135              equ   135
 
 LastEnable             equ   136
@@ -153,7 +151,7 @@ CMPL_BANK              equ   176         ; ^tiledata << 8 | $01 (Bank $01 in low
 
 ; Temporary storage for 8x16 sprite drawing in drawSprites
 sprTmp5Hi              equ   178
-sprTmp6Lo              equ   180
+sprCompBase            equ   180         ; drawSprites: low word of the SPR_COMP_TBL address (8x16 sprites)
 
 ; PPUFlushQueuesAlt locals, continued from above (same rationale)
 NtmDiff                equ   182         ; attribute EOR the last applied value

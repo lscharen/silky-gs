@@ -38,8 +38,14 @@ _BltRangeLite
                 plp
                 FIN
 
-                lda   ControlBits
-                bit   #CTRL_EVEN_RENDER
+                lda   ControlBits             ; The common case (background on, every line) needs
+                and   #CTRL_EVEN_RENDER+CTRL_BKGND_ENABLE   ; one test and falls into the body
+                cmp   #CTRL_BKGND_ENABLE
+                bne   :not_simple
+                sty   tmp1                ; Save the last line for the exit point
+                jmp   _BltRangeLiteBody
+
+:not_simple     bit   #CTRL_EVEN_RENDER
                 beq   :normal
 
                 txa
@@ -328,24 +334,230 @@ _BltSetup
                lda   #0
                ldx   ScreenHeight
 
+STK_ENTRIES    equ   4                   ; Ranges remembered by _BltSetupAlt
+;
+; The code field keeps the setup of the last few ranges (STK_ENTRIES), so a range that is set up again
+; only patches what changed:
+;
+;   - stack addresses: depend on the virtual line, the screen line and the number of lines
+;   - entry / alignment / edge patches: also on the horizontal offset and the mirroring mode
+;   - exit (save slot + BRA): left in place after the render; restored only when something needs the
+;     PEA field to be stable (_PEAFieldStable: a tile is drawn into it, or a dirty renderer reads it),
+;     when the range's horizontal offset changes, or when its rows are given to another range
+;
+; Every row with a patched exit belongs to exactly one entry (entries never overlap), so restoring an
+; entry's exits always puts its rows back to the plain PEA field.  SetScreenRect clears the entries.
 _BltSetupAlt
 :num_lines     equ tmp3
 :exit_addr     equ tmp4
 :virt_start    equ tmp10
+:first_line    equ tmp12                 ; (set by _BltSetupCommon)
+
+               pha
+               lda   BltMirrorP
+               xba
+               sta   stkCurXM
+               tya
+               ora   stkCurXM
+               sta   stkCurXM            ; horizontal offset | mirroring << 8
+               pla
 
                jsr   _BltSetupCommon
                sta   :virt_start
 
+               ldx   #{STK_ENTRIES-1}*2
+:find          cmp   stkKeyVirt,x         ; A = virtual line
+               bne   :next
+               lda   :first_line
+               cmp   stkKeyFirst,x
+               bne   :next0
+               lda   :num_lines
+               cmp   stkKeyCount,x
+               bne   :next0
+               brl   :hit
+:next0         lda   :virt_start
+:next          dex
+               dex
+               bpl   :find
+
+; New range.  The code rows are the virtual lines mod 240; rows [new, new+n) and [row, row+count)
+; overlap iff (row - new) mod 240 < n or (new - row) mod 240 < count.  Overlapped entries are
+; restored and dropped.
+
+               cmp   #240
+               bcc   *+5
+               sbc   #240
+               sta   stkNewRow
+               ldx   #{STK_ENTRIES-1}*2
+:inval         lda   stkKeyCount,x
+               bmi   :inval_next          ; ($FFFF = unused)
+               lda   stkKeyRow,x
+               sec
+               sbc   stkNewRow
+               bcs   *+5
+               adc   #240
+               cmp   :num_lines
+               bcc   :drop
+               lda   stkNewRow
+               sec
+               sbc   stkKeyRow,x
+               bcs   *+5
+               adc   #240
+               cmp   stkKeyCount,x
+               bcs   :inval_next
+:drop          jsr   stkRestore
+               lda   #$FFFF
+               sta   stkKeyCount,x
+:inval_next    dex
+               dex
+               bpl   :inval
+
+               ldx   #{STK_ENTRIES-1}*2   ; An unused entry, or the next one in turn
+:free          lda   stkKeyCount,x
+               bmi   :slot
+               dex
+               dex
+               bpl   :free
+               ldx   stkNextSlot
+               jsr   stkRestore
+               txa
+               inc
+               inc
+               and   #{STK_ENTRIES*2}-1
+               sta   stkNextSlot
+:slot          stx   stkCurSlot
+               lda   :virt_start
+               sta   stkKeyVirt,x
+               lda   stkNewRow
+               sta   stkKeyRow,x
+               lda   :first_line
+               sta   stkKeyFirst,x
+               lda   :num_lines
+               sta   stkKeyCount,x
+               lda   stkCurXM
+               sta   stkKeyXM,x
+               stz   stkSkipEntry        ; New rows: patch everything
+
                ldx   :num_lines
                ldy   #_SetupStack
-               jsr   _Apply
-
                lda   :virt_start
+               jsr   _Apply
+               bra   :patch
+
+; Same rows as an entry
+:hit           stx   stkCurSlot
+               lda   stkCurXM
+               cmp   stkKeyXM,x
+               bne   :new_x
+               lda   stkPatched,x         ; Same offset: if the exits are still patched, everything is
+               bne   :done                ; in place; otherwise only the exits are patched
+               lda   #1
+               sta   stkSkipEntry
+               bra   :patch
+:new_x         jsr   stkRestore           ; The exits move: put the old ones back first
+               lda   stkCurXM
+               sta   stkKeyXM,x
+               stz   stkSkipEntry
+
+:patch         lda   :virt_start
                ldx   :num_lines
                ldy   #_SetupPEAFieldLines
                jsr   _Apply
 
+               ldx   stkCurSlot
                lda   :exit_addr
+               sta   stkExitAddr,x
+               lda   #1
+               sta   stkPatched,x
+               sta   stkAnyPatched
+:done          lda   :exit_addr
+               rts
+
+; Restore the exits of entry X if they are patched.  X and tmp1 - tmp12 are preserved (it is called
+; in the middle of _BltSetupAlt).  DBR = K.
+               mx    %00
+stkRestore
+               lda   stkPatched,x
+               bne   :go
+               rts
+:go            stz   stkPatched,x
+               phx
+               pei   tmp1
+               pei   tmp2
+               pei   tmp3
+               pei   tmp4
+               pei   tmp5
+               pei   tmp6
+               pei   tmp7
+               pei   tmp8
+               pei   tmp9
+               pei   tmp10
+               pei   tmp11
+               pei   tmp12
+
+               lda   stkExitAddr,x
+               sta   tmp4                 ; :exit_addr of _RestoreBG0OpcodesCallback
+               lda   stkKeyCount,x
+               pha
+               lda   stkKeyVirt,x
+               plx
+               ldy   #_RestoreBG0OpcodesCallback
+               jsr   _Apply
+
+               pla
+               sta   tmp12
+               pla
+               sta   tmp11
+               pla
+               sta   tmp10
+               pla
+               sta   tmp9
+               pla
+               sta   tmp8
+               pla
+               sta   tmp7
+               pla
+               sta   tmp6
+               pla
+               sta   tmp5
+               pla
+               sta   tmp4
+               pla
+               sta   tmp3
+               pla
+               sta   tmp2
+               pla
+               sta   tmp1
+               plx
+               rts
+
+; Put back every exit that _BltSetupAlt left patched, so the PEA field holds only plain PEAs.  Called
+; before anything writes tiles into the PEA field or reads background data from it.  Any register
+; widths; all registers, DBR and the tmp variables are preserved.  D = the engine's direct page.
+_PEAFieldStable
+               php
+               rep   #$30
+               pha
+               phx
+               phy
+               phb
+               phk
+               plb
+               lda   stkAnyPatched
+               beq   :out
+               ldx   #{STK_ENTRIES-1}*2
+:loop          lda   stkKeyCount,x
+               bmi   *+5
+               jsr   stkRestore
+               dex
+               dex
+               bpl   :loop
+               stz   stkAnyPatched
+:out           plb
+               ply
+               plx
+               pla
+               plp
                rts
 
 ; A small variant for dirty rendering that just sets the BRA instruction in the code field assuming
@@ -592,6 +804,9 @@ _SetupPEAFieldLines
                 lda   :exit_bra           ; The same constant value is set for all lines
 :set_bra        jsr   $0000
 
+                ldal  stkSkipEntry        ; Entry / alignment / edge already in place (_BltSetupAlt)
+                bne   :done
+
                 lda   :btable_low
                 clc
                 adc   #_ENTRY_PATCH+1
@@ -656,3 +871,18 @@ _SetupPEAFieldLinesDirty
 
                 plb                       ; Restore the data bank
                 rts
+
+; The ranges remembered by _BltSetupAlt (count $FFFF = unused)
+stkKeyVirt     dw    $FFFF,$FFFF,$FFFF,$FFFF  ; first virtual line
+stkKeyFirst    dw    $FFFF,$FFFF,$FFFF,$FFFF  ; first screen line
+stkKeyCount    dw    $FFFF,$FFFF,$FFFF,$FFFF  ; number of lines
+stkKeyRow      dw    0,0,0,0              ; first code row (virtual line mod 240)
+stkKeyXM       dw    0,0,0,0              ; horizontal offset | mirroring << 8 of the entry patches
+stkExitAddr    dw    0,0,0,0              ; row-relative exit offset of the patched exits
+stkPatched     dw    0,0,0,0              ; non-zero: the exits (save slot + BRA) are patched
+stkAnyPatched  dw    0                    ; non-zero: some entry's exits are patched
+stkNewRow      dw    0
+stkCurXM       dw    0                    ; this setup's horizontal offset | mirroring << 8
+stkCurSlot     dw    0
+stkNextSlot    dw    0                    ; Entry to replace when all are in use
+stkSkipEntry   dw    0                    ; non-zero: _SetupPEAFieldLines skips the entry patches

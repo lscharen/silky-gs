@@ -45,7 +45,6 @@ ppuscroll dw 0     ; Y X coordinates
 ; Some derived values from spadr and bgadr that makes it easier to calculate addresses
 ; used in the various lookup tables and tile data caches
 spadr_hi  dw $0000 ; Set to $8000 if spadr is $1000. Used to get address in tiledata bank
-spadr_lo  dw $0000 ; Set to $0100 if spadr is $1000. Used to merge with tile ID values
 bgadr_hi  dw $0000 ; Set to $8000 if bgadr is $1000. Used to get address in tiledata bank
 bgadr_lo  dw $0000 ; Set to $0100 if bgadr is $1000. Used to merge with tile ID values
 
@@ -106,14 +105,11 @@ PPUCTRL_WRITE ENT
         stal spadr+1
         lda  #$80
         stal spadr_hi+1
-        lda  #$01
-        stal spadr_lo+1
         bra :sp_done
 
 :sp_zero
         stal spadr+1
         stal spadr_hi+1
-        stal spadr_lo+1
 
 :sp_done
 
