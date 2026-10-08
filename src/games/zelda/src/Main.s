@@ -48,7 +48,7 @@ POST_RENDER  mac
              <<<
 
 ; Callback before each sprite is set up and drawn (drawSprites, ppu.s): X = OAM index, ]1 = the
-; sprite height (8 or 16), DBR = the tiledata bank, 16-bit registers.  Sets sprClipTop, the lines
+; sprite height (8 or 16), DBR = $01 (the shadow screen), 16-bit registers.  Sets sprClipTop, the lines
 ; to hide at the top of the sprite: here, the lines in the door bands (see HideDoorBands).
 SPRITE_PRE_DRAW  mac
              ldal  zDoorBands
@@ -56,6 +56,9 @@ SPRITE_PRE_DRAW  mac
              lda   #]1
              jsr   ZSpriteClip
              <<<
+
+; Non-zero if SPRITE_PRE_DRAW can set sprClipTop: the sprite renderer only tests it then
+SPRITE_CLIP equ 1
 
 ; Define which PPU address has the background and sprite tiles
 ;

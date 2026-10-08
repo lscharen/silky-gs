@@ -187,16 +187,66 @@ sprTmp1      equ pputmp+2
 sprTmp2      equ pputmp+4
 sprTmp3      equ pputmp+6
 sprTmp4      equ pputmp+8
-sprAddrMin   equ unused132
-sprAddrMax   equ unused134
+sprMul160    equ pputmp+12          ; (3 bytes) long pointer to Mul160Tbl
+sprXPar      equ pputmp+15          ; (byte) scroll_x & 1, the half-pixel offset of every sprite this frame
+sprBankSwap  equ unused174          ; $01 << 8 | ^tiledata: pei / plb selects the tiledata bank, plb back to $01
 sprTmp5      equ sprTmp5Hi          ; tiledata bank offset for the tile to draw: $0000 or $8000
 sprTmp6      equ sprTmp6Lo          ; same selection in $0000/$0100 form (merges with tile ID like spadr_lo)
+
+; Set up a sprite for drawing.  X = OAM index (preserved).
+;
+; Sets sprTmp1 = SHR address, sprTmp4 = horizontal clip amount (0 = no clipping) and ActivePtr = the
+; sprite's palette.  A macro, so each sprite size gets its own copy and the setup is not a nested call.
+SPR_SETUP mac
+        ldal  OAM_COPY,x               ; Y-coordinate
+        and   #$00FF
+        asl                            ; (carry clear)
+        tay
+        db    $B7,sprMul160            ; lda [sprMul160],y
+        adc   #$2000-{y_offset*160}+x_offset
+        sta   sprTmp1
+        DO    1-GRID_DIRTY_RENDERING
+        sta   sprTmp3                  ; Clamped address, for the old dirty renderer's sprite save
+        FIN
+
+        sep   #$20                     ; Palette: ActivePtr selects the swizzle table of the sprite palette
+        ldal  OAM_COPY+2,x
+        and   #$03
+        asl
+        adc   SwizzlePtr2+1            ; (carry clear from the asl)
+        sta   ActivePtr+1
+
+        lda   sprXPar                  ; X-coordinate: NES pixels to IIgs bytes, with the scroll's
+        adcl  OAM_COPY+3,x             ; half-pixel offset
+        and   #$FE                     ; Mask before the shift so that a 0 goes into the carry
+        ror                            ; Bring the carry into the high bit in case of overflow
+        rep   #$20
+        and   #$00FF
+        tay
+        adc   sprTmp1                  ; Add to the base address calculated from the Y-coordinate
+        sta   sprTmp1                  ; This is the SHR address at which to draw the sprite
+
+        stz   sprTmp4                  ; Clip a sprite that runs off the right edge
+        cpy   #125
+        bcc   *+8
+        tya
+        sbc   #124                     ; (carry set)
+        sta   sprTmp4
+        DO    1-GRID_DIRTY_RENDERING
+        tya                            ; Clamped address, for the old dirty renderer's sprite save
+        cmp   #125
+        bcc   *+5
+        lda   #124
+        clc
+        adc   sprTmp3
+        sta   sprTmp3
+        FIN
+        <<<
 
         mx   %00
 drawSprites
 
 :spriteCount equ pputmp+10
-:mul160      equ pputmp+12
 
 ; Run through the copy of the OAM memory and render each sprite to the graphics screen.  Typically,
 ; shadowing is disabled during this routine.
@@ -205,20 +255,28 @@ drawSprites
 
         lda   spriteCount
         sta   :spriteCount
-        lda   #Mul160Tbl
-        sta   :mul160
-        lda   #^Mul160Tbl
-        sta   :mul160+2
-
-        ldx   #0
-        cpx   :spriteCount
         bne   *+3
         rts
 
-; Set up the data bank to point to the tile data
+        lda   #Mul160Tbl
+        sta   sprMul160
+        sep   #$20
+        lda   #^Mul160Tbl
+        sta   sprMul160+2
+        lda   _ppuscroll_x             ; The scroll's half-pixel offset is the same for every sprite
+        and   #$01
+        sta   sprXPar
+        rep   #$20
+        lda   CMPL_BANK                ; For switching to the tiledata bank and back to $01
+        xba
+        sta   sprBankSwap
 
-        phb                          ; Save the current data bank
-        pea   #^tiledata             ; Put the tile data bank on the stack
+; The loop runs with the data bank set to the shadow screen ($01), so compiled sprites are called
+; directly.  The bitmap routines switch to the tiledata bank themselves (as_bitmap).
+
+        phb                            ; Save the current data bank
+        pea   $0101
+        ldx   #0
 
 ; Determine if we are in 8x8 sprite mode, or 8x16 sprite mode.  Have a specialized loop for
 ; each.
@@ -227,6 +285,13 @@ drawSprites
         bit   #NES_PPUCTRL_SPRSIZE
         bne   :is_8x16
 
+; 8x8 mode: the pattern table is whatever PPUCTRL/spadr currently selects for all sprites (unlike
+; 8x16 mode, where each sprite's own tile ID picks the table), so it is set once
+
+        lda   spadr_hi
+        sta   sprTmp5
+        lda   spadr_lo
+        sta   sprTmp6
         plb
 
 :oam_loop_8x8
@@ -241,34 +306,18 @@ drawSprites
 :draw8
         FIN
 
-; The game can hide the sprite's top lines (sprClipTop, see SPRITE_PRE_DRAW).  A sprite that is
-; hidden entirely is not set up, marked or drawn.
+; The game can hide the sprite's top lines (sprClipTop, see SPRITE_PRE_DRAW and SPRITE_CLIP).
 
         SPRITE_PRE_DRAW 8
+        DO    SPRITE_CLIP
         ldal  sprClipTop
-        cmp   #8
-        bcs   :next8
-
-; Regardless of whether the PPUCTRL is in 8x8 or 8x16 mode, the 
-; starting SHR address and palette selection is the same
+        bne   :clip8
+        FIN
 
         jsr   :setupSprite8
-
-; Copy bytes 1 and 2 into temp space
-
-        ldal  OAM_COPY+1,x
+        ldal  OAM_COPY+1,x            ; Tile and attributes
         sta   sprTmp2
-
-; Draw the tile.  Top lines to hide go in the high byte of sprTmp4, which sends the tile through the
-; clipped draw routines.
-
-        ldal  sprClipTop
-        beq   :draw8x8
-        sep   #$20
-        sta   sprTmp4+1
-        rep   #$20
-:draw8x8
-        jsr   :drawSprite8x8
+        jsr   :blitResolvedSprite
 
 ; Restore and continue processing the OAMtable
 
@@ -285,32 +334,43 @@ drawSprites
         plb
         jmp   SprCacheService         ; Compile the sprite tiles that missed (returns to the caller)
 
+; A sprite with top lines to hide: one that is hidden entirely is not set up, marked or drawn.  The
+; others go through the clipped draw routines, with the lines in the high byte of sprTmp4.
+
+        DO    SPRITE_CLIP
+:clip8  cmp   #8
+        bcs   :next8
+        jsr   :setupSprite8
+        ldal  OAM_COPY+1,x
+        sta   sprTmp2
+        ldal  sprClipTop
+        sep   #$20
+        sta   sprTmp4+1
+        rep   #$20
+        lda   sprTmp2
+        jsr   :blitResolvedSprite
+        bra   :next8
+        FIN
+
 :is_8x16
         plb
 
 :oam_loop_8x16
         phx                    ; Save x
 
-; The game can hide the sprite's top lines (sprClipTop, see SPRITE_PRE_DRAW).  A sprite that is
-; hidden entirely is not set up, marked or drawn.
+; The game can hide the sprite's top lines (sprClipTop, see SPRITE_PRE_DRAW and SPRITE_CLIP).
 
         SPRITE_PRE_DRAW 16
+        DO    SPRITE_CLIP
         ldal  sprClipTop
-        cmp   #16
-        bcs   :next16
-
-; Setup the sprite
-
-        jsr   :setupSprite16
+        bne   :clip16
+        FIN
 
 ; Draw both halves of the 8x16 sprite (pattern table select comes from bit 0
 ; of the tile ID, not from spadr/PPUCTRL -- see :drawSprite16)
 
-        ldal  sprClipTop
-        bne   :clip16
+        jsr   :setupSprite16
         jsr   :drawSprite16
-        bra   :next16
-:clip16 jsr   :drawSprite16c
 
 :next16
         plx
@@ -325,13 +385,16 @@ drawSprites
         plb
         jmp   SprCacheService         ; Compile the sprite tiles that missed (returns to the caller)
 
-:setupSprite8
-        lda   #$2000+x_offset
-        sta   sprAddrMin
-        lda   #$2000+{{200-8}*160}+x_offset
-        sta   sprAddrMax
+        DO    SPRITE_CLIP
+:clip16 cmp   #16                     ; Hidden entirely: not set up, marked or drawn
+        bcs   :next16
+        jsr   :setupSprite16
+        jsr   :drawSprite16c
+        bra   :next16
+        FIN
 
-        jsr   :setupSprite
+:setupSprite8
+        SPR_SETUP
 
         DO   GRID_DIRTY_RENDERING
         jmp  gridMarkSprite8           ; The grid renderer erases from the code field, so nothing is
@@ -350,12 +413,7 @@ drawSprites
         FIN
 
 :setupSprite16
-        lda   #$2000+x_offset
-        sta   sprAddrMin
-        lda   #$2000+{{200-16}*160}+x_offset
-        sta   sprAddrMax
-
-        jsr   :setupSprite
+        SPR_SETUP
 
         DO   GRID_DIRTY_RENDERING
         jmp  gridMarkSprite16
@@ -371,81 +429,6 @@ drawSprites
 :not_dirty16
         rts
         FIN
-
-; X = OAM index
-:setupSprite
-        ldal  OAM_COPY,x               ; Y-coordinate
-        and   #$00FF
-        asl
-        tay
-        lda  [:mul160],y
-        adc  #$2000-{y_offset*160}+x_offset
-        sta  sprTmp1
-
-;        cmp  sprAddrMin
-;        bcs  :chk_max
-;        lda  sprAddrMin
-;:chk_max
-;        cmp  sprAddrMax
-;        bcc  :chk_done
-;        lda  sprAddrMax
-;:chk_done
-        sta   sprTmp3
-
-; Do some stuff that is faster in 8-bit mode
-
-        sep  #$20
-
-; Set the palette pointer for this sprite
-
-        ldal OAM_COPY+2,x              ; Put attribute byte in the high byte
-        and  #$03
-        asl
-        adc  SwizzlePtr2+1             ; Carry is clear from the asl
-        sta  ActivePtr+1               ; Select the second set of palettes
-
-; Convert the x-coordinate.
-
-        ldal _ppuscroll_x
-        and  #$01
-        adcl OAM_COPY+3,x             ; X-coordinate (In NES pixels, need to convert to IIgs bytes)
-        and  #$FE                     ; Mask before the shift so that we know a 0 goes into the carry
-        ror                           ; Rotate to bring the carry into the high bit in case of overflow
-        rep  #$20
-        and  #$00FF
-        tay
-        adc  sprTmp1                  ; Add to the base address calculated fom the Y-coordinate
-        sta  sprTmp1                  ; This is the SHR address at which to draw the sprite
-
-        stz  sprTmp4                  ; Assume no clipping
-        tya
-        cmp  #125
-        bcc  :no_x_clamp
-
-        sbc  #124                   ; get the difference
-        sta  sprTmp4
-
-        lda  #124
-        clc
-
-:no_x_clamp
-        adc  sprTmp3
-        sta  sprTmp3
-        rts
-
-; Calculate the on-screen address for the sprite
-;
-; Input:
-;  X = OAM index (0, 4, 8, ..., 248, 252)
-;
-; Output:
-;  sprTmp1 = SHR address
-;  sprTmp3 = clamped SHR address
-;  sprTmp4 = clipping amount (0 = no clipping)
-;
-; Modified:
-;  sprTmp0 used for temporary data
-;  ActivePtr set to sprite palette
 
 ; Draw a single 8x16 sprite (both halves)
 ;
@@ -566,41 +549,17 @@ drawSprites
 ;
 ; X = OAM index (0, 4, 8, ..., 248, 252)
 ; A = OAM[1] and OAM[2], also in sprTmp2
-:drawSprite8x8
-
-; 8x8 mode: the pattern table is whatever PPUCTRL/spadr currently selects for
-; all sprites (unlike 8x16 mode, where each sprite's own tile ID picks the table)
-
-        ldal spadr_hi                  ; Long addressing: DBR is the tiledata bank inside drawSprites
-        sta  sprTmp5
-        ldal spadr_lo
-        sta  sprTmp6
-        lda  sprTmp2
-
-; :blitResolvedSprite is the shared draw tail used by both 8x8 sprites (falling
-; through from above, with sprTmp5/sprTmp6 = the current global sprite table)
+; :blitResolvedSprite is the shared draw tail used by both 8x8 sprites (called
+; from the loop, with sprTmp5/sprTmp6 = the current global sprite table, set once)
 ; and 8x16 sprites (entered directly by :drawSprite16, with sprTmp5/sprTmp6 set
 ; per-sprite from the OAM tile ID's own pattern-table bit). Requires sprTmp2
 ; (tile id + attribute) already loaded into A, and sprTmp1/sprTmp3/sprTmp4
-; (screen address / clip amount) already set up by :setupSprite.
+; (screen address / clip amount) already set up by SPR_SETUP.  DBR = $01.
 :blitResolvedSprite
 
-; CHR-RAM support: reconvert this sprite tile now if it was marked dirty by a
-; PPUDATA write since it was last drawn.  This also drops the tile's compiled
-; sprites, so it has to run before the compiled-sprite check below.  The flag is
-; tested here, in 16-bit mode (the high byte is the next tile's flags), since it
-; is almost always clear; CheckSprTileDirty only runs for a dirty tile.
-        DO   HAS_CHR_RAM
-        and  #$00FF
-        ora  sprTmp6              ; tile | pattern table select: the 0-511 index of ChrRamDirty
-        tax
-        ldal ChrRamDirty,x
-        bit  #CHRRAM_SPR_DIRTY
-        beq  :spr_clean
-        jsr  CheckSprTileDirty
-:spr_clean
-        lda  sprTmp2              ; restore
-        FIN
+; CHR-RAM: a compiled-sprite hit needs no dirty check -- PPUDATA_WRITE drops a rewritten tile's
+; compiled sprites, and SprCompileTile does not keep one whose tile is dirty.  The bitmap paths below
+; read the converted tile data directly, so they reconvert a dirty tile first (sprChrCheck).
 
 ; This is the point to check if there is a compiled version of this sprite
 
@@ -633,12 +592,9 @@ drawSprites
 
 ; A hit changes nothing in the cache: it is replaced in the order it was compiled (see SPR_* in Defs.s)
 
-        ldx  sprTmp1                   ; the SHR address for the compiled code
-        pei  CMPL_BANK
-        plb
+        ldx  sprTmp1                   ; the SHR address for the compiled code (DBR = $01)
 csd     jml  $000000
-draw_rtn2
-        plb                           ; Return from compiled sprite
+draw_rtn2                             ; Return from compiled sprite
         DO   SHOW_DEBUG_VARS
         lda  #$7777
         stal outlineColor
@@ -673,6 +629,9 @@ sprCacheMiss
 
         mx    %00
 as_bitmap
+        DO   HAS_CHR_RAM
+        jsr  sprChrCheck
+        FIN
         DO   SHOW_DEBUG_VARS
         lda  #$FFFF         ; color for priority bit
         stal outlineColor
@@ -691,16 +650,22 @@ as_bitmap
         and  #$FF00
         lsr                           ; Each tile is 128 bytes of data -- this clears the carry flag
         ora  sprTmp5                  ; fold in the pattern-table offset ($0000 or $8000)
+        pei  sprBankSwap              ; The tile routines read the tile data with DBR = tiledata
+        plb
+        jsr  (drawProcs,x)
+        plb                           ; DBR = $01
         DO   SHOW_DEBUG_VARS
-        jsr  (drawProcs,x)            ; Executes an RTS to return directly to caller
         ldx  sprTmp1
         jmp  drawOutline
         ELSE
-        jmp  (drawProcs,x)            ; Executes an RTS to return directly to caller
+        rts
         FIN
 
         mx    %00
 as_bitmap_clip
+        DO   HAS_CHR_RAM
+        jsr  sprChrCheck
+        FIN
         lda  sprTmp2+1
         and  #$00E0
         lsr
@@ -712,10 +677,35 @@ as_bitmap_clip
         and  #$FF00
         lsr                           ; Each tile is 128 bytes of data -- this clears the carry flag
         ora  sprTmp5                  ; fold in the pattern-table offset ($0000 or $8000)
-        jmp  (drawProcsClipped,x)
+        pei  sprBankSwap              ; The tile routines read the tile data with DBR = tiledata
+        plb
+        jsr  (drawProcsClipped,x)
+        plb                           ; DBR = $01
+        rts
+
+; CHR-RAM support, for the bitmap draws (as_bitmap, as_bitmap_clip): if the sprite's tile was
+; rewritten since it was converted, reconvert it.  sprTmp2 = tile and attributes, sprTmp6 = the
+; pattern table select.  DBR = $01.  A, X and Y are trashed.
+        DO    HAS_CHR_RAM
+        mx    %00
+sprChrCheck
+        lda  sprTmp2
+        and  #$00FF
+        ora  sprTmp6                  ; tile | pattern table select: the 0-511 index of ChrRamDirty
+        tax
+        ldal ChrRamDirty,x
+        bit  #CHRRAM_SPR_DIRTY
+        bne  *+3
+        rts
+        pei  sprBankSwap              ; (with DBR = the tiledata bank, as it was written for)
+        plb
+        jsr  CheckSprTileDirty
+        plb
+        rts
+        FIN
 
 ; CHR-RAM support: reconvert one sprite tile whose sprite dirty flag is set (the
-; caller, :blitResolvedSprite, tests it), with FastROMMaskedTileToLookup, and
+; caller, sprChrCheck, tests it), with FastROMMaskedTileToLookup, and
 ; invalidate its compiled sprites (SprInvalidate).
 ;
 ; X = the 0-511 index of the tile in ChrRamDirty (tile | pattern table << 8).

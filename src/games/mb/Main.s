@@ -48,11 +48,14 @@ POST_RENDER  mac
              <<<
 
 ; Callback before each sprite is set up and drawn (drawSprites, ppu.s): X = OAM index, ]1 = the
-; sprite height (8 or 16), DBR = the tiledata bank, 16-bit registers.  It can set sprClipTop to
+; sprite height (8 or 16), DBR = $01 (the shadow screen), 16-bit registers.  It can set sprClipTop to
 ; hide the sprite's top lines.
 SPRITE_PRE_DRAW  mac
 ;
              <<<
+
+; Non-zero if SPRITE_PRE_DRAW can set sprClipTop: the sprite renderer only tests it then
+SPRITE_CLIP equ 0
 
 ; Define which PPU address has the background and sprite tiles
 PPU_BG_TILE_ADDR  equ $1000

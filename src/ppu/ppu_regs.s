@@ -325,10 +325,32 @@ PPUDATA_WRITE ENT
         lsr
         tax
         sep  #$20
+        ldal ChrRamDirty,x
+        pha                                       ; (was the sprite form already dirty?)
         lda  #{CHRRAM_BG_DIRTY+CHRRAM_SPR_DIRTY}  ; both forms need recompiling -- see CHRRAM_BG_DIRTY/
                                                   ; CHRRAM_SPR_DIRTY (CoreData.s) for why these are two
                                                   ; independent bits, not one shared flag
         stal ChrRamDirty,x
+        pla
+        bit  #CHRRAM_SPR_DIRTY
+        bne  :done
+
+; The first write since the sprite form was converted: drop the tile's compiled sprites (both vertical
+; orientations), so a compiled-sprite hit never needs to check the dirty flag.  A tile with its sprite
+; flag set never has a compiled sprite (SprCompileTile), so the other writes have nothing to drop.  The
+; flag is set first: the GS task may compile in between, and it does not keep a sprite whose flag is set.
+
+        rep  #$30
+        txa
+        asl
+        asl
+        asl
+        tax                                       ; key offset = (pattern table << 8 | tile) * 8
+        lda  #0
+        stal PPU_MEM+SPR_COMP_TBL,x
+        stal PPU_MEM+SPR_COMP_TBL+2,x
+        stal PPU_MEM+SPR_COMP_TBL+4,x
+        stal PPU_MEM+SPR_COMP_TBL+6,x
         bra  :done
 :not_chr
         ELSE

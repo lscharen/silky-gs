@@ -743,8 +743,10 @@ gridDrawDirty
 
 ; 2. Background tiles and attribute-driven metatiles: whole cells
 
+            DO    GRID_STATS
             stz   gbBgCount               ; (Tile writes now arrive through the metatile list)
             stz   gbMtCount
+            FIN
             ldy   #0
             bra   :t3
 :l3         lda   gmtList+2,y             ; Nibble: the metatile's tiles to expose
@@ -776,10 +778,12 @@ gridDrawDirty
             iny
 :t3         cpy   gmtEnd
             bcc   :l3
+            DO    GRID_STATS
             tya
             lsr
             lsr
             ADD32 gsMetatiles
+            FIN
 
             DO    GRID_SPRITE_SKIP
             jsr   gqSkipCascade           ; Changed sprites' new positions, then everything they reach
@@ -790,7 +794,9 @@ gridDrawDirty
 
             jsr   _ShadowOff
             stz   tmp4                    ; No code field bank selected yet
-            stz   tmp7                    ; Cells erased (GRID_CELL_STATS)
+            DO    GRID_CELL_STATS
+            stz   tmp7                    ; Cells erased
+            FIN
             lda   GridLPtr
             dec
             tax                           ; Opcode of the first unused entry
@@ -799,8 +805,10 @@ gridDrawDirty
             ply                           ; Run with DBR = K
             lda   #gqEraseOp
             jsr   gqRunCells
+            DO    GRID_CELL_STATS
             lda   tmp7
             sta   gbErase
+            FIN
 
 ; 4. New sprites (mark the expose nibble, extend the cell array and record themselves)
 
@@ -812,18 +820,23 @@ gridDrawDirty
 
 ; 5. Expose and clear every cell
 
-            stz   tmp7                    ; Cells exposed (GRID_CELL_STATS)
+            DO    GRID_CELL_STATS
+            stz   tmp7                    ; Cells exposed
+            FIN
             lda   GridLPtr
             dec
             tax
             ldy   #$0101                  ; Run with DBR = $01 (the expose routines index the SHR page)
             lda   #gqExposeOp
             jsr   gqRunCells
+            DO    GRID_CELL_STATS
             lda   tmp7
             sta   gbExpose
+            FIN
 
 ; Statistics
 
+            DO    GRID_STATS
             INC32 gsDirtyFrames
             lda   gbErase
             sta   gsLastErased
@@ -843,6 +856,7 @@ gridDrawDirty
 :no_mt      jsr   gridSpriteTiles
             sta   gsLastSprTiles
             ADD32 gsSprTiles
+            FIN
 
             jsr   gqSwap
             plb
@@ -965,7 +979,9 @@ gqMarkCiram
             phy
             jsr   gridCiramToCell
             bcs   :off
+            DO    GRID_STATS
             inc   gbMtCount
+            FIN
             jsr   gqMarkBg
 :off        ply
             rts
@@ -977,7 +993,9 @@ gridEndFull
             phb
             phk
             plb
+            DO    GRID_STATS
             INC32 gsFullFrames
+            FIN
             DO    GRID_SPRITE_SKIP
             jsr   gqSkipSync              ; Every sprite was drawn
             FIN
@@ -1116,9 +1134,16 @@ gqCellIdx
             rts
 
 ; gqPrevOAM := OAM_COPY (every sprite was drawn), entries past the count invalidated.  DBR = K.
+;
+; Not needed while the sprites are 8x16: they are never skipped, and the first 8x8 frame after them
+; comes here anyway (gqPrevTall), so gqPrevOAM is only read after it has been synced again.
             mx    %00
 gqSkipSync
             stz   gqUnch
+            lda   _ppuctrl
+            and   #NES_PPUCTRL_SPRSIZE
+            beq   *+3
+            rts
             ldx   #0
 :cp         cpx   spriteCount
             bcs   :inv
