@@ -191,8 +191,9 @@ sprMul160    equ pputmp+12          ; (3 bytes) long pointer to Mul160Tbl
 sprXPar      equ pputmp+15          ; (byte) scroll_x & 1, the half-pixel offset of every sprite this frame
 sprBankSwap  equ unused174          ; $01 << 8 | ^tiledata: pei / plb selects the tiledata bank, plb back to $01
 sprTmp5      equ sprTmp5Hi          ; tiledata bank offset for the tile to draw: $0000 or $8000
-; sprKeyTbl (Defs.s): the same selection as $0000/$0400, its position in the compiled sprite key before
-; the key is shifted into place (see :blitResolvedSprite)
+; sprCompTbl (Defs.s): long pointer to SPR_COMP_TBL, plus $1000 (the pattern table bit of the key offset)
+; for pattern table 1, so the lookup does not fold it into the key (see :blitResolvedSprite)
+; sprCompBase (Defs.s): the low word of SPR_COMP_TBL's address, for the 8x16 sprites to set sprCompTbl from
 
 ; Set up a sprite for drawing.  X = OAM index (preserved).
 ;
@@ -271,6 +272,13 @@ drawSprites
         lda   CMPL_BANK                ; For switching to the tiledata bank and back to $01
         xba
         sta   sprBankSwap
+        ldal  sprCompSite+1            ; SPR_COMP_TBL's address, from a relocated long operand (not
+        sta   sprCompBase              ; #PPU_MEM+SPR_COMP_TBL: see MERLIN32_OMF_EXT_OFFSET_BUG.md)
+        sta   sprCompTbl
+        sep   #$20
+        ldal  sprCompSite+3
+        sta   sprCompTbl+2
+        rep   #$20
 
         ldal  SprFlushReq              ; The sprite swizzle tables changed: the compiled sprites have
         beq   *+5                      ; the old colors
@@ -293,16 +301,19 @@ drawSprites
 ; 8x8 mode: the pattern table is whatever PPUCTRL/spadr currently selects for all sprites (unlike
 ; 8x16 mode, where each sprite's own tile ID picks the table), so it is set once
 
-        lda   spadr_hi
+        lda   spadr_hi                 ; ($0000 / $8000)
         sta   sprTmp5
-        lda   spadr_lo                 ; ($0000 / $0100)
-        asl
-        asl
-        sta   sprKeyTbl
+        lsr                            ; $8000 -> $1000: pattern table 1's half of SPR_COMP_TBL
+        lsr
+        lsr                            ; (carry clear)
+        adc   sprCompBase
+        sta   sprCompTbl
         plb
 
+; X = the OAM index for the whole loop.  Everything a sprite goes through preserves it (a compiled
+; sprite uses only Y), so the loop does not save it.
+
 :oam_loop_8x8
-        phx                           ; Save x
 
         DO    GRID_DIRTY_RENDERING
         ldal  gqSkip,x                ; Unchanged and out of reach of anything redrawn: just record it
@@ -329,7 +340,6 @@ drawSprites
 ; Restore and continue processing the OAMtable
 
 :next8
-        plx
         inx
         inx
         inx
@@ -363,7 +373,6 @@ drawSprites
         plb
 
 :oam_loop_8x16
-        phx                    ; Save x
 
 ; The game can hide the sprite's top lines (sprClipTop, see SPRITE_PRE_DRAW and SPRITE_CLIP).
 
@@ -380,7 +389,6 @@ drawSprites
         jsr   :drawSprite16
 
 :next16
-        plx
         inx
         inx
         inx
@@ -454,12 +462,15 @@ drawSprites
         beq   :spr16_tbl0
         lda   #$8000
         sta   sprTmp5
-        lda   #$0400
-        sta   sprKeyTbl
+        lda   sprCompBase
+        clc
+        adc   #$1000                   ; pattern table 1's half of SPR_COMP_TBL
+        sta   sprCompTbl
         bra   :spr16_tbl_done
 :spr16_tbl0
         stz   sprTmp5
-        stz   sprKeyTbl
+        lda   sprCompBase
+        sta   sprCompTbl
 :spr16_tbl_done
 
         lda   sprTmp2
@@ -510,12 +521,15 @@ drawSprites
         beq   :c16tbl0
         lda   #$8000
         sta   sprTmp5
-        lda   #$0400
-        sta   sprKeyTbl
+        lda   sprCompBase
+        clc
+        adc   #$1000
+        sta   sprCompTbl
         bra   :c16tbl
 :c16tbl0
         stz   sprTmp5
-        stz   sprKeyTbl
+        lda   sprCompBase
+        sta   sprCompTbl
 :c16tbl
         lda   sprTmp2
         and   #$FFFE                   ; top-half tile id
@@ -557,11 +571,13 @@ drawSprites
 ; X = OAM index (0, 4, 8, ..., 248, 252)
 ; A = OAM[1] and OAM[2], also in sprTmp2
 ; :blitResolvedSprite is the shared draw tail used by both 8x8 sprites (called
-; from the loop, with sprTmp5/sprKeyTbl = the current global sprite table, set once)
-; and 8x16 sprites (entered directly by :drawSprite16, with sprTmp5/sprKeyTbl set
+; from the loop, with sprTmp5/sprCompTbl = the current global sprite table, set once)
+; and 8x16 sprites (entered directly by :drawSprite16, with sprTmp5/sprCompTbl set
 ; per-sprite from the OAM tile ID's own pattern-table bit). Requires sprTmp2
 ; (tile id + attribute) already loaded into A, and sprTmp1/sprTmp3/sprTmp4
 ; (screen address / clip amount) already set up by SPR_SETUP.  DBR = $01.
+; X (the OAM index) is preserved: the compiled sprite path uses only Y, and the
+; other paths save it.
 :blitResolvedSprite
 
 ; CHR-RAM: a compiled-sprite hit needs no dirty check -- PPUDATA_WRITE drops a rewritten tile's
@@ -570,7 +586,7 @@ drawSprites
 
 ; This is the point to check if there is a compiled version of this sprite
 
-        ldx  sprTmp4        ; Test if this sprite needs clipping (first test)
+        ldy  sprTmp4        ; Test if this sprite needs clipping (first test; Y, so X keeps the OAM index)
         bne  as_bitmap_clip
 
         bit  #$2000         ; Is the priority bit set?
@@ -578,17 +594,17 @@ drawSprites
 
 ; The key offset is (pattern table << 12) | (palette << 10) | (tile << 2) | (vertical flip << 1), an index in
 ; the table of words.  In the attribute and tile word, the flips are bits 15 and 14, the priority bit (13) is
-; clear here and the palette is bits 9-8; the pattern table select goes in at bit 10.  The first shift moves the
-; vertical flip into the carry, and the ADC adds it at the bottom; the second leaves the horizontal flip in the
-; carry.  The entry is the slot of the compiled pair; the horizontally flipped code is at slot + $100.
+; clear here and the palette is bits 9-8.  The pattern table is left out: sprCompTbl points at its half of
+; the table.  The first shift moves the vertical flip into the carry, and the ADC adds it at the bottom; the
+; second leaves the horizontal flip in the carry.  The entry is the slot of the compiled pair; the horizontally
+; flipped code is at slot + $100.
 
         and  #$C3FF         ; tile, palette and the two flips
-        ora  sprKeyTbl      ; fold in the pattern-table select (0 or $0400)
         asl                 ; carry = vertical flip
         adc  #0
         asl                 ; carry = horizontal flip
-        tax
-        ldal PPU_MEM+SPR_COMP_TBL,x
+        tay
+        lda  [sprCompTbl],y
         beq  sprCacheMiss   ; zero value means no compiled sprite for this key
         bcc  *+5
         ora  #$0100         ; the horizontally flipped variant
@@ -601,42 +617,50 @@ drawSprites
 
 ; A hit changes nothing in the cache: it is replaced in the order it was compiled (see SPR_* in Defs.s)
 
-        ldx  sprTmp1                   ; the SHR address for the compiled code (DBR = $01)
+        ldy  sprTmp1                   ; the SHR address for the compiled code (DBR = $01)
 csd     jml  $000000
 draw_rtn2                             ; Return from compiled sprite
         DO   SHOW_DEBUG_VARS
         lda  #$7777
         stal outlineColor
+        phx
         ldx  sprTmp1
-        jmp  drawOutline
+        jsr  drawOutline
+        plx
         FIN
         rts
 
-; Compiled sprite cache miss.  X = key offset.  Queue the sprite to be compiled after drawSprites
-; (SprCacheService), unless this render's compile quota is already used up, and draw the sprite from
-; its bitmap this time.
+; Compiled sprite cache miss.  Y = key offset without the pattern table.  Queue the sprite to be compiled
+; after drawSprites (SprCacheService), unless this render's compile quota is already used up, and draw
+; the sprite from its bitmap this time.
 sprCacheMiss
+        phx                            ; the OAM index (as_bitmap restores it)
         ldal PPU_MEM+SPR_PEND_CNT
         cmp  #2*SPR_COMPILE_PER_RENDER
         bcs  :no_queue
-        tay                            ; Y = end of the pending list
-        txa                            ; A = key offset (both horizontal flips are compiled together)
-        tyx
+        tax                            ; X = end of the pending list
+        lda  sprTmp5                   ; A = key offset (both horizontal flips are compiled together): Y
+        lsr                            ; with the pattern table, $8000 -> $1000
+        lsr
+        lsr
+        phy
+        ora  1,s
+        ply
         stal PPU_MEM+SPR_PEND,x
         inx
         inx
         txa
         stal PPU_MEM+SPR_PEND_CNT
 :no_queue
-        DO   SHOW_DEBUG_VARS
-        ldx  #$2222         ; color for missing compiled sprite
-        FIN                            ; fall through to as_bitmap
+        bra  as_bitmap_saved
 
 ; Finish calculating the jump address. We dispatch differently based on the horizontal flip, vertical
 ; flip and priority bits. when calling the rendering function, Y = screen address, X = tile data address
 
         mx    %00
 as_bitmap
+        phx                           ; the OAM index
+as_bitmap_saved
         DO   HAS_CHR_RAM
         jsr  sprChrCheck
         FIN
@@ -664,13 +688,14 @@ as_bitmap
         plb                           ; DBR = $01
         DO   SHOW_DEBUG_VARS
         ldx  sprTmp1
-        jmp  drawOutline
-        ELSE
-        rts
+        jsr  drawOutline
         FIN
+        plx
+        rts
 
         mx    %00
 as_bitmap_clip
+        phx                           ; the OAM index
         DO   HAS_CHR_RAM
         jsr  sprChrCheck
         FIN
@@ -689,17 +714,18 @@ as_bitmap_clip
         plb
         jsr  (drawProcsClipped,x)
         plb                           ; DBR = $01
+        plx
         rts
 
 ; CHR-RAM support, for the bitmap draws (as_bitmap, as_bitmap_clip): if the sprite's tile was
-; rewritten since it was converted, reconvert it.  sprTmp2 = tile and attributes, sprKeyTbl = the
+; rewritten since it was converted, reconvert it.  sprTmp2 = tile and attributes, sprTmp5 = the
 ; pattern table select.  DBR = $01.  A, X and Y are trashed.
         DO    HAS_CHR_RAM
         mx    %00
 sprChrCheck
-        lda  sprKeyTbl                ; ($0000 / $0400 -> $0000 / $0100)
-        lsr
-        lsr
+        lda  sprTmp5                  ; ($0000 / $8000 -> $0000 / $0100)
+        xba
+        asl
         pha
         lda  sprTmp2
         and  #$00FF
