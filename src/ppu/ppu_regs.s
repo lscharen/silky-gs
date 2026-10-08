@@ -227,6 +227,34 @@ PPUADDR_WRITE ENT
         plp
         rtl
 
+        DO   HAS_CHR_RAM
+; The first write since the sprite form was converted (PPUDATA_WRITE): drop the tile's compiled sprites
+; (every palette and vertical orientation), so a compiled-sprite hit never needs to check the dirty flag.  A tile with its sprite
+; flag set never has a compiled sprite (SprCompileTile), so the other writes have nothing to drop.  The
+; flag is set first: the GS task may compile in between, and it does not keep a sprite whose flag is set.
+
+; X = the tile index (pattern table << 8 | tile).  Returns with 16-bit registers.
+        mx   %10
+DropTileSprites
+        rep  #$30
+        txa
+        and  #$00FF
+        asl
+        asl                                       ; tile << 2
+        cpx  #$0100
+        bcc  *+5
+        ora  #$1000                               ; pattern table << 12
+        tax                                       ; key offset of the tile, palette 0, not flipped vertically
+        lda  #0
+]pal    =    0
+        lup  4                                    ; every palette, both vertical orientations
+        stal PPU_MEM+SPR_COMP_TBL+{]pal*$400},x
+        stal PPU_MEM+SPR_COMP_TBL+{]pal*$400}+2,x
+]pal    =    ]pal+1
+        --^
+        rts
+        FIN
+
         mx    %11
 PPUDATA_READ ENT
         pha             ; space for return result
@@ -335,22 +363,7 @@ PPUDATA_WRITE ENT
         bit  #CHRRAM_SPR_DIRTY
         bne  :done
 
-; The first write since the sprite form was converted: drop the tile's compiled sprites (both vertical
-; orientations), so a compiled-sprite hit never needs to check the dirty flag.  A tile with its sprite
-; flag set never has a compiled sprite (SprCompileTile), so the other writes have nothing to drop.  The
-; flag is set first: the GS task may compile in between, and it does not keep a sprite whose flag is set.
-
-        rep  #$30
-        txa
-        asl
-        asl
-        asl
-        tax                                       ; key offset = (pattern table << 8 | tile) * 8
-        lda  #0
-        stal PPU_MEM+SPR_COMP_TBL,x
-        stal PPU_MEM+SPR_COMP_TBL+2,x
-        stal PPU_MEM+SPR_COMP_TBL+4,x
-        stal PPU_MEM+SPR_COMP_TBL+6,x
+        jsr  DropTileSprites
         bra  :done
 :not_chr
         ELSE

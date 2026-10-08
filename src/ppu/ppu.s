@@ -191,7 +191,8 @@ sprMul160    equ pputmp+12          ; (3 bytes) long pointer to Mul160Tbl
 sprXPar      equ pputmp+15          ; (byte) scroll_x & 1, the half-pixel offset of every sprite this frame
 sprBankSwap  equ unused174          ; $01 << 8 | ^tiledata: pei / plb selects the tiledata bank, plb back to $01
 sprTmp5      equ sprTmp5Hi          ; tiledata bank offset for the tile to draw: $0000 or $8000
-sprTmp6      equ sprTmp6Lo          ; same selection in $0000/$0100 form (merges with tile ID like spadr_lo)
+; sprKeyTbl (Defs.s): the same selection as $0000/$0400, its position in the compiled sprite key before
+; the key is shifted into place (see :blitResolvedSprite)
 
 ; Set up a sprite for drawing.  X = OAM index (preserved).
 ;
@@ -271,6 +272,10 @@ drawSprites
         xba
         sta   sprBankSwap
 
+        ldal  SprFlushReq              ; The sprite swizzle tables changed: the compiled sprites have
+        beq   *+5                      ; the old colors
+        jsr   SprCacheFlush
+
 ; The loop runs with the data bank set to the shadow screen ($01), so compiled sprites are called
 ; directly.  The bitmap routines switch to the tiledata bank themselves (as_bitmap).
 
@@ -290,8 +295,10 @@ drawSprites
 
         lda   spadr_hi
         sta   sprTmp5
-        lda   spadr_lo
-        sta   sprTmp6
+        lda   spadr_lo                 ; ($0000 / $0100)
+        asl
+        asl
+        sta   sprKeyTbl
         plb
 
 :oam_loop_8x8
@@ -447,12 +454,12 @@ drawSprites
         beq   :spr16_tbl0
         lda   #$8000
         sta   sprTmp5
-        lda   #$0100
-        sta   sprTmp6
+        lda   #$0400
+        sta   sprKeyTbl
         bra   :spr16_tbl_done
 :spr16_tbl0
         stz   sprTmp5
-        stz   sprTmp6
+        stz   sprKeyTbl
 :spr16_tbl_done
 
         lda   sprTmp2
@@ -503,12 +510,12 @@ drawSprites
         beq   :c16tbl0
         lda   #$8000
         sta   sprTmp5
-        lda   #$0100
-        sta   sprTmp6
+        lda   #$0400
+        sta   sprKeyTbl
         bra   :c16tbl
 :c16tbl0
         stz   sprTmp5
-        stz   sprTmp6
+        stz   sprKeyTbl
 :c16tbl
         lda   sprTmp2
         and   #$FFFE                   ; top-half tile id
@@ -550,8 +557,8 @@ drawSprites
 ; X = OAM index (0, 4, 8, ..., 248, 252)
 ; A = OAM[1] and OAM[2], also in sprTmp2
 ; :blitResolvedSprite is the shared draw tail used by both 8x8 sprites (called
-; from the loop, with sprTmp5/sprTmp6 = the current global sprite table, set once)
-; and 8x16 sprites (entered directly by :drawSprite16, with sprTmp5/sprTmp6 set
+; from the loop, with sprTmp5/sprKeyTbl = the current global sprite table, set once)
+; and 8x16 sprites (entered directly by :drawSprite16, with sprTmp5/sprKeyTbl set
 ; per-sprite from the OAM tile ID's own pattern-table bit). Requires sprTmp2
 ; (tile id + attribute) already loaded into A, and sprTmp1/sprTmp3/sprTmp4
 ; (screen address / clip amount) already set up by SPR_SETUP.  DBR = $01.
@@ -569,20 +576,22 @@ drawSprites
         bit  #$2000         ; Is the priority bit set?
         bne  as_bitmap
 
-; The key offset is (pattern table << 11) | (tile << 3) | (vertical flip << 2) | (horizontal flip << 1), an
-; index in the table of words.  The flips are bits 15 and 14 of the attribute and tile word (the priority bit,
-; 13, is clear here).  Each shift moves the next flip bit into the carry, and the ADC adds it at the bottom.
+; The key offset is (pattern table << 12) | (palette << 10) | (tile << 2) | (vertical flip << 1), an index in
+; the table of words.  In the attribute and tile word, the flips are bits 15 and 14, the priority bit (13) is
+; clear here and the palette is bits 9-8; the pattern table select goes in at bit 10.  The first shift moves the
+; vertical flip into the carry, and the ADC adds it at the bottom; the second leaves the horizontal flip in the
+; carry.  The entry is the slot of the compiled pair; the horizontally flipped code is at slot + $100.
 
-        and  #$C0FF         ; tile and the two flips
-        ora  sprTmp6        ; fold in the pattern-table select (0 or $0100)
+        and  #$C3FF         ; tile, palette and the two flips
+        ora  sprKeyTbl      ; fold in the pattern-table select (0 or $0400)
         asl                 ; carry = vertical flip
         adc  #0
         asl                 ; carry = horizontal flip
-        adc  #0
-        asl
         tax
         ldal PPU_MEM+SPR_COMP_TBL,x
         beq  sprCacheMiss   ; zero value means no compiled sprite for this key
+        bcc  *+5
+        ora  #$0100         ; the horizontally flipped variant
 
 ; Vector through the compiled sprite table.  The compiled sprites are in a different bank, so just check
 ; for a sentinel value and manually jump into the compiled sprite code to avoid a double-jump and having to
@@ -605,14 +614,13 @@ draw_rtn2                             ; Return from compiled sprite
 
 ; Compiled sprite cache miss.  X = key offset.  Queue the sprite to be compiled after drawSprites
 ; (SprCacheService), unless this render's compile quota is already used up, and draw the sprite from
-; its bitmap this time.  Both horizontal flips are compiled together, so the key is queued without it.
+; its bitmap this time.
 sprCacheMiss
         ldal PPU_MEM+SPR_PEND_CNT
         cmp  #2*SPR_COMPILE_PER_RENDER
         bcs  :no_queue
         tay                            ; Y = end of the pending list
-        txa
-        and  #$FFFD                    ; A = key offset, horizontal flip bit clear
+        txa                            ; A = key offset (both horizontal flips are compiled together)
         tyx
         stal PPU_MEM+SPR_PEND,x
         inx
@@ -684,15 +692,20 @@ as_bitmap_clip
         rts
 
 ; CHR-RAM support, for the bitmap draws (as_bitmap, as_bitmap_clip): if the sprite's tile was
-; rewritten since it was converted, reconvert it.  sprTmp2 = tile and attributes, sprTmp6 = the
+; rewritten since it was converted, reconvert it.  sprTmp2 = tile and attributes, sprKeyTbl = the
 ; pattern table select.  DBR = $01.  A, X and Y are trashed.
         DO    HAS_CHR_RAM
         mx    %00
 sprChrCheck
+        lda  sprKeyTbl                ; ($0000 / $0400 -> $0000 / $0100)
+        lsr
+        lsr
+        pha
         lda  sprTmp2
         and  #$00FF
-        ora  sprTmp6                  ; tile | pattern table select: the 0-511 index of ChrRamDirty
+        ora  1,s                      ; tile | pattern table select: the 0-511 index of ChrRamDirty
         tax
+        pla
         ldal ChrRamDirty,x
         bit  #CHRRAM_SPR_DIRTY
         bne  *+3
@@ -705,8 +718,7 @@ sprChrCheck
         FIN
 
 ; CHR-RAM support: reconvert one sprite tile whose sprite dirty flag is set (the
-; caller, sprChrCheck, tests it), with FastROMMaskedTileToLookup, and
-; invalidate its compiled sprites (SprInvalidate).
+; caller, sprChrCheck, tests it), with FastROMMaskedTileToLookup.
 ;
 ; X = the 0-511 index of the tile in ChrRamDirty (tile | pattern table << 8).
 ; 16-bit A/X/Y; all are trashed.
@@ -728,8 +740,6 @@ CheckSprTileDirty
         asl   a
         asl   a
         asl   a
-        pha                           ; the key offset of the tile with no flips (tile index * 8), for the
-                                      ; compiled sprite cache invalidation below
         asl   a
         tax                           ; X = CHR-RAM source address (tile ID * 16)
 
@@ -737,20 +747,10 @@ CheckSprTileDirty
         asl   a
         asl   a                       ; A = tile ID * 128 (tiledata offset)
 
-        jsr   FastROMMaskedTileToLookup
+; The tile has no compiled sprites to drop: PPUDATA_WRITE dropped them when the flag was set, and
+; SprCompileTile does not compile a tile while its flag is set.
 
-; The tile's pixels changed, so any compiled copy of it is stale.  Drop both of its compiled sprites from the
-; compiled sprite cache; the next time it is drawn, it is a miss and gets compiled again from the new data.
-
-        plx
-        phx
-        jsr   SprInvalidate
-        plx
-        inx
-        inx
-        inx
-        inx                           ; ... and with the vertical flip
-        jmp   SprInvalidate
+        jmp   FastROMMaskedTileToLookup
         FIN
 
 ; Lines to hide at the top of the sprite being drawn, set by the game's SPRITE_PRE_DRAW callback
@@ -765,13 +765,8 @@ drawProcsClipped
         dw drawClippedTileToScreen,drawClippedTileToScreenP,drawClippedTileToScreenH,drawClippedTileToScreenPH
         dw drawClippedTileToScreenV,drawClippedTileToScreenPV,drawClippedTileToScreenHV,drawClippedTileToScreenPHV
 
-; The compiled sprite dispatch table is in the PPU_MEM bank (PPU_MEM+SPR_COMP_TBL, Defs.s).  An entry of
-; $0000 means the sprite tile has no compiled representation.
-;
-; 512 word entries (1024 bytes): the low 256 entries are tile ids 0-255 in pattern
-; table 0, the high 256 entries (index 256-511, i.e. byte offset 512-1023) are tile
-; ids 0-255 in pattern table 1 -- indexed via (tile_id | sprTmp6) above, matching the
-; ChrRamDirty/spadr_lo convention.
+; The compiled sprite dispatch table is in the PPU_MEM bank (PPU_MEM+SPR_COMP_TBL, Defs.s), indexed by the
+; key offset built in :blitResolvedSprite.  An entry of $0000 means the sprite has no compiled version.
 
         mx    %00
 _blitTileNoMask

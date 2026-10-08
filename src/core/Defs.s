@@ -108,7 +108,7 @@ ShowFPS                equ   126
 MaxX                   equ   128          ; Horizontal Mirroring = 256, Vertical Mirroring = 512
 MaxY                   equ   130          ; Horizontal Mirroring = 480, Vertical Mirroring = 240
 
-unused132              equ   132
+sprKeyTbl              equ   132         ; Sprite pattern table select for the compiled sprite key: $0000 or $0400
 unused133              equ   133
 unused134              equ   134
 unused135              equ   135
@@ -290,51 +290,56 @@ BLT_P_HORZ     equ  $40                   ; V = 1 for horizontal mirroring
 ; shadow areas are meant to be accessed using using an CIRAM address ($000 - $7FF)
 ; e.g. ldal TILE_SHADOW,x
 ;
-; Since moving to directly modeling CIRAM, the size of each buffer could be reduces to $800 bytes.  But we are leaving them
-; for now.  Justknow that only the first half od each region should have data.
+; They are indexed by CIRAM address ($000 - $7FF), so each one is $800 bytes.
+;
+; PPU_MEM bank map: $0000-$1FFF CHR, $2000-$27FF CIRAM (PPU_CIRAM), $2800-$290B compiled sprite cache
+; bookkeeping (SPR_OWNER ...), $3F00 palette RAM, $4000-$67FF the tables below, $7000-$8FFF SPR_COMP_TBL
+; ($6800-$6FFF and $9000-$AFFF free),
+; $B000-$C7FF the grid renderer's cell tables, $C800/$E800 the nametable shadow buffers (NTM_SB0/1).
 
 TILE_SHADOW   equ $4000          ; shadowed values of the nametable tiles
-ATTR_SHADOW   equ $5000          ; pre-calculated attribute values derived from the attribute bytes in $2nC0 PPU RAM
+ATTR_SHADOW   equ $4800          ; pre-calculated attribute values derived from the attribute bytes in $2nC0 PPU RAM
 
 ; These three tables are static since the PEA fields are 1:1 to the CIRAM layout. Note that these tables simply replicate
 ; information that's already in the BTableHigh and BTableLow arrays. For a given CIRAM address N, the address corresponds
 ; to the Nth entry in those tables.  This is just a convenient way to get the information in 8-bit mode.
 
-TILE_BANK     equ $6000          ; pre-calculated data bank value for the location of the associated PEA field tile
-TILE_ADDR_LO  equ $7000          ; pre-calculated address (low byte) of the location of the PEA field tile
-TILE_ADDR_HI  equ $8000          ; pre-calculated address (high byte) of the location of the PEA field tile
+TILE_BANK     equ $5000          ; pre-calculated data bank value for the location of the associated PEA field tile
+TILE_ADDR_LO  equ $5800          ; pre-calculated address (low byte) of the location of the PEA field tile
+TILE_ADDR_HI  equ $6000          ; pre-calculated address (high byte) of the location of the PEA field tile
 
 ; Compiled sprite cache (core/sprites/CompileSprites.s).
 ;
-; A compiled sprite is the code for one tile with one vertical orientation, in two variants: as is and
-; flipped horizontally.  The sprite compile bank is divided into fixed, unpacked slots sized for the worst case:
-;
-;     2 variants * (16 words * 14 bytes + 4 byte return) = 456 bytes -> 512 byte slots
+; A compiled sprite is the code for one tile with one vertical orientation and one sprite palette, in two
+; variants: as is and flipped horizontally.  The pixels are compiled in their final colors (the palette's
+; swizzle table is applied at compile time), so the code is only immediate loads and stores.  The sprite
+; compile bank is divided into fixed, unpacked 512 byte slots; a variant is at most 16 words * 12 bytes + a
+; 4 byte return = 196 bytes, so the first one is at the start of the slot and the horizontally flipped one
+; at slot + $100.
 ;
 ; Slot 0 is not used because address $0000 in SPR_COMP_TBL means "not compiled", so there are at most 127.
 ;
-; SPR_COMP_TBL maps a sprite to the address of its compiled code, or 0.  It is indexed by the "key offset":
-;   key offset = (pattern table << 11) | (tile << 3) | (vertical flip << 2) | (horizontal flip << 1)
-; The two horizontal flips of a key are compiled together, into one slot, so their entries are set and cleared
-; together.  Everywhere else the key offset has the horizontal flip bit clear.
+; SPR_COMP_TBL maps a sprite to the slot of its compiled code, or 0.  It is indexed by the "key offset":
+;   key offset = (pattern table << 12) | (palette << 10) | (tile << 2) | (vertical flip << 1)
+; The two horizontal flips are compiled together, into one slot, so one entry (and one store to drop it) is
+; for both.  The compiled colors depend on the sprite swizzle tables, so a change to them drops every
+; compiled sprite (SprCacheFlush).
 ;
 ; Slots are replaced in the order they were filled (a FIFO): SPR_CURSOR goes round the slots, and the slot it
 ; points to is the next one used; if a key owns it (SPR_OWNER), that key is evicted.  A cache hit does not
 ; change anything.  A CHR-RAM write frees a key's slot, which is reused when the cursor gets back to it.
-SPR_COMP_TBL  equ $9000               ; 2048 words
+SPR_COMP_TBL  equ $7000               ; 4096 words
 SPR_SLOT_SIZE equ $0200
 SPR_SLOTS     equ 127                 ; the number of slots used (1 - 127)
 
 ; The number of sprite tiles compiled per drawSprites call (0 - 4; 0 never compiles).  The sprites that miss
 ; are drawn from their bitmaps until they are compiled.  2 was measured to be the best (docs/BENCH_ZELDA.md).
 SPR_COMPILE_PER_RENDER equ 2
-SPR_OWNER     equ $A000               ; 128 words, indexed by slot address >> 8: the key offset that owns the slot,
+SPR_OWNER     equ $2800               ; 128 words, indexed by slot address >> 8: the key offset that owns the slot,
                                       ; or $FFFF if none
-SPR_CURSOR    equ $A100               ; the address of the slot that is used next
-SPR_PEND_CNT  equ $A102               ; byte offset of the end of the pending list
-SPR_PEND      equ $A104               ; keys that missed this render, waiting to be compiled (4 words)
-
-; $A10C-$AFFF: free (formerly the TILE_VERSION0/1 dedup tables)
+SPR_CURSOR    equ $2900               ; the address of the slot that is used next
+SPR_PEND_CNT  equ $2902               ; byte offset of the end of the pending list
+SPR_PEND      equ $2904               ; keys that missed this render, waiting to be compiled (4 words)
 
 ;TILE_ROW      equ $B000          ; pre-calculated row of the PPU address
 ;TILE_COL      equ $C000          ; pre-calculated column of the PPU address
