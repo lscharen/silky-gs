@@ -64,7 +64,7 @@ The runtime sets up a dual-context environment: the IIgs runs as host, with a se
 
 Each port has a consistent structure:
 - `Master.s` — Merlin32 build descriptor (segment list)
-- `Main.s` — Game-specific config constants and callback hooks (`PRE_EVT_LOOP`, `POST_EVT_LOOP`, `PRE_RENDER`, `POST_RENDER`, `SCAN_OAM_XTRA_FILTER`, and `SPRITE_PRE_DRAW` before each sprite is drawn — it can set `sprClipTop` to hide the sprite's top lines, which the sprite renderer clips while drawing; Zelda uses it to emulate the NES 8-sprites-per-line limit at its doors). Every game must define every callback macro; an empty macro means no callback
+- `Main.s` — Game-specific config constants and callback hooks (`PRE_EVT_LOOP`, `POST_EVT_LOOP`, `PRE_RENDER`, `POST_RENDER`, `SCAN_OAM_XTRA_FILTER`, and `SPRITE_PRE_DRAW` before each sprite is drawn — it can set `sprClipTop` to hide the sprite's top lines, which the sprite renderer clips while drawing; Zelda uses it to emulate the NES 8-sprites-per-line limit at its doors; a game whose callback can set `sprClipTop` must also set `SPRITE_CLIP equ 1`, otherwise the clip tests are not assembled). Every game must define every callback macro; an empty macro means no callback
 - `rom.s` — Converted NES PRG-ROM code/data
 - `chr.s` — NES CHR-ROM tile graphics
 - `PPU.s` — NES PPU/OAM memory allocations

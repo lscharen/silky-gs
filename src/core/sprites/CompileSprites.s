@@ -401,8 +401,9 @@ bit_mask
 ;   SPR_OWNER has the key offset of each slot's sprite, to clear its SPR_COMP_TBL entries when it is replaced.
 ; * drawSprites draws a sprite that misses from its bitmap and queues it (SPR_PEND, at most
 ;   SPR_COMPILE_PER_RENDER entries).  SprCacheService compiles the queue when drawSprites is done.
-; * CHR-RAM writes invalidate the compiled sprites of the tile (both vertical orientations) through the
-;   existing dirty flags (SprInvalidate, called by CheckSprTileDirty).
+; * CHR-RAM: the first write to a tile drops its compiled sprites (both vertical orientations) and sets its
+;   sprite dirty flag (PPUDATA_WRITE), and a dirty tile is never compiled (SprCompileTile), so a hit needs no
+;   check.  The bitmap draws reconvert a dirty tile first (sprChrCheck in ppu.s).
 ; ---------------------------------------------------------------------------------------------------
 
 ; Start with an empty cache.  Called once from PPUStartUp.
@@ -433,6 +434,11 @@ SprCacheInit
 ; Make sure a sprite has a compiled version, in the next slot of the ring.  If a sprite owns that slot,
 ; it is evicted.  The tile data in the tiledata bank must be valid.
 ;
+; CHR-RAM: a tile whose sprite dirty flag is set never keeps a compiled sprite, because a compiled-sprite
+; hit does not check the flag (PPUDATA_WRITE drops the compiled sprites on the first write to a tile).
+; The tile may be rewritten after the miss that queued it converted it, so the flag is tested before
+; compiling, and again, with interrupts off, before the result is stored.
+;
 ; X = key offset (horizontal flip bit clear).  All registers trashed.
         mx    %00
 SprCompileTile
@@ -441,6 +447,12 @@ SprCompileTile
         rts                              ; already compiled (a key can be queued more than once)
 
 :compile
+        DO    HAS_CHR_RAM
+        jsr   :chr_dirty
+        beq   *+3
+        rts                              ; rewritten since it was converted: a later miss converts and
+                                         ; queues it again
+        FIN
         phx                              ; save the key offset
         ldal  PPU_MEM+SPR_CURSOR         ; take the next slot and move the cursor on
         pha                              ; slot at 1,s and key offset at 3,s
@@ -485,10 +497,45 @@ SprCompileTile
         tay
         pla                              ; A = slot: the variant without the horizontal flip
         plx                              ; X = key offset
+        DO    HAS_CHR_RAM
+        php
+        sei                              ; (the flag test and the store, with no NES task in between)
+        pha
+        jsr   :chr_dirty
+        bne   :stale
+        pla
+        FIN
         stal  PPU_MEM+SPR_COMP_TBL,x
         tya
         stal  PPU_MEM+SPR_COMP_TBL+2,x
+        DO    HAS_CHR_RAM
+        plp
+        FIN
         rts
+
+        DO    HAS_CHR_RAM
+:stale  pla                              ; Rewritten while it was compiled: free the slot instead
+        xba
+        and   #$00FF
+        tax
+        lda   #$FFFF
+        stal  PPU_MEM+SPR_OWNER,x
+        plp
+        rts
+
+; Z = 0 if the tile of the key in X has its sprite dirty flag set.  X is preserved.
+:chr_dirty
+        phx
+        txa
+        lsr
+        lsr
+        lsr                              ; (pattern table << 8 | tile): the 0-511 index of ChrRamDirty
+        tax
+        ldal  ChrRamDirty,x
+        plx
+        and   #CHRRAM_SPR_DIRTY
+        rts
+        FIN
 
 ; A tile's pixels changed (CHR-RAM write), so its compiled sprites are stale.  If a key has a compiled sprite,
 ; drop it and free its slot; the slot is used again when the cursor gets back to it.  This is for one key; the

@@ -58,6 +58,10 @@ GRID_FULL   equ   $00FF
 
 ; Count words copied per cell (costs ~13 cycles per cell per pass; only for measurements)
 GRID_WORD_STATS equ 0
+
+; Keep the frame / cell / tile counters (gs*) of the dirty and full renders (~150 cycles per frame;
+; only for measurements)
+GRID_STATS  equ 0
 GQ_PITCH2   equ   {{GRID_COLS+1}*2}         ; Quad mode: bytes per padded grid row (one pad column)
 GRID_X0     equ   {GRID_QUADS*GQ_PITCH2}    ; Quad mode: index of the first visible cell (one pad row above)
 GRID_XPAD   equ   {GRID_QUADS*2}            ; Quad mode: skip the pad column at the end of each row
