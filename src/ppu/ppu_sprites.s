@@ -85,29 +85,83 @@ scanOAMSprites
 
          clc
          ldx   #OAM_START_INDEX*4   ; This is in the range [0, 252]
+
+; When the range is a multiple of 4 entries, the filter is unrolled 4 times: each entry is tested at a
+; fixed offset from X, and only an entry that passes works out its index (X + offset; the carry stays
+; clear).  A rejected entry costs 11 cycles instead of 20.
+
+OAM_FILTER_REM equ {OAM_END_INDEX-OAM_START_INDEX}-{{{OAM_END_INDEX-OAM_START_INDEX}/4}*4}
+OAM_UNROLL     equ {4-OAM_FILTER_REM}/4          ; 1 = unrolled, 0 = loop
+OAM_END_CMP    equ 1-{OAM_END_INDEX/64}          ; 1 = compare the index with the end (OAM_END_INDEX*4 =
+                                                 ; 256 doesn't fit an 8-bit compare: the carry is set
+                                                 ; once the index wraps past 252)
+TILE_FILTER    equ 1-NO_TILE_EXCLUDE
+
+; (No nested conditionals: Merlin32 mishandles a DO / ELSE inside a DO that is off.)
+
+         DO    OAM_FILTER_REM
          txa                        ; Keep X = A
 oam_filter
          ldy:  DIRECT_OAM_READ,x    ; Y coordinate
          ldx   y_exclude,y
          bne   oam_next
-
-         DO    NO_TILE_EXCLUDE
-         ELSE
+         FIN
+         DO    OAM_FILTER_REM*TILE_FILTER
          tax                        ; Restore the X-register
          ldy:  DIRECT_OAM_READ+1,x  ; tile
          ldx   tile_exclude,y
          bne   oam_next
          FIN
-
+         DO    OAM_FILTER_REM
          pha                        ; Since A = X, we can just save it directly and fall through
 oam_next
          adc   #4
          tax
-         DO    {OAM_END_INDEX-64}   ; (OAM_END_INDEX*4 = 256 doesn't fit an 8-bit compare)
+         FIN
+         DO    OAM_FILTER_REM*OAM_END_CMP
          cmp   #OAM_END_INDEX*4
+         FIN
+         DO    OAM_FILTER_REM
          bcc   oam_filter
-         ELSE
-         bcc   oam_filter           ; carry is set once the index wraps past 252
+         FIN
+
+oam_filter4
+]k       =     0
+         DO    OAM_UNROLL*NO_TILE_EXCLUDE
+         lup   4
+         ldy:  DIRECT_OAM_READ+]k,x ; Y coordinate
+         lda   y_exclude,y
+         bne   *+6
+         txa                        ; Push the index of an entry that passes
+         adc   #]k
+         pha
+]k       =     ]k+4
+         --^
+         FIN
+         DO    OAM_UNROLL*TILE_FILTER
+         lup   4
+         ldy:  DIRECT_OAM_READ+]k,x ; Y coordinate
+         lda   y_exclude,y
+         bne   *+14
+         ldy:  DIRECT_OAM_READ+1+]k,x ; tile
+         lda   tile_exclude,y
+         bne   *+6
+         txa                        ; Push the index of an entry that passes
+         adc   #]k
+         pha
+]k       =     ]k+4
+         --^
+         FIN
+         DO    OAM_UNROLL
+         txa
+         adc   #16
+         tax
+         FIN
+         DO    OAM_UNROLL*OAM_END_CMP
+         cmp   #OAM_END_INDEX*4
+         FIN
+         DO    OAM_UNROLL
+         bcc   oam_filter4
          FIN
 
 ; Pass 2: copy the sprites that passed into OAM_COPY and mark their lines in the shadow bitmap.

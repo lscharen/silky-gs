@@ -48,6 +48,10 @@ ROM_CompileBackgroundTiles
 ; and sprites that miss are compiled on demand while the game runs.
 ROM_CompileSpriteTiles
 
+; Compiled sprites are now for one sprite palette each, and the palette map is set after this, which
+; drops every compiled sprite (NES_SetPaletteMap).  The cache fills itself in the first renders.
+            rts
+
             lda #2*{COMPILED_SPRITE_LIST_COUNT-1}         ; are any compiled sprite tiles defined?
             bmi :empty_list
 
@@ -197,7 +201,17 @@ TmpPalette  ds    32
 ; 3. The first 4 tables are for background tiles and second are for sprites
 ;
 ; A = high word, X = low word
+;
+; The compiled sprites have the sprite palettes' colors compiled in, so a different map drops them.
 NES_SetPaletteMap
+            cmp   SwizzlePtr+2
+            bne   :changed
+            cpx   SwizzlePtr
+            beq   :set
+:changed    pha
+            jsr   SprRequestFlush
+            pla
+:set
             sta   SwizzlePtr+2
             sta   SwizzlePtr2+2
             sta   ActivePtr+2
@@ -722,6 +736,6 @@ NES_BuildSwizzleTable
             clc
             adc  #14
             tcs
-            rts
+            jmp  SprRequestFlush         ; The compiled sprites have the old colors
 
             FIN
