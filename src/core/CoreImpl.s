@@ -448,8 +448,13 @@ _ReadKeypress
                   bit       #$80
                   beq       :no_key_down
 
-                  lda       LastKey             ; otherwise place the last key value as the current keypress
-                  sta       1,s                 ; without PAD_KEY_DOWN flag set
+; The held key is the last one pressed.  Its code stays in $C000 bits 0-6 after the strobe is cleared,
+; so take it from there rather than from LastKey: if something else cleared the strobe first (e.g. a
+; keyboard interrupt handler left installed by an INIT or CDA), LastKey never saw the key.
+                  ldal      KBD_REG
+                  ora       #$80                ; same value as when the key was new (LastKey keeps bit 7)
+                  sta       LastKey
+                  sta       1,s
                   bra       :done
 
 :no_key_down
