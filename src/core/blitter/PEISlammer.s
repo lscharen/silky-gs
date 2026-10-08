@@ -1,12 +1,18 @@
-; Implementation of a PEI Slammer that updates a rectangular screen area.  The only tweak that
-; this implementation does is that it does break up the slam into chunks of scan lines to allow
-; time for interrupts to be serviced in a timely manner.
+; PEI Slammer: expose whole playfield lines from the shadow screen ($01/2000) to the SHR screen.
 ;
-; This is a fairly basic slam in that it does not try to align the direct page.  To enhance the
-; slammer, note that page-aligned addresses repeat every 8 scan lines and some lines would need
-; to be split into two slams to keep the direct page aligned.
+; PEI costs 6 cycles with a page-aligned direct page and 7 without.  Screen lines are 160 bytes apart,
+; so the low byte of a line's address repeats every 8 lines (8 x 160 = 5 pages).  There is one unrolled
+; chunk of code per line phase (absolute screen line mod 8), with the direct page set to the page of
+; the line's words; a line that crosses a page boundary switches the direct page once in the middle.
+; The chunks chain to the next phase through patched JMPs (to the next line, or to the line after next
+; with CTRL_EVEN_RENDER), and the wrap from the last phase back to the first moves to the next block of
+; 8 lines and opens an interrupt window.
 ;
-; At best, this saves 1 cycle per word, or 80 cycles for a full scanline
+; The phase constants assume the NES playfield: 128 bytes wide, starting at byte 16 of the SHR line
+; (screen mode 2 and the other 128-byte modes).  _PEISlamPatch checks this.
+;
+; Registers inside the chunks: Y = 1280 x (absolute line / 8), the block's offset; X = lines left;
+; carry clear (nothing here overflows 16 bits).
 ;
 ; X = first line (inclusive), valid range of 0 to 199
 ; Y = last line  (exclusive), valid range >X up to 200
@@ -17,16 +23,30 @@ _PEISlam
             cpx   #200
             bcc   *+4
             brk   $14
-;                 rts
             cpy   #201
             bcc   *+4
             brk   $15
-;                 rts
+
+; Re-patch the chunk chain (and the state register values) when the render mode changes (before :tmp
+; is used: the patch routine uses tmp0)
+
+            lda   ControlBits
+            and   #CTRL_EVEN_RENDER
+            ora   #1                    ; (never 0, so the first call always patches)
+            cmpl  peiMode
+            beq   :mode_ok
+            phx
+            phy
+            jsr   _PEISlamPatch
+            ply
+            plx
+:mode_ok
 
             stx   :tmp       ; x must be less than y
             cpy   :tmp
+            beq   :none
             bcs   *+3
-            rts
+:none       rts
 
             DO    DIRTY_RENDERING_VISUALS
 ; Set SCB values for debugging
@@ -52,10 +72,10 @@ _PEISlam
             bit   #CTRL_EVEN_RENDER
             beq   :normal
 
-            txa                            ; force starting line to the next even line, rounded up
+            txa                         ; force starting line to the next even line, rounded up
             inc
-            and  #$FFFE
-            sta  :tmp
+            and   #$FFFE
+            sta   :tmp
             tax
 
             tya                         ; Examples:
@@ -70,129 +90,315 @@ _PEISlam
             rts
 
             lsr
-            inc                         ; Halve the number of iterations
-
-            tay
-
-            lda   #320
-            sta   :step+1                  ; double steps
-
+            inc                         ; Number of lines to slam
             bra   :begin
-:normal
-            tya
+
+:normal     tya
             sec
-            sbc   :tmp
-            tay                    ; get the number of lines in the y register. This changes if we're in even mode
-            lda   #160
-            sta   :step+1
-:begin
+            sbc   :tmp                  ; Number of lines to slam
 
-; Patch values because Direct Page is not available
-
-            sep   #$20
-            lda   STATE_REG_R0W0
-            sta   :r0w0_p1+1
-            sta   :r0w0_p2+1
-            lda   STATE_REG_R1W1
-            sta   :r1w1_p1+1
-            rep   #$20
-
-            lda   ScreenWidth
-            dec
-            sta   :screen_width_1  ; save the width-1 outside of the direct page
-
-            lda   #:pei_end        ; patch the PEI entry address
-            sec
-            sbc   ScreenWidth
-            sta   :inner+1
-
+:begin      sta   :tmp
             txa
+            clc
+            adc   ScreenY0              ; Absolute screen line of the first line
+            pha
+            clc                         ; Never write past the last screen line (the SCBs,
+            adc   :tmp                  ; palettes and I/O space follow).  Checked once per
+            cmp   #201                  ; call; the chunks don't check the stack.
+            bcc   *+4
+            brk   $85
+            lda   1,s
+            and   #$0007                ; Its phase selects the entry chunk
             asl
             tax
-            lda   RTable,x         ; This is the right visible byte, so add one to get the 
-            tax                    ; left visible byte (cache in x-reg)
-            sec
-            sbc   ScreenWidth
-            inc
+            ldal  peiChunkTbl,x
+            stal  peiGo+1
+            pla
+            and   #$FFF8
+            asl
+            tax
+            ldal  Mul160Tbl,x           ; 160 x (line & ~7) = 1280 x block
+            tay
+            ldx   :tmp                  ; Lines left
 
-            phd                    ; save the current direct page and assign the base
-            tcd                    ; screen address to the direct page register
-
+            phd                         ; The direct page and stack are restored on exit
             tsc
-            sta   :stk_save        ; save the stack pointer to restore later
+            stal  peiStkSave
 
-            clc                    ; clear before the loop -- nothing in the loop affect the carry bit
-            brl   :outer           ; hop into the entry point.
+            sep   #$20
+            lda   STATE_REG_R1W1        ; (read before the direct page moves)
+            sei
+            stal  STATE_REG
+            rep   #$21                  ; 16-bit, carry clear
+peiGo       jmp   $0000
 
-]dp         equ   158
-            lup   80               ; A full width screen is 160 bytes / 80 words
+; Next block of 8 lines, with an interrupt window.  Falls into the phase 0 chunk.
+peiWrap0
+            tya
+            adc   #1280
+            tay
+            sep   #$20
+peiW0a      lda   #0                    ; R0W0 (patched)
+            stal  STATE_REG
+            rep   #$20
+            ldal  peiStkSave
+            tcs
+            cli
+            sei
+            sep   #$20
+peiW0b      lda   #0                    ; R1W1 (patched)
+            stal  STATE_REG
+            rep   #$21
+
+; Phase 0: base $2010 (+ Y), one page
+peiC0       tya
+            adc   #$2010+127
+            tcs
+            tya
+            adc   #$2000
+            tcd
+]dp         equ   $8E
+            lup   64
             pei   ]dp
 ]dp         equ   ]dp-2
             --^
-:pei_end
-            tdc                    ; Move to the next line
-:step       adc   #160
+            dex
+            beq   *+5
+peiJ0       jmp   peiC1
+            jmp   peiExit
+
+; Phase 1: base $20B0, 24 words in page $21, 40 in page $20
+peiC1       tya
+            adc   #$20B0+127
+            tcs
+            tya
+            adc   #$2100
             tcd
-            adc   :screen_width_1
+]dp         equ   $2E
+            lup   24
+            pei   ]dp
+]dp         equ   ]dp-2
+            --^
+            tya
+            adc   #$2000
+            tcd
+]dp         equ   $FE
+            lup   40
+            pei   ]dp
+]dp         equ   ]dp-2
+            --^
+            dex
+            beq   *+5
+peiJ1       jmp   peiC2
+            jmp   peiExit
+
+; Phase 2: base $2150, one page
+peiC2       tya
+            adc   #$2150+127
             tcs
+            tya
+            adc   #$2100
+            tcd
+]dp         equ   $CE
+            lup   64
+            pei   ]dp
+]dp         equ   ]dp-2
+            --^
+            dex
+            beq   *+5
+peiJ2       jmp   peiC3
+            jmp   peiExit
 
-            dey                    ; decrement the total counter, if zero then we're done
-            beq   :exit
+; Phase 3: base $21F0, 56 words in page $22, 8 in page $21
+peiC3       tya
+            adc   #$21F0+127
+            tcs
+            tya
+            adc   #$2200
+            tcd
+]dp         equ   $6E
+            lup   56
+            pei   ]dp
+]dp         equ   ]dp-2
+            --^
+            tya
+            adc   #$2100
+            tcd
+]dp         equ   $FE
+            lup   8
+            pei   ]dp
+]dp         equ   ]dp-2
+            --^
+            dex
+            beq   *+5
+peiJ3       jmp   peiC4
+            jmp   peiExit
 
-            cmp   #$9D00
-            bcc   *+4
-;                 beq   :exit
-            brk   $85              ; Kill if stack is out of range
+; Phase 4: base $2290, 8 words in page $23, 56 in page $22
+peiC4       tya
+            adc   #$2290+127
+            tcs
+            tya
+            adc   #$2300
+            tcd
+]dp         equ   $0E
+            lup   8
+            pei   ]dp
+]dp         equ   ]dp-2
+            --^
+            tya
+            adc   #$2200
+            tcd
+]dp         equ   $FE
+            lup   56
+            pei   ]dp
+]dp         equ   ]dp-2
+            --^
+            dex
+            beq   *+5
+peiJ4       jmp   peiC5
+            jmp   peiExit
 
-            dex                    ; decrement the inner counter.  Both counters are set
-            beq   :restore         ; up so that they fall-through by default to save a cycle
-                                   ; per loop iteration.
+; Phase 5: base $2330, one page
+peiC5       tya
+            adc   #$2330+127
+            tcs
+            tya
+            adc   #$2300
+            tcd
+]dp         equ   $AE
+            lup   64
+            pei   ]dp
+]dp         equ   ]dp-2
+            --^
+            dex
+            beq   *+5
+peiJ5       jmp   peiC6
+            jmp   peiExit
 
-:inner      jmp   $0000            ; 25 cycles of overhead per line. A full width slam executes all
-                                   ; 80 of the PEI instructions which we expect to take 7 cycles
-                                   ; since the direct page is not aligned.  So total overhead is
-                                   ; 25 / (25 + 7 * 80) = 4.27% of execution
-                                   ;
-                                   ; Without the interrupt breaks, we could remove the dex/beq test
-                                   ; and save 4 cycles per loop which takes the overhead down to
-                                   ; only 3.6%
+; Phase 6: base $23D0, 40 words in page $24, 24 in page $23
+peiC6       tya
+            adc   #$23D0+127
+            tcs
+            tya
+            adc   #$2400
+            tcd
+]dp         equ   $4E
+            lup   40
+            pei   ]dp
+]dp         equ   ]dp-2
+            --^
+            tya
+            adc   #$2300
+            tcd
+]dp         equ   $FE
+            lup   24
+            pei   ]dp
+]dp         equ   ]dp-2
+            --^
+            dex
+            beq   *+5
+peiJ6       jmp   peiC7
+            jmp   peiExit
 
-:restore
-            tsx                    ; save the current stack
+; Phase 7: base $2470, one page
+peiC7       tya
+            adc   #$2470+127
+            tcs
+            tya
+            adc   #$2400
+            tcd
+]dp         equ   $EE
+            lup   64
+            pei   ]dp
+]dp         equ   ]dp-2
+            --^
+            dex
+            beq   *+5
+peiJ7       jmp   peiWrap0
+            jmp   peiExit
+
+; CTRL_EVEN_RENDER: the wrap from phase 7 continues at phase 1
+peiWrap1
+            tya
+            adc   #1280
+            tay
             sep   #$20
-:r0w0_p1    lda   #00              ; _R0W0
+peiW1a      lda   #0                    ; R0W0 (patched)
             stal  STATE_REG
             rep   #$20
-
-            lda   :stk_save        ; give a few cycles to catch some interrupts
-            tcs
-            cli                    ; fall through here -- saves a BRA instruction
-
-:outer
-            sei
-            txs                    ; set the stack address to the right edge
-            ldx   #8               ; Enable interrupts at least once every 8 iterations
-            sep   #$20
-:r1w1_p1    lda   #00             ; _R1W1
-            stal  STATE_REG
-            rep   #$20
-            bra   :inner
-
-:exit
-            sep    #$20
-:r0w0_p2    lda    #00             ; _R0W0
-            stal   STATE_REG
-            rep    #$20
-
-            lda    :stk_save
+            ldal  peiStkSave
             tcs
             cli
+            sei
+            sep   #$20
+peiW1b      lda   #0                    ; R1W1 (patched)
+            stal  STATE_REG
+            rep   #$21
+            jmp   peiC1
 
+peiExit
+            sep   #$20
+peiXa       lda   #0                    ; R0W0 (patched)
+            stal  STATE_REG
+            rep   #$20
+            ldal  peiStkSave
+            tcs
+            cli
             pld
             rts
 
-:stk_save        ds    2
-:screen_width_1  ds    2
+; Patch the state register values and the chunk chain for the render mode.  A = the mode key
+; (CTRL_EVEN_RENDER | 1).  Uses tmp0.
+            mx    %00
+_PEISlamPatch
+            phb
+            phk
+            plb
+            sta   peiMode
 
+            lda   ScreenWidth           ; The chunks are built for the 128-byte NES playfield
+            cmp   #128
+            bne   :bad
+            lda   ScreenX0
+            cmp   #16
+            beq   :ok
+:bad        brk   $16
+:ok
+            sep   #$20
+            lda   STATE_REG_R0W0
+            sta   peiW0a+1
+            sta   peiW1a+1
+            sta   peiXa+1
+            lda   STATE_REG_R1W1
+            sta   peiW0b+1
+            sta   peiW1b+1
+            rep   #$20
 
+            lda   peiMode
+            and   #CTRL_EVEN_RENDER
+            beq   *+5
+            lda   #16                   ; The even-mode targets
+            clc
+            adc   #14
+            tax
+            ldy   #14
+:loop       lda   peiJmpTbl,y
+            sta   tmp0
+            lda   peiNextTbl,x
+            sta   (tmp0)
+            dex
+            dex
+            dey
+            dey
+            bpl   :loop
 
+            plb
+            rts
+
+peiMode     dw    0                     ; CTRL_EVEN_RENDER | 1 of the current patches (0 = none yet)
+peiStkSave  dw    0
+peiChunkTbl dw    peiC0,peiC1,peiC2,peiC3,peiC4,peiC5,peiC6,peiC7
+peiJmpTbl   dw    peiJ0+1,peiJ1+1,peiJ2+1,peiJ3+1,peiJ4+1,peiJ5+1,peiJ6+1,peiJ7+1
+peiNextTbl  dw    peiC1,peiC2,peiC3,peiC4,peiC5,peiC6,peiC7,peiWrap0          ; Every line
+            dw    peiC2,peiC3,peiC4,peiC5,peiC6,peiC7,peiWrap0,peiWrap1       ; CTRL_EVEN_RENDER

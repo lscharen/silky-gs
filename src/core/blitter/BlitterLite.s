@@ -38,8 +38,14 @@ _BltRangeLite
                 plp
                 FIN
 
-                lda   ControlBits
-                bit   #CTRL_EVEN_RENDER
+                lda   ControlBits             ; The common case (background on, every line) needs
+                and   #CTRL_EVEN_RENDER+CTRL_BKGND_ENABLE   ; one test and falls into the body
+                cmp   #CTRL_BKGND_ENABLE
+                bne   :not_simple
+                sty   tmp1                ; Save the last line for the exit point
+                jmp   _BltRangeLiteBody
+
+:not_simple     bit   #CTRL_EVEN_RENDER
                 beq   :normal
 
                 txa
@@ -332,14 +338,84 @@ _BltSetupAlt
 :num_lines     equ tmp3
 :exit_addr     equ tmp4
 :virt_start    equ tmp10
+:first_line    equ tmp12                 ; (set by _BltSetupCommon)
 
                jsr   _BltSetupCommon
                sta   :virt_start
 
-               ldx   :num_lines
-               ldy   #_SetupStack
-               jsr   _Apply
+; The stack addresses only depend on the virtual line, the screen line and the number of lines, and
+; nothing else writes them.  Two ranges are remembered (e.g. SMB's status bar and playfield, which are
+; set up every frame), and a range that matches one of them is still in place.  A copy drops the
+; remembered ranges whose code rows it overwrites.  SetScreenRect clears both.
 
+               ldx   #2
+:find          cmp   stkKeyVirt,x         ; A = virtual line
+               bne   :next
+               lda   :first_line
+               cmp   stkKeyFirst,x
+               bne   :next0
+               lda   :num_lines
+               cmp   stkKeyCount,x
+               beq   :stack_ok
+:next0         lda   :virt_start
+:next          dex
+               dex
+               bpl   :find
+
+; Copy the stack addresses.  The code rows are the virtual lines mod 240; rows [new, new+n) and
+; [row, row+count) overlap iff (row - new) mod 240 < n or (new - row) mod 240 < count.
+
+               cmp   #240
+               bcc   *+5
+               sbc   #240
+               sta   stkNewRow
+               ldx   #2
+:inval         lda   stkKeyCount,x
+               bmi   :inval_next          ; ($FFFF = unused)
+               lda   stkKeyRow,x
+               sec
+               sbc   stkNewRow
+               bcs   *+5
+               adc   #240
+               cmp   :num_lines
+               bcc   :drop
+               lda   stkNewRow
+               sec
+               sbc   stkKeyRow,x
+               bcs   *+5
+               adc   #240
+               cmp   stkKeyCount,x
+               bcs   :inval_next
+:drop          lda   #$FFFF
+               sta   stkKeyCount,x
+:inval_next    dex
+               dex
+               bpl   :inval
+
+               ldx   #0                   ; An unused entry, or the one not replaced last time
+               lda   stkKeyCount
+               bmi   :slot
+               ldx   #2
+               lda   stkKeyCount+2
+               bmi   :slot
+               ldx   stkNextSlot
+:slot          txa
+               eor   #2
+               sta   stkNextSlot
+               lda   :virt_start
+               sta   stkKeyVirt,x
+               lda   stkNewRow
+               sta   stkKeyRow,x
+               lda   :first_line
+               sta   stkKeyFirst,x
+               lda   :num_lines
+               sta   stkKeyCount,x
+
+               tax
+               ldy   #_SetupStack
+               lda   :virt_start
+               jsr   _Apply
+:stack_ok
                lda   :virt_start
                ldx   :num_lines
                ldy   #_SetupPEAFieldLines
@@ -656,3 +732,11 @@ _SetupPEAFieldLinesDirty
 
                 plb                       ; Restore the data bank
                 rts
+
+; The two ranges of stack addresses remembered by _BltSetupAlt (count $FFFF = unused)
+stkKeyVirt     dw    $FFFF,$FFFF          ; first virtual line
+stkKeyFirst    dw    $FFFF,$FFFF          ; first screen line
+stkKeyCount    dw    $FFFF,$FFFF          ; number of lines
+stkKeyRow      dw    0,0                  ; first code row (virtual line mod 240)
+stkNewRow      dw    0
+stkNextSlot    dw    0                    ; Entry to replace when both are in use
