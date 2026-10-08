@@ -77,12 +77,19 @@ _Apply
 ; X = number of lines to render (0 - 200)
 ; Y = offset into the PEA field
 
+; The renderers call these after drawing, but _BltSetupAlt leaves its exits patched until the PEA field
+; needs to be stable (_PEAFieldStable), so there is nothing to do here.
 _RestoreBG0OpcodesLite
-;                    ldy   LastPatchOffset
+_RestoreBG0OpcodesAltLite
+                    rts
+
+; Restore the exits of a range right away.  Only for exits patched outside of _BltSetupAlt's tracking
+; (_BltSetupDirty).
+_RestoreBG0OpcodesNowLite
                     lda   #0
                     ldx   ScreenHeight
 
-_RestoreBG0OpcodesAltLite
+_RestoreBG0OpcodesNowAltLite
 :exit_addr          equ   tmp4                               ; row-relative exit offset returned by _BltSetup
 
                     sty   :exit_addr

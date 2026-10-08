@@ -148,6 +148,8 @@ SHOW_DEBUG_VARS equ 0
 
 ; Show the number of VBLs each screen render takes at the top-left of the screen (debug)
 RENDER_VBL_COUNT equ 0
+; Show the renders per second (decimal) at the top-left of the screen
+SHOW_FPS equ 0
 
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 0
@@ -270,7 +272,7 @@ SwizzleTables adrl L1_T0
 config_game_start
 config_game_end
 
-            DO    SHOW_DEBUG_VARS+RENDER_VBL_COUNT    ; debug text (DrawByte / DrawWord)
+            DO    SHOW_DEBUG_VARS+RENDER_VBL_COUNT+SHOW_FPS ; debug text (DrawByte / DrawWord)
             put   ../../misc/App.Msg.s
             FIN
             DO    SHOW_DEBUG_VARS

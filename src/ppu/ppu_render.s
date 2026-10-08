@@ -40,6 +40,7 @@
 
         mx   %00
 drawDirtyScreen
+        jsr   _PEAFieldStable         ; The background is restored from the PEA field
 
         lda   DirtyState              ; Move the Dirty State from 0 -> 1, 1 -> 2, or 2 -> 2
         cmp   #2                      ; Calling the drawScreen function will always set the

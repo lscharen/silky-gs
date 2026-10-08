@@ -534,6 +534,10 @@ NES_RenderFrame
             jsr   DrawByte
             FIN
 
+            DO    SHOW_FPS                ; Renders per second at the top-left of the screen
+            jsr   DrawFPS
+            FIN
+
 ; Game specific post-render logic
 
             POST_RENDER
@@ -548,6 +552,43 @@ NES_RenderFrame
             stx   CurrShadowBitmap
 
             rts
+
+; SHOW_FPS: once a second (OneSecondCounter), draw the number of renders in the last second
+; (framesPerSecond), in decimal, at the top-left of the screen (SHR $2000, the border left of the
+; playfield).
+; fpsValue keeps the number for tools that read memory.
+            DO    SHOW_FPS
+            mx    %00
+DrawFPS
+            ldal  OneSecondCounter
+            cmp   fpsLastSec
+            beq   :out
+            sta   fpsLastSec
+            ldal  framesPerSecond         ; Saved (8-bit) by the one-second interrupt, which also
+            and   #$00FF                  ; resets frameCount
+            sta   fpsValue
+            ldx   #0                      ; To two BCD digits (at most 60 renders a second)
+:tens       cmp   #10
+            bcc   :bcd
+            sbc   #10
+            inx
+            bra   :tens
+:bcd        sta   fpsTmp
+            txa
+            asl
+            asl
+            asl
+            asl
+            ora   fpsTmp
+            ldx   #0                      ; SHR $2000
+            ldy   #$FFFF                  ; colour 15
+            jsr   DrawByte
+:out        rts
+
+fpsLastSec   dw  0
+fpsValue     dw  0
+fpsTmp       dw  0
+            FIN
 
 ; Helper functions for patching and restoring the PEA field.  These could
 ; be overridden for games that want to preserve the ability to switch between
@@ -763,11 +804,12 @@ RenderScreen
 
 ; This is code path for performing dirty rendering.
 
+            jsr   _PEAFieldStable         ; _BltSetupDirty patches the exits itself
             jsr   _BltSetupDirty
             sta   exitOffset
             jsr   drawDirtyScreen
             ldy   exitOffset
-            jsr   _RestoreBG0OpcodesLite
+            jsr   _RestoreBG0OpcodesNowLite
             bra   :done
 
 :full_update

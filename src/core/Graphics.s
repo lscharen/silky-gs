@@ -245,10 +245,13 @@ _WaitForVBL
 SetScreenRect      sty   ScreenHeight               ; Save the screen height and width
                    stx   ScreenWidth
 
-                   pha
-                   lda   #$FFFF                     ; RTable changes: the code field's stack
-                   stal  stkKeyCount                ; addresses must be copied again
+                   jsr   _PEAFieldStable            ; RTable changes: forget the code field's
+                   pha                              ; ranges (their stack addresses must be
+                   lda   #$FFFF                     ; copied again)
+                   stal  stkKeyCount
                    stal  stkKeyCount+2
+                   stal  stkKeyCount+4
+                   stal  stkKeyCount+6
                    pla
 
                    tax                              ; Temp save of the accumulator

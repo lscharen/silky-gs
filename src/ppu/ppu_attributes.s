@@ -166,6 +166,11 @@ RefreshPPUTiles
 ; A = 8 bit, X/Y = 16bit on entry
         mx    %10
 DrawPPUTile
+        pha                           ; The PEA field must not have patched exits under the tile
+        ldal  stkAnyPatched
+        beq   :stable
+        jsr   _PEAFieldStable
+:stable pla
 
         sta   patch0+2                ; Put the tile ID into the page byte of the address first
 

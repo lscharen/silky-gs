@@ -1405,6 +1405,7 @@ gridEndFrame
 ; Render a frame with the grid renderer.  gridPrepare must have returned C = 0.
             mx    %00
 gridDrawDirty
+            jsr   _PEAFieldStable         ; Erased cells are copied from the PEA field
             phb
             phk
             plb

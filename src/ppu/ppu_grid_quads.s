@@ -711,6 +711,7 @@ gqRep16
 ; ---------------------------------------------------------------------------
             mx    %00
 gridDrawDirty
+            jsr   _PEAFieldStable         ; Erased cells are copied from the PEA field
             phb
             phk
             plb
