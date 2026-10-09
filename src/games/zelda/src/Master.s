@@ -19,7 +19,9 @@
 
             TYP   $B3         ; S16 file
             DSK   ZeldaGS
-            XPL
+
+; No XPL: build.js takes the zeros out of the file (scripts/omf-compact.js: DS records and reserved
+; space), and ExpressLoad can't load those.
 
 ; Segment #1 -- Main execution block
 

@@ -582,7 +582,6 @@ SprCacheInit
 ; X = key offset (horizontal flip bit clear).  All registers trashed.
         mx    %00
 SprCompileTile
-sprCompSite                              ; (drawSprites reads the table's long address from this operand)
         ldal  PPU_MEM+SPR_COMP_TBL,x
         beq   :compile
         rts                              ; already compiled (a key can be queued more than once)
@@ -628,8 +627,8 @@ sprCompSite                              ; (drawSprites reads the table's long a
         tax
         tya
         jsr   SprCompileSetup
-        jsr   CompileSprite              ; (cs_mode = 0: the sprite as is and flipped; trashes tmp7 - tmp14,
-        ldy   cs_slot                    ; which SprCacheService saves)
+        jsr   CompileSprite              ; (cs_mode = 0: the sprite as is and flipped; trashes tmp7 - tmp14)
+        ldy   cs_slot
         jsr   EmitShiftStubs             ; (the shifted pair is compiled when it is first needed)
         pla                              ; A = slot * 2
         plx                              ; X = key offset
@@ -704,7 +703,7 @@ SprCompileShift
         lda   1,s
         jsr   SprCompileSetup
         inc   cs_mode
-        jsr   CompileSprite              ; (trashes tmp7 - tmp14, which SprCacheService saves)
+        jsr   CompileSprite              ; (trashes tmp7 - tmp14)
         stz   cs_mode
         pla
         plx
@@ -800,8 +799,8 @@ SprFlushReq dw 0
 
 ; Compile the tiles that missed during drawSprites (at most SPR_COMPILE_PER_RENDER of them).  The
 ; tiles are drawn from their bitmaps until then, so the cost is spread over the next renders.  It is
-; run at the end of drawSprites, in whatever data bank and with whatever direct page temps the
-; caller has, so both are preserved.
+; run at the end of drawSprites (it only has to run before the next one), and trashes tmp7 - tmp14:
+; nothing that calls drawSprites keeps them across it.  The caller's data bank is preserved.
         mx    %00
 SprCacheService
         ldal  PPU_MEM+SPR_PEND_CNT
@@ -810,14 +809,6 @@ SprCacheService
         phb
         phk
         plb                              ; CompileSprite's data tables are addressed with the program bank
-        pei   tmp7
-        pei   tmp8
-        pei   tmp9
-        pei   tmp10
-        pei   tmp11
-        pei   tmp12
-        pei   tmp13
-        pei   tmp14
 
         tax                              ; X = the end of the pending list; compile the last key first
 :next
@@ -836,23 +827,6 @@ SprCacheService
 
         lda   #0
         stal  PPU_MEM+SPR_PEND_CNT
-
-        pla
-        sta   tmp14
-        pla
-        sta   tmp13
-        pla
-        sta   tmp12
-        pla
-        sta   tmp11
-        pla
-        sta   tmp10
-        pla
-        sta   tmp9
-        pla
-        sta   tmp8
-        pla
-        sta   tmp7
         plb
 :exit
         rts

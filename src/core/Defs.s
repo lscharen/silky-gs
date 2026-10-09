@@ -151,7 +151,6 @@ CMPL_BANK              equ   176         ; ^tiledata << 8 | $01 (Bank $01 in low
 
 ; Temporary storage for 8x16 sprite drawing in drawSprites
 sprTmp5Hi              equ   178
-sprCompBase            equ   180         ; drawSprites: low word of the SPR_COMP_TBL address (8x16 sprites)
 
 ; PPUFlushQueuesAlt locals, continued from above (same rationale)
 NtmDiff                equ   182         ; attribute EOR the last applied value

@@ -9,5 +9,6 @@ PPU_CIRAM   ENT
 PALETTE_RAM ds    $100            ; $3F00 - $3F14 is palette RAM
 
 ; End of normal PPU RAM, the rest is used for various shadow RAM leveraged by the runtime.  The only
-; data that needs to be shadowed is the 4kb of Nametable memory.
-            ds    $BF00
+; data that needs to be shadowed is the 4kb of Nametable memory.  There is no ds for it: build.js makes
+; this segment a whole bank (omf-compact.js --bank PPURAM), so PPU_MEM is at $0000 and the bank is
+; all ours.

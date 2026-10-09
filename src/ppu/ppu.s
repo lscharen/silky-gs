@@ -193,7 +193,6 @@ sprBankSwap  equ unused174          ; $01 << 8 | ^tiledata: pei / plb selects th
 sprTmp5      equ sprTmp5Hi          ; tiledata bank offset for the tile to draw: $0000 or $8000
 ; sprCompTbl (Defs.s): long pointer to SPR_COMP_TBL, plus $1000 (the pattern table bit of the key offset)
 ; for pattern table 1, so the lookup does not fold it into the key (see :blitResolvedSprite)
-; sprCompBase (Defs.s): the low word of SPR_COMP_TBL's address, for the 8x16 sprites to set sprCompTbl from
 
 ; Sprites are drawn on single pixels (sprShift selects the compiled variants shifted one pixel to the
 ; right), except with the old dirty renderer, which saves the screen under a sprite 4 bytes wide.  The
@@ -299,12 +298,9 @@ drawSprites
         lda   CMPL_BANK                ; For switching to the tiledata bank and back to $01
         xba
         sta   sprBankSwap
-        ldal  sprCompSite+1            ; SPR_COMP_TBL's address, from a relocated long operand (not
-        sta   sprCompBase              ; #PPU_MEM+SPR_COMP_TBL: see MERLIN32_OMF_EXT_OFFSET_BUG.md)
-        sta   sprCompTbl
         sep   #$20
-        ldal  sprCompSite+3
-        sta   sprCompTbl+2
+        lda   #^PPU_MEM                ; SPR_COMP_TBL's bank (the low word is set for 8x8 mode below, or
+        sta   sprCompTbl+2             ; per sprite in 8x16 mode)
         rep   #$20
 
         ldal  SprFlushReq              ; The sprite swizzle tables changed: the compiled sprites have
@@ -333,7 +329,7 @@ drawSprites
         lsr                            ; $8000 -> $1000: pattern table 1's half of SPR_COMP_TBL
         lsr
         lsr                            ; (carry clear)
-        adc   sprCompBase
+        adc   #SPR_COMP_TBL            ; (PPU_MEM is at the start of its bank)
         sta   sprCompTbl
         plb
 
@@ -489,14 +485,12 @@ drawSprites
         beq   :spr16_tbl0
         lda   #$8000
         sta   sprTmp5
-        lda   sprCompBase
-        clc
-        adc   #$1000                   ; pattern table 1's half of SPR_COMP_TBL
+        lda   #SPR_COMP_TBL+$1000      ; pattern table 1's half of SPR_COMP_TBL
         sta   sprCompTbl
         bra   :spr16_tbl_done
 :spr16_tbl0
         stz   sprTmp5
-        lda   sprCompBase
+        lda   #SPR_COMP_TBL
         sta   sprCompTbl
 :spr16_tbl_done
 
@@ -548,14 +542,12 @@ drawSprites
         beq   :c16tbl0
         lda   #$8000
         sta   sprTmp5
-        lda   sprCompBase
-        clc
-        adc   #$1000
+        lda   #SPR_COMP_TBL+$1000
         sta   sprCompTbl
         bra   :c16tbl
 :c16tbl0
         stz   sprTmp5
-        lda   sprCompBase
+        lda   #SPR_COMP_TBL
         sta   sprCompTbl
 :c16tbl
         lda   sprTmp2
