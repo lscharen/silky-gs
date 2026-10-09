@@ -44,7 +44,7 @@ ROM_CompileBackgroundTiles
 ;
 ; The compiled sprite buffer only uses a single bank, so there is not enough space to
 ; compile all of the sprite tiles.  The tiles here only warm up the compiled sprite cache
-; (SprCompileTile); at most SPR_SLOTS of them stay compiled, the rest are evicted in list order,
+; (SprCompileTile); at most SPR_MAX_SLOTS of them stay compiled, the rest are evicted in list order,
 ; and sprites that miss are compiled on demand while the game runs.
 ROM_CompileSpriteTiles
 

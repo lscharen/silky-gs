@@ -195,10 +195,15 @@ sprTmp5      equ sprTmp5Hi          ; tiledata bank offset for the tile to draw:
 ; for pattern table 1, so the lookup does not fold it into the key (see :blitResolvedSprite)
 ; sprCompBase (Defs.s): the low word of SPR_COMP_TBL's address, for the 8x16 sprites to set sprCompTbl from
 
+; Sprites are drawn on single pixels (sprShift selects the compiled variants shifted one pixel to the
+; right), except with the old dirty renderer, which saves the screen under a sprite 4 bytes wide.  The
+; grid renderer and the full renders (no dirty rendering) need nothing more.
+SPR_PIXEL_SHIFT equ GRID_DIRTY_RENDERING+1-ENABLE_DIRTY_RENDERING
+
 ; Set up a sprite for drawing.  X = OAM index (preserved).
 ;
-; Sets sprTmp1 = SHR address, sprTmp4 = horizontal clip amount (0 = no clipping) and ActivePtr = the
-; sprite's palette.  A macro, so each sprite size gets its own copy and the setup is not a nested call.
+; Sets sprTmp1 = SHR address, sprTmp4 = horizontal clip amount (0 = no clipping), sprShift = $0004 for
+; a sprite on an odd pixel (else 0; SPR_PIXEL_SHIFT) and ActivePtr = the sprite's palette.  A macro, so each sprite size gets its own copy and the setup is not a nested call.
 SPR_SETUP mac
         ldal  OAM_COPY,x               ; Y-coordinate
         and   #$00FF
@@ -220,20 +225,39 @@ SPR_SETUP mac
 
         lda   sprXPar                  ; X-coordinate: NES pixels to IIgs bytes, with the scroll's
         adcl  OAM_COPY+3,x             ; half-pixel offset
+        DO    1-SPR_PIXEL_SHIFT
         and   #$FE                     ; Mask before the shift so that a 0 goes into the carry
-        ror                            ; Bring the carry into the high bit in case of overflow
-        rep   #$20
+        FIN
+        ror                            ; Bring the carry into the high bit in case of overflow (the
+        rep   #$20                     ; carry is the pixel in the byte)
         and   #$00FF
         tay
+        DO    SPR_PIXEL_SHIFT          ; (no sep / rep in a DO: Merlin32 applies them to the MX state
+        lda   #0                       ; of the code after it even when it is skipped)
+        rol                            ; sprShift = 4 on an odd pixel: the shifted variants (+$400)
+        asl                            ; (carry clear)
+        asl
+        sta   sprShift
+        tya
+        FIN
         adc   sprTmp1                  ; Add to the base address calculated from the Y-coordinate
         sta   sprTmp1                  ; This is the SHR address at which to draw the sprite
 
         stz   sprTmp4                  ; Clip a sprite that runs off the right edge
+        DO    SPR_PIXEL_SHIFT
+        cpy   #124                     ; From byte 124 on, sprites are drawn on even pixels: shifted,
+        bcc   *+10                     ; one at 124 would run off the edge, and the clipped routines
+        stz   sprShift                 ; draw on even pixels
+        tya
+        sbc   #124                     ; (carry set; 0 at byte 124: not clipped)
+        sta   sprTmp4
+        ELSE
         cpy   #125
         bcc   *+8
         tya
         sbc   #124                     ; (carry set)
         sta   sprTmp4
+        FIN
         DO    1-GRID_DIRTY_RENDERING
         tya                            ; Clamped address, for the old dirty renderer's sprite save
         cmp   #125
@@ -269,6 +293,9 @@ drawSprites
         and   #$01
         sta   sprXPar
         rep   #$20
+        DO    1-SPR_PIXEL_SHIFT
+        stz   sprShift                 ; Always the even pixel variants
+        FIN
         lda   CMPL_BANK                ; For switching to the tiledata bank and back to $01
         xba
         sta   sprBankSwap
@@ -587,7 +614,12 @@ drawSprites
 ; This is the point to check if there is a compiled version of this sprite
 
         ldy  sprTmp4        ; Test if this sprite needs clipping (first test; Y, so X keeps the OAM index)
+        DO   SPR_CACHE_STATS
+        beq  *+5            ; (the counters put the target out of reach)
+        brl  as_bitmap_clip
+        ELSE
         bne  as_bitmap_clip
+        FIN
 
         bit  #$2000         ; Is the priority bit set?
         bne  as_bitmap
@@ -596,8 +628,10 @@ drawSprites
 ; the table of words.  In the attribute and tile word, the flips are bits 15 and 14, the priority bit (13) is
 ; clear here and the palette is bits 9-8.  The pattern table is left out: sprCompTbl points at its half of
 ; the table.  The first shift moves the vertical flip into the carry, and the ADC adds it at the bottom; the
-; second leaves the horizontal flip in the carry.  The entry is the slot of the compiled pair; the horizontally
-; flipped code is at slot + $100.
+; second leaves the horizontal flip in the carry.  The entry is the bank:page of the slot of the compiled
+; variants: the horizontally flipped code is at slot + $200, the shifted (odd pixel) ones at + $400 / + $600.
+; Slots are 8-page aligned, so the ORs never carry.  Until the shifted pair is compiled, page bit 0 of the
+; entry is set and the variants' stubs are on the odd pages (EmitShiftStubs).
 
         and  #$C3FF         ; tile, palette and the two flips
         asl                 ; carry = vertical flip
@@ -607,13 +641,15 @@ drawSprites
         lda  [sprCompTbl],y
         beq  sprCacheMiss   ; zero value means no compiled sprite for this key
         bcc  *+5
-        ora  #$0100         ; the horizontally flipped variant
+        ora  #$0002         ; the horizontally flipped variant
+        ora  sprShift       ; the shifted variant for a sprite on an odd pixel
 
-; Vector through the compiled sprite table.  The compiled sprites are in a different bank, so just check
+; Vector through the compiled sprite table.  The compiled sprites are in other banks, so just check
 ; for a sentinel value and manually jump into the compiled sprite code to avoid a double-jump and having to
 ; have a second jump table in the compile sprite code bank.
 
-        stal csd+1                     ; patch in the long address directly
+        stal csd+2                     ; patch in the page and bank directly (csd+1 is always $00)
+        SPR_STAT SPR_ST_HITS
 
 ; A hit changes nothing in the cache: it is replaced in the order it was compiled (see SPR_* in Defs.s)
 
@@ -634,6 +670,7 @@ draw_rtn2                             ; Return from compiled sprite
 ; after drawSprites (SprCacheService), unless this render's compile quota is already used up, and draw
 ; the sprite from its bitmap this time.
 sprCacheMiss
+        SPR_STAT SPR_ST_MISSES
         phx                            ; the OAM index (as_bitmap restores it)
         ldal PPU_MEM+SPR_PEND_CNT
         cmp  #2*SPR_COMPILE_PER_RENDER
@@ -778,6 +815,39 @@ CheckSprTileDirty
 
         jmp   FastROMMaskedTileToLookup
         FIN
+
+; A compiled sprite on an odd pixel whose shifted pair is not compiled yet: called by its stub
+; (EmitShiftStubs) with a JSL from the compile bank, which then draws the plain variant, a pixel to the
+; left.  Queue the shifted pair (bit 0 of the key: SprCacheService), unless this render's compile quota is
+; used up.  DBR = $01; X (the OAM index) and Y (the SHR address) are preserved.
+        mx    %00
+SprQueueShift
+        SPR_STAT SPR_ST_SHREQ
+        phx
+        ldal PPU_MEM+SPR_PEND_CNT
+        cmp  #2*SPR_COMPILE_PER_RENDER
+        bcs  :full
+        tax                            ; X = end of the pending list
+        lda  sprTmp5                   ; the pattern table, $8000 -> $1000, and the shift request
+        lsr
+        lsr
+        lsr
+        ora  #$0001
+        pha
+        lda  sprTmp2                   ; the key offset, as in :blitResolvedSprite
+        and  #$83FF                    ; tile, palette and vertical flip
+        asl
+        adc  #0
+        asl
+        ora  1,s
+        stal PPU_MEM+SPR_PEND,x
+        pla
+        inx
+        inx
+        txa
+        stal PPU_MEM+SPR_PEND_CNT
+:full   plx
+        rtl
 
 ; Lines to hide at the top of the sprite being drawn, set by the game's SPRITE_PRE_DRAW callback
 ; (stays 0 if the game never sets it).  At least the sprite's height hides it entirely.

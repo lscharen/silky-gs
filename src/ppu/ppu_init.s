@@ -4,7 +4,7 @@
 ; (scaffold.s) after the tile-compilation banks have been allocated.
 ;
 ;   PPUStartUp  - Patches the compile-bank addresses into the jsl dispatch
-;                 stubs (patch0-4, csd), initialises the nametable-to-PEA
+;                 stubs (patch0-4), initialises the nametable-to-PEA
 ;                 mapping tables, and fills the palette shadow with
 ;                 out-of-range sentinel values so the first real palette
 ;                 write is never skipped.  Returns carry clear on success.
@@ -21,10 +21,8 @@ PPUStartUp
         sta   patch3+2
         sta   patch4+2
 
-        lda   SpriteBank0+1             ; Patch some dispatch addresses with the sprite compilation bank
-        sta   csd+2
-
-        jsr   SprCacheInit              ; Empty compiled sprite cache; all of the slots are free
+        jsr   SprCacheInit              ; Empty compiled sprite cache; all of the slots are free (the
+                                        ; dispatch, csd, takes each slot's bank from its entry)
 
 ; Clear / initialize any of the tracking queues
 

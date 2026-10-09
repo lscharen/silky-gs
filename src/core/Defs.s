@@ -95,8 +95,8 @@ DebugSCB               equ   102          ; SCB byte to use for tracing actions
 LastRead               equ   104
 
 SpriteBank0            equ   106          ; Always zero to allow [SpriteBank0],y addressing
-SpriteBank             equ   108          ; Data bank that holds compiled sprite code
-unused110              equ   110          ; (formerly SpriteBankPos; the sprite bank is now a fixed-slot cache)
+SpriteBank             equ   108          ; Bank that compiled sprite code is written to (the slot's, see SprCompileTile)
+sprShift               equ   110          ; drawSprites: $0004 for a sprite on an odd pixel (the shifted variants), else 0
 
 UserId                 equ   112          ; Memory manager user Id to use
 LastKey                equ   116
@@ -290,9 +290,9 @@ BLT_P_HORZ     equ  $40                   ; V = 1 for horizontal mirroring
 ;
 ; They are indexed by CIRAM address ($000 - $7FF), so each one is $800 bytes.
 ;
-; PPU_MEM bank map: $0000-$1FFF CHR, $2000-$27FF CIRAM (PPU_CIRAM), $2800-$290B compiled sprite cache
-; bookkeeping (SPR_OWNER ...), $3F00 palette RAM, $4000-$67FF the tables below, $7000-$8FFF SPR_COMP_TBL
-; ($6800-$6FFF and $9000-$AFFF free),
+; PPU_MEM bank map: $0000-$1FFF CHR, $2000-$27FF CIRAM (PPU_CIRAM), $2800-$2927 compiled sprite cache
+; bookkeeping (SPR_OWNER ...), $2A00-$2AFF SPR_SLOT_TBL, $3F00 palette RAM, $4000-$67FF the tables below, $7000-$8FFF SPR_COMP_TBL
+; $6800-$6AFF the grid renderer's sprite skip tables (GQ_*), ($6B00-$6FFF and $9000-$AFFF free),
 ; $B000-$C7FF the grid renderer's cell tables, $C800/$E800 the nametable shadow buffers (NTM_SB0/1).
 
 TILE_SHADOW   equ $4000          ; shadowed values of the nametable tiles
@@ -308,36 +308,67 @@ TILE_ADDR_HI  equ $6000          ; pre-calculated address (high byte) of the loc
 
 ; Compiled sprite cache (core/sprites/CompileSprites.s).
 ;
-; A compiled sprite is the code for one tile with one vertical orientation and one sprite palette, in two
-; variants: as is and flipped horizontally.  The pixels are compiled in their final colors (the palette's
+; A compiled sprite is the code for one tile with one vertical orientation and one sprite palette, in four
+; variants: as is, flipped horizontally, and both of those shifted one pixel to the right (for a sprite on an
+; odd pixel; 3 words per line instead of 2).  The pixels are compiled in their final colors (the palette's
 ; swizzle table is applied at compile time), so the code is only immediate loads and stores.  The sprite
-; compile bank is divided into fixed, unpacked 512 byte slots; a variant is at most 16 words * 12 bytes + a
-; 4 byte return = 196 bytes, so the first one is at the start of the slot and the horizontally flipped one
-; at slot + $100.
+; compile banks (up to SPR_MAX_BANKS, allocated by InitMemory) are divided into fixed, unpacked 2KB slots,
+; 32 per bank, with each variant in its own 512 bytes (2 pages):
 ;
-; Slot 0 is not used because address $0000 in SPR_COMP_TBL means "not compiled", so there are at most 127.
+;   slot + $000  as is                  (at most 16 words * 12 bytes + a 4 byte return = 196 bytes)
+;   slot + $200  flipped horizontally
+;   slot + $400  shifted                (at most 24 words * 12 bytes + 4 = 292 bytes)
+;   slot + $600  shifted, flipped horizontally
 ;
-; SPR_COMP_TBL maps a sprite to the slot of its compiled code, or 0.  It is indexed by the "key offset":
+; SPR_COMP_TBL maps a sprite to the slot of its compiled code, as bank << 8 | page (the high two bytes of
+; the slot's 24-bit address), or 0.  The bank is never 0, so 0 means "not compiled".  It is indexed by the
+; "key offset":
 ;   key offset = (pattern table << 12) | (palette << 10) | (tile << 2) | (vertical flip << 1)
-; The two horizontal flips are compiled together, into one slot, so one entry (and one store to drop it) is
-; for both.  The compiled colors depend on the sprite swizzle tables, so a change to them drops every
-; compiled sprite (SprCacheFlush).
+; The four variants are compiled together, into one slot, so one entry (and one store to drop it) is for
+; all of them.  Slots are 8-page aligned, so the dispatch ORs the variant's page offset into the entry.
+; The compiled colors depend on the sprite swizzle tables, so a change to them drops every compiled
+; sprite (SprCacheFlush).
 ;
 ; Slots are replaced in the order they were filled (a FIFO): SPR_CURSOR goes round the slots, and the slot it
 ; points to is the next one used; if a key owns it (SPR_OWNER), that key is evicted.  A cache hit does not
 ; change anything.  A CHR-RAM write frees a key's slot, which is reused when the cursor gets back to it.
 SPR_COMP_TBL  equ $7000               ; 4096 words
-SPR_SLOT_SIZE equ $0200
-SPR_SLOTS     equ 127                 ; the number of slots used (1 - 127)
+SPR_SLOT_SIZE equ $0800
+SPR_BANK_SLOTS equ 32                 ; slots per compile bank
+SPR_MAX_BANKS equ 4
+SPR_MAX_SLOTS equ SPR_BANK_SLOTS*SPR_MAX_BANKS
 
 ; The number of sprite tiles compiled per drawSprites call (0 - 4; 0 never compiles).  The sprites that miss
 ; are drawn from their bitmaps until they are compiled.  2 was measured to be the best (docs/BENCH_ZELDA.md).
 SPR_COMPILE_PER_RENDER equ 2
-SPR_OWNER     equ $2800               ; 128 words, indexed by slot address >> 8: the key offset that owns the slot,
-                                      ; or $FFFF if none
-SPR_CURSOR    equ $2900               ; the address of the slot that is used next
+SPR_OWNER     equ $2800               ; 128 words, indexed by slot number * 2: the key offset that owns the
+                                      ; slot, or $FFFF if none
+SPR_CURSOR    equ $2900               ; the slot number * 2 of the slot that is used next
 SPR_PEND_CNT  equ $2902               ; byte offset of the end of the pending list
 SPR_PEND      equ $2904               ; keys that missed this render, waiting to be compiled (4 words)
+SPR_NSLOTS    equ $290C               ; the number of slots * 2 (32 for each bank InitMemory got)
+SPR_SLOT_TBL  equ $2A00               ; 128 words, indexed by slot number * 2: the slot's bank << 8 | page
+
+; Count the cache's events (SPR_STAT, ppu_macros.s), for measuring the hit rate: 32-bit counters at
+; PPU_MEM+SPR_STATS, cleared by SprCacheInit and read by scripts/gs2-bench-run.js --stats.  Off in normal
+; builds (the counters cost a few % of the render time).
+SPR_CACHE_STATS equ 0
+SPR_STATS     equ $2910
+SPR_ST_HITS   equ 0                   ; compiled sprite lookups that found the key
+SPR_ST_MISSES equ 4                   ; lookups that did not (drawn from the bitmap)
+SPR_ST_SHREQ  equ 8                   ; hits on an odd pixel before the shifted pair was compiled (drawn
+                                      ; compiled, a pixel to the left)
+SPR_ST_COMPILES equ 12                ; plain pairs compiled
+SPR_ST_SHIFTS equ 16                  ; shifted pairs compiled
+SPR_ST_EVICTS equ 20                  ; compiled sprites evicted from their slot
+SPR_ST_SIZE   equ 24
+
+; Grid renderer, quad mode (ppu_grid_quads.s): the unchanged-sprite skip's tables, out of the main segment
+GQ_PREV_OAM   equ $6800               ; OAM_COPY as last drawn (256 bytes)
+GQ_XTL        equ $6900               ; gqL* | gqH*: a sprite's quadrants in either nibble (128 bytes each)
+GQ_XTR        equ $6980
+GQ_XBL        equ $6A00
+GQ_XBR        equ $6A80
 
 ;TILE_ROW      equ $B000          ; pre-calculated row of the PPU address
 ;TILE_COL      equ $C000          ; pre-calculated column of the PPU address

@@ -3,7 +3,7 @@
 ; * $01/2000 - $01/9FFF for the shadow screen
 ; * $xx/0000 - $xx/07FF for NES RAM in the NES code bank
 ; * 1 bank for cached tiles
-; * 1 bank for cached sprites
+; * 1 - 4 banks for cached sprites (SPR_MAX_BANKS; as many as there is memory for, at least 1)
 
                mx        %00
 InitMemory
@@ -23,13 +23,30 @@ InitMemory
                sta       CompileBank
                stz       CompileBank0
 
+               ldx       #0                          ; The compiled sprite cache's banks (SprCacheInit)
+:spr_bank      phx
                jsr       AllocOneBank2
-               sta       SpriteBank
-               stz       SpriteBank0
-
+               plx
+               bcs       :spr_done                   ; no more memory: keep the banks there are
+               sep       #$20
+               stal      SprBanks,x
+               rep       #$20
+               inx
+               cpx       #SPR_MAX_BANKS
+               bcc       :spr_bank
+:spr_done      txa
+               stal      SprBankCount
+               stz       SpriteBank0                 ; SprCompileTile sets SpriteBank to each slot's bank
+               stz       SpriteBank
+               sec                                   ; no bank at all is an error
+               tax                                   ; (Z = no bank; the carry is kept)
+               beq       mem_err
                clc
 mem_err
                rts
+
+SprBanks       ds        SPR_MAX_BANKS               ; The sprite cache's banks
+SprBankCount   dw        0                           ; and how many there are (1 - SPR_MAX_BANKS)
 
 ; Bank allocator (for one full, fixed bank of memory. Can be immediately deferenced)
 
@@ -57,5 +74,6 @@ AllocOneBank2  PushLong  #0
                _NewHandle
                plx                                   ; base address of the new handle
                pla                                   ; high address 00XX of the new handle (bank)
+               bcs       :err                        ; (carry set: no memory)
                _Deref
-               rts
+:err           rts

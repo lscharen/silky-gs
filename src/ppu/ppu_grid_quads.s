@@ -9,8 +9,9 @@
 ; The grid is padded (one column on the right, rows above and below the playfield), so a sprite always
 ; touches the cells at Y, Y+2, Y+PITCH and Y+PITCH+2 (plus one more row for 8x16) with no bounds checks;
 ; anything that lands in a pad cell is ignored because pad cells have no SHR address.  Byte tables
-; indexed by the OAM coordinates give the cell offset and the table index (k * 8 + b * 2, k = y & 7,
-; b = x/2 & 3), and the quadrant tables give each of the sprite's cells directly.
+; indexed by the OAM coordinates give the cell offset and the table index (k * 16 + p * 2, k = y & 7,
+; p = x & 7: sprites are drawn on single pixels), and the quadrant tables give each of the sprite's cells
+; directly.
 ;
 ; Lists are code.  The cells touched this frame form an array of "ldy #cell / jsr gqCellOp" entries: a
 ; cell's first touch just stores its index into the next entry's operand.  A pass patches gqCellOp to
@@ -48,7 +49,7 @@ gqInitTables
             phk
             plb
 
-; y (OAM, already +1): row offset in the padded grid (low / high bytes) and k * 8.  Rows above the
+; y (OAM, already +1): row offset in the padded grid (low / high bytes) and k * 16.  Rows above the
 ; playfield map to the pad row above it and rows below map to the pad rows below it.
 
             ldy   #0
@@ -57,6 +58,7 @@ gqInitTables
             sbc   #y_offset
             sta   gqCell                  ; s, signed
             and   #$0007
+            asl
             asl
             asl
             asl
@@ -91,21 +93,20 @@ gqInitTables
             cpy   #256
             bcc   :yl
 
-; x (NES pixels): column offset and b * 2.  The scroll is always a multiple of 8 when the grid is used,
-; so the half-pixel parity in :setupSprite is 0.
+; x (NES pixels): column offset and p * 2.  The scroll is always a multiple of 8 when the grid is used,
+; so the half-pixel parity in :setupSprite is 0, and the sprite's pixel in its cell is x & 7.
 
             ldy   #0
 :xl         tya
             lsr                           ; IIgs byte
-            pha
             lsr
             lsr
             asl
             sep   #$20
             sta   gridColOff,y
             rep   #$20
-            pla
-            and   #$0003
+            tya
+            and   #$0007
             asl
             sep   #$20
             sta   gridBIdx,y
@@ -153,19 +154,19 @@ gqInitTables
             bcc   :rf
 
             DO    GRID_SPRITE_SKIP
-            ldx   #62                     ; gqX* = gqL* | gqH* (cascade test tables)
+            ldx   #126                    ; GQ_X* = gqL* | gqH* (cascade test tables)
 :xo         lda   gqLTL,x
             ora   gqHTL,x
-            sta   gqXTL,x
+            stal  PPU_MEM+GQ_XTL,x
             lda   gqLTR,x
             ora   gqHTR,x
-            sta   gqXTR,x
+            stal  PPU_MEM+GQ_XTR,x
             lda   gqLBL,x
             ora   gqHBL,x
-            sta   gqXBL,x
+            stal  PPU_MEM+GQ_XBL,x
             lda   gqLBR,x
             ora   gqHBR,x
-            sta   gqXBR,x
+            stal  PPU_MEM+GQ_XBR,x
             dex
             dex
             bpl   :xo
@@ -204,7 +205,7 @@ gridMarkSprite8
             lda   gridRowHi,x
             adc   #0
             sta   gqCell+1
-            lda   gridKIdx,x              ; table index = k * 8 + b * 2
+            lda   gridKIdx,x              ; table index = k * 16 + p * 2
             ora   gridBIdx,y
             tax
             rep   #$30                    ; X high byte is 0
@@ -316,7 +317,7 @@ gridMarkSprite16
             lda   gridRowHi,x
             adc   #0
             sta   gqCell+1
-            lda   gridKIdx,x              ; table index = k * 8 + b * 2
+            lda   gridKIdx,x              ; table index = k * 16 + p * 2
             ora   gridBIdx,y
             tax
             rep   #$30                    ; X high byte is 0
@@ -1052,7 +1053,7 @@ gqSwap
 ; record themselves for the next frame (gridRecordSprite8).
 
 ; Per sprite (X = OAM offset): changed test.  An unchanged sprite gets its cell / table index and skip flag
-; and its old record turned into a no-op; a changed one only updates gqPrevOAM.  DBR = K.
+; and its old record turned into a no-op; a changed one only updates GQ_PREV_OAM.  DBR = K.
             mx    %00
 gqSkipPrepare
             stz   gqUnch
@@ -1067,10 +1068,10 @@ gqSkipPrepare
 :loop       cpx   spriteCount
             bcs   :inv
             lda   OAM_COPY,x
-            cmp   gqPrevOAM,x
+            cmpl  PPU_MEM+GQ_PREV_OAM,x
             bne   :chg
             lda   OAM_COPY+2,x
-            cmp   gqPrevOAM+2,x
+            cmpl  PPU_MEM+GQ_PREV_OAM+2,x
             bne   :chg
             jsr   gqCellIdx               ; Unchanged: cell / index, skip flag
             ora   #$0100
@@ -1083,9 +1084,9 @@ gqSkipPrepare
             inc   gqUnch
             bra   :nx
 :chg        lda   OAM_COPY,x
-            sta   gqPrevOAM,x
+            stal  PPU_MEM+GQ_PREV_OAM,x
             lda   OAM_COPY+2,x
-            sta   gqPrevOAM+2,x
+            stal  PPU_MEM+GQ_PREV_OAM+2,x
 :nx         lda   gqRecK
             clc
             adc   #GQ_RENTRY
@@ -1098,7 +1099,7 @@ gqSkipPrepare
 :inv        lda   #$FFFF                  ; Entries past the count were not drawn: never match
 :il         cpx   gqOAMEnd
             bcs   :id
-            sta   gqPrevOAM,x
+            stal  PPU_MEM+GQ_PREV_OAM,x
             inx
             inx
             inx
@@ -1134,10 +1135,10 @@ gqCellIdx
             ldx   gqLoopX
             rts
 
-; gqPrevOAM := OAM_COPY (every sprite was drawn), entries past the count invalidated.  DBR = K.
+; GQ_PREV_OAM := OAM_COPY (every sprite was drawn), entries past the count invalidated.  DBR = K.
 ;
 ; Not needed while the sprites are 8x16: they are never skipped, and the first 8x8 frame after them
-; comes here anyway (gqPrevTall), so gqPrevOAM is only read after it has been synced again.
+; comes here anyway (gqPrevTall), so GQ_PREV_OAM is only read after it has been synced again.
             mx    %00
 gqSkipSync
             stz   gqUnch
@@ -1149,9 +1150,9 @@ gqSkipSync
 :cp         cpx   spriteCount
             bcs   :inv
             lda   OAM_COPY,x
-            sta   gqPrevOAM,x
+            stal  PPU_MEM+GQ_PREV_OAM,x
             lda   OAM_COPY+2,x
-            sta   gqPrevOAM+2,x
+            stal  PPU_MEM+GQ_PREV_OAM+2,x
             inx
             inx
             inx
@@ -1160,7 +1161,7 @@ gqSkipSync
 :inv        lda   #$FFFF
 :il         cpx   gqOAMEnd
             bcs   :id
-            sta   gqPrevOAM,x
+            stal  PPU_MEM+GQ_PREV_OAM,x
             inx
             inx
             inx
@@ -1205,16 +1206,16 @@ gqSkipCascade
             and   #$00FF
             tax
             lda   gqGrid,y                ; Any of its quadrants being erased, or under a changed sprite?
-            and   gqXTL,x
+            andl  PPU_MEM+GQ_XTL,x
             bne   :hit
             lda   gqGrid+2,y
-            and   gqXTR,x
+            andl  PPU_MEM+GQ_XTR,x
             bne   :hit
             lda   gqGrid+GQ_PITCH2,y
-            and   gqXBL,x
+            andl  PPU_MEM+GQ_XBL,x
             bne   :hit
             lda   gqGrid+GQ_PITCH2+2,y
-            and   gqXBR,x
+            andl  PPU_MEM+GQ_XBR,x
             bne   :hit
             ldx   gqLoopX
             bra   :c2n
@@ -1581,117 +1582,120 @@ gridXQTbl   dw    gridQX0,gridQX1,gridQX2,gridQX3,gridQX4,gridQX5,gridQX6,gridQX
 ; ---------------------------------------------------------------------------
 ; Tables
 ; ---------------------------------------------------------------------------
-; Quadrants per cell, indexed by k * 8 + b * 2.  T = first cell row, B = next cell row, F = full middle row
-; of an 8x16 sprite (depends only on b); L = the cell the sprite starts in, R = the cell to its right.
+; Quadrants per cell, indexed by k * 16 + p * 2 (k = the sprite's line in its cell, p = its pixel).  A quadrant
+; is 4 pixels wide, and a sprite at pixel p covers pixels p to p + 7.  T = first cell row, B = next cell row,
+; F = full middle row of an 8x16 sprite (depends only on p); L = the cell the sprite starts in (quadrant
+; columns p / 4 to 1), R = the cell to its right (columns 0 to (p - 1) / 4, none at p = 0).
+; (Generated; the even pixels are the same as the old 2-pixel tables.)
 ; gqL* mark the erase nibble (bits 1-4) when replaying records, gqH* the expose nibble (bits 9-12).
 gqLTL
-            dw    $001E,$001E,$0014,$0014   ; k = 0
-            dw    $001E,$001E,$0014,$0014   ; k = 1
-            dw    $001E,$001E,$0014,$0014   ; k = 2
-            dw    $001E,$001E,$0014,$0014   ; k = 3
-            dw    $0018,$0018,$0010,$0010   ; k = 4
-            dw    $0018,$0018,$0010,$0010   ; k = 5
-            dw    $0018,$0018,$0010,$0010   ; k = 6
-            dw    $0018,$0018,$0010,$0010   ; k = 7
+            dw    $001E,$001E,$001E,$001E,$0014,$0014,$0014,$0014   ; k = 0
+            dw    $001E,$001E,$001E,$001E,$0014,$0014,$0014,$0014   ; k = 1
+            dw    $001E,$001E,$001E,$001E,$0014,$0014,$0014,$0014   ; k = 2
+            dw    $001E,$001E,$001E,$001E,$0014,$0014,$0014,$0014   ; k = 3
+            dw    $0018,$0018,$0018,$0018,$0010,$0010,$0010,$0010   ; k = 4
+            dw    $0018,$0018,$0018,$0018,$0010,$0010,$0010,$0010   ; k = 5
+            dw    $0018,$0018,$0018,$0018,$0010,$0010,$0010,$0010   ; k = 6
+            dw    $0018,$0018,$0018,$0018,$0010,$0010,$0010,$0010   ; k = 7
 gqLTR
-            dw    $0000,$000A,$000A,$001E   ; k = 0
-            dw    $0000,$000A,$000A,$001E   ; k = 1
-            dw    $0000,$000A,$000A,$001E   ; k = 2
-            dw    $0000,$000A,$000A,$001E   ; k = 3
-            dw    $0000,$0008,$0008,$0018   ; k = 4
-            dw    $0000,$0008,$0008,$0018   ; k = 5
-            dw    $0000,$0008,$0008,$0018   ; k = 6
-            dw    $0000,$0008,$0008,$0018   ; k = 7
+            dw    $0000,$000A,$000A,$000A,$000A,$001E,$001E,$001E   ; k = 0
+            dw    $0000,$000A,$000A,$000A,$000A,$001E,$001E,$001E   ; k = 1
+            dw    $0000,$000A,$000A,$000A,$000A,$001E,$001E,$001E   ; k = 2
+            dw    $0000,$000A,$000A,$000A,$000A,$001E,$001E,$001E   ; k = 3
+            dw    $0000,$0008,$0008,$0008,$0008,$0018,$0018,$0018   ; k = 4
+            dw    $0000,$0008,$0008,$0008,$0008,$0018,$0018,$0018   ; k = 5
+            dw    $0000,$0008,$0008,$0008,$0008,$0018,$0018,$0018   ; k = 6
+            dw    $0000,$0008,$0008,$0008,$0008,$0018,$0018,$0018   ; k = 7
 gqLBL
-            dw    $0000,$0000,$0000,$0000   ; k = 0
-            dw    $0006,$0006,$0004,$0004   ; k = 1
-            dw    $0006,$0006,$0004,$0004   ; k = 2
-            dw    $0006,$0006,$0004,$0004   ; k = 3
-            dw    $0006,$0006,$0004,$0004   ; k = 4
-            dw    $001E,$001E,$0014,$0014   ; k = 5
-            dw    $001E,$001E,$0014,$0014   ; k = 6
-            dw    $001E,$001E,$0014,$0014   ; k = 7
+            dw    $0000,$0000,$0000,$0000,$0000,$0000,$0000,$0000   ; k = 0
+            dw    $0006,$0006,$0006,$0006,$0004,$0004,$0004,$0004   ; k = 1
+            dw    $0006,$0006,$0006,$0006,$0004,$0004,$0004,$0004   ; k = 2
+            dw    $0006,$0006,$0006,$0006,$0004,$0004,$0004,$0004   ; k = 3
+            dw    $0006,$0006,$0006,$0006,$0004,$0004,$0004,$0004   ; k = 4
+            dw    $001E,$001E,$001E,$001E,$0014,$0014,$0014,$0014   ; k = 5
+            dw    $001E,$001E,$001E,$001E,$0014,$0014,$0014,$0014   ; k = 6
+            dw    $001E,$001E,$001E,$001E,$0014,$0014,$0014,$0014   ; k = 7
 gqLBR
-            dw    $0000,$0000,$0000,$0000   ; k = 0
-            dw    $0000,$0002,$0002,$0006   ; k = 1
-            dw    $0000,$0002,$0002,$0006   ; k = 2
-            dw    $0000,$0002,$0002,$0006   ; k = 3
-            dw    $0000,$0002,$0002,$0006   ; k = 4
-            dw    $0000,$000A,$000A,$001E   ; k = 5
-            dw    $0000,$000A,$000A,$001E   ; k = 6
-            dw    $0000,$000A,$000A,$001E   ; k = 7
+            dw    $0000,$0000,$0000,$0000,$0000,$0000,$0000,$0000   ; k = 0
+            dw    $0000,$0002,$0002,$0002,$0002,$0006,$0006,$0006   ; k = 1
+            dw    $0000,$0002,$0002,$0002,$0002,$0006,$0006,$0006   ; k = 2
+            dw    $0000,$0002,$0002,$0002,$0002,$0006,$0006,$0006   ; k = 3
+            dw    $0000,$0002,$0002,$0002,$0002,$0006,$0006,$0006   ; k = 4
+            dw    $0000,$000A,$000A,$000A,$000A,$001E,$001E,$001E   ; k = 5
+            dw    $0000,$000A,$000A,$000A,$000A,$001E,$001E,$001E   ; k = 6
+            dw    $0000,$000A,$000A,$000A,$000A,$001E,$001E,$001E   ; k = 7
 gqLFL
-            dw    $001E,$001E,$0014,$0014   ; k = 0
-            dw    $001E,$001E,$0014,$0014   ; k = 1
-            dw    $001E,$001E,$0014,$0014   ; k = 2
-            dw    $001E,$001E,$0014,$0014   ; k = 3
-            dw    $001E,$001E,$0014,$0014   ; k = 4
-            dw    $001E,$001E,$0014,$0014   ; k = 5
-            dw    $001E,$001E,$0014,$0014   ; k = 6
-            dw    $001E,$001E,$0014,$0014   ; k = 7
+            dw    $001E,$001E,$001E,$001E,$0014,$0014,$0014,$0014   ; k = 0
+            dw    $001E,$001E,$001E,$001E,$0014,$0014,$0014,$0014   ; k = 1
+            dw    $001E,$001E,$001E,$001E,$0014,$0014,$0014,$0014   ; k = 2
+            dw    $001E,$001E,$001E,$001E,$0014,$0014,$0014,$0014   ; k = 3
+            dw    $001E,$001E,$001E,$001E,$0014,$0014,$0014,$0014   ; k = 4
+            dw    $001E,$001E,$001E,$001E,$0014,$0014,$0014,$0014   ; k = 5
+            dw    $001E,$001E,$001E,$001E,$0014,$0014,$0014,$0014   ; k = 6
+            dw    $001E,$001E,$001E,$001E,$0014,$0014,$0014,$0014   ; k = 7
 gqLFR
-            dw    $0000,$000A,$000A,$001E   ; k = 0
-            dw    $0000,$000A,$000A,$001E   ; k = 1
-            dw    $0000,$000A,$000A,$001E   ; k = 2
-            dw    $0000,$000A,$000A,$001E   ; k = 3
-            dw    $0000,$000A,$000A,$001E   ; k = 4
-            dw    $0000,$000A,$000A,$001E   ; k = 5
-            dw    $0000,$000A,$000A,$001E   ; k = 6
-            dw    $0000,$000A,$000A,$001E   ; k = 7
+            dw    $0000,$000A,$000A,$000A,$000A,$001E,$001E,$001E   ; k = 0
+            dw    $0000,$000A,$000A,$000A,$000A,$001E,$001E,$001E   ; k = 1
+            dw    $0000,$000A,$000A,$000A,$000A,$001E,$001E,$001E   ; k = 2
+            dw    $0000,$000A,$000A,$000A,$000A,$001E,$001E,$001E   ; k = 3
+            dw    $0000,$000A,$000A,$000A,$000A,$001E,$001E,$001E   ; k = 4
+            dw    $0000,$000A,$000A,$000A,$000A,$001E,$001E,$001E   ; k = 5
+            dw    $0000,$000A,$000A,$000A,$000A,$001E,$001E,$001E   ; k = 6
+            dw    $0000,$000A,$000A,$000A,$000A,$001E,$001E,$001E   ; k = 7
 gqHTL
-            dw    $1E00,$1E00,$1400,$1400   ; k = 0
-            dw    $1E00,$1E00,$1400,$1400   ; k = 1
-            dw    $1E00,$1E00,$1400,$1400   ; k = 2
-            dw    $1E00,$1E00,$1400,$1400   ; k = 3
-            dw    $1800,$1800,$1000,$1000   ; k = 4
-            dw    $1800,$1800,$1000,$1000   ; k = 5
-            dw    $1800,$1800,$1000,$1000   ; k = 6
-            dw    $1800,$1800,$1000,$1000   ; k = 7
+            dw    $1E00,$1E00,$1E00,$1E00,$1400,$1400,$1400,$1400   ; k = 0
+            dw    $1E00,$1E00,$1E00,$1E00,$1400,$1400,$1400,$1400   ; k = 1
+            dw    $1E00,$1E00,$1E00,$1E00,$1400,$1400,$1400,$1400   ; k = 2
+            dw    $1E00,$1E00,$1E00,$1E00,$1400,$1400,$1400,$1400   ; k = 3
+            dw    $1800,$1800,$1800,$1800,$1000,$1000,$1000,$1000   ; k = 4
+            dw    $1800,$1800,$1800,$1800,$1000,$1000,$1000,$1000   ; k = 5
+            dw    $1800,$1800,$1800,$1800,$1000,$1000,$1000,$1000   ; k = 6
+            dw    $1800,$1800,$1800,$1800,$1000,$1000,$1000,$1000   ; k = 7
 gqHTR
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 0
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 1
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 2
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 3
-            dw    $0000,$0800,$0800,$1800   ; k = 4
-            dw    $0000,$0800,$0800,$1800   ; k = 5
-            dw    $0000,$0800,$0800,$1800   ; k = 6
-            dw    $0000,$0800,$0800,$1800   ; k = 7
+            dw    $0000,$0A00,$0A00,$0A00,$0A00,$1E00,$1E00,$1E00   ; k = 0
+            dw    $0000,$0A00,$0A00,$0A00,$0A00,$1E00,$1E00,$1E00   ; k = 1
+            dw    $0000,$0A00,$0A00,$0A00,$0A00,$1E00,$1E00,$1E00   ; k = 2
+            dw    $0000,$0A00,$0A00,$0A00,$0A00,$1E00,$1E00,$1E00   ; k = 3
+            dw    $0000,$0800,$0800,$0800,$0800,$1800,$1800,$1800   ; k = 4
+            dw    $0000,$0800,$0800,$0800,$0800,$1800,$1800,$1800   ; k = 5
+            dw    $0000,$0800,$0800,$0800,$0800,$1800,$1800,$1800   ; k = 6
+            dw    $0000,$0800,$0800,$0800,$0800,$1800,$1800,$1800   ; k = 7
 gqHBL
-            dw    $0000,$0000,$0000,$0000   ; k = 0
-            dw    $0600,$0600,$0400,$0400   ; k = 1
-            dw    $0600,$0600,$0400,$0400   ; k = 2
-            dw    $0600,$0600,$0400,$0400   ; k = 3
-            dw    $0600,$0600,$0400,$0400   ; k = 4
-            dw    $1E00,$1E00,$1400,$1400   ; k = 5
-            dw    $1E00,$1E00,$1400,$1400   ; k = 6
-            dw    $1E00,$1E00,$1400,$1400   ; k = 7
+            dw    $0000,$0000,$0000,$0000,$0000,$0000,$0000,$0000   ; k = 0
+            dw    $0600,$0600,$0600,$0600,$0400,$0400,$0400,$0400   ; k = 1
+            dw    $0600,$0600,$0600,$0600,$0400,$0400,$0400,$0400   ; k = 2
+            dw    $0600,$0600,$0600,$0600,$0400,$0400,$0400,$0400   ; k = 3
+            dw    $0600,$0600,$0600,$0600,$0400,$0400,$0400,$0400   ; k = 4
+            dw    $1E00,$1E00,$1E00,$1E00,$1400,$1400,$1400,$1400   ; k = 5
+            dw    $1E00,$1E00,$1E00,$1E00,$1400,$1400,$1400,$1400   ; k = 6
+            dw    $1E00,$1E00,$1E00,$1E00,$1400,$1400,$1400,$1400   ; k = 7
 gqHBR
-            dw    $0000,$0000,$0000,$0000   ; k = 0
-            dw    $0000,$0200,$0200,$0600   ; k = 1
-            dw    $0000,$0200,$0200,$0600   ; k = 2
-            dw    $0000,$0200,$0200,$0600   ; k = 3
-            dw    $0000,$0200,$0200,$0600   ; k = 4
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 5
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 6
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 7
+            dw    $0000,$0000,$0000,$0000,$0000,$0000,$0000,$0000   ; k = 0
+            dw    $0000,$0200,$0200,$0200,$0200,$0600,$0600,$0600   ; k = 1
+            dw    $0000,$0200,$0200,$0200,$0200,$0600,$0600,$0600   ; k = 2
+            dw    $0000,$0200,$0200,$0200,$0200,$0600,$0600,$0600   ; k = 3
+            dw    $0000,$0200,$0200,$0200,$0200,$0600,$0600,$0600   ; k = 4
+            dw    $0000,$0A00,$0A00,$0A00,$0A00,$1E00,$1E00,$1E00   ; k = 5
+            dw    $0000,$0A00,$0A00,$0A00,$0A00,$1E00,$1E00,$1E00   ; k = 6
+            dw    $0000,$0A00,$0A00,$0A00,$0A00,$1E00,$1E00,$1E00   ; k = 7
 gqHFL
-            dw    $1E00,$1E00,$1400,$1400   ; k = 0
-            dw    $1E00,$1E00,$1400,$1400   ; k = 1
-            dw    $1E00,$1E00,$1400,$1400   ; k = 2
-            dw    $1E00,$1E00,$1400,$1400   ; k = 3
-            dw    $1E00,$1E00,$1400,$1400   ; k = 4
-            dw    $1E00,$1E00,$1400,$1400   ; k = 5
-            dw    $1E00,$1E00,$1400,$1400   ; k = 6
-            dw    $1E00,$1E00,$1400,$1400   ; k = 7
+            dw    $1E00,$1E00,$1E00,$1E00,$1400,$1400,$1400,$1400   ; k = 0
+            dw    $1E00,$1E00,$1E00,$1E00,$1400,$1400,$1400,$1400   ; k = 1
+            dw    $1E00,$1E00,$1E00,$1E00,$1400,$1400,$1400,$1400   ; k = 2
+            dw    $1E00,$1E00,$1E00,$1E00,$1400,$1400,$1400,$1400   ; k = 3
+            dw    $1E00,$1E00,$1E00,$1E00,$1400,$1400,$1400,$1400   ; k = 4
+            dw    $1E00,$1E00,$1E00,$1E00,$1400,$1400,$1400,$1400   ; k = 5
+            dw    $1E00,$1E00,$1E00,$1E00,$1400,$1400,$1400,$1400   ; k = 6
+            dw    $1E00,$1E00,$1E00,$1E00,$1400,$1400,$1400,$1400   ; k = 7
 gqHFR
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 0
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 1
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 2
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 3
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 4
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 5
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 6
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 7
+            dw    $0000,$0A00,$0A00,$0A00,$0A00,$1E00,$1E00,$1E00   ; k = 0
+            dw    $0000,$0A00,$0A00,$0A00,$0A00,$1E00,$1E00,$1E00   ; k = 1
+            dw    $0000,$0A00,$0A00,$0A00,$0A00,$1E00,$1E00,$1E00   ; k = 2
+            dw    $0000,$0A00,$0A00,$0A00,$0A00,$1E00,$1E00,$1E00   ; k = 3
+            dw    $0000,$0A00,$0A00,$0A00,$0A00,$1E00,$1E00,$1E00   ; k = 4
+            dw    $0000,$0A00,$0A00,$0A00,$0A00,$1E00,$1E00,$1E00   ; k = 5
+            dw    $0000,$0A00,$0A00,$0A00,$0A00,$1E00,$1E00,$1E00   ; k = 6
+            dw    $0000,$0A00,$0A00,$0A00,$0A00,$1E00,$1E00,$1E00   ; k = 7
 
 gqCell      dw    0
 gqEraseEnd  dw    0
@@ -1717,12 +1721,7 @@ gqGrid      ds    GQ_BYTES
 gqSC        ds    256                     ; Per OAM offset: +0 cell, +2 table index, +3 skip flag
 gqSI        equ   gqSC+2                  ;   (byte; read as a word, the high byte is the skip flag)
 gqSkip      equ   gqSC+2                  ;   word: table index | skip << 8 -- skip when >= $100
-gqPrevOAM   ds    256                     ; OAM_COPY as last drawn
 gqOAMEnd    dw    256
-gqXTL       ds    64                      ; gqL* | gqH*: a sprite's quadrants in either nibble
-gqXTR       ds    64
-gqXBL       ds    64
-gqXBR       ds    64
 gqPrevTall  dw    1                       ; (no skipping before the first full frame)
 gqUnch      dw    0                       ; Unchanged sprites this frame (0: no skipping, no cascade)
 gqRecK      dw    0
