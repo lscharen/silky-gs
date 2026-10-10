@@ -9,7 +9,8 @@
 ; The variants go in the slot's 512 byte parts (see SPR_* in Defs.s).  With cs_mode = 0, the sprite as
 ; is at Y and flipped horizontally at Y + $200; with cs_mode = 1, both of those shifted one pixel to the
 ; right (for a sprite on an odd pixel) at Y + $400 and Y + $600.  The shifted pair is compiled later, the
-; first time the sprite is drawn on an odd pixel (SprCompileShift).
+; first time the sprite is drawn on an odd pixel (SprCompileShift).  Without SPR_PIXEL_SHIFT, there are
+; only the first two, at Y and Y + $100.
 ;
 ; The swizzle table is applied here, so the code has the final pixel values as immediates.  The
 ; vertical flip is part of the cache key (see SPR_* in Defs.s), so one compiled sprite is for one
@@ -38,6 +39,7 @@ CompileSprite
 
         sta  :src
         sty  cs_slot
+        DO   SPR_PIXEL_SHIFT
         lda  #word_addr          ; screen offsets of the words: in order, or flipped vertically
         ldy  #word_addr_shift
         cpx  #0
@@ -49,6 +51,13 @@ CompileSprite
         sec
         sbc  #32                 ; (the shifted words are at cs_val + 32 / cs_msk + 32)
         sta  cs_satbl
+        ELSE
+        lda  #word_addr          ; screen offsets of the words: in order, or flipped vertically
+        cpx  #0
+        beq  *+5
+        lda  #word_addr_flip
+        sta  cs_atbl
+        FIN
 
         ldy  cs_slot
         jsr  EmitSpriteVariant   ; the sprite as it is (or flipped vertically): slot + $000 or + $400
@@ -58,96 +67,150 @@ CompileSprite
         sta  :src
         lda  cs_slot
         clc
-        adc  #$200
+        adc  #SPR_FLIP_PAGE*256
         tay
-        jmp  EmitSpriteVariant   ; flipped horizontally: slot + $200 or + $600
+        jmp  EmitSpriteVariant   ; flipped horizontally: slot + $200 or + $600 (+ $100 without SPR_PIXEL_SHIFT)
 
 ; Emit one variant: the 16 words of the tile data at :src, to the screen offsets in cs_atbl, at Y; or with
 ; cs_mode = 1, the 24 words of the sprite shifted one pixel to the right, to the screen offsets in
 ; cs_satbl, at Y + $400.
         mx    %00
 EmitSpriteVariant
-:j       equ tmp8
 :src     equ tmp10
-:out     equ tmp11
 
-        sty  :out
+; 1. The mask and the final pixels of each word, two words (a line) at a time.  The tiledata segment is a
+;    whole bank, so tiledata is at $0000 and the tile's offset in the bank is patched into the loads.
 
-; 1. The mask and the final pixels of each word
-
-        lda  #30
-        sta  :j
-:resolve
-        lda  :j
+        lda  :src
+        sta  :ldv1+1
+        inc
+        inc
+        sta  :ldv0+1                     ; (the second word of the line)
         clc
-        adc  :src
-        tax
-        ldal tiledata+32,x       ; mask: 0 = opaque, $FFFF = transparent
-        pha
-        ldal tiledata,x          ; swizzle table index of the 4 pixels
+        adc  #32
+        sta  :ldm0+1
+        dec
+        dec
+        sta  :ldm1+1
+        phy                              ; the output address
+        ldx  #28
+:resolve
+:ldm0   ldal tiledata+32+2,x             ; mask: 0 = opaque, $FFFF = transparent (patched: :src + 34)
+        sta  cs_msk+2,x
+:ldv0   ldal tiledata+2,x                ; swizzle table index of the 4 pixels (patched: :src + 2)
         tay
-        lda  [sprPalPtr],y       ; the 4 pixels in the palette's IIgs colors
-        ldx  :j
-        sta  cs_val,x
-        pla
+        lda  [sprPalPtr],y               ; the 4 pixels in the palette's IIgs colors
+        sta  cs_val+2,x
+:ldm1   ldal tiledata+32,x
         sta  cs_msk,x
-        dec  :j
-        dec  :j
+:ldv1   ldal tiledata,x
+        tay
+        lda  [sprPalPtr],y
+        sta  cs_val,x
+        dex
+        dex
+        dex
+        dex
         bpl  :resolve
+        ply
 
-; 2. The code: as is, the words at 0 - 30
+; 2. The code: as is, the words at 0 - 30, or shifted, the words at 32 - 78
 
+        DO   SPR_PIXEL_SHIFT
         lda  cs_mode
         bne  :shifted
+        FIN
+        lda  #32
+        sta  cs_end
         lda  cs_atbl
         ldx  #0
-        ldy  #32
         jsr  EmitSpriteWords
         jmp  _EmitReturn
 
-; or shifted, the words at 32 - 78
-
+        DO   SPR_PIXEL_SHIFT
 :shifted
+        phy
         jsr  ShiftSpriteWords
-        lda  :out
+        pla
         clc
         adc  #$400
-        sta  :out
+        tay
+        lda  #80
+        sta  cs_end
         lda  cs_satbl
         ldx  #32
-        ldy  #80
         jsr  EmitSpriteWords
         jmp  _EmitReturn
 
+        FIN
+
 ; Shift each line of cs_val / cs_msk (2 words, 4 bytes) one pixel to the right, into 3 words (6 bytes) at
-; cs_val + 32 / cs_msk + 32.  The leftmost pixel of a line is the high nibble of its first byte (the low
-; byte of the first word), so each new byte is the low nibble of the byte before it and the high nibble
-; of its own.  The pixels shifted in (the first one and the last three) are transparent: value 0, mask $F.
+; cs_val + 32 / cs_msk + 32.  The leftmost pixel of a line is the high nibble of its first byte, the low
+; byte of its first word, so a line is shifted as a big-endian (XBA) 32-bit value: its pixels p0 - p7
+; become f p0 - p7 f f f, with f = a transparent pixel: value 0, mask $F.
+        DO    SPR_PIXEL_SHIFT
         mx    %00
 ShiftSpriteWords
-        ldx  #0                  ; X = the line in the 4 byte lines, Y = in the 6 byte lines
-        ldy  #32
-:line
-        phx
-        phy
-        lda  #$00                ; the pixels
-        jsr  :shift
-        ply
-        plx
-        phx
-        phy
+:n       equ tmp8                        ; lines left
+:hi      equ tmp7                        ; p0 - p3, big-endian
+:lo      equ tmp9                        ; p4 - p7, big-endian
+:t       equ tmp14
+
+        ldx  #0                          ; The values: f = 0
+        txa
+        sta  :fill2+1
+        jsr  :pass
+        ldx  #cs_msk-cs_val              ; The masks: f = $F
+        lda  #$0FFF
+        sta  :fill2+1
+        lda  #$F000
+
+; A = the fill of the first word (f in its first pixel); X = the offset of the 4 byte lines from cs_val
+:pass   sta  :fill0+1
         txa
         clc
-        adc  #cs_msk-cs_val
-        tax
-        tya
-        clc
-        adc  #cs_msk-cs_val
-        tay
-        lda  #$0F                ; the mask
-        jsr  :shift
-        ply
-        plx
+        adc  #32
+        tay                              ; Y = the 6 byte lines
+        lda  #8
+        sta  :n
+:line   lda  cs_val,x
+        xba
+        sta  :hi
+        lsr
+        lsr
+        lsr
+        lsr
+:fill0  ora  #$0000                      ; f p0 p1 p2
+        xba
+        sta  cs_val,y
+        lda  cs_val+2,x
+        xba
+        sta  :lo
+        lsr
+        lsr
+        lsr
+        lsr
+        sta  :t
+        lda  :hi
+        and  #$000F
+        xba
+        asl
+        asl
+        asl
+        asl
+        ora  :t                          ; p3 p4 p5 p6
+        xba
+        sta  cs_val+2,y
+        lda  :lo
+        and  #$000F
+        xba
+        asl
+        asl
+        asl
+        asl
+:fill2  ora  #$0000                      ; p7 f f f
+        xba
+        sta  cs_val+4,y
         inx
         inx
         inx
@@ -156,168 +219,147 @@ ShiftSpriteWords
         clc
         adc  #6
         tay
-        cpx  #32
-        bcc  :line
+        dec  :n
+        bne  :line
         rts
-
-; One line: X = the 4 source bytes, Y = the 6 destination bytes (offsets from cs_val), A = the fill nibble.
-:shift
-        sep  #$20
-        mx   %10
-        sta  cs_fill
-        asl
-        asl
-        asl
-        asl
-        sta  cs_prev             ; the low nibble of the byte before, in the high nibble
-        lda  #4
-        sta  cs_cnt
-:byte
-        lda  cs_val,x
-        pha
-        lsr
-        lsr
-        lsr
-        lsr
-        ora  cs_prev
-        sta  cs_val,y
-        pla
-        asl
-        asl
-        asl
-        asl
-        sta  cs_prev
-        inx
-        iny
-        dec  cs_cnt
-        bne  :byte
-        lda  cs_prev             ; the last pixel and a transparent one
-        ora  cs_fill
-        sta  cs_val,y
-        lda  cs_fill             ; two transparent pixels
-        asl
-        asl
-        asl
-        asl
-        ora  cs_fill
-        sta  cs_val+1,y
-        rep  #$20
-        mx   %00
-        rts
+        FIN
 
 ; Emit the code for some of the resolved words in cs_val / cs_msk.
 ;
-; X = the offset of the first word, Y = the offset after the last one, A = the table of their screen
-; offsets, minus X.  Writes the code at :out, and leaves :out at the end of it; returns Y = :out.
+; X = the offset of the first word, cs_end = the offset after the last one, A = the table of their screen
+; offsets, minus X (patched into the loads below), Y = the output address in the compile bank.  Returns Y =
+; the end of the code.  Each instruction is written as a word, opcode first: its high byte is overwritten
+; by the operand.
+;
+; The words are destroyed: the opaque ones are listed, in order, at the start of the range (value in cs_val,
+; screen offset in cs_msk).  The list never gets ahead of the word being read, and nothing reads the words
+; again (each variant resolves its own).
         mx    %00
 EmitSpriteWords
+:k       equ tmp7                        ; the end of the opaque list
 :j       equ tmp8
-:atbl    equ tmp9
-:out     equ tmp11
 :v       equ tmp14
 
-        sta  :atbl
-        stx  cs_first
-        sty  cs_end
+        sta  :off1+1
+        sta  :off2+1
+        sta  :off4+1
+        stx  :k
+        phx
 
-; 1. The words with transparent pixels: read, mask, merge and write back
+; 1. The words with transparent pixels: read, mask, merge and write back.  The opaque ones are listed.
 
 :masked
         lda  cs_msk,x
-        beq  :m_next             ; opaque
+        beq  :opq                        ; opaque
         cmp  #$FFFF
-        beq  :m_next             ; transparent
-        stx  :j
-        txy
-        lda  (:atbl),y
-        sta  :v                  ; (the screen offset)
-        ldx  #$B9                ; lda abs,y
-        jsr  :emit3
-        ldx  :j
+        beq  :m_next                     ; transparent
+        lda  #$B9                        ; lda abs,y
+        sta  [SpriteBank0],y
+        iny
+:off1   lda: $0000,x                     ; (the screen offset)
+        sta  [SpriteBank0],y
+        iny
+        iny
+        lda  #$29                        ; and #mask
+        sta  [SpriteBank0],y
+        iny
         lda  cs_msk,x
-        ldx  #$29                ; and #mask
-        jsr  :emit3
-        ldx  :j
+        sta  [SpriteBank0],y
+        iny
+        iny
         lda  cs_val,x
         beq  :no_ora
-        ldx  #$09                ; ora #pixels
-        jsr  :emit3
+        lda  #$09                        ; ora #pixels
+        sta  [SpriteBank0],y
+        iny
+        lda  cs_val,x
+        sta  [SpriteBank0],y
+        iny
+        iny
 :no_ora
-        lda  :v
-        ldx  #$99                ; sta abs,y
-        jsr  :emit3
-        ldx  :j
+        lda  #$99                        ; sta abs,y
+        sta  [SpriteBank0],y
+        iny
+:off2   lda: $0000,x
+        sta  [SpriteBank0],y
+        iny
+        iny
 :m_next
         inx
         inx
         cpx  cs_end
         bcc  :masked
+        bra  :list
 
-; 2. The opaque words, one load for each value: A still holds it after each store
+:opq    phy                              ; Opaque: add it to the list
+        ldy  :k
+        lda  cs_val,x
+        sta  cs_val,y
+:off4   lda: $0000,x
+        sta  cs_msk,y
+        iny
+        iny
+        sty  :k
+        ply
+        bra  :m_next
 
-        ldx  cs_first
+; 2. The opaque words, one load for each value: A still holds it after each store.  A stored word's offset
+;    becomes $FFFF (the offsets are under $8000).
+
+:list   plx
+        bra  :o_test
 :opaque
         lda  cs_msk,x
-        bne  :o_next             ; not opaque, or already stored
+        bmi  :o_next                     ; already stored
         stx  :j
+        lda  #$A9                        ; lda #pixels
+        sta  [SpriteBank0],y
+        iny
         lda  cs_val,x
+        sta  [SpriteBank0],y
+        iny
+        iny
         sta  :v
-        ldx  #$A9                ; lda #pixels
-        jsr  :emit3
-        ldx  :j
 :same
-        lda  cs_msk,x            ; every opaque word from here on with the same value
-        bne  :s_next
+        lda  cs_msk,x                    ; every listed word from here on with the same value
+        bmi  :s_next
         lda  cs_val,x
         cmp  :v
         bne  :s_next
-        dec  cs_msk,x            ; = $FFFF: stored
-        txy
-        lda  (:atbl),y
-        phx
-        ldx  #$99                ; sta abs,y
-        jsr  :emit3
-        plx
+        lda  #$99                        ; sta abs,y
+        sta  [SpriteBank0],y
+        iny
+        lda  cs_msk,x
+        sta  [SpriteBank0],y
+        iny
+        iny
+        lda  #$FFFF
+        sta  cs_msk,x
 :s_next
         inx
         inx
-        cpx  cs_end
+        cpx  :k
         bcc  :same
         ldx  :j
 :o_next
         inx
         inx
-        cpx  cs_end
+:o_test cpx  :k
         bcc  :opaque
-
-        ldy  :out
         rts
 
-; Emit an instruction with a 16-bit operand.  X = opcode, A = operand.
-:emit3
-        pha
-        txa
-        ldy  :out
-        sta  [SpriteBank0],y     ; (the high byte is overwritten by the operand)
-        iny
-        pla
-        sta  [SpriteBank0],y
-        iny
-        iny
-        sty  :out
-        rts
-
-cs_val  ds   80                  ; the words being compiled: final pixels (16 words, then the 24 shifted)
-cs_msk  ds   80                  ;                              mask (right after cs_val: ShiftSpriteWords)
-cs_atbl  dw  0                   ; word_addr or word_addr_flip
-cs_satbl dw  0                   ; word_addr_shift or word_addr_shift_flip, minus 32
-cs_slot  dw  0                   ; the slot being compiled
-cs_mode  dw  0                   ; 0: the sprite as is and flipped; 1: the shifted pair
-cs_first dw  0                   ; EmitSpriteWords: the words to emit
-cs_end   dw  0
-cs_fill  db  0                   ; ShiftSpriteWords: the nibble shifted in
-cs_prev  db  0                   ;                   the low nibble of the byte before, << 4
-cs_cnt   db  0                   ;                   bytes left in the line
+        DO   SPR_PIXEL_SHIFT
+cs_val  ds   80                          ; the words being compiled: final pixels (16 words, then the 24 shifted)
+cs_msk  ds   80                          ;                              mask (right after cs_val: ShiftSpriteWords)
+cs_satbl dw  0                           ; word_addr_shift or word_addr_shift_flip, minus 32
+cs_mode  dw  0                           ; 0: the sprite as is and flipped; 1: the shifted pair
+        ELSE
+cs_val  ds   32                          ; the words being compiled: final pixels
+cs_msk  ds   32                          ;                              mask
+        FIN
+cs_atbl  dw  0                           ; word_addr or word_addr_flip
+cs_slot  dw  0                           ; the slot being compiled
+cs_end   dw  0                           ; EmitSpriteWords: the offset after the last word
 
         mx    %00
 _EmitReturn
@@ -342,6 +384,7 @@ _EmitReturn
 ;
 ; The plain variants are at most 196 bytes, so pages + $100 / $300 are free.  The shifted pair overwrites
 ; the other two when it is compiled.  Y = the slot's address, SpriteBank = its bank.
+        DO    SPR_PIXEL_SHIFT
         mx    %00
 EmitShiftStubs
         sty  cs_slot
@@ -393,6 +436,7 @@ EmitShiftStubs
         sta  [SpriteBank0],y
         iny
         rts
+        FIN
 
 ; data tables for generating code
 word_addr
@@ -432,6 +476,7 @@ word_addr_flip
         dw {0*SHR_LINE_WIDTH}+2
 
 ; The shifted variants: 3 words per line
+        DO   SPR_PIXEL_SHIFT
 word_addr_shift
         dw {0*SHR_LINE_WIDTH}+0
         dw {0*SHR_LINE_WIDTH}+2
@@ -483,6 +528,7 @@ word_addr_shift_flip
         dw {0*SHR_LINE_WIDTH}+0
         dw {0*SHR_LINE_WIDTH}+2
         dw {0*SHR_LINE_WIDTH}+4
+        FIN
 
 ; ---------------------------------------------------------------------------------------------------
 ; Compiled sprite cache
@@ -500,7 +546,8 @@ word_addr_shift_flip
 ;   never on an odd pixel never pays for its shifted code.
 ; * Slots are not packed.  Each slot is SPR_SLOT_SIZE = 2KB, 512 bytes per variant, 32 per compile bank, in
 ;   up to SPR_MAX_BANKS banks (InitMemory gets as many as there is memory for).  SPR_SLOT_TBL has each
-;   slot's bank:page.
+;   slot's bank:page.  Without SPR_PIXEL_SHIFT, there are no shifted variants or stubs, and a slot is 512
+;   bytes, 256 per variant, 128 in one bank (the sizes are in ppu.s).
 ; * The slots are used in turn (SPR_CURSOR), so the one that is replaced is the one that was filled the
 ;   longest time ago: a FIFO.  A hit does nothing; it takes a full round of new compiles to replace a sprite.
 ;   SPR_OWNER has the key offset of each slot's sprite, to clear its SPR_COMP_TBL entry when it is replaced.
@@ -533,7 +580,7 @@ SprCacheInit
         dex
         bpl   :owners
 
-        ldx   #0                         ; SPR_SLOT_TBL: bank << 8 | page, 32 slots per bank
+        ldx   #0                         ; SPR_SLOT_TBL: bank << 8 | page, SPR_BANK_SLOTS per bank
         txy                              ; Y = the bank's index in SprBanks
 :bank
         tya
@@ -552,7 +599,7 @@ SprCacheInit
         clc
         adc   #SPR_SLOT_SIZE/256
         bit   #$00FF
-        bne   :slot                      ; (32 slots of 8 pages, then the page wraps to 0)
+        bne   :slot                      ; (until the page wraps to 0)
         iny
         bra   :bank
 :slots_done
@@ -628,8 +675,10 @@ SprCompileTile
         tya
         jsr   SprCompileSetup
         jsr   CompileSprite              ; (cs_mode = 0: the sprite as is and flipped; trashes tmp7 - tmp14)
+        DO    SPR_PIXEL_SHIFT
         ldy   cs_slot
         jsr   EmitShiftStubs             ; (the shifted pair is compiled when it is first needed)
+        FIN
         pla                              ; A = slot * 2
         plx                              ; X = key offset
         DO    HAS_CHR_RAM
@@ -644,7 +693,9 @@ SprCompileTile
         tax
         ldal  PPU_MEM+SPR_SLOT_TBL,x     ; the entry: the slot's bank:page, with page bit 0 set: the
         plx                              ; shifted pair is not compiled
+        DO    SPR_PIXEL_SHIFT
         ora   #$0001
+        FIN
         stal  PPU_MEM+SPR_COMP_TBL,x
         DO    HAS_CHR_RAM
         plp
@@ -687,6 +738,7 @@ SprCompileTile
 ; CHR-RAM write clears the entry (PPUDATA_WRITE), and the entry is only updated if it did not change.
 ;
 ; X = key offset (bit 0, the shift request, is ignored).  All registers trashed.
+        DO    SPR_PIXEL_SHIFT
         mx    %00
 SprCompileShift
         txa
@@ -720,6 +772,7 @@ SprCompileShift
         plp
         FIN
         rts
+        FIN
 
 ; Set up CompileSprite for a key: its palette (sprPalPtr), and its slot's bank (SpriteBank).
 ; A = the slot's entry (bank << 8 | page; page bit 0 is ignored), X = key offset.  Returns A = the tile in
@@ -730,7 +783,7 @@ SprCompileSetup
         sep   #$20
         sta   SpriteBank                 ; the bank for [SpriteBank0],y
         rep   #$20
-        and   #$F800                     ; (slots are 8-page aligned)
+        and   #$10000-SPR_SLOT_SIZE      ; (slots are aligned to their size)
         sta   cs_slot
 
         txa                              ; The palette's swizzle table: SwizzlePtr2 + palette * $200
@@ -817,11 +870,15 @@ SprCacheService
         phx
         ldal  PPU_MEM+SPR_PEND,x
         tax
+        DO    SPR_PIXEL_SHIFT
         lsr                              ; bit 0: the shifted pair of a compiled sprite
         bcs   :shift
         jsr   SprCompileTile
         bra   :done
 :shift  jsr   SprCompileShift
+        ELSE
+        jsr   SprCompileTile
+        FIN
 :done   plx
         bne   :next                      ; (not the first entry yet)
 

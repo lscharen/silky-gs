@@ -62,9 +62,8 @@ SwizzlePtr             equ   34          ; Pointer to a table of 8 swizzle table
 SwizzlePtr2            equ   42          ; Work pointer to point at the fourth palette of the active swizzle table
 ActivePtr              equ   38          ; Work pointer to point at the active swizzle table
 
-; Keep track of the current sprite bitmap and the one for the previous frame
-CurrShadowBitmap       equ   46          ; These are 16-bit pointers
-PrevShadowBitmap       equ   48
+unused46               equ   46
+unused48               equ   48
 
 ; Pointers to which block of CHR memory is for tiles vs sprites
 TileChrMem             equ   50
@@ -74,9 +73,9 @@ unused59               equ   59
 
 pputmp                 equ   60          ; 16 bytes of temporary storage for the ppu subsystem
 
-SprSaveTop             equ   76          ; Top stack address for the sprite save buffer
-SprSaveAddr            equ   78          ; Current address
-SprAddrCount           equ   80          ; Number of sprites saved in the buffer
+unused76               equ   76
+unused78               equ   78
+unused80               equ   80
 GridLPtr               equ   82          ; Grid dirty renderer (quad mode): write pointer of the cell list
 NtmPtr                 equ   84          ; PPUFlushQueuesAlt: long pointer to the shadow buffer being drawn (4 bytes)
 NtmTMask               equ   88          ; PPUFlushQueuesAlt: tiles written in the group this period
@@ -86,12 +85,8 @@ NtmNib                 equ   94          ; PPUFlushQueuesAlt: its nibble of tile
 NtmPal                 equ   96          ; PPUFlushQueuesAlt: its palette select * 2
 PPU_BANK               equ   98
 
-; Dirty State transition
-;                                                                                                +---------------------------------------------+
-;                                                                                                +----------+---------------+    +-----------+ |
-;                                                                                                V          |               |    V           | |
-DirtyState             equ   100          ; Track the transition from normal to dirty rendering [0] normal -+-> [1] dirty1 -+-> [2] dirty2 --+-+
-DebugSCB               equ   102          ; SCB byte to use for tracing actions
+unused100              equ   100
+unused102              equ   102
 LastRead               equ   104
 
 SpriteBank0            equ   106          ; Always zero to allow [SpriteBank0],y addressing
@@ -216,9 +211,6 @@ CTRL_EVEN_RENDER       equ   $8000                  ; Only render half the scanl
 ; The size of each tile instruction is 3 bytes
 PER_TILE_SIZE equ 3
 
-; Turn ON/OFF dirty rendering debugging
-DIRTY_RENDERING_VISUALS equ 0
-
 ; Debug border indicators.  Both write the border color, so turn on at most one of them.
 ;
 ; TASK_TIME_BORDER: raster bar of CPU time.  The border is TASK_COLOR_NES while the NES task (game
@@ -233,7 +225,7 @@ TASK_COLOR_NES     equ 12               ; Green
 APU_STATS          equ 0
 
 ; GRID_FALLBACK_BORDER: color the border by why the grid renderer fell back to a full render, black
-; on frames it handles (GRID_DIRTY_RENDERING only).  Values are IIgs border colors.
+; on frames it handles (ENABLE_DIRTY_RENDERING only).  Values are IIgs border colors.
 GRID_FALLBACK_BORDER equ 0
 FB_COLOR_GRID      equ 0                ; Black      - grid frame, no fallback
 FB_COLOR_SCROLL    equ 2                ; Dark blue  - scrolled (DIRTY_BIT_BG0_X / BG0_Y)
@@ -319,12 +311,16 @@ TILE_ADDR_HI  equ $6000          ; pre-calculated address (high byte) of the loc
 ;   slot + $400  shifted                (at most 24 words * 12 bytes + 4 = 292 bytes)
 ;   slot + $600  shifted, flipped horizontally
 ;
+; Without SPR_PIXEL_SHIFT (the game's Main.s) there are only the first two variants, in 512 byte slots,
+; 128 in one bank: as is at slot + $000 and flipped horizontally at slot + $100.  The slot sizes are in
+; ppu.s (SPR_SLOT_SIZE, SPR_BANK_SLOTS, SPR_MAX_BANKS, SPR_MAX_SLOTS, SPR_FLIP_PAGE), after the game's flags.
+;
 ; SPR_COMP_TBL maps a sprite to the slot of its compiled code, as bank << 8 | page (the high two bytes of
 ; the slot's 24-bit address), or 0.  The bank is never 0, so 0 means "not compiled".  It is indexed by the
 ; "key offset":
 ;   key offset = (pattern table << 12) | (palette << 10) | (tile << 2) | (vertical flip << 1)
 ; The four variants are compiled together, into one slot, so one entry (and one store to drop it) is for
-; all of them.  Slots are 8-page aligned, so the dispatch ORs the variant's page offset into the entry.
+; all of them.  Slots are aligned to their size, so the dispatch ORs the variant's page offset into the entry.
 ; The compiled colors depend on the sprite swizzle tables, so a change to them drops every compiled
 ; sprite (SprCacheFlush).
 ;
@@ -332,10 +328,6 @@ TILE_ADDR_HI  equ $6000          ; pre-calculated address (high byte) of the loc
 ; points to is the next one used; if a key owns it (SPR_OWNER), that key is evicted.  A cache hit does not
 ; change anything.  A CHR-RAM write frees a key's slot, which is reused when the cursor gets back to it.
 SPR_COMP_TBL  equ $7000               ; 4096 words
-SPR_SLOT_SIZE equ $0800
-SPR_BANK_SLOTS equ 32                 ; slots per compile bank
-SPR_MAX_BANKS equ 4
-SPR_MAX_SLOTS equ SPR_BANK_SLOTS*SPR_MAX_BANKS
 
 ; The number of sprite tiles compiled per drawSprites call (0 - 4; 0 never compiles).  The sprites that miss
 ; are drawn from their bitmaps until they are compiled.  2 was measured to be the best (docs/BENCH_ZELDA.md).
@@ -345,7 +337,7 @@ SPR_OWNER     equ $2800               ; 128 words, indexed by slot number * 2: t
 SPR_CURSOR    equ $2900               ; the slot number * 2 of the slot that is used next
 SPR_PEND_CNT  equ $2902               ; byte offset of the end of the pending list
 SPR_PEND      equ $2904               ; keys that missed this render, waiting to be compiled (4 words)
-SPR_NSLOTS    equ $290C               ; the number of slots * 2 (32 for each bank InitMemory got)
+SPR_NSLOTS    equ $290C               ; the number of slots * 2 (SPR_BANK_SLOTS for each bank InitMemory got)
 SPR_SLOT_TBL  equ $2A00               ; 128 words, indexed by slot number * 2: the slot's bank << 8 | page
 
 ; Count the cache's events (SPR_STAT, ppu_macros.s), for measuring the hit rate: 32-bit counters at

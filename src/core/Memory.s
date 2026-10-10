@@ -3,7 +3,7 @@
 ; * $01/2000 - $01/9FFF for the shadow screen
 ; * $xx/0000 - $xx/07FF for NES RAM in the NES code bank
 ; * 1 bank for cached tiles
-; * 1 - 4 banks for cached sprites (SPR_MAX_BANKS; as many as there is memory for, at least 1)
+; * 1 - SPR_MAX_BANKS banks for cached sprites (as many as there is memory for, at least 1)
 
                mx        %00
 InitMemory

@@ -14,10 +14,6 @@
 ;
 ;   - Conditional store macro (cond)
 ;     Stores one of two values depending on a bit test result.
-;
-; Note: The WALK_BITMAP macro and its associated load macros (LOAD_CURRENT,
-; LOAD_INV_CURRENT, LOAD_OTHERS, LOAD_INTERSECTION) are in scanline_bitmap.s
-; because they generate executable 65816 code and branch labels.
 
 ; ---------------------------------------------------------------------------
 ; Data replication macros

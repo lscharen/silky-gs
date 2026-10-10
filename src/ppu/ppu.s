@@ -8,196 +8,38 @@ _ppuscroll_x dw  0          ; Pad the top-byte with zero to allow 8- or 16-bit a
 _ppumask     ds  2
 
 
-; Change all of the 1-bits from the MSB to the first one bit to zeros, i.e. 11011000 -> 00011000
-flipLeadingOnes
-        db   $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0A,$0B,$0C,$0D,$0E,$0F
-        db   $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$1A,$1B,$1C,$1D,$1E,$1F
-        db   $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$2A,$2B,$2C,$2D,$2E,$2F
-        db   $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$3A,$3B,$3C,$3D,$3E,$3F
-        db   $40,$41,$42,$43,$44,$45,$46,$47,$48,$49,$4A,$4B,$4C,$4D,$4E,$4F
-        db   $50,$51,$52,$53,$54,$55,$56,$57,$58,$59,$5A,$5B,$5C,$5D,$5E,$5F
-        db   $60,$61,$62,$63,$64,$65,$66,$67,$68,$69,$6A,$6B,$6C,$6D,$6E,$6F
-        db   $70,$71,$72,$73,$74,$75,$76,$77,$78,$79,$7A,$7B,$7C,$7D,$7E,$7F
-
-        db   $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0A,$0B,$0C,$0D,$0E,$0F  ; $80 - $8F
-        db   $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$1A,$1B,$1C,$1D,$1E,$1F  ; $90 - $9F
-        db   $20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$2A,$2B,$2C,$2D,$2E,$2F  ; $A0 - $AF
-        db   $30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$3A,$3B,$3C,$3D,$3E,$3F  ; $B0 - $BF
-
-        db   $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0A,$0B,$0C,$0D,$0E,$0F  ; $C0 - $CF
-        db   $10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$1A,$1B,$1C,$1D,$1E,$1F  ; $D0 - $DF
-
-        db   $00,$01,$02,$03,$04,$05,$06,$07,$08,$09,$0A,$0B,$0C,$0D,$0E,$0F  ; $E0 - $EF
-        db   $00,$01,$02,$03,$04,$05,$06,$07,$00,$01,$02,$03,$00,$01,$00,$00  ; $F0 - $FF
-
-; Change all of the 0-bits from the MSB to the first zero bit to ones, i.e. 00100111 -> 11100111
-flipLeadingZeros
-        db   $FF,$FF,$FE,$FF,$FC,$FD,$FE,$FF,$F8,$F9,$FA,$FB,$FC,$FD,$FE,$FF  ; $00 - $0F
-        db   $F0,$F1,$F2,$F3,$F4,$F5,$F6,$F7,$F8,$F9,$FA,$FB,$FC,$FD,$FE,$FF  ; $10 - $1F
-
-        db   $E0,$E1,$E2,$E3,$E4,$E5,$E6,$E7,$E8,$E9,$EA,$EB,$EC,$ED,$EE,$EF  ; $20 - $2F
-        db   $F0,$F1,$F2,$F3,$F4,$F5,$F6,$F7,$F8,$F9,$FA,$FB,$FC,$FD,$FE,$FF  ; $30 - $3F
-
-        db   $C0,$C1,$C2,$C3,$C4,$C5,$C6,$C7,$C8,$C9,$CA,$CB,$CC,$CD,$CE,$CF  ; $40 - $4F
-        db   $D0,$D1,$D2,$D3,$D4,$D5,$D6,$D7,$D8,$D9,$DA,$DB,$DC,$DD,$DE,$DF  ; $50 - $5F
-        db   $E0,$E1,$E2,$E3,$E4,$E5,$E6,$E7,$E8,$E9,$EA,$EB,$EC,$ED,$EE,$EF  ; $60 - $6F
-        db   $F0,$F1,$F2,$F3,$F4,$F5,$F6,$F7,$F8,$F9,$FA,$FB,$FC,$FD,$FE,$FF  ; $70 - $7F
-
-        db   $80,$81,$82,$83,$84,$85,$86,$87,$88,$89,$8A,$8B,$8C,$8D,$8E,$8F  ; $80 - $8F
-        db   $90,$91,$92,$93,$94,$95,$96,$97,$98,$99,$9A,$9B,$9C,$9D,$9E,$9F  ; $90 - $9F
-        db   $A0,$A1,$A2,$A3,$A4,$A5,$A6,$A7,$A8,$A9,$AA,$AB,$AC,$AD,$AE,$AF  ; $A0 - $AF
-        db   $B0,$B1,$B2,$B3,$B4,$B5,$B6,$B7,$B8,$B9,$BA,$BB,$BC,$BD,$BE,$BF  ; $B0 - $BF
-        db   $C0,$C1,$C2,$C3,$C4,$C5,$C6,$C7,$C8,$C9,$CA,$CB,$CC,$CD,$CE,$CF  ; $C0 - $CF
-        db   $D0,$D1,$D2,$D3,$D4,$D5,$D6,$D7,$D8,$D9,$DA,$DB,$DC,$DD,$DE,$DF  ; $D0 - $DF
-        db   $E0,$E1,$E2,$E3,$E4,$E5,$E6,$E7,$E8,$E9,$EA,$EB,$EC,$ED,$EE,$EF  ; $E0 - $EF
-        db   $F0,$F1,$F2,$F3,$F4,$F5,$F6,$F7,$F8,$F9,$FA,$FB,$FC,$FD,$FE,$FF  ; $F0 - $FF
-
-; Variation on shadowBitmapToList that uses a temporary variable for the current byte and does not modify
-; the bitmap list itself
-;
-; X = bitmap address
-; Y = starting byte
-; A = ending byte (exclusive)
-;
-; Scan bytes 2 through 10 at address $1234
-; X = $1234
-; Y = 2
-; A = 11
-
-
-; Direct-page aliases used by the WALK_BITMAP macro in scanline_bitmap.s and by _drawBackground/_exposeScreen
-walk_top     equ tmp3
-walk_bottom  equ tmp4
-walk_curr    equ tmp5
-walk_prev    equ tmp6
-
-; Setup all of the sprites from the NES OAM memory.  If possible, we read the OAM information directly
-; from a game-specific area of NES RAM, rather than supporting the OAMDMA operation, to avoid extra
-; copying.
-;        mx  %11
-;drawOAMSprites
-
-; Step 1: Scan the OAM sprite information.  Since we're reading NES RAM, we disable interrupts so that
-;         a VBL cannot fire while we sync the data.
-
-; This step was done at the start of RenderFrame
-
-; Step 2: Convert the bitmap to a list of (top, bottom) pairs in order to update the screen
-
-;        jmp   shadowBitmapToList
-
-; Dirty rendering.  Only draw differences
-
-; Set up specialized methods to walk the bitmaps (called in 8-bit mode), guaranteed to have
-; the carry clear when called, must return with the carry clear as well.
-        mx   %11
-_drawBackground
-        phx
-        phy
-        php
-        rep  #$30
-        ldx  walk_top
-        ldy  walk_bottom
-        jsr  _BltRangeLite           ; BltRangeLite uses tmp0, tmp1, tmp2
-        plp
-        ply
-        plx
-        rts
-
-        mx   %11
-_exposeScreen
-        phx
-        phy
-        php
-        rep  #$30
-        ldx  walk_top
-        tay
-        ldy  walk_bottom
-        jsr  _PEISlam               ; PEISlam uses tmp0
-        plp
-        ply
-        plx
-        rts
-
-        mx   %00
-clearPreviousSprites
-        WALK_BITMAP LOAD_INTERSECTION;y_offset_rows;y_ending_row;_drawBackground
-
-        mx    %00
-exposeCurrentSprites
-        WALK_BITMAP LOAD_CURRENT;y_offset_rows;y_ending_row;_exposeScreen
-
-        mx    %00
-drawOtherLines
-        WALK_BITMAP LOAD_OTHERS;y_offset_rows;y_ending_row;_drawBackground
-
-; Handles horizontal mirroring where the top of the screen could start at any scanline.  The PPU
-; emulation is based on nametable addresses, the any bitmap that marks dirty scanlines is independent
-; of the YSCROLL values.  Sprites are also independent of YSCROLL values and are placed directly in
-; screen-space coordinates.
-;
-; The trick here is to be able to generate, on the fly, a union of sprite bitmap values and tile row values. The
-; extra wrinkle is that the index register is also working in screen-space, so it can directly lookup the
-; sprite bitmap, but we need to adjust the tileBitmap on a per-bit basis.
-LOAD_HORZ_MIRROR mac
-        lda  (TileBitmap),y          ; Set TileBitmap pointer to the closest 
-        lda  (CurrShadowBitmap),y    ; y = screen_y / 8
-
-        <<<
-
-; alignedTileBuffer = btmap fill based on YSCROLL
-;
-;       ldx  tile_row     ; logical row (0 - 30 for V_MIRROR, 0 - 60 for H_MIRROR)
-;       ldy  y_scroll_mod_8
-;       lda  y2bits,y    ; 16-bit mask value based on YSCOLL mod 8. If YSCROLL = 0, mask = $00FF.  YSCROLL = 7, mask = $FE01
-;       ora  tileBitmap,x
-;       sta  tileBitmap,x
-;
-; When blitting, set a pointer to the 
-; Update the minimal amount of the screen just based on what has changed from the prior
-; frame.  We track three bitmaps of information that identify which lines different
-; components are on.
-;
-; shadowBitmap0 and shadowBitmap1 track the lines that hold sprites from the previous
-; and current frame.
-;
-; There are actually two phases to the dirty rendering.  The first is when the prior
-; frame was rendered normally and the second in when the prior frame used the dirty
-; renderer.
-;
-; When performing dirty rendering for the first time, the sprites from the last frame have
-; to be erased by drawing the background on the lines previously occupied, then the new sprites
-; drawn and the updated lines exposed
-;
-; When rendering a dirty frame, the expectation is that the next frame will use the dirty
-; renderer as well, so the pipeline changes to improve efficieny.  The screen data beneath
-; a sprite is saved before drawing and, on the next frame used to restore the graphic
-; screen rather than re-rendering the full background.
-;
-; New sprites are drawn and the 8x8 patches of the previous sprites are used to update only
-; the active portions of the screen.  Sprites are drawn in a top-down order, if possible
-; to avoid bubbling. Exposing the erased sprites *after* drawing the current sprites will
-; avoid flicker.
-;
-; When the drawing transitions back to a normal rendering frame, nothing special needs to
-; be done as the normal blit will erase all of the previous sprites.
-
 sprTmp0      equ pputmp
 sprTmp1      equ pputmp+2
 sprTmp2      equ pputmp+4
 sprTmp3      equ pputmp+6
 sprTmp4      equ pputmp+8
 sprMul160    equ pputmp+12          ; (3 bytes) long pointer to Mul160Tbl
-sprXPar      equ pputmp+15          ; (byte) scroll_x & 1, the half-pixel offset of every sprite this frame
+sprXPar      equ pputmp+15          ; (byte) scroll_x & 1, the half-pixel offset of every sprite this frame (byte-positioned sprites only)
 sprBankSwap  equ unused174          ; $01 << 8 | ^tiledata: pei / plb selects the tiledata bank, plb back to $01
 sprTmp5      equ sprTmp5Hi          ; tiledata bank offset for the tile to draw: $0000 or $8000
 ; sprCompTbl (Defs.s): long pointer to SPR_COMP_TBL, plus $1000 (the pattern table bit of the key offset)
 ; for pattern table 1, so the lookup does not fold it into the key (see :blitResolvedSprite)
 
-; Sprites are drawn on single pixels (sprShift selects the compiled variants shifted one pixel to the
-; right), except with the old dirty renderer, which saves the screen under a sprite 4 bytes wide.  The
-; grid renderer and the full renders (no dirty rendering) need nothing more.
-SPR_PIXEL_SHIFT equ GRID_DIRTY_RENDERING+1-ENABLE_DIRTY_RENDERING
+; SPR_PIXEL_SHIFT (the game's Main.s): sprites are drawn on single pixels, sprShift selects the compiled
+; variants shifted one pixel to the right.
+
+; The compiled sprite cache's slots (see SPR_* in Defs.s and CompileSprites.s).  With the shifted
+; variants: 2KB, 4 variants of 512 bytes, 32 slots per bank in up to 4 banks.  Without them: 512 bytes,
+; 2 variants of 256, 128 slots in one bank.  SPR_FLIP_PAGE is the page offset of the horizontally
+; flipped variant, ORed into the slot's SPR_COMP_TBL entry by the dispatch.  The SPR_OWNER and
+; SPR_SLOT_TBL tables have room for 128 slots.
+        DO    SPR_PIXEL_SHIFT
+SPR_SLOT_SIZE equ $0800
+SPR_BANK_SLOTS equ 32
+SPR_MAX_BANKS equ 4
+SPR_FLIP_PAGE equ 2
+        ELSE
+SPR_SLOT_SIZE equ $0200
+SPR_BANK_SLOTS equ 128
+SPR_MAX_BANKS equ 1
+SPR_FLIP_PAGE equ 1
+        FIN
+SPR_MAX_SLOTS equ SPR_BANK_SLOTS*SPR_MAX_BANKS
 
 ; Set up a sprite for drawing.  X = OAM index (preserved).
 ;
@@ -211,9 +53,6 @@ SPR_SETUP mac
         db    $B7,sprMul160            ; lda [sprMul160],y
         adc   #$2000-{y_offset*160}+x_offset
         sta   sprTmp1
-        DO    1-GRID_DIRTY_RENDERING
-        sta   sprTmp3                  ; Clamped address, for the old dirty renderer's sprite save
-        FIN
 
         sep   #$20                     ; Palette: ActivePtr selects the swizzle table of the sprite palette
         ldal  OAM_COPY+2,x
@@ -222,13 +61,16 @@ SPR_SETUP mac
         adc   SwizzlePtr2+1            ; (carry clear from the asl)
         sta   ActivePtr+1
 
-        lda   sprXPar                  ; X-coordinate: NES pixels to IIgs bytes, with the scroll's
-        adcl  OAM_COPY+3,x             ; half-pixel offset
-        DO    1-SPR_PIXEL_SHIFT
-        and   #$FE                     ; Mask before the shift so that a 0 goes into the carry
+        DO    SPR_PIXEL_SHIFT
+        ldal  OAM_COPY+3,x             ; X-coordinate: NES pixels to IIgs bytes, the pixel in the byte
+        lsr                            ; into the carry.  No scroll correction: the sprite is drawn on
+        ELSE                           ; its exact pixel even though the background moves in bytes
+        lda   sprXPar                  ; X-coordinate: IIgs byte ((scroll_x & 1) + x) / 2.  The background
+        adcl  OAM_COPY+3,x             ; starts at byte scroll_x / 2, so this is the byte that shows the
+        and   #$FE                     ; sprite's NES pixel.  (Mask before the shift so that a 0 goes into
+        ror                            ; the carry; the carry from the add is bit 8)
         FIN
-        ror                            ; Bring the carry into the high bit in case of overflow (the
-        rep   #$20                     ; carry is the pixel in the byte)
+        rep   #$20
         and   #$00FF
         tay
         DO    SPR_PIXEL_SHIFT          ; (no sep / rep in a DO: Merlin32 applies them to the MX state
@@ -257,15 +99,6 @@ SPR_SETUP mac
         sbc   #124                     ; (carry set)
         sta   sprTmp4
         FIN
-        DO    1-GRID_DIRTY_RENDERING
-        tya                            ; Clamped address, for the old dirty renderer's sprite save
-        cmp   #125
-        bcc   *+5
-        lda   #124
-        clc
-        adc   sprTmp3
-        sta   sprTmp3
-        FIN
         <<<
 
         mx   %00
@@ -288,13 +121,15 @@ drawSprites
         sep   #$20
         lda   #^Mul160Tbl
         sta   sprMul160+2
+        DO    1-SPR_PIXEL_SHIFT
         lda   _ppuscroll_x             ; The scroll's half-pixel offset is the same for every sprite
         and   #$01
         sta   sprXPar
-        rep   #$20
-        DO    1-SPR_PIXEL_SHIFT
-        stz   sprShift                 ; Always the even pixel variants
+        DO    ENABLE_DIRTY_RENDERING
+        stal  gqLastPar                ; (the grid renderer's unchanged-sprite skip)
         FIN
+        FIN
+        rep   #$20
         lda   CMPL_BANK                ; For switching to the tiledata bank and back to $01
         xba
         sta   sprBankSwap
@@ -310,9 +145,16 @@ drawSprites
 ; The loop runs with the data bank set to the shadow screen ($01), so compiled sprites are called
 ; directly.  The bitmap routines switch to the tiledata bank themselves (as_bitmap).
 
+        DO    ENABLE_DIRTY_RENDERING
+        jsr   gridRecordsBegin         ; The sprites' records for the grid renderer's next frame
+        FIN
+
         phb                            ; Save the current data bank
         pea   $0101
-        ldx   #0
+        lda   :spriteCount             ; Draw the sprites from the last to the first: the NES draws a
+        sec                            ; lower OAM index on top
+        sbc   #4
+        tax
 
 ; Determine if we are in 8x8 sprite mode, or 8x16 sprite mode.  Have a specialized loop for
 ; each.
@@ -333,12 +175,12 @@ drawSprites
         sta   sprCompTbl
         plb
 
-; X = the OAM index for the whole loop.  Everything a sprite goes through preserves it (a compiled
-; sprite uses only Y), so the loop does not save it.
+; X = the OAM index for the whole loop, from the last sprite down to 0.  Everything a sprite goes through
+; preserves it (a compiled sprite uses only Y), so the loop does not save it.
 
 :oam_loop_8x8
 
-        DO    GRID_DIRTY_RENDERING
+        DO    ENABLE_DIRTY_RENDERING
         ldal  gqSkip,x                ; Unchanged and out of reach of anything redrawn: just record it
         cmp   #$0100                  ; (word = table index | skip flag << 8)
         bcc   :draw8
@@ -363,12 +205,11 @@ drawSprites
 ; Restore and continue processing the OAMtable
 
 :next8
-        inx
-        inx
-        inx
-        inx
-        cpx   :spriteCount
-        bcc   :oam_loop_8x8
+        dex
+        dex
+        dex
+        dex
+        bpl   :oam_loop_8x8
 
         plb
         plb
@@ -379,7 +220,7 @@ drawSprites
 
         DO    SPRITE_CLIP
 :clip8  cmp   #8
-        bcs   :next8
+        bcs   :hide8
         jsr   :setupSprite8
         ldal  OAM_COPY+1,x
         sta   sprTmp2
@@ -389,6 +230,11 @@ drawSprites
         rep   #$20
         lda   sprTmp2
         jsr   :blitResolvedSprite
+        bra   :next8
+:hide8
+        DO    ENABLE_DIRTY_RENDERING
+        jsr   gridRecordNone           ; (a record that erases nothing next frame)
+        FIN
         bra   :next8
         FIN
 
@@ -412,12 +258,11 @@ drawSprites
         jsr   :drawSprite16
 
 :next16
-        inx
-        inx
-        inx
-        inx
-        cpx   :spriteCount
-        bcc   :oam_loop_8x16
+        dex
+        dex
+        dex
+        dex
+        bpl   :oam_loop_8x16
 
         plb
         plb
@@ -425,53 +270,40 @@ drawSprites
 
         DO    SPRITE_CLIP
 :clip16 cmp   #16                     ; Hidden entirely: not set up, marked or drawn
-        bcs   :next16
+        bcs   :hide16
         jsr   :setupSprite16
         jsr   :drawSprite16c
+        bra   :next16
+:hide16
+        DO    ENABLE_DIRTY_RENDERING
+        jsr   gridRecordNone
+        FIN
         bra   :next16
         FIN
 
 :setupSprite8
         SPR_SETUP
 
-        DO   GRID_DIRTY_RENDERING
+        DO   ENABLE_DIRTY_RENDERING
         jmp  gridMarkSprite8           ; The grid renderer erases from the code field, so nothing is
                                        ; saved; just mark the cells that this sprite covers
         ELSE
-        ; If we are in DirtyState 1 or 2, then the sprite data should be copied
-        lda  DirtyState
-        beq  :not_dirty8
-        phx
-        ldx  sprTmp1
-        ldy  sprTmp3                   ; Save the clamped screen address in sprTmp3
-        jsr  saveTileFromScreen8
-        plx
-:not_dirty8
         rts
         FIN
 
 :setupSprite16
         SPR_SETUP
 
-        DO   GRID_DIRTY_RENDERING
+        DO   ENABLE_DIRTY_RENDERING
         jmp  gridMarkSprite16
         ELSE
-        ; If we are in DirtyState 1 or 2, then the sprite data should be copied
-        lda  DirtyState
-        beq  :not_dirty16
-        phx
-        ldx  sprTmp1
-        ldy  sprTmp3                   ; Save the clamped screen address in sprTmp3
-        jsr  saveTileFromScreen16
-        plx
-:not_dirty16
         rts
         FIN
 
 ; Draw a single 8x16 sprite (both halves)
 ;
 ; X = OAM index (0, 4, 8, ..., 248, 252)
-; sprTmp1/sprTmp3/sprTmp4 already set by :setupSprite16 for the top-left position
+; sprTmp1/sprTmp4 already set by :setupSprite16 for the top-left position
 ;
 ; Unlike 8x8 mode, the NES ignores PPUCTRL/spadr for 8x16 sprites: bit 0 of the OAM
 ; tile ID selects the pattern table, and bits 7-1 select the tile pair within it
@@ -593,7 +425,7 @@ drawSprites
 ; from the loop, with sprTmp5/sprCompTbl = the current global sprite table, set once)
 ; and 8x16 sprites (entered directly by :drawSprite16, with sprTmp5/sprCompTbl set
 ; per-sprite from the OAM tile ID's own pattern-table bit). Requires sprTmp2
-; (tile id + attribute) already loaded into A, and sprTmp1/sprTmp3/sprTmp4
+; (tile id + attribute) already loaded into A, and sprTmp1/sprTmp4
 ; (screen address / clip amount) already set up by SPR_SETUP.  DBR = $01.
 ; X (the OAM index) is preserved: the compiled sprite path uses only Y, and the
 ; other paths save it.
@@ -621,9 +453,10 @@ drawSprites
 ; clear here and the palette is bits 9-8.  The pattern table is left out: sprCompTbl points at its half of
 ; the table.  The first shift moves the vertical flip into the carry, and the ADC adds it at the bottom; the
 ; second leaves the horizontal flip in the carry.  The entry is the bank:page of the slot of the compiled
-; variants: the horizontally flipped code is at slot + $200, the shifted (odd pixel) ones at + $400 / + $600.
-; Slots are 8-page aligned, so the ORs never carry.  Until the shifted pair is compiled, page bit 0 of the
-; entry is set and the variants' stubs are on the odd pages (EmitShiftStubs).
+; variants: the horizontally flipped code is at slot + SPR_FLIP_PAGE pages, and with SPR_PIXEL_SHIFT the
+; shifted (odd pixel) ones at + $400 / + $600.  Slots are aligned to their size, so the ORs never carry.
+; Until the shifted pair is compiled, page bit 0 of the entry is set and the variants' stubs are on the odd
+; pages (EmitShiftStubs).
 
         and  #$C3FF         ; tile, palette and the two flips
         asl                 ; carry = vertical flip
@@ -633,8 +466,10 @@ drawSprites
         lda  [sprCompTbl],y
         beq  sprCacheMiss   ; zero value means no compiled sprite for this key
         bcc  *+5
-        ora  #$0002         ; the horizontally flipped variant
+        ora  #SPR_FLIP_PAGE ; the horizontally flipped variant
+        DO   SPR_PIXEL_SHIFT
         ora  sprShift       ; the shifted variant for a sprite on an odd pixel
+        FIN
 
 ; Vector through the compiled sprite table.  The compiled sprites are in other banks, so just check
 ; for a sentinel value and manually jump into the compiled sprite code to avoid a double-jump and having to
@@ -812,6 +647,7 @@ CheckSprTileDirty
 ; (EmitShiftStubs) with a JSL from the compile bank, which then draws the plain variant, a pixel to the
 ; left.  Queue the shifted pair (bit 0 of the key: SprCacheService), unless this render's compile quota is
 ; used up.  DBR = $01; X (the OAM index) and Y (the SHR address) are preserved.
+        DO    SPR_PIXEL_SHIFT
         mx    %00
 SprQueueShift
         SPR_STAT SPR_ST_SHREQ
@@ -840,6 +676,7 @@ SprQueueShift
         stal PPU_MEM+SPR_PEND_CNT
 :full   plx
         rtl
+        FIN
 
 ; Lines to hide at the top of the sprite being drawn, set by the game's SPRITE_PRE_DRAW callback
 ; (stays 0 if the game never sets it).  At least the sprite's height hides it entirely.

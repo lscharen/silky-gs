@@ -5,7 +5,6 @@
 ; that list during rendering.
 ;
 ; Separated from ppu.s to allow shadowBitmapToList to be unit-tested in isolation.
-; The lookup tables are also referenced by the WALK_BITMAP macro in scanline_bitmap.s.
 
 ; A representation of the list as [top, bot) pairs
 shadowListCount dw 0            ; Pad for 16-bit comparisons
@@ -194,7 +193,7 @@ clipShadowList
 :done   sty  shadowListCount
         rts
 
-* ; Converts the shadow bitmap (accessed via CurrShadowBitmap pointer) into a list of
+* ; Converts the shadow bitmap (shadowBitmap0) into a list of
 * ; contiguous [top, bottom) scanline pairs in shadowListTop/shadowListBot.
 * ; Processes y_height_rows bytes starting at byte index y_offset_rows.
         mx   %00
@@ -203,9 +202,7 @@ shadowBitmapToList
 :bottom   equ  tmp2
 :bitfield equ  tmp4
 
-        DO   GRID_DIRTY_RENDERING
-        jsr  ensureShadowBitmap           ; (built on demand with the grid renderer)
-        FIN
+        jsr  ensureShadowBitmap           ; (built on demand)
 
         sep  #$30
 
@@ -215,7 +212,7 @@ shadowBitmapToList
 
 ; This loop is called when we are not tracking a sprite range
 :zero_loop
-        lda  (CurrShadowBitmap),y
+        lda  shadowBitmap0,y
 :zero_chk
         beq  :zero_next
         tax
@@ -233,7 +230,7 @@ shadowBitmapToList
         bra  :exit           ; ended while not tracking a sprite, so exit the function
 
 :one_loop
-        lda  (CurrShadowBitmap),y     ; if the next byte is all sprite, just continue
+        lda  shadowBitmap0,y          ; if the next byte is all sprite, just continue
         cmp  #$FF
         beq  :one_next
 

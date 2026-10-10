@@ -98,14 +98,17 @@ DIRECT_OAM_READ   equ $200
 OAM_START_INDEX   equ 0
 OAM_END_INDEX     equ 64
 
-; Allow the engine to use dirty rendering (drawing only lines/blocks where sprites
-; have changed) if the background did not scroll compared to the previous frame
+; Dirty rendering: when the background did not scroll, the screen-aligned 8x8 grid renderer
+; (ppu_grid.s, ppu_grid_quads.s) redraws only the cells that changed, erasing from the PEA field.  0 =
+; every frame is a full render.
 ENABLE_DIRTY_RENDERING equ 1
 
-; Use the screen-aligned 8x8 grid dirty renderer (erase from the PEA field, BG tile updates
-; without a full refresh).  Requires ENABLE_DIRTY_RENDERING.  See BG_TILE_DIRTY_PLAN.md
-GRID_DIRTY_RENDERING equ 1
 GRID_MAX_BG_TILES    equ 64
+
+; Draw sprites on single pixels (compiled variants shifted one pixel to the right for a sprite on an
+; odd pixel).  Off: sprites are drawn on even pixels (IIgs bytes), with the scroll's half-pixel
+; correction, and the sprite cache uses smaller slots.
+SPR_PIXEL_SHIFT equ 1
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
@@ -363,7 +366,6 @@ config_game_end
             put    ../../ppu/ppu_grid_quads.s
             put    ../../ppu/ppu_sprites.s
             put    ../../ppu/ppu_tile_blitters.s
-            put    ../../ppu/scanline_bitmap.s
 ; AUTOINC:END
 
             put   ../../apu/apu.s

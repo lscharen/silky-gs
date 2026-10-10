@@ -100,7 +100,7 @@ RefreshMetatile                            ; Alternate entry point is not settin
         beq   :stable
         jsr   _PEAFieldStable
 :stable pla
-        DO    GRID_DIRTY_RENDERING
+        DO    ENABLE_DIRTY_RENDERING
         jsr   gridRecordMetatile           ; Let the grid renderer expose these 4 tiles (preserves A, X, Y)
         FIN
         clc

@@ -18,26 +18,6 @@ _BltRangeLite
                 bcc   *+3
                 rts
 
-                DO    DIRTY_RENDERING_VISUALS
-; Set SCB values for debugging
-                php
-                phx
-                phy
-:dbg_loop
-                sep  #$20
-                lda  DebugSCB
-                oral $E19D00,x
-                stal $E19D00,x
-                rep  #$30
-                inx
-                txa
-                cmp  1,s
-                bcc  :dbg_loop
-                ply
-                plx
-                plp
-                FIN
-
                 lda   ControlBits             ; The common case (background on, every line) needs
                 and   #CTRL_EVEN_RENDER+CTRL_BKGND_ENABLE   ; one test and falls into the body
                 cmp   #CTRL_BKGND_ENABLE
@@ -560,25 +540,6 @@ _PEAFieldStable
                plp
                rts
 
-; A small variant for dirty rendering that just sets the BRA instruction in the code field assuming
-; that everything else has not changed, e.g. saved value and entry/exit points.
-_BltSetupDirty
-               ldy   StartX
-               lda   #0
-               ldx   ScreenHeight
-
-_BltSetupDirtyAlt
-:num_lines     equ tmp3
-:exit_addr     equ tmp4
-
-               jsr   _BltSetupCommon
-               ldx   :num_lines
-               ldy   #_SetupPEAFieldLinesDirty
-               jsr   _Apply
-
-               lda   :exit_addr
-               rts
-
 ; Common setup for a range of lines.  Calculates the patch values from the horizontal scroll.
 ;
 ; A = first screen line
@@ -832,44 +793,6 @@ _SetupPEAFieldLines
 :set_edge       jsr   $0000
 
 :done           plb                       ; Restore the data bank
-                rts
-
-; Only patch the BRA instructions
-_SetupPEAFieldLinesDirty
-:exit_addr     equ tmp4
-:exit_bra      equ tmp5
-:draw_count_x2 equ tmp9
-
-                phb
-
-                asl                              ; 2 x :virt_line
-                tay                              ; use to load the base address
-
-                txa
-                asl
-                sta   :draw_count_x2
-                txa
-                adc   :draw_count_x2              ; multiply by 3 to calculate the jump offset (carry is clear)
-                eor   #$FFFF
-                sec
-                adc   #lsc_bottom
-                sta   :set_bra+1
-
-                sep   #$20
-                lda   BTableHigh,y                ; Get the bank for this range of PEA field lines
-                pha
-                rep   #$21
-
-                lda   BTableLow,y
-                adc   BltSegPage
-                adc   :exit_addr
-                tay
-
-                plb                       ; Set the data bank to the target PEA field range
-                lda   :exit_bra           ; The same constant value is set for all lines
-:set_bra        jsr   $0000
-
-                plb                       ; Restore the data bank
                 rts
 
 ; The ranges remembered by _BltSetupAlt (count $FFFF = unused)

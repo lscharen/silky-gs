@@ -370,7 +370,7 @@ PPUFlushQueuesAlt
         asl
         tax
         jsr   (ntmPartTbl,x)                  ; Copy + draw the set tiles
-        DO    GRID_DIRTY_RENDERING
+        DO    ENABLE_DIRTY_RENDERING
         ldx   gmtEnd                          ; Let the grid renderer expose these tiles (gmtList entry)
         cpx   #GRID_MAX_METATILES*4
         bcs   :o0
@@ -490,7 +490,7 @@ PPUFlushQueuesAlt
         asl
         tax
         jsr   (ntmPartTbl,x)                  ; Copy + draw the set tiles
-        DO    GRID_DIRTY_RENDERING
+        DO    ENABLE_DIRTY_RENDERING
         ldx   gmtEnd                          ; Let the grid renderer expose these tiles (gmtList entry)
         cpx   #GRID_MAX_METATILES*4
         bcs   :o1
@@ -613,7 +613,7 @@ PPUFlushQueuesAlt
         asl
         tax
         jsr   (ntmPartTbl,x)                  ; Copy + draw the set tiles
-        DO    GRID_DIRTY_RENDERING
+        DO    ENABLE_DIRTY_RENDERING
         ldx   gmtEnd                          ; Let the grid renderer expose these tiles (gmtList entry)
         cpx   #GRID_MAX_METATILES*4
         bcs   :o2
@@ -737,7 +737,7 @@ PPUFlushQueuesAlt
         asl
         tax
         jsr   (ntmPartTbl,x)                  ; Copy + draw the set tiles
-        DO    GRID_DIRTY_RENDERING
+        DO    ENABLE_DIRTY_RENDERING
         ldx   gmtEnd                          ; Let the grid renderer expose these tiles (gmtList entry)
         cpx   #GRID_MAX_METATILES*4
         bcs   :o3

@@ -20,17 +20,6 @@ NES_StartUp
             bcc   *+5
             brl   Fail
 
-; Set up the bank 00 buffer used for the sprite save and restore
-
-            tsc
-            ora   #$00FF                  ; Move to top of the page
-            sec
-            sbc   #$0300                  ; Leave this much space to the application
- 
-            sta   SprSaveTop
-            sta   SprSaveAddr
-            stz   SprAddrCount
-
 ; Keep a copy of the application's direct page to be restored later
 
             tdc
@@ -451,7 +440,7 @@ NES_RenderFrame
 ; If there are background updates to make, force a screen refresh.  The grid renderer decides for
 ; itself in gridPrepare, since it can apply a limited number of background tile updates directly.
 
-            DO   GRID_DIRTY_RENDERING
+            DO   ENABLE_DIRTY_RENDERING
             bra  :no_force
             FIN
             lda  prev_at_list_start       ; Any queued attribute group means background changes
@@ -545,12 +534,6 @@ NES_RenderFrame
 ; Internal post-render logic
 
             inc   frameCount       ; Tick over to a new frame
-
-            lda   CurrShadowBitmap ; Swap the bitmap pointers
-            ldx   PrevShadowBitmap
-            sta   PrevShadowBitmap
-            stx   CurrShadowBitmap
-
             rts
 
 ; SHOW_FPS: once a second (OneSecondCounter), draw the number of renders in the last second
@@ -778,11 +761,11 @@ RenderScreen
             tsb   DirtyBits
 :no_refresh
 
-; Allow dirty rendering or not
+; Dirty rendering (the grid renderer) or not
 
             DO    ENABLE_DIRTY_RENDERING
 
-; If this frame did not scroll, we can perform a dirty update
+; If this frame did not scroll, the grid renderer may be able to draw only what changed
 
             lda   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_Y+DIRTY_BIT_BG0_REFRESH
             bit   DirtyBits
@@ -790,7 +773,6 @@ RenderScreen
             lda   disableDirtyRendering
             bne   :full_update
 
-            DO    GRID_DIRTY_RENDERING
 ; The grid renderer never executes the code field, so it does not need the exit points patched
             jsr   gridPrepare
             bcs   :full_update
@@ -800,20 +782,9 @@ RenderScreen
             FIN
             jsr   gridDrawDirty
             bra   :done
-            FIN
-
-; This is code path for performing dirty rendering.
-
-            jsr   _PEAFieldStable         ; _BltSetupDirty patches the exits itself
-            jsr   _BltSetupDirty
-            sta   exitOffset
-            jsr   drawDirtyScreen
-            ldy   exitOffset
-            jsr   _RestoreBG0OpcodesNowLite
-            bra   :done
 
 :full_update
-            DO    GRID_DIRTY_RENDERING*GRID_FALLBACK_BORDER
+            DO    ENABLE_DIRTY_RENDERING*GRID_FALLBACK_BORDER
             jsr   gridFallbackColor       ; Border color = why we fell back to a full render
             jsr   gridFallbackBorder
             FIN
@@ -840,7 +811,7 @@ RenderScreen
             stz   DirtyBits
             rts
 
-            DO    ENABLE_DIRTY_RENDERING*GRID_DIRTY_RENDERING*GRID_FALLBACK_BORDER
+            DO    ENABLE_DIRTY_RENDERING*GRID_FALLBACK_BORDER
 ; Returns A = the border color for the reason this frame fell back to a full render.  The scaffold's
 ; own reasons are checked first; if none apply, gridPrepare was called and recorded its reason in
 ; gridFbReason.  Colors are listed with GRID_FALLBACK_BORDER in Defs.s.

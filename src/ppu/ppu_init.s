@@ -42,7 +42,7 @@ PPUStartUp
 
         jsr   _InitCIRAMTileMapping
 
-        DO    GRID_DIRTY_RENDERING
+        DO    ENABLE_DIRTY_RENDERING
         jsr   gridStartUp               ; Static tables for the grid dirty renderer
         FIN
 

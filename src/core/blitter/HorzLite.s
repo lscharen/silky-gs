@@ -83,27 +83,6 @@ _RestoreBG0OpcodesLite
 _RestoreBG0OpcodesAltLite
                     rts
 
-; Restore the exits of a range right away.  Only for exits patched outside of _BltSetupAlt's tracking
-; (_BltSetupDirty).
-_RestoreBG0OpcodesNowLite
-                    lda   #0
-                    ldx   ScreenHeight
-
-_RestoreBG0OpcodesNowAltLite
-:exit_addr          equ   tmp4                               ; row-relative exit offset returned by _BltSetup
-
-                    sty   :exit_addr
-
-                    clc
-                    add_y_offset           ; Playfield line to NES scanline
-                    adc   StartY              ; Load the starting virtual line within the PEA renderer
-                    cmp   MaxY
-                    bcc   *+4
-                    sbc   MaxY
-
-                    ldy   #_RestoreBG0OpcodesCallback
-                    jmp   _Apply
-
 ; This will get called with A, X set and guaranteed to be within a contiguous range
 ; of the blitter code.  This allows the data bank to be set once and then all of the
 ; bank manipulations done without worrying about changing the bank.

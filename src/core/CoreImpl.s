@@ -155,8 +155,6 @@ EngineReset
                   lda       #$FFFF                 ; Mark as needing a full update
                   sta       DirtyBits
 
-                  stz       DirtyState
-                  stz       DebugSCB
                   stz       LastRender             ; Initialize as if a full render was performed
 
 
@@ -167,11 +165,7 @@ EngineReset
                   stz       OneSecondCounter
                   stz       LastKey
 
-                  stz       frameCount             ; Maintain which shadow bitmap to use for a given frame
-                  lda       #shadowBitmap0
-                  sta       CurrShadowBitmap
-                  lda       #shadowBitmap1
-                  sta       PrevShadowBitmap
+                  stz       frameCount
 
 ; Fill in the state register values
 
