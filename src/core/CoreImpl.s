@@ -218,7 +218,9 @@ EngineReset
 ; 4, 20, 36, 52, 68, 84 and 100.
 ;
 ; If CTRL_EVEN_RENDER is set, the even lines exit to the line after next, so only half of the
-; lines are drawn.  Line 118 still continues to line 119, which jumps to the other bank.
+; lines are drawn.  Line 118 jumps to line 119's JML into the other bank, so line 119 is skipped
+; as well.  The skipped lines are the odd code rows, which are the odd screen lines that
+; _BltRangeLite assumes as long as StartRow + y_offset is even.
 ;
 ; All of the exits are rewritten, so this can be called again whenever CTRL_EVEN_RENDER changes.
 FIRST_PAGE        equ       $100       ; PEA code starts at $0100 in each respective bank
@@ -260,6 +262,12 @@ _InitLiteBlitter
                   tax
                   cpx       #{118*_LINE_SPAN}
                   bcc       :even_loop
+
+; Line 118 skips line 119 too: its exits go straight to line 119's JML into the other bank, so the
+; odd line 119 is not drawn and the next bank continues on its even line 0
+                  ldx       #{118*_LINE_SPAN}
+                  lda       #FIRST_PAGE+{119*_LINE_SPAN}+_E_JMP_OFFSET
+                  jsr       :patch_exits
 
 :int              ldx       #{4*_LINE_SPAN}
 :int_loop         txa

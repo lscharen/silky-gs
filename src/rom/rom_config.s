@@ -148,7 +148,22 @@ _ConfigExit
             dex
             bpl  :loop
 
+; Flush the input before the game runs again.  The key that closed the screen (Return, the same key
+; as the Start button) is still held, and a held key keeps reading as pressed (_ReadKeypress), so
+; wait for it to be released, then clear the strobe and every input value the game could see.
+
+            sep  #$20
+:held       ldal KBD_STROBE_REG           ; Bit 7: a key is down (the read also clears the strobe)
+            bmi  :held
+            rep  #$20
+
             jsr  _ClearKeypress
+            stz  LastRead
+            stz  InputPlayer1
+            stz  InputPlayer2
+            lda  #0
+            stal KeyEvent
+            stal native_joy               ; Both controller bytes
             rts
 
 ; Palette for the configuration screen (4 palettes of 4 colors, defined by NES colors)

@@ -250,9 +250,9 @@ FB_COLOR_MANY      equ 11               ; Pink       - gridPrepare :fb_many (cur
 ; page (P1) is at +$100 and uses the same offsets for its PEA run and exit jumps.
 _INT_OFFSET    equ  $00                   ; code to enable interrupts before the line
 _ENTRY_OFFSET  equ  $11                   ; normal entry point for each line
-_ALIGN_PATCH   equ  $15                   ; BRA (even) or LDA #imm (odd), patched per line
-_EDGE_PATCH    equ  $17                   ; LDX #imm with the offset of the odd right edge byte (operand at +1)
-_ENTRY_PATCH   equ  $1E                   ; BRL to the first PEA (operand at +1)
+_ALIGN_PATCH   equ  $15                   ; BRL to the first PEA (even) or LDX #imm with the offset of the
+                                          ; odd right edge byte, patched per line (operand at +1)
+_ODD_ENTRY_PATCH equ $1C                  ; Odd lines: BRL to the first PEA (operand at +1)
 _E_OUT_OFFSET  equ  $21                   ; top jump to the even exit
 _O_OUT_OFFSET  equ  $24                   ; top jump to the odd exit
 _PEA_OFFSET    equ  $27                   ; first PEA instruction
@@ -266,10 +266,10 @@ _O_JMP_OFFSET  equ  $FA                   ; odd exit JMP to the next line (opera
 _LINE_SPAN  equ  512                     ; always 512 bytes between adjacent rows
 _LINES_PER_BANK equ 120
 
-; Values patched into _ALIGN_PATCH.  Even lines branch over the edge byte code to the BRL.  Odd lines
-; execute a harmless 8-bit LDA #imm and fall into the code that pushes the right edge byte.
-BLT_ALIGN_EVEN equ  $80+{{_ENTRY_PATCH-_ALIGN_PATCH-2}*256}
-BLT_ALIGN_ODD  equ  $00A9
+; Opcodes patched into _ALIGN_PATCH (8-bit).  Even lines BRL straight to the first PEA.  Odd lines
+; LDX the offset of the right edge byte and fall into the code that pushes it.
+BLT_ALIGN_EVEN equ  $82                   ; BRL
+BLT_ALIGN_ODD  equ  $A2                   ; LDX #imm (16-bit X)
 
 ; Processor status values used to enter the blitter.  M = 1, X = 0 and I = 1 always.
 BLT_P_BASE     equ  $24
