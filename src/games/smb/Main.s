@@ -164,16 +164,6 @@ CUSTOM_PPU_SCROLL_LOCK_CODE mac
                           xba
                           <<<
 
-; Define a list of sprites that should be compiled (must be in order and the tile address offset (x16))
-; If the COMPILED_SPRITE_LIST is a single negative value, then the first COMPILED_SPRITE_LIST_COUNT
-; sprites will be compiled
-COMPILED_SPRITE_LIST_COUNT equ 100
-;COMPILED_SPRITE_LIST_COUNT equ 0
-COMPILED_SPRITE_LIST       mac
-;                           dw  $70*16,$71*16,$72*16,$73*16     ; goombas
-                           dw  $FFFF
-                           <<<
-
 ; Do not check for specific Tile IDs to exclude from drawing
 NO_TILE_EXCLUDE equ 0
 
@@ -184,7 +174,6 @@ CUSTOM_RENDER_SCREEN_ADDR equ _RenderScreen
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 2
 y_height_rows equ 25
-y_ending_row  equ {y_offset_rows+y_height_rows}
 
 y_offset    equ {y_offset_rows*8}
 y_height    equ {y_height_rows*8}
@@ -205,12 +194,12 @@ x_offset    equ   16                      ; number of bytes from the left edge
             lda   #VERTICAL_MIRRORING      ; A = cartridge nametable mirroring at power on
             jsr   NES_StartUp
 
-; This an NROM game, so all of the sprite and background tiles are static.  They have
-; been statically converted into the runtime's internal representation and are loaded
-; into the 
+; This an NROM game, so all of the sprite and background tiles are static.  They have been
+; converted into the runtime's internal representation by build.js and loaded into the tiledata
+; bank, so all that's left is to compile the background tiles (sprites are compiled when they
+; are first drawn, SprCompileTile)
 
             jsr   ROM_CompileBackgroundTiles    ; Convert the background tiles (PPU:$1000) to compiled format
-            jsr   ROM_CompileSpriteTiles        ; Convert a bunch (100) of the sprite tiles to compiled format for speed
 
 ; Now, initialize the game-specific functionality that this wrapper needs in order to
 ; run the game in an effective manner.
@@ -484,8 +473,6 @@ CheckForPaletteChange
             rts
 
 ; Make the screen appear
-nesTopOffset    ds 2
-nesBottomOffset ds 2
 _RenderScreen
 
 ; Do the basic setup
@@ -512,7 +499,6 @@ _RenderScreen
             ldx   #16
             ldy   #0                      ; Xmod256 = 0
             jsr   _BltSetupAlt
-            sta   nesTopOffset            ; cache the :exit_offset value returned from this function
 
 ; Next render the remaining lines
 
@@ -523,26 +509,10 @@ _RenderScreen
             lda   #16                 ; Start at line 16
             ldy   StartX
             jsr   _BltSetupAlt
-            sta   nesBottomOffset
 
 ; Copy the sprites and buffer to the graphics screen
 
             jsr   drawScreen
-
-; Restore the buffer
-
-            lda   #0                      ; virt_line
-            ldx   #16                     ; lines_left
-            ldy   nesTopOffset            ; offset to patch
-            jsr   _RestoreBG0OpcodesAltLite
-
-            lda   ScreenHeight
-            sec
-            sbc   #16
-            tax                           ; lines_left
-            lda   #16                     ; virt_line
-            ldy   nesBottomOffset         ; offset to patch
-            jsr   _RestoreBG0OpcodesAltLite
 
             DO    SHOW_DEBUG_VARS
             ldal  OneSecondCounter

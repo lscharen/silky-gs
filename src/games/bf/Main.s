@@ -160,11 +160,6 @@ CUSTOM_PPU_SCROLL_LOCK_CODE mac
 ;
                           <<<
 
-COMPILED_SPRITE_LIST_COUNT equ 100
-COMPILED_SPRITE_LIST       mac
-                           dw  $FFFF
-                           <<<
-
 ; Do not check for specific Tile IDs to exclude from drawing
 NO_TILE_EXCLUDE equ 0
 
@@ -175,7 +170,6 @@ CUSTOM_RENDER_SCREEN_ADDR equ _RenderScreen
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 3 
 y_height_rows equ 25
-y_ending_row  equ {y_offset_rows+y_height_rows}
 
 y_offset      equ {y_offset_rows*8}
 y_height      equ {y_height_rows*8}
@@ -195,10 +189,10 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
 ; This an NROM game, so all of the sprite and background tiles are static.  They have been
 ; converted into the runtime's internal representation by build.js and loaded into the tiledata
-; bank, so all that's left is to compile them
+; bank, so all that's left is to compile the background tiles (sprites are compiled when they
+; are first drawn, SprCompileTile)
 
             jsr   ROM_CompileBackgroundTiles    ; Convert the background tiles (PPU:$1000) to compiled format
-            jsr   ROM_CompileSpriteTiles        ; Convert the COMPILED_SPRITE_LIST tiles to compiled format
 
 ; This is set up to let the game define all colors.  We only need to set up a single, static
 ; swizzle table
@@ -447,8 +441,6 @@ BF_3F1F ldal PPU_MEM+$3F1F
         rts
 
 ; Make the screen appear
-nesTopOffset    ds 2
-nesBottomOffset ds 2
 _RenderScreen
 
 ; If we're not on Balloon Trip, jut use the default render function
@@ -473,7 +465,6 @@ _RenderScreen
             ldx   #16
             ldy   #0                      ; Xmod256 = 0
             jsr   _BltSetupAlt
-            sta   nesTopOffset            ; cache the :exit_offset value returned from this function
 
 ; Next render the remaining lines
 
@@ -484,7 +475,6 @@ _RenderScreen
             lda   #16                 ; Start at line 16
             ldy   StartX
             jsr   _BltSetupAlt
-            sta   nesBottomOffset
 
 ; Copy the sprites and buffer to the graphics screen
 
@@ -498,21 +488,6 @@ _RenderScreen
             DO    ENABLE_DIRTY_RENDERING
             jsr   gridEndFull
             FIN
-
-; Restore the buffer
-
-            lda   #0                      ; virt_line
-            ldx   #16                     ; lines_left
-            ldy   nesTopOffset            ; offset to patch
-            jsr   _RestoreBG0OpcodesAltLite
-
-            lda   ScreenHeight
-            sec
-            sbc   #16
-            tax                           ; lines_left
-            lda   #16                     ; virt_line
-            ldy   nesBottomOffset         ; offset to patch
-            jsr   _RestoreBG0OpcodesAltLite
 
             stz   DirtyBits
             rts

@@ -35,7 +35,7 @@ drawScreen
         jmp   exposeShadowList
 
 ; Full redraw of a range of screen lines at the current scroll position (NES_SetScroll), as drawScreen
-; does for the whole screen.  This also sets up and restores the code field, for these lines only.
+; does for the whole screen.  This also sets up the code field, for these lines only.
 ; The other lines are not touched, so a custom renderer can draw each part of a split screen with
 ; its own scroll position, or leave a part of the screen as it is.
 ;
@@ -44,15 +44,14 @@ drawScreen
         mx   %00
 drawScreenRange
         sta   dsrTop
-        stx   dsrCount
+        stx   dsrEnd
         clc
-        adc   dsrCount
+        adc   dsrEnd
         sta   dsrEnd
 
         ldy   StartX
         lda   dsrTop
         jsr   _BltSetupAlt
-        sta   dsrExit
 
         jsr   shadowBitmapToList      ; Sprite lines, clipped to the range
         ldx   dsrEnd
@@ -74,13 +73,7 @@ drawScreenRange
         DO    ENABLE_DIRTY_RENDERING
         jsr   gridEndFull             ; drawSprites recorded this frame's sprite cells
         FIN
-
-        lda   dsrTop
-        ldx   dsrCount
-        ldy   dsrExit
-        jmp   _RestoreBG0OpcodesAltLite
+        rts
 
 dsrTop    dw  0
-dsrCount  dw  0
 dsrEnd    dw  0
-dsrExit   dw  0

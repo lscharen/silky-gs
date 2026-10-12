@@ -238,8 +238,7 @@ NES_EvtLoop
 ; Take the last new key press (each press, or auto-repeat, is one event).  If there is none,
 ; then nothing else to do here
 
-            jsr   NES_TakeKey
-            cmp   #0
+            jsr   NES_TakeKey            ; (Z set if there is none)
             bne   *+5
             brl   NES_EvtLoop
 
@@ -594,25 +593,6 @@ fpsValue     dw  0
 fpsTmp       dw  0
             FIN
 
-; Helper functions for patching and restoring the PEA field.  These could
-; be overridden for games that want to preserve the ability to switch between
-; dirty and full rendering, but still have a custom screen layout
-            mx  %00
-_SetupPEAField
-            jsr   _BltSetup
-            sta   exitOffset              ; cache the :exit_offset value returned from this function
-
-            lda   #1
-            sta   peaFieldIsPatched
-            rts
-
-            mx  %00
-_ResetPEAField
-            stz   peaFieldIsPatched
-
-            ldy   exitOffset              ; offset to patch
-            jmp   _RestoreBG0OpcodesLite
-
 ; Given a nametable address ($2000 - $2FFF), return the screen address taking into account the current
 ; scroll position.
 ;
@@ -817,16 +797,10 @@ RenderScreen
             ELSE
 
             jsr   _BltSetup
-            sta   exitOffset              ; cache the :exit_offset value returned from this function
 
 ; Copy the sprites and buffer to the graphics screen
 
             jsr   drawScreen
-
-; Restore the buffer
-
-            ldy   exitOffset              ; offset to patch
-            jsr   _RestoreBG0OpcodesLite
             FIN
 
             stz   DirtyBits
@@ -874,14 +848,9 @@ gridFallbackBorder
             rts
             FIN
 
-; Track if the PEA field is patched or not (for dirty rendering)
-peaFieldIsPatched dw 0
-
 ; If dirty rendering is turned on, provide a way to override it
 disableDirtyRendering dw 0
 
-; PEA field offset for the right edge where the BRA instructions are patched in
-exitOffset   ds 2
 
 ; Tracks the number of times NES_RenderFrame has been called
 frameCount      dw  0

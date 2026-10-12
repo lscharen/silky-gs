@@ -98,15 +98,11 @@ NES_TakeKey
             php
             sei
             lda   nesPolled
-            stz   nesPolled
-            plp
-            tax
             bne   :polled
-            jsr   NES_PollInput
-:polled     php
-            sei
+            jsr   NES_PollInput           ; (interrupts stay off: it saves and restores P itself)
+:polled     stz   nesPolled
             lda   KeyEvent
             stz   KeyEvent
             plp
-            and   #$007F
+            and   #$007F                  ; Z set if there is no key
             rts

@@ -98,7 +98,7 @@ gqInitTables
 
 ; x (NES pixels): column offset and p * 2 (b * 2 without SPR_PIXEL_SHIFT, b = the sprite's byte in its cell,
 ; x / 2 & 3).  The scroll is always a multiple of 8 when the grid is used, so the half-pixel parity in
-; :setupSprite is 0, and the sprite's pixel in its cell is x & 7.
+; SPR_SETUP is 0, and the sprite's pixel in its cell is x & 7.
 
             ldy   #0
 :xl         tya

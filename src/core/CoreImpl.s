@@ -399,16 +399,6 @@ _ClearKeypress
                   stz       LastKey
                   rts
 
-; Acknowledge that a keypress has been read.  This is similar to physically clearing
-; the keyboard strobe and will clear the PAD_KEY_DOWN bit, which is held so that a new
-; keypress can be picked up by the user code on a differnt frame than the initial read
-                mx %00
-_AckKeypress
-                  lda       LastKey
-                  and       #$FF7F
-                  sta       LastKey
-                  rts
-
                 mx %00
 _ReadRawKeypress
                   pea       $0000               ; temporary space

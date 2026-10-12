@@ -161,7 +161,8 @@ drawSprites
 
         lda   _ppuctrl
         bit   #NES_PPUCTRL_SPRSIZE
-        bne   :is_8x16
+        beq   *+5
+        brl   :is_8x16
 
 ; 8x8 mode: the pattern table is whatever PPUCTRL/spadr currently selects for all sprites (unlike
 ; 8x16 mode, where each sprite's own tile ID picks the table), so it is set once
@@ -197,7 +198,10 @@ drawSprites
         bne   :clip8
         FIN
 
-        jsr   :setupSprite8
+        SPR_SETUP
+        DO    ENABLE_DIRTY_RENDERING
+        jsr   gridMarkSprite8     ; Mark the cells that this sprite covers (nothing is saved)
+        FIN
         ldal  OAM_COPY+1,x            ; Tile and attributes
         sta   sprTmp2
         jsr   :blitResolvedSprite
@@ -221,7 +225,10 @@ drawSprites
         DO    SPRITE_CLIP
 :clip8  cmp   #8
         bcs   :hide8
-        jsr   :setupSprite8
+        SPR_SETUP
+        DO    ENABLE_DIRTY_RENDERING
+        jsr   gridMarkSprite8     ; Mark the cells that this sprite covers (nothing is saved)
+        FIN
         ldal  OAM_COPY+1,x
         sta   sprTmp2
         ldal  sprClipTop
@@ -254,7 +261,10 @@ drawSprites
 ; Draw both halves of the 8x16 sprite (pattern table select comes from bit 0
 ; of the tile ID, not from spadr/PPUCTRL -- see :drawSprite16)
 
-        jsr   :setupSprite16
+        SPR_SETUP
+        DO    ENABLE_DIRTY_RENDERING
+        jsr   gridMarkSprite16     ; Mark the cells that this sprite covers (nothing is saved)
+        FIN
         jsr   :drawSprite16
 
 :next16
@@ -271,7 +281,10 @@ drawSprites
         DO    SPRITE_CLIP
 :clip16 cmp   #16                     ; Hidden entirely: not set up, marked or drawn
         bcs   :hide16
-        jsr   :setupSprite16
+        SPR_SETUP
+        DO    ENABLE_DIRTY_RENDERING
+        jsr   gridMarkSprite16     ; Mark the cells that this sprite covers (nothing is saved)
+        FIN
         jsr   :drawSprite16c
         bra   :next16
 :hide16
@@ -281,29 +294,10 @@ drawSprites
         bra   :next16
         FIN
 
-:setupSprite8
-        SPR_SETUP
-
-        DO   ENABLE_DIRTY_RENDERING
-        jmp  gridMarkSprite8           ; The grid renderer erases from the code field, so nothing is
-                                       ; saved; just mark the cells that this sprite covers
-        ELSE
-        rts
-        FIN
-
-:setupSprite16
-        SPR_SETUP
-
-        DO   ENABLE_DIRTY_RENDERING
-        jmp  gridMarkSprite16
-        ELSE
-        rts
-        FIN
-
 ; Draw a single 8x16 sprite (both halves)
 ;
 ; X = OAM index (0, 4, 8, ..., 248, 252)
-; sprTmp1/sprTmp4 already set by :setupSprite16 for the top-left position
+; sprTmp1/sprTmp4 already set by SPR_SETUP for the top-left position
 ;
 ; Unlike 8x8 mode, the NES ignores PPUCTRL/spadr for 8x16 sprites: bit 0 of the OAM
 ; tile ID selects the pattern table, and bits 7-1 select the tile pair within it

@@ -9,8 +9,8 @@
  * pattern table $0000 fills the first half of the bank and pattern table
  * $1000 the second half.  Nothing here depends on which pattern table PPUCTRL
  * selects for the background or the sprites; Main.s compiles tiles out of
- * this bank after NES_StartUp (ROM_CompileBackgroundTiles /
- * ROM_CompileSpriteTiles) and the game's TileData.s assembles it into the
+ * this bank after NES_StartUp (ROM_CompileBackgroundTiles; sprites are compiled
+ * when first drawn) and the game's TileData.s assembles it into the
  * CHRDATA segment with `putbin tiledata.bin`.
  *
  * The CHR-ROM bytes are reconstructed from the game's own PPU.s: everything

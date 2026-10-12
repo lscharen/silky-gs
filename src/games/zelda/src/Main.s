@@ -170,11 +170,6 @@ CUSTOM_PPU_SCROLL_LOCK_CODE mac
                           lda   ppuscroll
                           <<<
 
-COMPILED_SPRITE_LIST_COUNT equ 0
-COMPILED_SPRITE_LIST       mac
-;
-                           <<<
-
 ; Do not check for specific Tile IDs to exclude from drawing
 NO_TILE_EXCLUDE equ 0
 
@@ -185,7 +180,6 @@ CUSTOM_RENDER_SCREEN_ADDR equ _RenderScreen     ; split screen during room trans
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 3
 y_height_rows equ 25
-y_ending_row  equ {y_offset_rows+y_height_rows}
 
 y_offset      equ {y_offset_rows*8}
 y_height      equ {y_height_rows*8}

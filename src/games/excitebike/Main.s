@@ -175,11 +175,6 @@ CUSTOM_PPU_SCROLL_LOCK_CODE mac
         xba
         <<<
 
-COMPILED_SPRITE_LIST_COUNT equ 0
-COMPILED_SPRITE_LIST       mac
-;
-                           <<<
-
 ; Do not check for specific Tile IDs to exclude from drawing
 NO_TILE_EXCLUDE equ 0
 
@@ -190,7 +185,6 @@ CUSTOM_RENDER_SCREEN_ADDR equ _RenderScreen
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 3   ; Ideally make this 2 for the title screen and 3 for the gameplay
 y_height_rows equ 25
-y_ending_row  equ {y_offset_rows+y_height_rows}
 
 y_offset      equ {y_offset_rows*8}
 y_height      equ {y_height_rows*8}
@@ -210,10 +204,10 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
 ; This an NROM game, so all of the sprite and background tiles are static.  They have been
 ; converted into the runtime's internal representation by build.js and loaded into the tiledata
-; bank, so all that's left is to compile them
+; bank, so all that's left is to compile the background tiles (sprites are compiled when they
+; are first drawn, SprCompileTile)
 
             jsr   ROM_CompileBackgroundTiles    ; Compile the background tiles
-            jsr   ROM_CompileSpriteTiles        ; Compile the COMPILED_SPRITE_LIST tiles
 
 ; Initialize the graphics for the main game mode
 
@@ -394,9 +388,6 @@ CheckForPaletteChange
 ; Make the screen appear
 _topscroll      ds 2
 _top_bg_x       ds 2
-nesCrowdOffset  ds 2
-nesTopOffset    ds 2
-nesBottomOffset ds 2
 _RenderScreen
 
 ; If we are not in-game, defer to the standard renderer
@@ -447,7 +438,6 @@ _RenderScreen
         ldx   #40
         ldy   _top_bg_x           ; Xmod256
         jsr   _BltSetupAlt
-        sta   nesCrowdOffset
 
 ; Next render top part of the screen to move with the player
 
@@ -455,7 +445,6 @@ _RenderScreen
         ldx   #{200-32-40}
         ldy   StartX              ; Xmod256
         jsr   _BltSetupAlt
-        sta   nesTopOffset
 
 ; Now render the bottom 32 lines to show the status bar area
 
@@ -463,28 +452,10 @@ _RenderScreen
         ldx   #32
         ldy   #0                         ; Xmod256
         jsr   _BltSetupAlt
-        sta   nesBottomOffset            ; cache the :exit_offset value returned from this function
 
 ; Copy the sprites and buffer to the graphics screen
 
         jsr   drawScreen
-
-; Restore the buffer
-
-        lda   #0
-        ldx   #40
-        ldy   nesCrowdOffset          ; offset to patch
-        jsr   _RestoreBG0OpcodesAltLite
-
-        lda   #40
-        ldx   #{200-32-40}
-        ldy   nesTopOffset            ; offset to patch
-        jsr   _RestoreBG0OpcodesAltLite
-
-        lda   #200-32
-        ldx   #32
-        ldy   nesBottomOffset         ; offset to patch
-        jsr   _RestoreBG0OpcodesAltLite
 
         DO    SHOW_DEBUG_VARS
         ldal  OneSecondCounter
