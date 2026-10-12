@@ -79,11 +79,6 @@ BG_TILES_AS_SPRITES equ 1
 ; 1 = Reset code is the game code
 ROM_DRIVER_MODE   equ 1
 
-; MAME cycle-count benchmark harness flag (scripts/run-bench.js) -- see
-; src/games/smb/Main.s for details. Always 0 here; rom_input.s is shared
-; across all games and must default to normal (non-bench) behavior.
-BENCH_MODE        equ 0
-
 ; Flag whether the backend should use the OAMDMA to get the sprite information,
 ; or if it can scan the NES RAM area directly
 ;
@@ -128,6 +123,7 @@ CACHE_DMC_SAMPLES equ 0
 ; Configuration screen setup (see rom/rom_config_setup.s)
 CONFIG_DEFAULT_AUDIO equ APU_60HZ   ; default audio quality
 CONFIG_VIDEO_MENU    equ 1          ; show the VIDEO menu
+CONFIG_VIDEO_FASTBLIT equ 1         ; show the FAST BLIT option (scrolling games only)
 CONFIG_INPUT_BUTTONS equ 0          ; allow remapping the A/B buttons
 CONFIG_INPUT_2P      equ 0          ; show P1/P2 tabs on the INPUT menu
 CONFIG_GAME_MENU     equ 0          ; append a GAME_CONFIG menu defined by this file
@@ -234,6 +230,10 @@ quit
 qtRec       adrl  $0000
             da    $00
 
+; Name of the save and preference files (used by misc/io.s)
+SAVE_FILENAME strl '1/ic.sav'
+PREF_FILENAME strl '1/ic.prefs'
+
 InitPlayfield
             ldx   #TitleScreen
             lda   #0
@@ -278,9 +278,7 @@ config_game_end
             DO    SHOW_DEBUG_VARS+RENDER_VBL_COUNT+SHOW_FPS ; debug text (DrawByte / DrawWord)
             put   ../../misc/App.Msg.s
             FIN
-            DO    SHOW_DEBUG_VARS
             put   ../../misc/io.s
-            FIN
 
             mput  ../../ppu
 ; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)

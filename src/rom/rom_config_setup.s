@@ -7,11 +7,16 @@
 ;   CONFIG_DEFAULT_AUDIO equ APU_60HZ / APU_120HZ / APU_240HZ
 ;                                  Default audio quality
 ;   CONFIG_VIDEO_MENU    equ 0/1   Show the VIDEO menu (status bar, fast blit)
+;   CONFIG_VIDEO_FASTBLIT equ 0/1  Show the FAST BLIT option on the VIDEO menu (needs CONFIG_VIDEO_MENU).
+;                                  Only useful for scrolling games, which do full renders.  When 0, a
+;                                  fast blit setting in an old preferences file is ignored.
 ;   CONFIG_INPUT_BUTTONS equ 0/1   Allow remapping the A/B buttons for keyboard input
 ;   CONFIG_INPUT_2P      equ 0/1   Show P1/P2 tabs on the INPUT menu (otherwise P1 only)
 ;   CONFIG_GAME_MENU     equ 0/1   Append the game's own menu.  Main.s must then define a menu
 ;                                  block labeled GAME_CONFIG whose previous menu item is
-;                                  INPUT_CONFIG and next menu item is 0.
+;                                  INPUT_CONFIG and next menu item is CREDITS_CONFIG.
+;
+; The CREDITS menu is always last.  At most 10 menus fit on the screen.
 ;
 ;   config_game_start / config_game_end
 ;                                  Labels (required, may be empty) bracketing the game's own
@@ -31,6 +36,7 @@
 ; Read the variables set up by the configuration screen and apply them to the runtime engine.
             mx    %00
 ApplyConfig
+            DO    CONFIG_VIDEO_FASTBLIT
             lda   config_video_fastmode
             beq   :normal_video
             lda   #CTRL_EVEN_RENDER
@@ -40,8 +46,8 @@ ApplyConfig
             lda   #CTRL_EVEN_RENDER
             trb   ControlBits
 :apply_video
-            lda   #0
-            jsr   FillScreen
+            FIN
+            jsr   _ClearShadowScreen          ; With shadowing on, so fast blit leaves no stale lines
             jsr   _InitRenderMode
 
             lda   config_audio_quality
@@ -112,7 +118,9 @@ AUDIO_QUALITY_240HZ str '240 HZ'
 
              DO   CONFIG_VIDEO_MENU
 VIDEO_TITLE_STR      str 'VIDEO'
+             DO   CONFIG_VIDEO_FASTBLIT
 VIDEO_FASTMODE_STR   str 'FAST BLIT'
+             FIN
 VIDEO_STATUS_BAR_STR str 'STATUS BAR'
              FIN
 
@@ -130,6 +138,22 @@ INPUT_SNESMAX_PORT_STR str 'SLOT'
 INPUT_BUTTON_A_STR  str 'A BUTTON'
 INPUT_BUTTON_B_STR  str 'B BUTTON'
              FIN
+
+CREDITS_TITLE_STR   str 'CREDITS'
+
+; The credits text: upper case letters, digits and spaces only (other characters are drawn blank),
+; at most 19 characters per line
+CREDITS_HEADER_STR  str 'THANKS TO'
+CREDITS_LINE_1      str ' ALEX LEE'
+CREDITS_LINE_2      str ' BRUTAL DELUXE'
+CREDITS_LINE_3      str ' CHRIS VAVRUSKA'
+CREDITS_LINE_4      str ' FATDOG'
+CREDITS_LINE_5      str ' IAN BRUMBY'
+CREDITS_LINE_6      str ' JAWAID BAZYAR'
+CREDITS_LINE_7      str ' JAY CRAFT'
+CREDITS_LINE_8      str 'AND EVERYONE ON THE'
+CREDITS_LINE_9      str 'APPLE II INFINITUM'
+CREDITS_LINE_10     str 'THANK YOU ALL'
 
              DO   CONFIG_INPUT_2P
 PLAYER_INPUT_STR    str 'PLAYER INPUTS'
@@ -149,8 +173,8 @@ CONFIG_BLK   db   CONFIG_PALETTE        ; Which background palette to use
              db   TILE_A                ; First tile for the alphabet A - Z characters
              db   TILE_SPACE
 
-; Menu list: "Audio", ["Video"], "Input", [game menu]
-CONFIG_MENU  dw   2+CONFIG_VIDEO_MENU+CONFIG_GAME_MENU
+; Menu list: "Audio", ["Video"], "Input", [game menu], "Credits"
+CONFIG_MENU  dw   3+CONFIG_VIDEO_MENU+CONFIG_GAME_MENU
              dw   AUDIO_CONFIG
              DO   CONFIG_VIDEO_MENU
              dw   VIDEO_CONFIG
@@ -159,6 +183,7 @@ CONFIG_MENU  dw   2+CONFIG_VIDEO_MENU+CONFIG_GAME_MENU
              DO   CONFIG_GAME_MENU
              dw   GAME_CONFIG
              FIN
+             dw   CREDITS_CONFIG
 
 AUDIO_CONFIG dw   AUDIO_TITLE_STR
              dw   0                     ; previous menu item
@@ -196,23 +221,31 @@ VIDEO_CONFIG dw   VIDEO_TITLE_STR
              dw   AUDIO_CONFIG          ; previous menu item
              dw   INPUT_CONFIG          ; next menu item
 
-             dw   2                     ; Two configuration elements
+             dw   1+CONFIG_VIDEO_FASTBLIT ; Number of configuration elements
              dw   VIDEO_ITEM_1
+             DO   CONFIG_VIDEO_FASTBLIT
              dw   VIDEO_ITEM_2
+             FIN
 
 VIDEO_ITEM_1 dw   CHKBOX                ; Checkbox just forces a 0/1 for False/True
              dw   0                     ; previous control
+             DO   CONFIG_VIDEO_FASTBLIT
              dw   VIDEO_ITEM_2          ; next control
+             ELSE
+             dw   0
+             FIN
              dw   3,2
              dw   VIDEO_STATUS_BAR_STR
              dw   config_video_statusbar
 
+             DO   CONFIG_VIDEO_FASTBLIT
 VIDEO_ITEM_2 dw   CHKBOX
              dw   VIDEO_ITEM_1          ; previous control
              dw   0                     ; next control
              dw   3,4
              dw   VIDEO_FASTMODE_STR
              dw   config_video_fastmode
+             FIN
              FIN
 
 INPUT_CONFIG dw   INPUT_TITLE_STR
@@ -224,7 +257,7 @@ INPUT_CONFIG dw   INPUT_TITLE_STR
              DO   CONFIG_GAME_MENU
              dw   GAME_CONFIG           ; next menu item
              ELSE
-             dw   0
+             dw   CREDITS_CONFIG
              FIN
 
              dw   1
@@ -444,3 +477,36 @@ INPUT_ITEM_13 dw  BTNMAP
              dw   config_input_p2_button_b
              FIN
              FIN
+
+; Credits.  The panel is cleared down to row 18, so the text must end there.
+CREDITS_CONFIG dw CREDITS_TITLE_STR
+             DO   CONFIG_GAME_MENU
+             dw   GAME_CONFIG           ; previous menu item
+             ELSE
+             dw   INPUT_CONFIG
+             FIN
+             dw   0                     ; next menu item
+
+             dw   1
+             dw   CREDITS_ITEM_1
+
+CREDITS_ITEM_1 dw TEXT
+             dw   0                     ; previous control
+             dw   0                     ; next control
+             dw   1,2
+             dw   CREDITS_HEADER_STR
+             dw   0                     ; no value
+
+             dw   12                    ; number of lines (0 = blank line)
+             dw   CREDITS_LINE_1
+             dw   CREDITS_LINE_2
+             dw   CREDITS_LINE_3
+             dw   CREDITS_LINE_4
+             dw   CREDITS_LINE_5
+             dw   CREDITS_LINE_6
+             dw   CREDITS_LINE_7
+             dw   0
+             dw   CREDITS_LINE_8
+             dw   CREDITS_LINE_9
+             dw   0
+             dw   CREDITS_LINE_10

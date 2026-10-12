@@ -132,6 +132,8 @@ SaveROMFile
             rts
 
 ; Save the preferences
+;
+; Returns C = 0 if the file was written, C = 1 if it could not be (e.g. a write-protected disk)
             mx    %00
 SavePrefData
             lda        #{config_block_end-config_block_start}
@@ -146,7 +148,7 @@ SavePrefData
             _CreateGS  pfCreateRec
             bcc        :noError
             cmp        #$0047                  ; File exists error is ok
-            bne        :gsosError0
+            bne        :gsosError
 :noError
 
             lda        pfCreateRec+2           ; Copy file name to open rec
@@ -155,13 +157,13 @@ SavePrefData
             sta        openRec+6
 
             _OpenGS    openRec
-            bcs        :gsosError1
+            bcs        :gsosError
             lda        openRec+2
             sta        writeRec+2
             sta        closeRec+2
 
             _WriteGS   writeRec
-            bcs        :gsosError2
+            bcs        :close
 
 ; Followed by the game-specific values
 
@@ -173,15 +175,13 @@ SavePrefData
             lda        #^config_game_start
             sta        writeRec+6
             _WriteGS   writeRec
-            bcs        :gsosError2
 
-:close      _CloseGS   closeRec
-            clc
+:close      php                                ; Close the file even if the write failed
+            _CloseGS   closeRec
+            plp
             rts
 
-:gsosError0 brk        $89
-:gsosError1 brk        $8A
-:gsosError2 brk        $8B
+:gsosError  sec
             rts
 
 svCreateRec dw         4                       ; pCount

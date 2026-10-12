@@ -10662,6 +10662,7 @@ ReadControllers_F50E
 ;  endif
 
 native_joy EXT
+NES_ReadJoy EXT
 JP_CODE_F530
 CODE_F522
 ;  LDY #$08					;
@@ -10669,7 +10670,7 @@ CODE_F522
 LOOP_F524
 ;  PHA						;
 ;  LDA ControllerReg,X				;
-  ldal native_joy,x
+  jsl  NES_ReadJoy                    ; (was ldal native_joy,x: read on demand)
   bra  :native_done
 
   STA $00						;

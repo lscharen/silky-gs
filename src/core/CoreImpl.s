@@ -435,6 +435,7 @@ _ReadKeypress
                   stal      KBD_STROBE_REG      ; reset the strobe
                   sta       LastKey
                   sta       1,s
+                  stal      KeyEvent            ; a new press, for the event loop (NES_TakeKey)
                   bra       :done               ; return the key value
 
 :no_new_key

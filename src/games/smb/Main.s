@@ -78,18 +78,6 @@ BG_TILES_AS_SPRITES equ 1
 ; 1 = Reset code is the game code
 ROM_DRIVER_MODE   equ 0
 
-; Flag for the MAME cycle-count benchmark harness (scripts/run-bench.js):
-; skips GS/OS-dependent quit handling (there is no GS/OS to return to when
-; booted directly by the harness) and feeds NES_ReadInput from a canned
-; input file instead of the keyboard/joystick, advancing one entry per
-; virtual NMI (see src/rom/rom_input.s).
-;
-; 0 = normal build (this is the only other game/build that shares
-;     rom_input.s, so it must always default to 0 there too)
-; 1 = bench harness build
-BENCH_MODE        equ 0
-BENCH_MODE_LEN    equ 3600
-
 ; Flag whether the backend should use the OAMDMA to get the sprite information,
 ; or if it can scan the NES RAM area directly
 ;
@@ -134,6 +122,7 @@ CACHE_DMC_SAMPLES equ 0
 ; Configuration screen setup (see rom/rom_config_setup.s)
 CONFIG_DEFAULT_AUDIO equ APU_60HZ   ; default audio quality
 CONFIG_VIDEO_MENU    equ 1          ; show the VIDEO menu
+CONFIG_VIDEO_FASTBLIT equ 1         ; show the FAST BLIT option (scrolling games only)
 CONFIG_INPUT_BUTTONS equ 0          ; allow remapping the A/B buttons
 CONFIG_INPUT_2P      equ 0          ; show P1/P2 tabs on the INPUT menu
 CONFIG_GAME_MENU     equ 0          ; append a GAME_CONFIG menu defined by this file
@@ -275,11 +264,6 @@ ContinueArea           = $7E00   ; patches operand
 
             jsr   NES_EvtLoop
 
-; (BENCH_MODE's exhausted-input quit check now lives in NES_EvtLoop
-; itself, right after NES_RenderFrame -- see src/rom/scaffold.s. It has
-; to be there, not here, since NES_EvtLoop never returns under BENCH_MODE
-; in the first place.)
-
             cmp   #USER_SAYS_QUIT
             beq   quit
 
@@ -294,34 +278,20 @@ ContinueArea           = $7E00   ; patches operand
 quit
             jsr   NES_ShutDown
 
-; Exit the application. Under the MAME bench harness there is no GS/OS to
-; return to (it boots straight into this code, bypassing GS/OS entirely --
-; see BENCH_MODE above), so _QuitGS would fail; just RTL back to the boot
-; stub's WDM $01 completion loop instead.
+; Exit the application
 
-            DO    BENCH_MODE
-            rtl
-            ELSE
             _QuitGS    qtRec
-            FIN
 qtRec       adrl  $0000
             da    $00
+
+; Name of the save and preference files (used by misc/io.s)
+SAVE_FILENAME strl '1/smb.sav'
+PREF_FILENAME strl '1/smb.prefs'
 
 Greyscale   dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
-
-            DO    BENCH_MODE
-; Canned controller input for the MAME bench harness, one byte per
-; virtual NES frame in the same A-B-Select-Start-Up-Down-Left-Right bit
-; layout NES_ReadInput normally produces (see src/rom/rom_input.s).
-; Extracted from an FCEUX .fm2 movie via scripts/fm2-extract.js, e.g.:
-;   node scripts/fm2-extract.js -n 1000 replay.fm2 -o src/games/smb/bench_input.bin
-;BenchInputIndex   dw    0
-;BenchInputData
-;            putbin bench_input.bin
-            FIN
 
 ; Program variables
 LastAreaType      dw  0
@@ -708,6 +678,7 @@ config_game_end
             DO    SHOW_DEBUG_VARS+RENDER_VBL_COUNT+SHOW_FPS ; debug text (DrawByte / DrawWord)
             put   ../../misc/App.Msg.s
             FIN
+            put   ../../misc/io.s
 
             mput  ../../ppu
 ; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)

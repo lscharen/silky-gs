@@ -273,17 +273,6 @@ NES_WarmBoot
             mx    %00
 NES_TriggerNMI
 
-; Each call to NES_TriggerNMI represents one virtual 1/60th-of-a-second
-; NES frame boundary, regardless of how many times NES_ReadInput itself
-; gets called within it -- so this is where the MAME bench harness's
-; canned input index advances (see BENCH_MODE / BenchInputData in the
-; game's Main.s, and src/rom/rom_input.s).
-            DO    BENCH_MODE
-            ldal  BenchInputIndex
-            inc
-            stal  BenchInputIndex
-            FIN
-
 ; If the audio engine is not running off of its own ESQ interrups at 240Hz or 120Hz, then it must be manually drive
 ; at 60Hz
             lda   apu_mode                ; The running mode (config_audio_quality is the menu setting)
@@ -357,16 +346,10 @@ schedTask
             ora   #$80
             stal  ppustatus
 
-            jsr   NES_ReadInput           ; Put the IIgs inputs into the NES controller bytes
+; (The inputs are read when the game reads its controller: NES_ReadJoy, rom_input.s)
 
             lda   singleStepMode
             bne   :out
-
-            DO    BENCH_MODE              ; See NES_TriggerNMI
-            ldal  BenchInputIndex
-            inc
-            stal  BenchInputIndex
-            FIN
 
             lda   #1
             sta   nesBusy

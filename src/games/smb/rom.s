@@ -2499,6 +2499,7 @@ InitATLoop   jsr STA_2007
 ;-------------------------------------------------------------------------------------
 ;$00 - temp joypad bit
 native_joy    EXT
+NES_ReadJoy    EXT
 ReadJoypads 
               lda #$01               ;reset and clear strobe of joypad ports
               sta JOYPAD_PORT
@@ -2519,7 +2520,7 @@ ReadPortBits
 ;              rol                    ;rotate bit from carry flag
 ;              dey
 ;              bne PortLoop           ;count down bits left
-              ldal  native_joy,x
+              jsl   NES_ReadJoy       ; (was ldal native_joy,x: read on demand)
 
               sta SavedJoypadBits,x  ;save controller status here always
               pha

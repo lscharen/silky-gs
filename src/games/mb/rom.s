@@ -2723,6 +2723,7 @@ CODE_CCC2
 ;Should be self-explanatory
 ;ReadControllers_CCC5
 native_joy    EXT
+NES_ReadJoy    EXT
 CODE_CCC5
    LDX #$01					;\prepare controller 2 for reading
 ;   STX ControllerReg				;/
@@ -2738,7 +2739,7 @@ CODE_CCD3
 ;   LDY #$08					;8 bits, of course
     ldy #0
 CODE_CCD5
-    ldal native_joy,x
+    jsl  NES_ReadJoy                  ; (was ldal native_joy,x: read on demand)
     bra  :joyskip
     ds   9
 :joyskip

@@ -79,12 +79,6 @@ BG_TILES_AS_SPRITES equ 1
 ; 1 = Reset code is the game code
 ROM_DRIVER_MODE   equ 1
 
-; MAME cycle-count benchmark harness flag (scripts/run-bench.js) -- see
-; src/games/smb/Main.s for details. Always 0 here; rom_input.s is shared
-; across all games and must default to normal (non-bench) behavior.
-BENCH_MODE        equ 0
-BENCH_MODE_LEN    equ 4500            ; Frames in bench_input.bin
-
 ; Flag whether the backend should use the OAMDMA to get the sprite information,
 ; or if it can scan the NES RAM area directly
 ;
@@ -129,6 +123,7 @@ CACHE_DMC_SAMPLES equ 0
 ; Configuration screen setup (see rom/rom_config_setup.s)
 CONFIG_DEFAULT_AUDIO equ APU_60HZ   ; default audio quality
 CONFIG_VIDEO_MENU    equ 0          ; show the VIDEO menu
+CONFIG_VIDEO_FASTBLIT equ 0         ; show the FAST BLIT option (scrolling games only)
 CONFIG_INPUT_BUTTONS equ 1          ; allow remapping the A/B buttons
 CONFIG_INPUT_2P      equ 1          ; show P1/P2 tabs on the INPUT menu
 CONFIG_GAME_MENU     equ 0          ; append a GAME_CONFIG menu defined by this file
@@ -209,10 +204,6 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
             jsr   SetDefaultPalette
 
-; Load in the game preferences (if they exist)
-
-            jsr   LoadPrefData
-
 ; Call the boot code in the ROM
 
             jsr   NES_ColdBoot
@@ -234,23 +225,11 @@ x_offset      equ 16                      ; number of bytes from the left edge
 quit
             jsr   NES_ShutDown
 
-; Save the user preferences
-
-            jsr   SavePrefData
-
 ; Exit the application
 
         _QuitGS    qtRec
 qtRec   adrl  $0000
         da    $00
-
-            DO    BENCH_MODE
-; Canned controller input for benchmarking, one byte per virtual NES frame in the
-; A-B-Select-Start-Up-Down-Left-Right bit layout (see src/rom/rom_input.s)
-;BenchInputIndex   dw    0
-;BenchInputData
-;            putbin bench_input.bin
-            FIN
 
 ; Name of the save and preference files
 SAVE_FILENAME strl '1/mb.sav'

@@ -15,7 +15,13 @@
 NES_StartUp
             stx   UserId
             and   #HORIZONTAL_MIRRORING+VERTICAL_MIRRORING
-            sta   PendingMirrorMode       ; Applied by PPUStartUp
+            sta   PendingMirrorMode       ; Applied by PPUStartUp (before A is reused below)
+            sep   #$20                    ; The video state to put back when the game quits
+            ldal  SHADOW_REG
+            sta   SavedShadow
+            ldal  NEW_VIDEO_REG
+            sta   SavedNewVideo
+            rep   #$20
             _MTStartUp                    ; Require the miscellaneous toolset to be running
             bcc   *+5
             brl   Fail
@@ -96,6 +102,24 @@ NES_StartUp
 
             jsr   InitYExclude
 
+; Load the user preferences (PREF_FILENAME, written by NES_ShutDown).  If there is no file yet (first
+; run), the defaults in rom_config_setup.s are kept.  The audio quality is used by APUStartUp below;
+; the fast blit mode and the game's own values are applied here, as ApplyConfig would.
+
+            jsr   LoadPrefData
+            DO    CONFIG_VIDEO_FASTBLIT
+            lda   config_video_fastmode
+            beq   :prefs_done
+            lda   #CTRL_EVEN_RENDER
+            tsb   ControlBits
+            jsr   _InitRenderMode
+:prefs_done
+            FIN
+            ldx   #config_block_start
+            ldy   #config_game_start
+            CONFIG_APPLY_HOOK
+            rep   #$30
+
 ; Initialize the sound hardware for APU emulation
 
             DO    NO_INTERRUPTS
@@ -110,10 +134,10 @@ NES_StartUp
             jsr   APUCacheDMC
             FIN
 
-; Clear the IIgs screen and initialize the rendering infrastrucure
+; Clear the IIgs screen and initialize the rendering infrastrucure.  Shadowing is turned on for the
+; clear, so a fast blit setting from the preferences file starts with no stale lines.
 
-            lda   #0
-            jsr   _ClearToColor
+            jsr   _ClearShadowScreen
             jsr   InitPlayfield
 
 ; CHR-ROM games have their tiles converted offline into the tiledata bank by
@@ -194,8 +218,7 @@ NES_EvtLoop
 ; driven manually
 
             DO    NO_INTERRUPTS
-            jsr   NES_TriggerNMI
-            jsr   NES_ReadInput           ; .fm2 docs imply that the controller input is latched following the NMI
+            jsr   NES_TriggerNMI          ; (the frame reads the controller through NES_ReadJoy)
             ELSE
 
 ; Wait for a frame to become available.  This almost never waits, unless
@@ -212,33 +235,16 @@ NES_EvtLoop
 
             jsr   NES_RenderFrame
 
-; MAME bench harness (scripts/run-bench.js): once the canned input file
-; (BenchInputData) is exhausted, quit -- this has to happen here, right
-; after a frame has actually rendered, rather than relying on the normal
-; LastRead/PAD_KEY_DOWN check below returning control to the caller,
-; since BENCH_MODE's NES_ReadInput never sets LastRead and the check
-; below would just loop back to NES_EvtLoop forever.
-            DO    BENCH_MODE
-            ldal  BenchInputIndex
-            cmp   #BENCH_MODE_LEN-1
-            bcc   :bench_not_done
-            lda   #'q'             ; make it a quit
-            brl   :exit
-:bench_not_done
-            FIN
+; Take the last new key press (each press, or auto-repeat, is one event).  If there is none,
+; then nothing else to do here
 
-; The input is read from the VBL interrupt handler.  If no
-; new key input is available, then nothing else to do here
+            jsr   NES_TakeKey
+            cmp   #0
+            bne   *+5
+            brl   NES_EvtLoop
 
-            lda   LastRead
-            bit   #PAD_KEY_DOWN
-            beq   NES_EvtLoop
-
-; Isolate the keycode and handle all of the built-in
-; actions.  Afterwared, allow for application-specific
-; handlers.
-
-            and   #$007F
+; Handle all of the built-in actions with the keycode.  Afterwards, allow for
+; application-specific handlers.
 
 ; '?' to bring up the configuration screen and reapply the settings
 
@@ -340,6 +346,8 @@ NES_EvtLoop
 ; Clean up the runtime
             mx  %00
 NES_ShutDown
+            jsr   NES_StopExecution        ; First stop the VBL task from running NES frames and the 60Hz
+                                           ; audio driver while the runtime is taken down
             lda   BorderColor              ; Restore the border color
             jsr   _SetBorderColor
 
@@ -348,6 +356,13 @@ NES_ShutDown
             jsr   APUShutDown
             FIN
             jsr   ShutDown
+
+            sep   #$20                     ; The shadowing and video modes the game started with
+            lda   SavedShadow
+            stal  SHADOW_REG
+            lda   SavedNewVideo
+            stal  NEW_VIDEO_REG
+            rep   #$20
 
 ; Battery-backed cartridges: write the WRAM image back out.  Done after ShutDown, when the NES task
 ; can no longer be scheduled, so WRAM can't change while it is being written.
@@ -358,6 +373,10 @@ NES_ShutDown
             ldy   #wrCreateRec
             jsr   SaveROMFile
             FIN
+
+; Save the user preferences for the next run (loaded by NES_StartUp)
+
+            jsr   SavePrefData
             rts
 
 OneSecondCounter  dw  0
@@ -365,6 +384,8 @@ DPSave            dw  0
 DP_OAM            dw  0
 DP_NES            dw  0
 BorderColor       dw  0            ; save/restore border color
+SavedShadow       dw  0            ; $C035 at start-up, put back by NES_ShutDown
+SavedNewVideo     dw  0            ; $C029 at start-up, put back by NES_ShutDown
 
 ; Runtime nametable-mirroring mask, set by SetMirrorMode (ControlBits.s).
 ; Duplicates the DP MirrorMask (Defs.s) for use from contexts where the

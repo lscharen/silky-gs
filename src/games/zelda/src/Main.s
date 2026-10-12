@@ -75,20 +75,6 @@ PPU_SPR_TILE_ADDR equ $0000
 ; (ppu_attributes.s), CheckSprTileDirty (ppu.s), and NES_StartUp (scaffold.s).
 HAS_CHR_RAM equ 1
 
-; Benchmark flag, driven by the gs2-mcp harness (scripts/bench-zelda.js).  See rom/rom_input.s.  The
-; controller input is read from BenchInputData, one byte per NES frame, and the run ends after
-; BENCH_MODE_LEN frames at BenchDone, which is before NES_ShutDown, so the save file is read but never
-; written: the harness puts a zelda.wram with a registered name next to the application, so the run
-; does not have to go through the registration screens.  BENCH_MODE does not
-; change NO_INTERRUPTS: with interrupts on, the input advances once per VBL (schedTask), so a run
-; lasts a fixed number of VBLs; with NO_INTERRUPTS it advances once per NES frame (NES_TriggerNMI),
-; so the cycles between BenchStart and BenchDone measure the work done for those frames.
-;
-; 0 = normal build
-; 1 = benchmark build
-BENCH_MODE        equ 0
-BENCH_MODE_LEN    equ 3600                  ; at most 6144 (BENCH_INPUT_ADDR to $1FFF)
-
 ; The cartridge has battery-backed WRAM ($6000-$7FFF).  NES_StartUp loads it from
 ; WRAM_FILENAME and NES_ShutDown saves it back (scaffold.s, misc/io.s).
 HAS_BACKED_WRAM equ 1
@@ -144,6 +130,7 @@ NO_CONFIG         equ 0
 ; Configuration screen setup (see rom/rom_config_setup.s)
 CONFIG_DEFAULT_AUDIO equ APU_60HZ   ; default audio quality
 CONFIG_VIDEO_MENU    equ 1          ; show the VIDEO menu
+CONFIG_VIDEO_FASTBLIT equ 0         ; show the FAST BLIT option (scrolling games only)
 CONFIG_INPUT_BUTTONS equ 0          ; allow remapping the A/B buttons
 CONFIG_INPUT_2P      equ 0          ; show P1/P2 tabs on the INPUT menu
 CONFIG_GAME_MENU     equ 0          ; append a GAME_CONFIG menu defined by this file
@@ -222,13 +209,6 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
 ; Call the boot code in the ROM
 
-            DO    BENCH_MODE
-            lda   #BENCH_MODE_LEN         ; Load the canned input, one byte per frame
-            ldx   #BENCH_INPUT_ADDR
-            ldy   #benchCreateRec
-            jsr   LoadROMFile
-BenchStart                                ; The harness starts counting cycles here
-            FIN
             jsr   NES_ColdBoot
 
 ; Start up the NES
@@ -246,9 +226,6 @@ BenchStart                                ; The harness starts counting cycles h
 
 ; The user has exited the runtime
 quit
-            DO    BENCH_MODE
-BenchDone   bra   BenchDone               ; The harness reads the cycle count and the cache statistics here
-            FIN
             jsr   NES_ShutDown
 
 ; Exit the application
@@ -269,26 +246,10 @@ DMC_SAMPLE_LIST
             db    $28,$90,$0F           ; $20 Dodongo / Gohma roar
             db    $4C,$D0,$0E           ; $40 Digdogger / Manhandla / Patra roar
 
-            DO    BENCH_MODE
-; Canned controller input, one byte per NES frame in the A-B-Select-Start-Up-Down-Left-Right layout
-; (rom_input.s).  It is read from BENCH_FILENAME, next to the application, into the part of the NES
-; address space that nothing uses ($0800-$1FFF of the ROMBase bank), so the script can change without
-; a rebuild (scripts/bench-zelda.js --input).
-BENCH_INPUT_ADDR equ $0800
-BenchInputIndex dw  0
-BenchInputData  equ ROMBase+BENCH_INPUT_ADDR
-BENCH_FILENAME  strl '1/zelda.bench'
-benchCreateRec  dw  4                     ; pCount (LoadROMFile only uses the file name)
-                adrl BENCH_FILENAME
-                dw  $00C3
-                dw  $0006
-                dw  $0000,$0000
-            FIN
-
 ; Files used by misc/io.s.  WRAM_FILENAME holds the battery-backed save RAM (HAS_BACKED_WRAM).
 WRAM_FILENAME strl '1/zelda.wram'
 SAVE_FILENAME strl '1/zelda.sav'     ; unused
-PREF_FILENAME strl '1/zelda.prefs'   ; unused
+PREF_FILENAME strl '1/zelda.prefs'
 
 ; Palette management.  The palettes the game uses are described in ../palettes/, and
 ; pal_transitions.s (generated from them) gives each one a fixed IIgs slot layout and swizzle

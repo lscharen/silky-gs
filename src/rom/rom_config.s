@@ -6,6 +6,7 @@ CTRL_LIST       equ 4     ; list of other controls (no UI)
 NUMBER_SELECT   equ 5     ; select from a range of single-digit numbers
 BTNMAP          equ 6     ; button mapping for keyboard
 TAB             equ 7     ; tab control
+TEXT            equ 8     ; static lines of text (no value, no cursor)
 
 CHKBOX_YES      str 'YES'
 CHKBOX_NO       str ' NO'
@@ -52,6 +53,9 @@ CTRL_LIST_COUNT  equ CTRL_PREV
 
 CTRL_NUMBER_MIN  equ CTRL_DATA
 CTRL_NUMBER_MAX  equ CTRL_DATA+2
+
+CTRL_TEXT_LINE_COUNT equ CTRL_DATA
+CTRL_TEXT_LINES      equ CTRL_DATA+2   ; string address per line (0 = blank line)
 
 ; Units to move text around
 COL_STEP    equ 4
@@ -355,10 +359,27 @@ _DrawControlBorder
 
             rts
 
-; Render the configuration sidebar
+; Render the configuration sidebar: one box, the same height as the control panel, with the menu
+; titles on every other row starting at MENU_FIRST_ROW (room for 10 menus)
+MENU_FIRST_ROW equ 2
+MENU_ROW_STEP  equ 2
+
 _DrawConfigMenu
 :count      equ  tmp14
 :addr       equ  tmp15
+
+            ldy  #MENU_PANEL_ORIGIN
+            ldx  #9
+            jsr  ConfigDrawTopBorder
+
+            ldy  #MENU_PANEL_ORIGIN+ROW_STEP
+            ldx  #20
+            lda  #COL_STEP*10
+            jsr  ConfigDrawSideBorder
+
+            ldy  #MENU_PANEL_ORIGIN+{21*ROW_STEP}
+            ldx  #9
+            jsr  ConfigDrawBottomBorder
 
             lda  CONFIG_MENU
             asl
@@ -366,40 +387,15 @@ _DrawConfigMenu
 
             ldx  #0
 
-            lda  #MENU_PANEL_ORIGIN
+            lda  #MENU_PANEL_ORIGIN+{MENU_FIRST_ROW*ROW_STEP}+{3*COL_STEP} ; Room for 7 characters before the right border
             sta  :addr
 :dcm_loop
             phx
 
-            ldy  :addr
-            ldx  #9
-            jsr  ConfigDrawTopBorder
-
-            lda  :addr
-            clc
-            adc  #ROW_STEP
-            tay
-            ldx  #3
-            lda  #COL_STEP*10
-            jsr  ConfigDrawSideBorder
-
-            lda  :addr
-            clc
-            adc  #4*ROW_STEP
-            tay
-            ldx  #9
-            jsr  ConfigDrawBottomBorder
-
-            lda  1,s
-            tax
             lda: CONFIG_MENU+2,x               ; Get the address of the config block for this menu item
             tax
 
-            lda  :addr
-            clc
-            adc  #{2*ROW_STEP}+{4*COL_STEP}
-            tay
-
+            ldy  :addr
             lda: MENU_TITLE,x                  ; Load the title pointer
             tax
             lda  #CONFIG_PALETTE*2
@@ -407,7 +403,7 @@ _DrawConfigMenu
 
             lda  :addr
             clc
-            adc  #5*ROW_STEP
+            adc  #MENU_ROW_STEP*ROW_STEP
             sta  :addr
 
             plx
@@ -1131,6 +1127,60 @@ _DrawRadio
 
             rts
 
+; Y = screen addr
+; X = control addr
+;
+; +------------
+; |<title>
+; |
+; |<line 1>
+; |...
+; |<line N>
+_DrawText
+:addr       equ  tmp15
+:count      equ  tmp14
+
+; First two words are the offset coordinates of the control
+
+            jsr  _OffsetToAddr
+            sty  :addr
+
+            phx
+            lda: CTRL_TITLE,x
+            tax
+            lda  #TEXT_NORMAL
+            jsr  ConfigDrawString
+            plx
+
+            lda: CTRL_TEXT_LINE_COUNT,x
+            beq  :done
+            sta  :count
+
+            lda  :addr
+            clc
+            adc  #2*ROW_STEP                  ; Leave a blank line under the title
+:loop
+            sta  :addr
+            phx
+            lda: CTRL_TEXT_LINES,x            ; Load the string address
+            beq  :next                        ; Blank line (an empty string would draw 64K characters)
+            tax
+            ldy  :addr
+            lda  #TEXT_NORMAL
+            jsr  ConfigDrawString
+:next
+            plx
+            inx                               ; Each entry is a 2-byte address
+            inx
+
+            lda  :addr
+            clc
+            adc  #ROW_STEP
+            dec  :count
+            bne  :loop
+:done
+            rts
+
 
 ; Iterate through the control list of the active control
 ; and draw them in the configuration panel
@@ -1163,7 +1213,11 @@ _DrawControl
 :not_btnmap cmp  #TAB
             bne  :not_tab
             jmp  _DrawTab
-:not_tab
+
+:not_tab    cmp  #TEXT
+            bne  :not_text
+            jmp  _DrawText
+:not_text
             rts
 
 ; Switch the value of the active control
@@ -1303,9 +1357,11 @@ _DrawControlCursor
             lda  1,s
             tax
 
-; If this is a list control, nothing to draw
+; If this is a list or text control, nothing to draw
             lda:  CTRL_TYPE,x
             cmp   #CTRL_LIST
+            beq   :no_draw
+            cmp   #TEXT
             beq   :no_draw
 
             jsr  _OffsetToAddr            ; Address of control label
@@ -1380,7 +1436,6 @@ _UpdateMenuCursor
 
 _DrawMenuCursor
 :tile       equ  tmp15
-:scratch    equ  tmp14
 
             pha
             ldx  #TILE_SPACE
@@ -1398,21 +1453,14 @@ _DrawMenuCursor
 
             asl
             asl
-            asl                           ; x8
-
-            sta   :scratch
             asl
-            asl                           ; x5 spaces between 
-            clc
-            adc   :scratch
+            asl                           ; x16 lines (MENU_ROW_STEP rows of 8 lines)
 
             asl                           ; x2 for indexing
             tax
             lda   Mul160Tbl,x
             clc
-            adc   #MENU_PANEL_ORIGIN
-            clc
-            adc   #{2*ROW_STEP}+{2*COL_STEP}
+            adc   #MENU_PANEL_ORIGIN+{MENU_FIRST_ROW*ROW_STEP}+{1*COL_STEP} ; A blank column before the title
             tay
 
             lda   :tile

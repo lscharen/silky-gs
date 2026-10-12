@@ -1262,6 +1262,7 @@ Z07Int_ReadOneController
     LDY #$08
 
 native_joy EXT
+NES_ReadJoy EXT
 :Z07Int_Read
 ;    LDA Ctrl1_4016, X
 ;    LSR
@@ -1271,7 +1272,7 @@ native_joy EXT
 ;    DEY
 ;    BNE :Z07Int_Read            ; IIgs -- 12 bytes
 
-    ldal  native_joy,x
+    jsl   NES_ReadJoy                 ; (was ldal native_joy,x: read on demand)
     sta   ButtonsPressed,x
     lda   #0
     sta   $00
