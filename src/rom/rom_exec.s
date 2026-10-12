@@ -90,7 +90,8 @@ saveCtx
             stal  curTask
             tax
 
-            DO    TASK_TIME_BORDER        ; Raster bar: border color = task that owns the CPU
+            ldal  config_video_nescpu     ; VIDEO > SHOW NES CPU: border color = task that owns the CPU
+            beq   :no_border
             sep   #$20
             mx    %10
             ldal  BORDER_REG
@@ -103,7 +104,7 @@ saveCtx
 :set_border stal  BORDER_REG
             rep   #$20
             mx    %00
-            FIN
+:no_border
 
             ldal  tcbS,x                  ; Switch to the incoming stack
             tcs
@@ -187,18 +188,8 @@ nesWaitFrame
 ; Execute the ROM's NMI handler on the NES task
             mx    %00
 nesRunNMI
-            DO    SHOW_ROM_EXECUTION_TIME
-            lda   #2
-            jsr   _SetBorderColor
-            FIN
-
             ldal  ROMBase+$FFFA           ; NMI Vector
             jsr   nesCall
-
-            DO    SHOW_ROM_EXECUTION_TIME
-            lda   #0
-            jsr   _SetBorderColor
-            FIN
             rts
 
 ; nesCall

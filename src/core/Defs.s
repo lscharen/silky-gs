@@ -211,31 +211,17 @@ CTRL_EVEN_RENDER       equ   $8000                  ; Only render half the scanl
 ; The size of each tile instruction is 3 bytes
 PER_TILE_SIZE equ 3
 
-; Debug border indicators.  Both write the border color, so turn on at most one of them.
-;
-; TASK_TIME_BORDER: raster bar of CPU time.  The border is TASK_COLOR_NES while the NES task (game
-; logic) runs and TASK_COLOR_GS while the GS task (renderer) runs, so the height of the NES-colored
-; band is the share of each 1/60s spent in game logic.  A solid NES-colored border = overrunning.
-TASK_TIME_BORDER   equ 0
+; Border indicator: VIDEO > SHOW NES CPU (config_video_nescpu, a setting), a raster bar of CPU time.  The border is
+; TASK_COLOR_NES while the NES task (game logic) runs and TASK_COLOR_GS while the GS task (renderer)
+; runs (saveCtx, rom_exec.s).  The NES task usually starts right after the VBL, so the height of the
+; NES-colored band is the share of each 1/60s spent in game logic.  A solid NES-colored border =
+; overrunning.
 TASK_COLOR_GS      equ 0                ; Black
 TASK_COLOR_NES     equ 12               ; Green
 
 ; APU_STATS: count the VBLs and the APU interrupts, frame sequencer clocks and DOC updates in the
 ; apu_stats block (apu/apu.s), to check the audio rates against the VBL in a debugger.
 APU_STATS          equ 0
-
-; GRID_FALLBACK_BORDER: color the border by why the grid renderer fell back to a full render, black
-; on frames it handles (ENABLE_DIRTY_RENDERING only).  Values are IIgs border colors.
-GRID_FALLBACK_BORDER equ 0
-FB_COLOR_GRID      equ 0                ; Black      - grid frame, no fallback
-FB_COLOR_SCROLL    equ 2                ; Dark blue  - scrolled (DIRTY_BIT_BG0_X / BG0_Y)
-FB_COLOR_PALETTE   equ 13               ; Yellow     - background palette changed
-FB_COLOR_REFRESH   equ 15               ; White      - forced refresh (DIRTY_BIT_BG0_REFRESH, other cause)
-FB_COLOR_DISABLED  equ 5                ; Dark gray  - disableDirtyRendering is set
-FB_COLOR_METATILES equ 1                ; Deep red   - more than GRID_MAX_METATILES redrawn (gmtOverflow)
-FB_COLOR_UNALIGNED equ 9                ; Orange     - scroll position not cell-aligned
-FB_COLOR_BGOFF     equ 3                ; Purple     - background disabled
-FB_COLOR_MANY      equ 11               ; Pink       - gridPrepare :fb_many (currently unused)
 
 ; Offsets for the Lite blitter
 ;

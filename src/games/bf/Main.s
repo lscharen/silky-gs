@@ -139,16 +139,11 @@ CONFIG_APPLY_HOOK mac
 PPU_PALETTE_DISPATCH equ BF_PALETTE_DISPATCH
 AUTOMATIC_PALETTE_MAPPING equ 0
 
-; Turn on code that visualizes the CPU time used by the ROM code
-SHOW_ROM_EXECUTION_TIME equ 0
-
 ; Turn on some off-screen information
 SHOW_DEBUG_VARS equ 0
 
 ; Show the number of VBLs each screen render takes at the top-left of the screen (debug)
 RENDER_VBL_COUNT equ 0
-; Show the renders per second (decimal) at the top-left of the screen
-SHOW_FPS equ 0
 
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 0
@@ -535,11 +530,14 @@ SwizzleTables adrl L1_T0
 TitleScreen  dw    $0F, $30, $27, $2A, $15, $02, $21, $00, $10, $16, $12, $37, $21, $17, $11, $2B
 LevelHeader1 dw    $0F, $2A, $09, $07, $30, $27, $16, $11, $21, $00, $10, $12, $37, $17, $35, $2B
 
-; Game-specific configuration values, saved after the built-in values by misc/io.s.  The
-; built-in values, menus and ApplyConfig are defined in rom/rom_config_setup.s
-config_game_start
-config_video_twinkle   dw  1  ; animate the background stars
-config_game_end
+; Game-specific configuration values.  Each has an ID, its byte offset in the game's block, and
+; CONFIG_GAME_DEFAULTS lays out the defaults at those offsets (see rom/rom_config_setup.s, which also has
+; the built-in values, menus and ApplyConfig).  Add new values after the last one.
+CFG_GAME_TWINKLE equ 0                  ; (word) animate the background stars
+
+CONFIG_GAME_DEFAULTS mac
+             dw   1                     ; CFG_GAME_TWINKLE
+             <<<
 
 GAME_TITLE_STR      str 'GAME'
 GAME_NO_ANIM_STR    str 'STAR ANIM'
@@ -556,14 +554,14 @@ GAME_ITEM_1  dw   CHKBOX
              dw   0
              dw   3,2
              dw   GAME_NO_ANIM_STR
-             dw   config_video_twinkle
+             dw   config_game_start+CFG_GAME_TWINKLE
 
 ; Apply the game-specific settings (CONFIG_APPLY_HOOK)
 ;
 ; Y = config_game_start
 star_patch EXT
 BF_ApplyConfig
-            ldx:  {config_video_twinkle-config_game_start},y   ; read while Y is still 16-bit
+            ldx:  CFG_GAME_TWINKLE,y   ; read while Y is still 16-bit
             sep   #$30
             lda   #$80          ; BRA instruction (skip the star animation)
             cpx   #0
@@ -573,9 +571,7 @@ BF_ApplyConfig
             rep   #$30
             rts
 
-            DO    SHOW_DEBUG_VARS+RENDER_VBL_COUNT+SHOW_FPS ; debug text (DrawByte / DrawWord)
-            put   ../../misc/App.Msg.s
-            FIN
+            put   ../../misc/App.Msg.s         ; Text (DrawByte / DrawWord): VIDEO > SHOW FPS and the debug displays
             put   ../../misc/io.s
 
             mput  ../../ppu

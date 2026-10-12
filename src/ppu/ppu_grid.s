@@ -63,19 +63,19 @@ gridPrepare
 
             lda   ControlBits             ; If the background is disabled, the code field does not
             bit   #CTRL_BKGND_ENABLE      ; match the (blank) screen
-            beq   :fb_bgoff
+            beq   :fb
 
             lda   gmtOverflow             ; Attribute updates redrew more metatiles than can be tracked
-            bne   :fb_attr
+            bne   :fb
 
             lda   StartX                  ; The scroll position must be cell-aligned
             and   #$0003
-            bne   :fb_unaligned
+            bne   :fb
             lda   StartY
             clc
             adc   #y_offset
             and   #$0007
-            bne   :fb_unaligned
+            bne   :fb
 
             lda   StartX
             cmp   gridKeyX
@@ -91,19 +91,7 @@ gridPrepare
             clc
             rts
 
-:fb_bgoff   INC32 gsFbBgOff
-            lda   #FB_COLOR_BGOFF
-            bra   :fb
-:fb_attr    INC32 gsFbAttr
-            lda   #FB_COLOR_METATILES
-            bra   :fb
-:fb_many    INC32 gsFbMany
-            lda   #FB_COLOR_MANY
-            bra   :fb
-:fb_unaligned INC32 gsFbAlign
-            lda   #FB_COLOR_UNALIGNED
-:fb         sta   gridFbReason            ; Read by the scaffold's GRID_FALLBACK_BORDER indicator
-            plb
+:fb         plb
             sec
             rts
 
@@ -421,12 +409,11 @@ gsErased        ds    4               ; Cells copied from the code field
 gsExposed       ds    4               ; Cells exposed (shadowed copies)
 gsSprTiles      ds    4               ; 8x8 sprite tiles drawn in grid-dirty frames
 gsBgCells       ds    4               ; Visible background tiles updated in grid-dirty frames
-gsFbBgOff       ds    4               ; Fallbacks to a full render, by reason
+gsFbBgOff       ds    4               ; (unused: kept so the block's layout does not change)
 gsFbAttr        ds    4
 gsFbMany        ds    4
 gsFbAlign       ds    4
-gsFbScroll      ds    4               ; Scroll / refresh dirty bits were set
-gridFbReason    dw    0               ; FB_COLOR_* of the last gridPrepare fallback
+gsFbScroll      ds    4
 gsBgFrames      ds    4               ; Grid-dirty frames with at least one visible BG tile update
 gsMetatiles     ds    4               ; Metatiles redrawn by attribute updates in grid-dirty frames
 gsMtCells       ds    4               ; Visible cells marked for those metatiles

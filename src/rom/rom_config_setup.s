@@ -6,7 +6,7 @@
 ;
 ;   CONFIG_DEFAULT_AUDIO equ APU_60HZ / APU_120HZ / APU_240HZ
 ;                                  Default audio quality
-;   CONFIG_VIDEO_MENU    equ 0/1   Show the VIDEO menu (status bar, fast blit)
+;   CONFIG_VIDEO_MENU    equ 0/1   Show the VIDEO menu (status bar, fast blit, show FPS, show NES CPU)
 ;   CONFIG_VIDEO_FASTBLIT equ 0/1  Show the FAST BLIT option on the VIDEO menu (needs CONFIG_VIDEO_MENU).
 ;                                  Only useful for scrolling games, which do full renders.  When 0, a
 ;                                  fast blit setting in an old preferences file is ignored.
@@ -18,11 +18,17 @@
 ;
 ; The CREDITS menu is always last.  At most 10 menus fit on the screen.
 ;
-;   config_game_start / config_game_end
-;                                  Labels (required, may be empty) bracketing the game's own
-;                                  configuration variables.  This block is saved to / loaded
-;                                  from the preferences file right after the built-in block,
-;                                  so game controls can point their value address into it.
+;   CONFIG_GAME_DEFAULTS mac       The game's own configuration values: CONFIG_GAME_SIZE (128) bytes
+;                                  at config_game_start, right after the built-in block and saved with
+;                                  it.  The macro lays out their default values (dw / db), each at its
+;                                  ID: the value's byte offset in the block, which the game defines
+;                                  (e.g. CFG_GAME_X equ 0, CFG_GAME_Y equ 2 for two words).  The rest
+;                                  of the block is 0.  A game control's value address is
+;                                  config_game_start+ID, and the hook below reads ID,y.  New values
+;                                  go after the existing ones, with a default of 0 in an older
+;                                  preferences file, so the file keeps its size and keeps loading.
+;                                  A single ';' line for a game with no values (an empty macro body
+;                                  breaks the build).
 ;
 ;   CONFIG_APPLY_HOOK mac          Callback invoked at the end of ApplyConfig, after the built-in
 ;                                  settings have been applied.  Define an empty macro for no
@@ -97,7 +103,25 @@ config_input_p2_key_down  dw  'k'
 config_input_p2_snesmax_port dw 4
 config_input_p2_button_a  dw  MOD_REG_CONTROL_DOWN
 config_input_p2_button_b  dw  MOD_REG_SHIFT_DOWN
+
+; Added after the original layout, so the values above keep their offsets
+config_video_fps       dw  0  ; show the renders per second at the top-left of the screen (DrawFPS)
+config_video_nescpu    dw  0  ; border = the task that owns the CPU, a raster bar of game logic time (saveCtx)
+
+; Room for new built-in values.  Add them here (taking from the reserve), so the size of the block, and
+; with it the preferences file, stays the same and older files keep loading (misc/io.s checks the size).
+; A new value must default to 0, since an older file has 0 in its place.
+config_reserved        ds  126
 config_block_end
+
+; The game's own values (CONFIG_GAME_DEFAULTS, the game's Main.s), in a block of a fixed size, saved and
+; loaded together with the built-in block (misc/io.s)
+CONFIG_GAME_SIZE equ 128
+config_game_start
+            CONFIG_GAME_DEFAULTS
+            ERR   {*-config_game_start}/{CONFIG_GAME_SIZE+1}  ; The game's values are over CONFIG_GAME_SIZE
+            ds    CONFIG_GAME_SIZE-{*-config_game_start}
+config_game_end
 
 ; Offsets of the built-in values from config_block_start (X register in CONFIG_APPLY_HOOK)
 CFG_AUDIO_QUALITY   equ config_audio_quality-config_block_start
@@ -105,6 +129,8 @@ CFG_VIDEO_STATUSBAR equ config_video_statusbar-config_block_start
 CFG_VIDEO_FASTMODE  equ config_video_fastmode-config_block_start
 CFG_INPUT_P1        equ config_block_p1-config_block_start
 CFG_INPUT_P2        equ config_block_p2-config_block_start
+CFG_VIDEO_FPS       equ config_video_fps-config_block_start
+CFG_VIDEO_NESCPU    equ config_video_nescpu-config_block_start
 
              DO   CONFIG_INPUT_2P
 config_tab_value    dw 0      ; selected INPUT tab (UI state only, not saved)
@@ -118,9 +144,9 @@ AUDIO_QUALITY_240HZ str '240 HZ'
 
              DO   CONFIG_VIDEO_MENU
 VIDEO_TITLE_STR      str 'VIDEO'
-             DO   CONFIG_VIDEO_FASTBLIT
 VIDEO_FASTMODE_STR   str 'FAST BLIT'
-             FIN
+VIDEO_FPS_STR        str 'SHOW FPS'
+VIDEO_NESCPU_STR     str 'SHOW NES CPU'
 VIDEO_STATUS_BAR_STR str 'STATUS BAR'
              FIN
 
@@ -221,31 +247,43 @@ VIDEO_CONFIG dw   VIDEO_TITLE_STR
              dw   AUDIO_CONFIG          ; previous menu item
              dw   INPUT_CONFIG          ; next menu item
 
-             dw   1+CONFIG_VIDEO_FASTBLIT ; Number of configuration elements
+             dw   3+CONFIG_VIDEO_FASTBLIT ; Number of configuration elements
              dw   VIDEO_ITEM_1
              DO   CONFIG_VIDEO_FASTBLIT
              dw   VIDEO_ITEM_2
              FIN
+             dw   VIDEO_ITEM_3
+             dw   VIDEO_ITEM_4
 
+; FAST BLIT (VIDEO_ITEM_2) is only listed with CONFIG_VIDEO_FASTBLIT.  It is always assembled, so the links
+; and positions are expressions of the flag rather than more DO / ELSE blocks.
 VIDEO_ITEM_1 dw   CHKBOX                ; Checkbox just forces a 0/1 for False/True
              dw   0                     ; previous control
-             DO   CONFIG_VIDEO_FASTBLIT
-             dw   VIDEO_ITEM_2          ; next control
-             ELSE
-             dw   0
-             FIN
+             dw   VIDEO_ITEM_3+{CONFIG_VIDEO_FASTBLIT*{VIDEO_ITEM_2-VIDEO_ITEM_3}} ; next: FAST BLIT, or SHOW FPS
              dw   3,2
              dw   VIDEO_STATUS_BAR_STR
              dw   config_video_statusbar
 
-             DO   CONFIG_VIDEO_FASTBLIT
 VIDEO_ITEM_2 dw   CHKBOX
              dw   VIDEO_ITEM_1          ; previous control
-             dw   0                     ; next control
+             dw   VIDEO_ITEM_3          ; next control
              dw   3,4
              dw   VIDEO_FASTMODE_STR
              dw   config_video_fastmode
-             FIN
+
+VIDEO_ITEM_3 dw   CHKBOX
+             dw   VIDEO_ITEM_1+{CONFIG_VIDEO_FASTBLIT*{VIDEO_ITEM_2-VIDEO_ITEM_1}} ; previous: FAST BLIT, or STATUS BAR
+             dw   VIDEO_ITEM_4          ; next control
+             dw   3,4+{2*CONFIG_VIDEO_FASTBLIT}
+             dw   VIDEO_FPS_STR
+             dw   config_video_fps
+
+VIDEO_ITEM_4 dw   CHKBOX
+             dw   VIDEO_ITEM_3          ; previous control
+             dw   0                     ; next control
+             dw   3,6+{2*CONFIG_VIDEO_FASTBLIT}
+             dw   VIDEO_NESCPU_STR
+             dw   config_video_nescpu
              FIN
 
 INPUT_CONFIG dw   INPUT_TITLE_STR

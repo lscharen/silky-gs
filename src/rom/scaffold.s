@@ -543,9 +543,9 @@ NES_RenderFrame
             jsr   DrawByte
             FIN
 
-            DO    SHOW_FPS                ; Renders per second at the top-left of the screen
+            lda   config_video_fps        ; VIDEO > SHOW FPS: renders per second at the top-left of the screen
+            beq   *+5
             jsr   DrawFPS
-            FIN
 
 ; Game specific post-render logic
 
@@ -556,11 +556,10 @@ NES_RenderFrame
             inc   frameCount       ; Tick over to a new frame
             rts
 
-; SHOW_FPS: once a second (OneSecondCounter), draw the number of renders in the last second
-; (framesPerSecond), in decimal, at the top-left of the screen (SHR $2000, the border left of the
-; playfield).
-; fpsValue keeps the number for tools that read memory.
-            DO    SHOW_FPS
+; VIDEO > SHOW FPS (config_video_fps): once a second (OneSecondCounter), draw the number of renders in
+; the last second (framesPerSecond), in decimal, at the top-left of the screen (SHR $2000, the border
+; left of the playfield).  Leaving the configuration screen clears the screen, which removes it when
+; the option is turned off.  fpsValue keeps the number for tools that read memory.
             mx    %00
 DrawFPS
             ldal  OneSecondCounter
@@ -591,7 +590,6 @@ DrawFPS
 fpsLastSec   dw  0
 fpsValue     dw  0
 fpsTmp       dw  0
-            FIN
 
 ; Given a nametable address ($2000 - $2FFF), return the screen address taking into account the current
 ; scroll position.
@@ -777,18 +775,10 @@ RenderScreen
 ; The grid renderer never executes the code field, so it does not need the exit points patched
             jsr   gridPrepare
             bcs   :full_update
-            DO    GRID_FALLBACK_BORDER
-            lda   #FB_COLOR_GRID          ; Grid frame: no fallback
-            jsr   gridFallbackBorder
-            FIN
             jsr   gridDrawDirty
             bra   :done
 
 :full_update
-            DO    ENABLE_DIRTY_RENDERING*GRID_FALLBACK_BORDER
-            jsr   gridFallbackColor       ; Border color = why we fell back to a full render
-            jsr   gridFallbackBorder
-            FIN
             lda   #0                      ; (grid builds: drawScreenRange records the sprite cells
             ldx   ScreenHeight            ; for the next frame)
             jsr   drawScreenRange
@@ -805,48 +795,6 @@ RenderScreen
 
             stz   DirtyBits
             rts
-
-            DO    ENABLE_DIRTY_RENDERING*GRID_FALLBACK_BORDER
-; Returns A = the border color for the reason this frame fell back to a full render.  The scaffold's
-; own reasons are checked first; if none apply, gridPrepare was called and recorded its reason in
-; gridFbReason.  Colors are listed with GRID_FALLBACK_BORDER in Defs.s.
-            mx    %00
-gridFallbackColor
-            lda   DirtyBits
-            bit   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_Y
-            bne   :scroll
-            bit   #DIRTY_BIT_PAL_CHANGE
-            bne   :palette
-            bit   #DIRTY_BIT_BG0_REFRESH
-            bne   :refresh
-            lda   disableDirtyRendering
-            bne   :disabled
-            ldal  gridFbReason
-            and   #$000F
-            rts
-:scroll     lda   #FB_COLOR_SCROLL
-            rts
-:palette    lda   #FB_COLOR_PALETTE
-            rts
-:refresh    lda   #FB_COLOR_REFRESH
-            rts
-:disabled   lda   #FB_COLOR_DISABLED
-            rts
-
-; A = border color (0-15).  Only the low nibble of $C034 is the border; the high nibble is the
-; RTC interface and must be preserved.
-            mx    %00
-gridFallbackBorder
-            sep   #$20
-            pha
-            ldal  BORDER_REG
-            and   #$F0
-            ora   1,s
-            stal  BORDER_REG
-            pla
-            rep   #$20
-            rts
-            FIN
 
 ; If dirty rendering is turned on, provide a way to override it
 disableDirtyRendering dw 0

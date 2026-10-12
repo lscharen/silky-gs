@@ -122,7 +122,7 @@ CACHE_DMC_SAMPLES equ 0
 
 ; Configuration screen setup (see rom/rom_config_setup.s)
 CONFIG_DEFAULT_AUDIO equ APU_60HZ   ; default audio quality
-CONFIG_VIDEO_MENU    equ 0          ; show the VIDEO menu
+CONFIG_VIDEO_MENU    equ 1          ; show the VIDEO menu
 CONFIG_VIDEO_FASTBLIT equ 0         ; show the FAST BLIT option (scrolling games only)
 CONFIG_INPUT_BUTTONS equ 1          ; allow remapping the A/B buttons
 CONFIG_INPUT_2P      equ 1          ; show P1/P2 tabs on the INPUT menu
@@ -139,16 +139,11 @@ CONFIG_APPLY_HOOK mac
 PPU_PALETTE_DISPATCH equ PALETTE_DISPATCH
 AUTOMATIC_PALETTE_MAPPING equ 0
 
-; Turn on code that visualizes the CPU time used by the ROM code
-SHOW_ROM_EXECUTION_TIME equ 0
-
 ; Turn on some off-screen information
 SHOW_DEBUG_VARS equ 0
 
 ; Show the number of VBLs each screen render takes at the top-left of the screen (debug)
 RENDER_VBL_COUNT equ 0
-; Show the renders per second (decimal) at the top-left of the screen
-SHOW_FPS equ 0
 
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 0
@@ -310,14 +305,13 @@ SetDefaultPalette
         ldx   SwizzleTables
         jmp   NES_SetPaletteMap
 
-; Game-specific configuration values, saved after the built-in values by misc/io.s.  The
-; built-in values, menus and ApplyConfig are defined in rom/rom_config_setup.s
-config_game_start
-config_game_end
+; Game-specific configuration values (none): CONFIG_GAME_DEFAULTS lays out their defaults at their IDs in
+; the game's block (see rom/rom_config_setup.s, which also has the built-in values, menus and ApplyConfig)
+CONFIG_GAME_DEFAULTS mac
+;
+             <<<
 
-            DO    SHOW_DEBUG_VARS+RENDER_VBL_COUNT+SHOW_FPS ; debug text (DrawByte / DrawWord)
-            put   ../../misc/App.Msg.s
-            FIN
+            put   ../../misc/App.Msg.s         ; Text (DrawByte / DrawWord): VIDEO > SHOW FPS and the debug displays
             put   ../../misc/io.s
             
             mput  ../../ppu
