@@ -9,8 +9,6 @@
             use   GTE.Macs.s
 
             put   ../../Externals.s
-L0_T0       EXT                       ; Swizzle tables live in the PALDATA segment (palettes.s)
-AT2_T0      EXT
             put   ../../core/Defs.s
 
             mx    %00
@@ -40,7 +38,7 @@ EVT_LOOP_END mac
 ; Pre-render check to see if there are any background tiles queued for updates.  If so, we will do
 ; a regular rendering.  If not, use dirty rendering.
 PRE_RENDER   mac
-;
+             jsr  ApplyPaletteChange ; switch to a new palette detected since the last frame
              <<<
 
 POST_RENDER  mac
@@ -224,87 +222,66 @@ qtRec   adrl  $0000
 SAVE_FILENAME strl '1/mb.sav'
 PREF_FILENAME strl '1/mb.prefs'
 
+; Palette management.  The two palettes the game uses (title screen and gameplay) are described in
+; palettes/, and pal_transitions.s (generated from them by build.js) gives each one a fixed IIgs slot
+; layout and swizzle tables.  A palette RAM write (MB_PalWrite) only marks the palette dirty; at the next
+; render, ApplyPaletteChange (GS task) identifies the palette in palette RAM and switches to it (redrawing
+; tiles when needed), or shows the changed colors in the current palette's layout.
+mbCurPal    dw    0                         ; PAL_* id of the palette on screen
+mbPalDirty  dw    0                         ; palette RAM changed since the last render
+
+; Start with the title screen palette.  At power-on the ROM's title upload (20 bytes) leaves SP1-SP3 at
+; their start-up values, so the first title screen isn't detected; with the title palette current, its
+; layout is used for the colors anyway.  InitPlayfield is called by NES_StartUp.
 InitPlayfield
-        ldx   #AllColors
-        lda   #0
-        jsr   NES_SetPalette
-        rts
-
-SwizzleTables
-        adrl L0_T0
-        adrl  AT2_T0
-
-; Are there less than 15 total color combos? Yes! This game can use a fixed palette
-;                      1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
-AllColors   dw     $0F,$06,$09,$12
-            dw     $16,$18,$19,$25
-            dw     $26,$27,$29,$2C
-            dw     $30,$35,$3C,$37
-
-; When the NES ROM code tried to write to the PPU palette space, intercept here.
-PALETTE_DISPATCH
-        dw   ppu_3F00,dk_3Fxx,dk_3Fxx,dk_3Fxx
-        dw   ppu_3F04,dk_3Fxx,dk_3Fxx,dk_3Fxx
-        dw   ppu_3F08,dk_3Fxx,dk_3Fxx,dk_3Fxx
-        dw   ppu_3F0C,dk_3Fxx,dk_3Fxx,dk_3Fxx
-
-        dw   ppu_3F10,dk_3Fxx,dk_3Fxx,mb_3F13
-        dw   ppu_3F14,dk_3Fxx,dk_3Fxx,dk_3Fxx
-        dw   ppu_3F18,dk_3Fxx,dk_3Fxx,dk_3Fxx
-        dw   ppu_3F1C,dk_3Fxx,dk_3Fxx,dk_3Fxx
-
-; Watch this palette entry to determine when to swap swizzle tables
-mb_3F13
-        cmp   #$0035
-        bne  :tbl2
-
-        phd
-        ldal  DPSave
-        tcd
-        lda   SwizzleTables+2          ; title screen palette
-        ldx   SwizzleTables
-        jsr   NES_SetPaletteMap
-
-        lda   #DIRTY_BIT_PAL_CHANGE    ; this needs to be set when the background palettes are changed
-        tsb   DirtyBits
-
-        pld
-        rts
-
-:tbl2
-        phd
-        ldal  DPSave
-        tcd
-        lda   SwizzleTables+6          ; gameplay palette
-        ldx   SwizzleTables+4
-        jsr   NES_SetPaletteMap
-
-        lda   #DIRTY_BIT_PAL_CHANGE
-        tsb   DirtyBits
-
-        pld
-        rts
-
-; The the phase changes, set a flag, but way for the transition time to drop below $70
-; before applying the change.
-;HasPaletteChange dw 0
-
-; X = 2*nes_palette_index
-dk_3Fxx
-        rts
-; Palette
-;
-; 0 = background
-; 
-
-; For this game, we utilize a single, static palette
 SetDefaultPalette
+            ldy   #PAL_TITLE_SCREEN
+            sty   mbCurPal
+            ldx   PAL_SWIZZLE_LO,y
+            lda   PAL_SWIZZLE_HI,y
+            jmp   NES_SetPaletteMap
 
-; Set the tile/sprite mapping
+; Palette RAM write ($3F01-$3F1F, except the color 0s), on the NES task.  The palette RAM is already
+; updated (and only changed values get here): just note that it changed.
+MB_PalWrite
+            lda   #1
+            sta   mbPalDirty
+MB_PalNone  rts
 
-        lda   SwizzleTables+2
-        ldx   SwizzleTables
-        jmp   NES_SetPaletteMap
+; PRE_RENDER, on the GS task: if the palette RAM changed, identify the palette in it and switch to it,
+; or show its changed colors in the current palette's layout
+ApplyPaletteChange
+            lda   mbPalDirty
+            beq   :none
+            lda   _ppumask                  ; While the background is off (the game is rebuilding the
+            and   #NES_PPUMASK_BG           ; screen), keep the old colors on whatever is left on the
+            beq   :none                     ; screen; the new ones come with the new screen
+            stz   mbPalDirty                ; (first, so a write from here on is seen next time)
+            ldx   mbCurPal
+            jsr   DetectNESPalette          ; A = Y = palette id, 0 if none
+            beq   :colors                   ; not a known palette (e.g. at power-on)
+            cmp   mbCurPal
+            beq   :colors
+            ldx   mbCurPal
+            sty   mbCurPal
+            jmp   UpdatePalette             ; X = from, Y = to
+:colors     ldy   mbCurPal
+            jmp   LoadPaletteColors
+:none       rts
+
+            put   pal_transitions.s
+
+; Color 0: $3F00 / $3F10 is always IIgs slot 0, so it is set straight away (ppu_palette.s); the
+; other color 0s aren't shown.  The rest go to MB_PalWrite.
+PALETTE_DISPATCH
+        dw   ppu_3F00,MB_PalWrite,MB_PalWrite,MB_PalWrite
+        dw   MB_PalNone,MB_PalWrite,MB_PalWrite,MB_PalWrite
+        dw   MB_PalNone,MB_PalWrite,MB_PalWrite,MB_PalWrite
+        dw   MB_PalNone,MB_PalWrite,MB_PalWrite,MB_PalWrite
+        dw   ppu_3F10,MB_PalWrite,MB_PalWrite,MB_PalWrite
+        dw   MB_PalNone,MB_PalWrite,MB_PalWrite,MB_PalWrite
+        dw   MB_PalNone,MB_PalWrite,MB_PalWrite,MB_PalWrite
+        dw   MB_PalNone,MB_PalWrite,MB_PalWrite,MB_PalWrite
 
 ; Game-specific configuration values (none): CONFIG_GAME_DEFAULTS lays out their defaults at their IDs in
 ; the game's block (see rom/rom_config_setup.s, which also has the built-in values, menus and ApplyConfig)
