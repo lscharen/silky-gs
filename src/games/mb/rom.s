@@ -2529,8 +2529,14 @@ CODE_CBC4
    LDY #$00					;
    LDX CurrentEntity_OAMOffset			;OAM offset
 
+;Each entry is a flag byte, then the Y and X offsets.  On the NES a non-zero flag ($01 / $80) draws the
+;entry only on odd / even frames: the sidesteppers and fighterflies (Entity_Draw_8x16_FlickerTop /
+;_FlickerBottom) alternate the two tiles of their wide half, for the 8 sprites per line limit.  The
+;IIgs has no such limit and doesn't show every frame, so the flicker only looked like a missing piece:
+;every entry is drawn on every frame.  The BRA takes the place of the LDA (same size, so nothing
+;moves); the flag test below it is no longer reached.  Each enemy has 4 OAM entries, and these use 3.
 CODE_CBDD
-   LDA ($12),Y					;
+   BRA CODE_CBE9				;(was LDA ($12),Y) always draw the entry
    BEQ CODE_CBE9				;check if it should animate with frame counter?
    BPL CODE_CBE4				;if bit 7 is set, it'll animate slower (or faster, idk)
    ASL A					;
@@ -2723,6 +2729,7 @@ CODE_CCC2
 ;Should be self-explanatory
 ;ReadControllers_CCC5
 native_joy    EXT
+NES_ReadJoy    EXT
 CODE_CCC5
    LDX #$01					;\prepare controller 2 for reading
 ;   STX ControllerReg				;/
@@ -2738,7 +2745,7 @@ CODE_CCD3
 ;   LDY #$08					;8 bits, of course
     ldy #0
 CODE_CCD5
-    ldal native_joy,x
+    jsl  NES_ReadJoy                  ; (was ldal native_joy,x: read on demand)
     bra  :joyskip
     ds   9
 :joyskip

@@ -14,10 +14,6 @@
 ;
 ;   - Conditional store macro (cond)
 ;     Stores one of two values depending on a bit test result.
-;
-; Note: The WALK_BITMAP macro and its associated load macros (LOAD_CURRENT,
-; LOAD_INV_CURRENT, LOAD_OTHERS, LOAD_INTERSECTION) are in scanline_bitmap.s
-; because they generate executable 65816 code and branch labels.
 
 ; ---------------------------------------------------------------------------
 ; Data replication macros
@@ -94,4 +90,18 @@ cond    mac
         bra cond_s
 cond_0  lda ]2
 cond_s  sta ]4
+        <<<
+
+; Count a compiled sprite cache event (SPR_CACHE_STATS, Defs.s): a 32-bit counter at PPU_MEM+SPR_STATS+]1.
+; 16-bit A, which is trashed (and the flags); any data bank.  Nothing is assembled without the stats.
+SPR_STAT mac
+        DO    SPR_CACHE_STATS
+        ldal  PPU_MEM+SPR_STATS+]1
+        inc
+        stal  PPU_MEM+SPR_STATS+]1
+        bne   *+11
+        ldal  PPU_MEM+SPR_STATS+]1+2
+        inc
+        stal  PPU_MEM+SPR_STATS+]1+2
+        FIN
         <<<

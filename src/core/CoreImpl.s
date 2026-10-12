@@ -155,8 +155,6 @@ EngineReset
                   lda       #$FFFF                 ; Mark as needing a full update
                   sta       DirtyBits
 
-                  stz       DirtyState
-                  stz       DebugSCB
                   stz       LastRender             ; Initialize as if a full render was performed
 
 
@@ -167,11 +165,7 @@ EngineReset
                   stz       OneSecondCounter
                   stz       LastKey
 
-                  stz       frameCount             ; Maintain which shadow bitmap to use for a given frame
-                  lda       #shadowBitmap0
-                  sta       CurrShadowBitmap
-                  lda       #shadowBitmap1
-                  sta       PrevShadowBitmap
+                  stz       frameCount
 
 ; Fill in the state register values
 
@@ -224,7 +218,9 @@ EngineReset
 ; 4, 20, 36, 52, 68, 84 and 100.
 ;
 ; If CTRL_EVEN_RENDER is set, the even lines exit to the line after next, so only half of the
-; lines are drawn.  Line 118 still continues to line 119, which jumps to the other bank.
+; lines are drawn.  Line 118 jumps to line 119's JML into the other bank, so line 119 is skipped
+; as well.  The skipped lines are the odd code rows, which are the odd screen lines that
+; _BltRangeLite assumes as long as StartRow + y_offset is even.
 ;
 ; All of the exits are rewritten, so this can be called again whenever CTRL_EVEN_RENDER changes.
 FIRST_PAGE        equ       $100       ; PEA code starts at $0100 in each respective bank
@@ -266,6 +262,12 @@ _InitLiteBlitter
                   tax
                   cpx       #{118*_LINE_SPAN}
                   bcc       :even_loop
+
+; Line 118 skips line 119 too: its exits go straight to line 119's JML into the other bank, so the
+; odd line 119 is not drawn and the next bank continues on its even line 0
+                  ldx       #{118*_LINE_SPAN}
+                  lda       #FIRST_PAGE+{119*_LINE_SPAN}+_E_JMP_OFFSET
+                  jsr       :patch_exits
 
 :int              ldx       #{4*_LINE_SPAN}
 :int_loop         txa
@@ -397,16 +399,6 @@ _ClearKeypress
                   stz       LastKey
                   rts
 
-; Acknowledge that a keypress has been read.  This is similar to physically clearing
-; the keyboard strobe and will clear the PAD_KEY_DOWN bit, which is held so that a new
-; keypress can be picked up by the user code on a differnt frame than the initial read
-                mx %00
-_AckKeypress
-                  lda       LastKey
-                  and       #$FF7F
-                  sta       LastKey
-                  rts
-
                 mx %00
 _ReadRawKeypress
                   pea       $0000               ; temporary space
@@ -441,6 +433,7 @@ _ReadKeypress
                   stal      KBD_STROBE_REG      ; reset the strobe
                   sta       LastKey
                   sta       1,s
+                  stal      KeyEvent            ; a new press, for the event loop (NES_TakeKey)
                   bra       :done               ; return the key value
 
 :no_new_key

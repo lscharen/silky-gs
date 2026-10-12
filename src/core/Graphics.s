@@ -135,6 +135,25 @@ _ClearToColor
                  bpl  :loop
                  rts
 
+; Clear the SHR shadow screen ($01/2000) to zeros with shadowing on, so the visible screen ($E1/2000)
+; is cleared as well.  Needed when CTRL_EVEN_RENDER is turned on: only every other line is drawn
+; after that, and the lines in between would keep whatever was on the screen.  The shadowing state
+; is restored afterwards.
+                 mx    %00
+_ClearShadowScreen
+                 sep   #$20
+                 ldal  SHADOW_REG
+                 pha
+                 rep   #$20
+                 jsr   _ShadowOn
+                 lda   #0
+                 jsr   _ClearToColor
+                 sep   #$20
+                 pla
+                 stal  SHADOW_REG
+                 rep   #$20
+                 rts
+
 ; Set a palette values
 ; A = palette number, X = palette address
                  mx    %00

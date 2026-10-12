@@ -13,70 +13,73 @@
 ; NES master palette: 64 entries, each a 12-bit IIgs RGB word ($0RGB).
 ; Illegal/undefined NES colour indices map to black ($0000).
 NES_ColorPalette
-            dw    $0777   ;  0
-            dw    $000f   ;  1
-            dw    $000b   ;  2
-            dw    $042b   ;  3
-            dw    $0908   ;  4
-            dw    $0a02   ;  5
-            dw    $0a10   ;  6
-            dw    $0810   ;  7
-            dw    $0530   ;  8
-            dw    $0070   ;  9
-            dw    $0060   ; 10
-            dw    $0050   ; 11
-            dw    $0045   ; 12
-            dw    $0000   ; 13 illegal
-            dw    $0000   ; 14 illegal
-            dw    $0000   ; 15 illegal
-            dw    $0bbb   ; 16
-            dw    $007f   ; 17
-            dw    $005f   ; 18
-            dw    $064f   ; 19
-            dw    $0d0c   ; 20
-            dw    $0d05   ; 21
-            dw    $0f30   ; 22
-            dw    $0d51   ; 23
-            dw    $0a70   ; 24
-            dw    $00b0   ; 25
-            dw    $00a0   ; 26
-            dw    $00a4   ; 27
-            dw    $0088   ; 28
-            dw    $0000   ; 29 illegal
-            dw    $0000   ; 30 illegal
-            dw    $0000   ; 31 illegal
-            dw    $0fff   ; 32
-            dw    $04bf   ; 33
-            dw    $068f   ; 34
-            dw    $097f   ; 35
-            dw    $0f7f   ; 36
-            dw    $0f59   ; 37
-            dw    $0f75   ; 38
-            dw    $0f94   ; 39
-            dw    $0fb0   ; 40
-            dw    $0bf1   ; 41
-            dw    $05d5   ; 42
-            dw    $05f9   ; 43
-            dw    $00ed   ; 44
-            dw    $0777   ; 45 illegal
-            dw    $0000   ; 46 illegal
-            dw    $0000   ; 47 illegal
-            dw    $0fff   ; 48
-            dw    $0adf   ; 49
-            dw    $0bbf   ; 50
-            dw    $0dbf   ; 51
-            dw    $0fbf   ; 52
-            dw    $0fab   ; 53
-            dw    $0eca   ; 54
-            dw    $0fda   ; 55
-            dw    $0fd7   ; 56
-            dw    $0df7   ; 57
-            dw    $0bfb   ; 58
-            dw    $0bfd   ; 59
-            dw    $00ff   ; 60
-            dw    $0fdf   ; 61 illegal
-            dw    $0000   ; 62 illegal
-            dw    $0000   ; 63 illegal
+            dw    $0666   ;  0
+            dw    $0029   ;  1
+            dw    $000D   ;  2
+            dw    $074D   ;  3
+            dw    $0907   ;  4
+            dw    $0B07   ;  5
+            dw    $0B20   ;  6
+            dw    $0940   ;  7
+            dw    $0740   ;  8
+            dw    $0240   ;  9
+            dw    $0072   ;  10
+            dw    $0090   ;  11
+            dw    $0044   ;  12
+            dw    $0000   ;  13 illegal
+            dw    $0000   ;  14 illegal
+            dw    $0000   ;  15 illegal
+
+            dw    $0BBB   ;  16
+            dw    $007E   ;  17
+            dw    $004F   ;  18
+            dw    $090F   ;  19
+            dw    $0B0F   ;  20
+            dw    $0F09   ;  21
+            dw    $0F00   ;  22
+            dw    $0E60   ;  23
+            dw    $0970   ;  24
+            dw    $0290   ;  25
+            dw    $0090   ;  26
+            dw    $00B7   ;  27
+            dw    $0099   ;  28
+            dw    $0000   ;  29 illegal
+            dw    $0000   ;  30 illegal
+            dw    $0000   ;  31 illegal
+
+            dw    $0FFF   ;  32
+            dw    $07BF   ;  33
+            dw    $099F   ;  34
+            dw    $0D6F   ;  35
+            dw    $0F0F   ;  36
+            dw    $0F6F   ;  37
+            dw    $0F90   ;  38
+            dw    $0FB0   ;  39
+            dw    $0DD0   ;  40
+            dw    $06D0   ;  41
+            dw    $00F0   ;  42
+            dw    $04FD   ;  43
+            dw    $00FF   ;  44
+            dw    $0440   ;  45 "illegal"
+            dw    $0000   ;  46 illegal
+            dw    $0000   ;  47 illegal
+
+            dw    $0FFF   ;  48
+            dw    $0BEF   ;  49
+            dw    $0DBF   ;  50
+            dw    $0FBF   ;  51
+            dw    $0F9F   ;  52
+            dw    $0FBB   ;  53
+            dw    $0FD9   ;  54
+            dw    $0FF4   ;  55
+            dw    $0FF7   ;  56
+            dw    $0BF4   ;  57
+            dw    $09F6   ;  58
+            dw    $04FD   ;  59
+            dw    $08DF   ;  60
+            dw    $0BBB   ;  61 "illegal"
+            dw    $0000   ;  62 illegal
+            dw    $0000   ;  63 illegal
 
 ; NES_ColorToIIgs
 ; A = NES colour index (0-63; high byte ignored)

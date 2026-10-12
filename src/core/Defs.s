@@ -62,9 +62,8 @@ SwizzlePtr             equ   34          ; Pointer to a table of 8 swizzle table
 SwizzlePtr2            equ   42          ; Work pointer to point at the fourth palette of the active swizzle table
 ActivePtr              equ   38          ; Work pointer to point at the active swizzle table
 
-; Keep track of the current sprite bitmap and the one for the previous frame
-CurrShadowBitmap       equ   46          ; These are 16-bit pointers
-PrevShadowBitmap       equ   48
+unused46               equ   46
+unused48               equ   48
 
 ; Pointers to which block of CHR memory is for tiles vs sprites
 TileChrMem             equ   50
@@ -74,9 +73,9 @@ unused59               equ   59
 
 pputmp                 equ   60          ; 16 bytes of temporary storage for the ppu subsystem
 
-SprSaveTop             equ   76          ; Top stack address for the sprite save buffer
-SprSaveAddr            equ   78          ; Current address
-SprAddrCount           equ   80          ; Number of sprites saved in the buffer
+unused76               equ   76
+unused78               equ   78
+unused80               equ   80
 GridLPtr               equ   82          ; Grid dirty renderer (quad mode): write pointer of the cell list
 NtmPtr                 equ   84          ; PPUFlushQueuesAlt: long pointer to the shadow buffer being drawn (4 bytes)
 NtmTMask               equ   88          ; PPUFlushQueuesAlt: tiles written in the group this period
@@ -86,17 +85,13 @@ NtmNib                 equ   94          ; PPUFlushQueuesAlt: its nibble of tile
 NtmPal                 equ   96          ; PPUFlushQueuesAlt: its palette select * 2
 PPU_BANK               equ   98
 
-; Dirty State transition
-;                                                                                                +---------------------------------------------+
-;                                                                                                +----------+---------------+    +-----------+ |
-;                                                                                                V          |               |    V           | |
-DirtyState             equ   100          ; Track the transition from normal to dirty rendering [0] normal -+-> [1] dirty1 -+-> [2] dirty2 --+-+
-DebugSCB               equ   102          ; SCB byte to use for tracing actions
+unused100              equ   100
+unused102              equ   102
 LastRead               equ   104
 
 SpriteBank0            equ   106          ; Always zero to allow [SpriteBank0],y addressing
-SpriteBank             equ   108          ; Data bank that holds compiled sprite code
-unused110              equ   110          ; (formerly SpriteBankPos; the sprite bank is now a fixed-slot cache)
+SpriteBank             equ   108          ; Bank that compiled sprite code is written to (the slot's, see SprCompileTile)
+sprShift               equ   110          ; drawSprites: $0004 for a sprite on an odd pixel (the shifted variants), else 0
 
 UserId                 equ   112          ; Memory manager user Id to use
 LastKey                equ   116
@@ -151,7 +146,6 @@ CMPL_BANK              equ   176         ; ^tiledata << 8 | $01 (Bank $01 in low
 
 ; Temporary storage for 8x16 sprite drawing in drawSprites
 sprTmp5Hi              equ   178
-sprCompBase            equ   180         ; drawSprites: low word of the SPR_COMP_TBL address (8x16 sprites)
 
 ; PPUFlushQueuesAlt locals, continued from above (same rationale)
 NtmDiff                equ   182         ; attribute EOR the last applied value
@@ -217,34 +211,17 @@ CTRL_EVEN_RENDER       equ   $8000                  ; Only render half the scanl
 ; The size of each tile instruction is 3 bytes
 PER_TILE_SIZE equ 3
 
-; Turn ON/OFF dirty rendering debugging
-DIRTY_RENDERING_VISUALS equ 0
-
-; Debug border indicators.  Both write the border color, so turn on at most one of them.
-;
-; TASK_TIME_BORDER: raster bar of CPU time.  The border is TASK_COLOR_NES while the NES task (game
-; logic) runs and TASK_COLOR_GS while the GS task (renderer) runs, so the height of the NES-colored
-; band is the share of each 1/60s spent in game logic.  A solid NES-colored border = overrunning.
-TASK_TIME_BORDER   equ 0
+; Border indicator: VIDEO > SHOW NES CPU (config_video_nescpu, a setting), a raster bar of CPU time.  The border is
+; TASK_COLOR_NES while the NES task (game logic) runs and TASK_COLOR_GS while the GS task (renderer)
+; runs (saveCtx, rom_exec.s).  The NES task usually starts right after the VBL, so the height of the
+; NES-colored band is the share of each 1/60s spent in game logic.  A solid NES-colored border =
+; overrunning.
 TASK_COLOR_GS      equ 0                ; Black
 TASK_COLOR_NES     equ 12               ; Green
 
 ; APU_STATS: count the VBLs and the APU interrupts, frame sequencer clocks and DOC updates in the
 ; apu_stats block (apu/apu.s), to check the audio rates against the VBL in a debugger.
 APU_STATS          equ 0
-
-; GRID_FALLBACK_BORDER: color the border by why the grid renderer fell back to a full render, black
-; on frames it handles (GRID_DIRTY_RENDERING only).  Values are IIgs border colors.
-GRID_FALLBACK_BORDER equ 0
-FB_COLOR_GRID      equ 0                ; Black      - grid frame, no fallback
-FB_COLOR_SCROLL    equ 2                ; Dark blue  - scrolled (DIRTY_BIT_BG0_X / BG0_Y)
-FB_COLOR_PALETTE   equ 13               ; Yellow     - background palette changed
-FB_COLOR_REFRESH   equ 15               ; White      - forced refresh (DIRTY_BIT_BG0_REFRESH, other cause)
-FB_COLOR_DISABLED  equ 5                ; Dark gray  - disableDirtyRendering is set
-FB_COLOR_METATILES equ 1                ; Deep red   - more than GRID_MAX_METATILES redrawn (gmtOverflow)
-FB_COLOR_UNALIGNED equ 9                ; Orange     - scroll position not cell-aligned
-FB_COLOR_BGOFF     equ 3                ; Purple     - background disabled
-FB_COLOR_MANY      equ 11               ; Pink       - gridPrepare :fb_many (currently unused)
 
 ; Offsets for the Lite blitter
 ;
@@ -259,9 +236,9 @@ FB_COLOR_MANY      equ 11               ; Pink       - gridPrepare :fb_many (cur
 ; page (P1) is at +$100 and uses the same offsets for its PEA run and exit jumps.
 _INT_OFFSET    equ  $00                   ; code to enable interrupts before the line
 _ENTRY_OFFSET  equ  $11                   ; normal entry point for each line
-_ALIGN_PATCH   equ  $15                   ; BRA (even) or LDA #imm (odd), patched per line
-_EDGE_PATCH    equ  $17                   ; LDX #imm with the offset of the odd right edge byte (operand at +1)
-_ENTRY_PATCH   equ  $1E                   ; BRL to the first PEA (operand at +1)
+_ALIGN_PATCH   equ  $15                   ; BRL to the first PEA (even) or LDX #imm with the offset of the
+                                          ; odd right edge byte, patched per line (operand at +1)
+_ODD_ENTRY_PATCH equ $1C                  ; Odd lines: BRL to the first PEA (operand at +1)
 _E_OUT_OFFSET  equ  $21                   ; top jump to the even exit
 _O_OUT_OFFSET  equ  $24                   ; top jump to the odd exit
 _PEA_OFFSET    equ  $27                   ; first PEA instruction
@@ -275,10 +252,10 @@ _O_JMP_OFFSET  equ  $FA                   ; odd exit JMP to the next line (opera
 _LINE_SPAN  equ  512                     ; always 512 bytes between adjacent rows
 _LINES_PER_BANK equ 120
 
-; Values patched into _ALIGN_PATCH.  Even lines branch over the edge byte code to the BRL.  Odd lines
-; execute a harmless 8-bit LDA #imm and fall into the code that pushes the right edge byte.
-BLT_ALIGN_EVEN equ  $80+{{_ENTRY_PATCH-_ALIGN_PATCH-2}*256}
-BLT_ALIGN_ODD  equ  $00A9
+; Opcodes patched into _ALIGN_PATCH (8-bit).  Even lines BRL straight to the first PEA.  Odd lines
+; LDX the offset of the right edge byte and fall into the code that pushes it.
+BLT_ALIGN_EVEN equ  $82                   ; BRL
+BLT_ALIGN_ODD  equ  $A2                   ; LDX #imm (16-bit X)
 
 ; Processor status values used to enter the blitter.  M = 1, X = 0 and I = 1 always.
 BLT_P_BASE     equ  $24
@@ -290,9 +267,9 @@ BLT_P_HORZ     equ  $40                   ; V = 1 for horizontal mirroring
 ;
 ; They are indexed by CIRAM address ($000 - $7FF), so each one is $800 bytes.
 ;
-; PPU_MEM bank map: $0000-$1FFF CHR, $2000-$27FF CIRAM (PPU_CIRAM), $2800-$290B compiled sprite cache
-; bookkeeping (SPR_OWNER ...), $3F00 palette RAM, $4000-$67FF the tables below, $7000-$8FFF SPR_COMP_TBL
-; ($6800-$6FFF and $9000-$AFFF free),
+; PPU_MEM bank map: $0000-$1FFF CHR, $2000-$27FF CIRAM (PPU_CIRAM), $2800-$2927 compiled sprite cache
+; bookkeeping (SPR_OWNER ...), $2A00-$2AFF SPR_SLOT_TBL, $3F00 palette RAM, $4000-$67FF the tables below, $7000-$8FFF SPR_COMP_TBL
+; $6800-$6AFF the grid renderer's sprite skip tables (GQ_*), ($6B00-$6FFF and $9000-$AFFF free),
 ; $B000-$C7FF the grid renderer's cell tables, $C800/$E800 the nametable shadow buffers (NTM_SB0/1).
 
 TILE_SHADOW   equ $4000          ; shadowed values of the nametable tiles
@@ -308,36 +285,67 @@ TILE_ADDR_HI  equ $6000          ; pre-calculated address (high byte) of the loc
 
 ; Compiled sprite cache (core/sprites/CompileSprites.s).
 ;
-; A compiled sprite is the code for one tile with one vertical orientation and one sprite palette, in two
-; variants: as is and flipped horizontally.  The pixels are compiled in their final colors (the palette's
+; A compiled sprite is the code for one tile with one vertical orientation and one sprite palette, in four
+; variants: as is, flipped horizontally, and both of those shifted one pixel to the right (for a sprite on an
+; odd pixel; 3 words per line instead of 2).  The pixels are compiled in their final colors (the palette's
 ; swizzle table is applied at compile time), so the code is only immediate loads and stores.  The sprite
-; compile bank is divided into fixed, unpacked 512 byte slots; a variant is at most 16 words * 12 bytes + a
-; 4 byte return = 196 bytes, so the first one is at the start of the slot and the horizontally flipped one
-; at slot + $100.
+; compile banks (up to SPR_MAX_BANKS, allocated by InitMemory) are divided into fixed, unpacked 2KB slots,
+; 32 per bank, with each variant in its own 512 bytes (2 pages):
 ;
-; Slot 0 is not used because address $0000 in SPR_COMP_TBL means "not compiled", so there are at most 127.
+;   slot + $000  as is                  (at most 16 words * 12 bytes + a 4 byte return = 196 bytes)
+;   slot + $200  flipped horizontally
+;   slot + $400  shifted                (at most 24 words * 12 bytes + 4 = 292 bytes)
+;   slot + $600  shifted, flipped horizontally
 ;
-; SPR_COMP_TBL maps a sprite to the slot of its compiled code, or 0.  It is indexed by the "key offset":
+; Without SPR_PIXEL_SHIFT (the game's Main.s) there are only the first two variants, in 512 byte slots,
+; 128 in one bank: as is at slot + $000 and flipped horizontally at slot + $100.  The slot sizes are in
+; ppu.s (SPR_SLOT_SIZE, SPR_BANK_SLOTS, SPR_MAX_BANKS, SPR_MAX_SLOTS, SPR_FLIP_PAGE), after the game's flags.
+;
+; SPR_COMP_TBL maps a sprite to the slot of its compiled code, as bank << 8 | page (the high two bytes of
+; the slot's 24-bit address), or 0.  The bank is never 0, so 0 means "not compiled".  It is indexed by the
+; "key offset":
 ;   key offset = (pattern table << 12) | (palette << 10) | (tile << 2) | (vertical flip << 1)
-; The two horizontal flips are compiled together, into one slot, so one entry (and one store to drop it) is
-; for both.  The compiled colors depend on the sprite swizzle tables, so a change to them drops every
-; compiled sprite (SprCacheFlush).
+; The four variants are compiled together, into one slot, so one entry (and one store to drop it) is for
+; all of them.  Slots are aligned to their size, so the dispatch ORs the variant's page offset into the entry.
+; The compiled colors depend on the sprite swizzle tables, so a change to them drops every compiled
+; sprite (SprCacheFlush).
 ;
 ; Slots are replaced in the order they were filled (a FIFO): SPR_CURSOR goes round the slots, and the slot it
 ; points to is the next one used; if a key owns it (SPR_OWNER), that key is evicted.  A cache hit does not
 ; change anything.  A CHR-RAM write frees a key's slot, which is reused when the cursor gets back to it.
 SPR_COMP_TBL  equ $7000               ; 4096 words
-SPR_SLOT_SIZE equ $0200
-SPR_SLOTS     equ 127                 ; the number of slots used (1 - 127)
 
 ; The number of sprite tiles compiled per drawSprites call (0 - 4; 0 never compiles).  The sprites that miss
 ; are drawn from their bitmaps until they are compiled.  2 was measured to be the best (docs/BENCH_ZELDA.md).
 SPR_COMPILE_PER_RENDER equ 2
-SPR_OWNER     equ $2800               ; 128 words, indexed by slot address >> 8: the key offset that owns the slot,
-                                      ; or $FFFF if none
-SPR_CURSOR    equ $2900               ; the address of the slot that is used next
+SPR_OWNER     equ $2800               ; 128 words, indexed by slot number * 2: the key offset that owns the
+                                      ; slot, or $FFFF if none
+SPR_CURSOR    equ $2900               ; the slot number * 2 of the slot that is used next
 SPR_PEND_CNT  equ $2902               ; byte offset of the end of the pending list
 SPR_PEND      equ $2904               ; keys that missed this render, waiting to be compiled (4 words)
+SPR_NSLOTS    equ $290C               ; the number of slots * 2 (SPR_BANK_SLOTS for each bank InitMemory got)
+SPR_SLOT_TBL  equ $2A00               ; 128 words, indexed by slot number * 2: the slot's bank << 8 | page
+
+; Count the cache's events (SPR_STAT, ppu_macros.s), for measuring the hit rate: 32-bit counters at
+; PPU_MEM+SPR_STATS, cleared by SprCacheInit and read by scripts/gs2-bench-run.js --stats.  Off in normal
+; builds (the counters cost a few % of the render time).
+SPR_CACHE_STATS equ 0
+SPR_STATS     equ $2910
+SPR_ST_HITS   equ 0                   ; compiled sprite lookups that found the key
+SPR_ST_MISSES equ 4                   ; lookups that did not (drawn from the bitmap)
+SPR_ST_SHREQ  equ 8                   ; hits on an odd pixel before the shifted pair was compiled (drawn
+                                      ; compiled, a pixel to the left)
+SPR_ST_COMPILES equ 12                ; plain pairs compiled
+SPR_ST_SHIFTS equ 16                  ; shifted pairs compiled
+SPR_ST_EVICTS equ 20                  ; compiled sprites evicted from their slot
+SPR_ST_SIZE   equ 24
+
+; Grid renderer, quad mode (ppu_grid_quads.s): the unchanged-sprite skip's tables, out of the main segment
+GQ_PREV_OAM   equ $6800               ; OAM_COPY as last drawn (256 bytes)
+GQ_XTL        equ $6900               ; gqL* | gqH*: a sprite's quadrants in either nibble (128 bytes each)
+GQ_XTR        equ $6980
+GQ_XBL        equ $6A00
+GQ_XBR        equ $6A80
 
 ;TILE_ROW      equ $B000          ; pre-calculated row of the PPU address
 ;TILE_COL      equ $C000          ; pre-calculated column of the PPU address

@@ -75,20 +75,6 @@ PPU_SPR_TILE_ADDR equ $0000
 ; (ppu_attributes.s), CheckSprTileDirty (ppu.s), and NES_StartUp (scaffold.s).
 HAS_CHR_RAM equ 1
 
-; Benchmark flag, driven by the gs2-mcp harness (scripts/bench-zelda.js).  See rom/rom_input.s.  The
-; controller input is read from BenchInputData, one byte per NES frame, and the run ends after
-; BENCH_MODE_LEN frames at BenchDone, which is before NES_ShutDown, so the save file is read but never
-; written: the harness puts a zelda.wram with a registered name next to the application, so the run
-; does not have to go through the registration screens.  BENCH_MODE does not
-; change NO_INTERRUPTS: with interrupts on, the input advances once per VBL (schedTask), so a run
-; lasts a fixed number of VBLs; with NO_INTERRUPTS it advances once per NES frame (NES_TriggerNMI),
-; so the cycles between BenchStart and BenchDone measure the work done for those frames.
-;
-; 0 = normal build
-; 1 = benchmark build
-BENCH_MODE        equ 0
-BENCH_MODE_LEN    equ 3600                  ; at most 6144 (BENCH_INPUT_ADDR to $1FFF)
-
 ; The cartridge has battery-backed WRAM ($6000-$7FFF).  NES_StartUp loads it from
 ; WRAM_FILENAME and NES_ShutDown saves it back (scaffold.s, misc/io.s).
 HAS_BACKED_WRAM equ 1
@@ -117,14 +103,17 @@ DIRECT_OAM_READ   equ $200
 OAM_START_INDEX   equ 0
 OAM_END_INDEX     equ 64
 
-; Allow the engine to use dirty rendering (drawing only lines where sprites
-; have changed) if the background did not scroll compared to the previous frame
+; Dirty rendering: when the background did not scroll, the screen-aligned 8x8 grid renderer
+; (ppu_grid.s, ppu_grid_quads.s) redraws only the cells that changed, erasing from the PEA field.  0 =
+; every frame is a full render.
 ENABLE_DIRTY_RENDERING equ 1
 
-; Use the screen-aligned 8x8 grid dirty renderer (erase from the PEA field, BG tile updates
-; without a full refresh).  Requires ENABLE_DIRTY_RENDERING.  See BG_TILE_DIRTY_PLAN.md
-GRID_DIRTY_RENDERING equ 1
 GRID_MAX_BG_TILES    equ 64
+
+; Draw sprites on single pixels (compiled variants shifted one pixel to the right for a sprite on an
+; odd pixel).  Off: sprites are drawn on even pixels (IIgs bytes), with the scroll's half-pixel
+; correction, and the sprite cache uses smaller slots.
+SPR_PIXEL_SHIFT equ 1
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
@@ -141,6 +130,8 @@ NO_CONFIG         equ 0
 ; Configuration screen setup (see rom/rom_config_setup.s)
 CONFIG_DEFAULT_AUDIO equ APU_60HZ   ; default audio quality
 CONFIG_VIDEO_MENU    equ 1          ; show the VIDEO menu
+CONFIG_VIDEO_FASTBLIT equ 0         ; show the FAST BLIT option (scrolling games only)
+CONFIG_VIDEO_STATUSBAR equ 0        ; show the STATUS BAR option (separately drawn status bar)
 CONFIG_INPUT_BUTTONS equ 0          ; allow remapping the A/B buttons
 CONFIG_INPUT_2P      equ 0          ; show P1/P2 tabs on the INPUT menu
 CONFIG_GAME_MENU     equ 0          ; append a GAME_CONFIG menu defined by this file
@@ -158,16 +149,11 @@ CACHE_DMC_SAMPLES equ 1
 PPU_PALETTE_DISPATCH equ ZELDA_PALETTE_DISPATCH
 AUTOMATIC_PALETTE_MAPPING equ 0
 
-; Turn on code that visualizes the CPU time used by the ROM code
-SHOW_ROM_EXECUTION_TIME equ 0
-
 ; Turn on some off-screen information
 SHOW_DEBUG_VARS equ 0
 
 ; Show the number of VBLs each screen render takes at the top-left of the screen (debug)
 RENDER_VBL_COUNT equ 0
-; Show the renders per second (decimal) at the top-left of the screen
-SHOW_FPS equ 1
 
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 0
@@ -180,11 +166,6 @@ CUSTOM_PPU_SCROLL_LOCK_CODE mac
                           lda   ppuscroll
                           <<<
 
-COMPILED_SPRITE_LIST_COUNT equ 0
-COMPILED_SPRITE_LIST       mac
-;
-                           <<<
-
 ; Do not check for specific Tile IDs to exclude from drawing
 NO_TILE_EXCLUDE equ 0
 
@@ -195,7 +176,6 @@ CUSTOM_RENDER_SCREEN_ADDR equ _RenderScreen     ; split screen during room trans
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 3
 y_height_rows equ 25
-y_ending_row  equ {y_offset_rows+y_height_rows}
 
 y_offset      equ {y_offset_rows*8}
 y_height      equ {y_height_rows*8}
@@ -219,13 +199,6 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
 ; Call the boot code in the ROM
 
-            DO    BENCH_MODE
-            lda   #BENCH_MODE_LEN         ; Load the canned input, one byte per frame
-            ldx   #BENCH_INPUT_ADDR
-            ldy   #benchCreateRec
-            jsr   LoadROMFile
-BenchStart                                ; The harness starts counting cycles here
-            FIN
             jsr   NES_ColdBoot
 
 ; Start up the NES
@@ -243,9 +216,6 @@ BenchStart                                ; The harness starts counting cycles h
 
 ; The user has exited the runtime
 quit
-            DO    BENCH_MODE
-BenchDone   bra   BenchDone               ; The harness reads the cycle count and the cache statistics here
-            FIN
             jsr   NES_ShutDown
 
 ; Exit the application
@@ -266,26 +236,10 @@ DMC_SAMPLE_LIST
             db    $28,$90,$0F           ; $20 Dodongo / Gohma roar
             db    $4C,$D0,$0E           ; $40 Digdogger / Manhandla / Patra roar
 
-            DO    BENCH_MODE
-; Canned controller input, one byte per NES frame in the A-B-Select-Start-Up-Down-Left-Right layout
-; (rom_input.s).  It is read from BENCH_FILENAME, next to the application, into the part of the NES
-; address space that nothing uses ($0800-$1FFF of the ROMBase bank), so the script can change without
-; a rebuild (scripts/bench-zelda.js --input).
-BENCH_INPUT_ADDR equ $0800
-BenchInputIndex dw  0
-BenchInputData  equ ROMBase+BENCH_INPUT_ADDR
-BENCH_FILENAME  strl '1/zelda.bench'
-benchCreateRec  dw  4                     ; pCount (LoadROMFile only uses the file name)
-                adrl BENCH_FILENAME
-                dw  $00C3
-                dw  $0006
-                dw  $0000,$0000
-            FIN
-
 ; Files used by misc/io.s.  WRAM_FILENAME holds the battery-backed save RAM (HAS_BACKED_WRAM).
 WRAM_FILENAME strl '1/zelda.wram'
 SAVE_FILENAME strl '1/zelda.sav'     ; unused
-PREF_FILENAME strl '1/zelda.prefs'   ; unused
+PREF_FILENAME strl '1/zelda.prefs'
 
 ; Palette management.  The palettes the game uses are described in ../palettes/, and
 ; pal_transitions.s (generated from them) gives each one a fixed IIgs slot layout and swizzle
@@ -618,14 +572,13 @@ ZELDA_PALETTE_DISPATCH
         dw   Z_PalNone,Z_PalWrite,Z_PalWrite,Z_PalWrite
         dw   Z_PalNone,Z_PalWrite,Z_PalWrite,Z_PalWrite
 
-; Game-specific configuration values, saved after the built-in values by misc/io.s.  The
-; built-in values, menus and ApplyConfig are defined in rom/rom_config_setup.s
-config_game_start
-config_game_end
+; Game-specific configuration values (none): CONFIG_GAME_DEFAULTS lays out their defaults at their IDs in
+; the game's block (see rom/rom_config_setup.s, which also has the built-in values, menus and ApplyConfig)
+CONFIG_GAME_DEFAULTS mac
+;
+             <<<
 
-            DO    SHOW_DEBUG_VARS+RENDER_VBL_COUNT+SHOW_FPS ; debug text (DrawByte / DrawWord)
-            put   ../../../misc/App.Msg.s
-            FIN
+            put   ../../../misc/App.Msg.s         ; Text (DrawByte / DrawWord): VIDEO > SHOW FPS and the debug displays
 
             mput  ../../../ppu
 ; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
@@ -645,7 +598,6 @@ config_game_end
             put    ../../../ppu/ppu_grid_quads.s
             put    ../../../ppu/ppu_sprites.s
             put    ../../../ppu/ppu_tile_blitters.s
-            put    ../../../ppu/scanline_bitmap.s
 ; AUTOINC:END
 
             put   ../../../apu/apu.s

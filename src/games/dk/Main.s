@@ -79,11 +79,6 @@ BG_TILES_AS_SPRITES equ 1
 ; 1 = Reset code is the game code
 ROM_DRIVER_MODE   equ 1
 
-; MAME cycle-count benchmark harness flag (scripts/run-bench.js) -- see
-; src/games/smb/Main.s for details. Always 0 here; rom_input.s is shared
-; across all games and must default to normal (non-bench) behavior.
-BENCH_MODE        equ 0
-
 ; Flag whether the backend should use the OAMDMA to get the sprite information,
 ; or if it can scan the NES RAM area directly
 ;
@@ -97,14 +92,17 @@ DIRECT_OAM_READ   equ $200
 OAM_START_INDEX   equ 0
 OAM_END_INDEX     equ 64
 
-; Allow the engine to use dirty rendering (drawing only lines/blocks where sprites
-; have changed) if the background did not scroll compared to the previous frame
+; Dirty rendering: when the background did not scroll, the screen-aligned 8x8 grid renderer
+; (ppu_grid.s, ppu_grid_quads.s) redraws only the cells that changed, erasing from the PEA field.  0 =
+; every frame is a full render.
 ENABLE_DIRTY_RENDERING equ 1
 
-; Use the screen-aligned 8x8 grid dirty renderer (erase from the PEA field, BG tile updates
-; without a full refresh).  Requires ENABLE_DIRTY_RENDERING.  See BG_TILE_DIRTY_PLAN.md
-GRID_DIRTY_RENDERING equ 1
 GRID_MAX_BG_TILES    equ 64
+
+; Draw sprites on single pixels (compiled variants shifted one pixel to the right for a sprite on an
+; odd pixel).  Off: sprites are drawn on even pixels (IIgs bytes), with the scroll's half-pixel
+; correction, and the sprite cache uses smaller slots.
+SPR_PIXEL_SHIFT equ 1
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
@@ -124,7 +122,9 @@ CACHE_DMC_SAMPLES equ 0
 
 ; Configuration screen setup (see rom/rom_config_setup.s)
 CONFIG_DEFAULT_AUDIO equ APU_60HZ   ; default audio quality
-CONFIG_VIDEO_MENU    equ 0          ; show the VIDEO menu
+CONFIG_VIDEO_MENU    equ 1          ; show the VIDEO menu
+CONFIG_VIDEO_FASTBLIT equ 0         ; show the FAST BLIT option (scrolling games only)
+CONFIG_VIDEO_STATUSBAR equ 0        ; show the STATUS BAR option (separately drawn status bar)
 CONFIG_INPUT_BUTTONS equ 1          ; allow remapping the A/B buttons
 CONFIG_INPUT_2P      equ 0          ; show P1/P2 tabs on the INPUT menu
 CONFIG_GAME_MENU     equ 0          ; append a GAME_CONFIG menu defined by this file
@@ -141,16 +141,11 @@ PPU_PALETTE_DISPATCH equ PALETTE_DISPATCH
 PPU_PALETTE_MAP equ dk_palette_map
 AUTOMATIC_PALETTE_MAPPING equ 1
 
-; Turn on code that visualizes the CPU time used by the ROM code
-SHOW_ROM_EXECUTION_TIME equ 0
-
 ; Turn on some off-screen information
 SHOW_DEBUG_VARS equ 0
 
 ; Show the number of VBLs each screen render takes at the top-left of the screen (debug)
 RENDER_VBL_COUNT equ 0
-; Show the renders per second (decimal) at the top-left of the screen
-SHOW_FPS equ 0
 
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 0
@@ -162,25 +157,6 @@ CUSTOM_PPU_SCROLL_LOCK_CODE mac
 ;
                           <<<
 
-; Mario occupies the first 48 sprite tiles
-COMPILED_SPRITE_LIST_COUNT equ 108
-COMPILED_SPRITE_LIST       mac
-                           dw   246,247,248,249,250,251                 ; Hammer sprites
-                           dw   252,253,254,255                         ; Oil barrel flames
-                           dw   128,129,130,131,132,133,134,135         ; Rolling barrels 128 - 151
-                           dw   136,137,138,139,140,141,142,143
-                           dw   144,145,146,147,148,149,150,151
-                           dw   213,214,215,216,217,218,219,220,221,222 ; Pauline
-                           dw   152,153,154,155,156,157,158,159         ; Flame dude
-                           dw   168,169,170,171,172,173,174,175
-                           dw   0,1,2,3,4,5,6,7                         ; Mario ex death and ladder animation 0 - 47
-                           dw   8,9,10,11,12,13,14,15
-                           dw   16,17,18,19,20,21,22,23
-                           dw   24,25,26,27,28,29,30,31
-                           dw   32,33,34,35,36,37,38,39
-                           dw   40,41,42,43,44,45,46,47
-                           <<<
-
 ; Do not check for specific Tile IDs to exclude from drawing
 NO_TILE_EXCLUDE equ 1
 
@@ -190,7 +166,6 @@ CUSTOM_RENDER_SCREEN equ 0
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 3 
 y_height_rows equ 25
-y_ending_row  equ {y_offset_rows+y_height_rows}
 
 y_offset      equ {y_offset_rows*8}
 y_height      equ {y_height_rows*8}
@@ -210,18 +185,14 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
 ; This an NROM game, so all of the sprite and background tiles are static.  They have been
 ; converted into the runtime's internal representation by build.js and loaded into the tiledata
-; bank, so all that's left is to compile them
+; bank, so all that's left is to compile the background tiles (sprites are compiled when they
+; are first drawn, SprCompileTile)
 
             jsr   ROM_CompileBackgroundTiles    ; Convert the background tiles (PPU:$1000) to compiled format
-            jsr   ROM_CompileSpriteTiles        ; Convert the COMPILED_SPRITE_LIST tiles to compiled format
 
 ; Initialize the graphics for the main game mode
 
             jsr   SetDefaultPalette
-
-; Load in the game preferences (if they exist)
-
-            jsr   LoadPrefData
 
 ; Call the boot code in the ROM
 
@@ -255,10 +226,6 @@ quit
             ldx   #$0507                 ; Area of RAM to load into
             lda   #3                     ; Only three bytes
             jsr   SaveROMData
-
-; Save the user preferences
-
-            jsr   SavePrefData
 
 ; Exit the application
 
@@ -429,14 +396,13 @@ SetDefaultPalette
         jsr   NES_SetPaletteMap
         rts
 
-; Game-specific configuration values, saved after the built-in values by misc/io.s.  The
-; built-in values, menus and ApplyConfig are defined in rom/rom_config_setup.s
-config_game_start
-config_game_end
+; Game-specific configuration values (none): CONFIG_GAME_DEFAULTS lays out their defaults at their IDs in
+; the game's block (see rom/rom_config_setup.s, which also has the built-in values, menus and ApplyConfig)
+CONFIG_GAME_DEFAULTS mac
+;
+             <<<
 
-            DO    SHOW_DEBUG_VARS+RENDER_VBL_COUNT+SHOW_FPS ; debug text (DrawByte / DrawWord)
-            put   ../../misc/App.Msg.s
-            FIN
+            put   ../../misc/App.Msg.s         ; Text (DrawByte / DrawWord): VIDEO > SHOW FPS and the debug displays
             put   ../../misc/io.s
             
             mput  ../../ppu
@@ -457,7 +423,6 @@ config_game_end
             put    ../../ppu/ppu_grid_quads.s
             put    ../../ppu/ppu_sprites.s
             put    ../../ppu/ppu_tile_blitters.s
-            put    ../../ppu/scanline_bitmap.s
 ; AUTOINC:END
 
             put   ../../apu/apu.s

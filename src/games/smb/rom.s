@@ -739,7 +739,28 @@ GteInitMem
 
             plp
             rts
-            
+
+; MoveAllSpritesOffscreen / MoveSpritesOffscreen, moved here from the ROM code: write 248 into every OAM
+; entry's Y coordinate, which moves the sprites off the screen.  This runs every frame, so the original
+; indexed loop (16 cycles per sprite) is unrolled into absolute stores (4 cycles each; the data bank
+; holds the NES RAM).  Leaves A = $F8 and Y = 0, as the loop did.
+            mx    %11
+MoveAllSpritesOffscreen
+            lda   #$f8                ;this routine moves all sprites off the screen
+            sta   Sprite_Y_Position
+            bra   MoveSprStores
+
+MoveSpritesOffscreen
+            lda   #$f8                ;this routine moves all but sprite 0 off the screen
+MoveSprStores
+]spr        =     4
+            lup   63
+            sta   Sprite_Y_Position+]spr
+]spr        =     ]spr+4
+            --^
+            ldy   #$00
+            rts
+
             ds   $8000-*
 
 ;-------------------------------------------------------------------------------------
@@ -964,29 +985,11 @@ ExitPause     rts
 ;-------------------------------------------------------------------------------------
 ;$00 - used for preset value
 
+; The NES rotates the objects' OAM offsets every frame (the "shuffle"), so its 8 sprites per scanline
+; limit drops a different sprite each frame (the flicker).  The IIgs has no such limit, so the offsets
+; keep the values set at the start of the area (DefaultSprOffsets) and only the misc offsets, which are
+; derived from them, are set here.
 SpriteShuffler
-               ldy AreaType                ;load level type, likely residual code
-               lda #$28                    ;load preset value which will put it at
-               sta $00                     ;sprite #10
-               ldx #$0e                    ;start at the end of OAM data offsets
-ShuffleLoop   lda SprDataOffset,x         ;check for offset value against
-               cmp $00                     ;the preset value
-               bcc NextSprOffset           ;if less, skip this part
-               ldy SprShuffleAmtOffset     ;get current offset to preset value we want to add
-               clc
-               adc SprShuffleAmt,y         ;get shuffle amount, add to current sprite offset
-               bcc StrSprOffset            ;if not exceeded $ff, skip second add
-               clc
-               adc $00                     ;otherwise add preset value $28 to offset
-StrSprOffset  sta SprDataOffset,x         ;store new offset here or old one if branched to here
-NextSprOffset dex                         ;move backwards to next one
-               bpl ShuffleLoop
-               ldx SprShuffleAmtOffset     ;load offset
-               inx
-               cpx #$03                    ;check if offset + 1 goes to 3
-               bne SetAmtOffset            ;if offset + 1 not 3, store
-               ldx #$00                    ;otherwise, init to 0
-SetAmtOffset  stx SprShuffleAmtOffset
                ldx #$08                    ;load offsets for values and storage
                ldy #$02
 SetMiscOffset lda SprDataOffset+5,y       ;load one of three OAM data offsets
@@ -1017,20 +1020,7 @@ OperModeExecutionTree
 
 ;-------------------------------------------------------------------------------------
 
-MoveAllSpritesOffscreen
-              ldy #$00                ;this routine moves all sprites off the screen
-              db $2c                 ;BIT instruction opcode
-
-MoveSpritesOffscreen
-              ldy #$04                ;this routine moves all but sprite 0
-              lda #$f8                ;off the screen
-SprInitLoop  sta Sprite_Y_Position,y ;write 248 into OAM data's Y coordinate
-              iny                     ;which will move it off the screen
-              iny
-              iny
-              iny
-              bne SprInitLoop
-              rts
+; MoveAllSpritesOffscreen / MoveSpritesOffscreen: below $8000 (they are longer than the original code)
 
 ;-------------------------------------------------------------------------------------
 
@@ -2499,6 +2489,7 @@ InitATLoop   jsr STA_2007
 ;-------------------------------------------------------------------------------------
 ;$00 - temp joypad bit
 native_joy    EXT
+NES_ReadJoy    EXT
 ReadJoypads 
               lda #$01               ;reset and clear strobe of joypad ports
               sta JOYPAD_PORT
@@ -2519,7 +2510,7 @@ ReadPortBits
 ;              rol                    ;rotate bit from carry flag
 ;              dey
 ;              bne PortLoop           ;count down bits left
-              ldal  native_joy,x
+              jsl   NES_ReadJoy       ; (was ldal native_joy,x: read on demand)
 
               sta SavedJoypadBits,x  ;save controller status here always
               pha

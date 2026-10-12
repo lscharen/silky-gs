@@ -36,10 +36,17 @@ LoadROMFile
             plp
 :gsosNoErr  rts
 
-; Load the preference data
+; Load the preference data: the built-in block and the game's block, which follows it in memory
+; (rom_config_setup.s).  Both have reserved space, so the file only changes size if the layout does.  The
+; file must be exactly PREF_FILE_SIZE bytes: a file with another layout (from before the reserved space)
+; is ignored, so the defaults are kept and the next save writes the current layout.
+;
+; Returns C = 0 if the preferences were loaded, C = 1 if not (no file, the wrong size, or an error)
+PREF_FILE_SIZE equ config_game_end-config_block_start
+
             mx    %00
 LoadPrefData
-            lda        #{config_block_end-config_block_start}
+            lda        #PREF_FILE_SIZE
             sta        readRec+8               ; Number of bytes to read
             stz        readRec+10
 
@@ -60,25 +67,23 @@ LoadPrefData
             sta        readRec+2
             sta        closeRec+2
 
-            _ReadGS    readRec
+            _GetEOFGS  eofRec                  ; Only a file of the current layout is read
             bcs        :closeFile
+            lda        eofRec+6
+            bne        :wrongSize
+            lda        eofRec+4
+            cmp        #PREF_FILE_SIZE
+            bne        :wrongSize
 
-; Followed by the game-specific values.  Ignore errors since a preference file from
-; before the game block existed will hit EOF and leave the defaults in place.
-
-            lda        #{config_game_end-config_game_start}
-            beq        :closeFile
-            sta        readRec+8
-            lda        #config_game_start
-            sta        readRec+4
-            lda        #^config_game_start
-            sta        readRec+6
             _ReadGS    readRec
 
-:closeFile  _CloseGS   closeRec
-            clc
-            lda        eofRec+4                ; File Size
+:closeFile  php                                ; C = 1 if a call failed
+            _CloseGS   closeRec
+            plp
             rts
+
+:wrongSize  sec
+            bra        :closeFile
 
 :gsosError  rts
 
@@ -132,9 +137,11 @@ SaveROMFile
             rts
 
 ; Save the preferences
+;
+; Returns C = 0 if the file was written, C = 1 if it could not be (e.g. a write-protected disk)
             mx    %00
 SavePrefData
-            lda        #{config_block_end-config_block_start}
+            lda        #PREF_FILE_SIZE
             sta        writeRec+8              ; Number of bytes to write
             stz        writeRec+10
 
@@ -146,7 +153,7 @@ SavePrefData
             _CreateGS  pfCreateRec
             bcc        :noError
             cmp        #$0047                  ; File exists error is ok
-            bne        :gsosError0
+            bne        :gsosError
 :noError
 
             lda        pfCreateRec+2           ; Copy file name to open rec
@@ -155,33 +162,22 @@ SavePrefData
             sta        openRec+6
 
             _OpenGS    openRec
-            bcs        :gsosError1
+            bcs        :gsosError
             lda        openRec+2
             sta        writeRec+2
+            sta        setEofRec+2
             sta        closeRec+2
 
             _WriteGS   writeRec
-            bcs        :gsosError2
+            bcs        :close
+            _SetEOFGS  setEofRec               ; Drop anything after it, from a longer file
 
-; Followed by the game-specific values
-
-            lda        #{config_game_end-config_game_start}
-            beq        :close
-            sta        writeRec+8
-            lda        #config_game_start
-            sta        writeRec+4
-            lda        #^config_game_start
-            sta        writeRec+6
-            _WriteGS   writeRec
-            bcs        :gsosError2
-
-:close      _CloseGS   closeRec
-            clc
+:close      php                                ; Close the file even if the write failed
+            _CloseGS   closeRec
+            plp
             rts
 
-:gsosError0 brk        $89
-:gsosError1 brk        $8A
-:gsosError2 brk        $8B
+:gsosError  sec
             rts
 
 svCreateRec dw         4                       ; pCount
@@ -211,6 +207,11 @@ openRec     dw         2                       ; pCount
 eofRec      dw         2                       ; pCount
             ds         2                       ; refNum
             ds         4                       ; eof
+
+setEofRec   dw         3                       ; pCount
+            ds         2                       ; refNum
+            dw         0                       ; base: an absolute position
+            adrl       PREF_FILE_SIZE          ; displacement: the end of the preferences
 
 readRec     dw         4                       ; pCount
             ds         2                       ; refNum

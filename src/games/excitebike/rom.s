@@ -3583,13 +3583,14 @@ sub_D347_read_joy_regs
 
 
 native_joy EXT
+NES_ReadJoy EXT
 sub_D35B
 ;  LDY #$08
   LDY #$00
 bra_D35D_loop
 ;  PHA
 ;  JSR LDA_4016_X
-  ldal native_joy,x
+  jsl  NES_ReadJoy                    ; (was ldal native_joy,x: read on demand)
   bra  :native_done
 
   STA ram_0000

@@ -1946,6 +1946,7 @@ bra_CAE6_loop
 
 
 native_joy    EXT
+NES_ReadJoy    EXT
 sub_CAED_read_joy_regs
   JSR sub_CB35
   LDA #$01
@@ -1956,7 +1957,7 @@ sub_CAED_read_joy_regs
   JSR sub_CB00
   INX
 sub_CB00
-  ldal  native_joy,x
+  jsl   NES_ReadJoy                   ; (was ldal native_joy,x: read on demand)
   bra   :native_done  ; 6 bytes
   LDY #$08
 ; bra_CB02_loop

@@ -69,40 +69,8 @@ _Apply
 :patch              jmp   $0000
 
 
-; Subroutines that deal with the horizontal scrolling in the blitter. These functions
-; take in account the visible playfield and update the PEA fields in the two banks to
-; set up the entry and exit points.
-;
-; A = first playfield line (0 - 199)
-; X = number of lines to render (0 - 200)
-; Y = offset into the PEA field
-
-; The renderers call these after drawing, but _BltSetupAlt leaves its exits patched until the PEA field
-; needs to be stable (_PEAFieldStable), so there is nothing to do here.
-_RestoreBG0OpcodesLite
-_RestoreBG0OpcodesAltLite
-                    rts
-
-; Restore the exits of a range right away.  Only for exits patched outside of _BltSetupAlt's tracking
-; (_BltSetupDirty).
-_RestoreBG0OpcodesNowLite
-                    lda   #0
-                    ldx   ScreenHeight
-
-_RestoreBG0OpcodesNowAltLite
-:exit_addr          equ   tmp4                               ; row-relative exit offset returned by _BltSetup
-
-                    sty   :exit_addr
-
-                    clc
-                    add_y_offset           ; Playfield line to NES scanline
-                    adc   StartY              ; Load the starting virtual line within the PEA renderer
-                    cmp   MaxY
-                    bcc   *+4
-                    sbc   MaxY
-
-                    ldy   #_RestoreBG0OpcodesCallback
-                    jmp   _Apply
+; _BltSetupAlt leaves its exits patched after a render; they are put back only when the PEA field needs
+; to be stable (_PEAFieldStable, through stkRestore and this callback).
 
 ; This will get called with A, X set and guaranteed to be within a contiguous range
 ; of the blitter code.  This allows the data bank to be set once and then all of the

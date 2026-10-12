@@ -4548,10 +4548,11 @@ le762
 ;  Joypad Code
 ; ----------------------
 native_joy    EXT
+NES_ReadJoy    EXT
 le768_polljoypad0
     ldx #$00	;  Read Controller 0
 le76a_polljoypadx
-    ldal  native_joy,x
+    jsl   NES_ReadJoy                 ; (was ldal native_joy,x: read on demand)
     sta   $061c,x
     bra   native_done
 

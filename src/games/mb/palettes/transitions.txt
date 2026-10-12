@@ -1,0 +1,13 @@
+; Palette transitions.  Each [section] lists the palettes that can follow it.  The layouts are chosen
+; to keep the redraws on these transitions down, and DetectNESPalette tries them first.  The in-game
+; color changes (enemy palettes) are sprite attribute changes, not palette RAM writes.
+
+[init]
+title_screen
+
+[title_screen]
+gameplay
+
+; Game over and the end of the demo go back to the title screen
+[gameplay]
+title_screen

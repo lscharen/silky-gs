@@ -79,11 +79,6 @@ BG_TILES_AS_SPRITES equ 1
 ; 1 = Reset code is the game code
 ROM_DRIVER_MODE   equ 1
 
-; MAME cycle-count benchmark harness flag (scripts/run-bench.js) -- see
-; src/games/smb/Main.s for details. Always 0 here; rom_input.s is shared
-; across all games and must default to normal (non-bench) behavior.
-BENCH_MODE        equ 0
-
 ; Flag whether the backend should use the OAMDMA to get the sprite information,
 ; or if it can scan the NES RAM area directly
 ;
@@ -97,14 +92,17 @@ DIRECT_OAM_READ   equ $200
 OAM_START_INDEX   equ 0
 OAM_END_INDEX     equ 64
 
-; Allow the engine to use dirty rendering (drawing only lines where sprites
-; have changed) if the background did not scroll compared to the previous frame
+; Dirty rendering: when the background did not scroll, the screen-aligned 8x8 grid renderer
+; (ppu_grid.s, ppu_grid_quads.s) redraws only the cells that changed, erasing from the PEA field.  0 =
+; every frame is a full render.
 ENABLE_DIRTY_RENDERING equ 1
 
-; Use the screen-aligned 8x8 grid dirty renderer (erase from the PEA field, BG tile updates
-; without a full refresh).  Requires ENABLE_DIRTY_RENDERING.  See BG_TILE_DIRTY_PLAN.md
-GRID_DIRTY_RENDERING equ 1
 GRID_MAX_BG_TILES    equ 64
+
+; Draw sprites on single pixels (compiled variants shifted one pixel to the right for a sprite on an
+; odd pixel).  Off: sprites are drawn on even pixels (IIgs bytes), with the scroll's half-pixel
+; correction, and the sprite cache uses smaller slots.
+SPR_PIXEL_SHIFT equ 1
 
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
@@ -125,6 +123,8 @@ CACHE_DMC_SAMPLES equ 0
 ; Configuration screen setup (see rom/rom_config_setup.s)
 CONFIG_DEFAULT_AUDIO equ APU_60HZ   ; default audio quality
 CONFIG_VIDEO_MENU    equ 1          ; show the VIDEO menu
+CONFIG_VIDEO_FASTBLIT equ 1         ; show the FAST BLIT option (scrolling games only)
+CONFIG_VIDEO_STATUSBAR equ 1        ; show the STATUS BAR option (separately drawn status bar)
 CONFIG_INPUT_BUTTONS equ 0          ; allow remapping the A/B buttons
 CONFIG_INPUT_2P      equ 0          ; show P1/P2 tabs on the INPUT menu
 CONFIG_GAME_MENU     equ 1          ; append a GAME_CONFIG menu defined by this file
@@ -140,16 +140,11 @@ CONFIG_APPLY_HOOK mac
 PPU_PALETTE_DISPATCH equ BF_PALETTE_DISPATCH
 AUTOMATIC_PALETTE_MAPPING equ 0
 
-; Turn on code that visualizes the CPU time used by the ROM code
-SHOW_ROM_EXECUTION_TIME equ 0
-
 ; Turn on some off-screen information
 SHOW_DEBUG_VARS equ 0
 
 ; Show the number of VBLs each screen render takes at the top-left of the screen (debug)
 RENDER_VBL_COUNT equ 0
-; Show the renders per second (decimal) at the top-left of the screen
-SHOW_FPS equ 0
 
 ; Provide alternative ways of locking in the scroll and ppu control values after a frame
 CUSTOM_PPU_CTRL_LOCK equ 0
@@ -161,11 +156,6 @@ CUSTOM_PPU_SCROLL_LOCK_CODE mac
 ;
                           <<<
 
-COMPILED_SPRITE_LIST_COUNT equ 100
-COMPILED_SPRITE_LIST       mac
-                           dw  $FFFF
-                           <<<
-
 ; Do not check for specific Tile IDs to exclude from drawing
 NO_TILE_EXCLUDE equ 0
 
@@ -176,7 +166,6 @@ CUSTOM_RENDER_SCREEN_ADDR equ _RenderScreen
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
 y_offset_rows equ 3 
 y_height_rows equ 25
-y_ending_row  equ {y_offset_rows+y_height_rows}
 
 y_offset      equ {y_offset_rows*8}
 y_height      equ {y_height_rows*8}
@@ -196,10 +185,10 @@ x_offset      equ 16                      ; number of bytes from the left edge
 
 ; This an NROM game, so all of the sprite and background tiles are static.  They have been
 ; converted into the runtime's internal representation by build.js and loaded into the tiledata
-; bank, so all that's left is to compile them
+; bank, so all that's left is to compile the background tiles (sprites are compiled when they
+; are first drawn, SprCompileTile)
 
             jsr   ROM_CompileBackgroundTiles    ; Convert the background tiles (PPU:$1000) to compiled format
-            jsr   ROM_CompileSpriteTiles        ; Convert the COMPILED_SPRITE_LIST tiles to compiled format
 
 ; This is set up to let the game define all colors.  We only need to set up a single, static
 ; swizzle table
@@ -448,8 +437,6 @@ BF_3F1F ldal PPU_MEM+$3F1F
         rts
 
 ; Make the screen appear
-nesTopOffset    ds 2
-nesBottomOffset ds 2
 _RenderScreen
 
 ; If we're not on Balloon Trip, jut use the default render function
@@ -474,7 +461,6 @@ _RenderScreen
             ldx   #16
             ldy   #0                      ; Xmod256 = 0
             jsr   _BltSetupAlt
-            sta   nesTopOffset            ; cache the :exit_offset value returned from this function
 
 ; Next render the remaining lines
 
@@ -485,7 +471,6 @@ _RenderScreen
             lda   #16                 ; Start at line 16
             ldy   StartX
             jsr   _BltSetupAlt
-            sta   nesBottomOffset
 
 ; Copy the sprites and buffer to the graphics screen
 
@@ -496,24 +481,9 @@ _RenderScreen
 ; without this, every Balloon Trip frame appended to them until they overran into the code that
 ; follows (OAM_COPY, shadowBitmap0/1 and scanOAMSprites) and crashed.
 
-            DO    GRID_DIRTY_RENDERING
+            DO    ENABLE_DIRTY_RENDERING
             jsr   gridEndFull
             FIN
-
-; Restore the buffer
-
-            lda   #0                      ; virt_line
-            ldx   #16                     ; lines_left
-            ldy   nesTopOffset            ; offset to patch
-            jsr   _RestoreBG0OpcodesAltLite
-
-            lda   ScreenHeight
-            sec
-            sbc   #16
-            tax                           ; lines_left
-            lda   #16                     ; virt_line
-            ldy   nesBottomOffset         ; offset to patch
-            jsr   _RestoreBG0OpcodesAltLite
 
             stz   DirtyBits
             rts
@@ -561,18 +531,21 @@ SwizzleTables adrl L1_T0
 TitleScreen  dw    $0F, $30, $27, $2A, $15, $02, $21, $00, $10, $16, $12, $37, $21, $17, $11, $2B
 LevelHeader1 dw    $0F, $2A, $09, $07, $30, $27, $16, $11, $21, $00, $10, $12, $37, $17, $35, $2B
 
-; Game-specific configuration values, saved after the built-in values by misc/io.s.  The
-; built-in values, menus and ApplyConfig are defined in rom/rom_config_setup.s
-config_game_start
-config_video_twinkle   dw  1  ; animate the background stars
-config_game_end
+; Game-specific configuration values.  Each has an ID, its byte offset in the game's block, and
+; CONFIG_GAME_DEFAULTS lays out the defaults at those offsets (see rom/rom_config_setup.s, which also has
+; the built-in values, menus and ApplyConfig).  Add new values after the last one.
+CFG_GAME_TWINKLE equ 0                  ; (word) animate the background stars
+
+CONFIG_GAME_DEFAULTS mac
+             dw   1                     ; CFG_GAME_TWINKLE
+             <<<
 
 GAME_TITLE_STR      str 'GAME'
 GAME_NO_ANIM_STR    str 'STAR ANIM'
 
 GAME_CONFIG  dw   GAME_TITLE_STR
              dw   INPUT_CONFIG          ; previous menu item
-             dw   0                     ; next menu item
+             dw   CREDITS_CONFIG        ; next menu item
 
              dw   1
              dw   GAME_ITEM_1
@@ -582,14 +555,14 @@ GAME_ITEM_1  dw   CHKBOX
              dw   0
              dw   3,2
              dw   GAME_NO_ANIM_STR
-             dw   config_video_twinkle
+             dw   config_game_start+CFG_GAME_TWINKLE
 
 ; Apply the game-specific settings (CONFIG_APPLY_HOOK)
 ;
 ; Y = config_game_start
 star_patch EXT
 BF_ApplyConfig
-            ldx:  {config_video_twinkle-config_game_start},y   ; read while Y is still 16-bit
+            ldx:  CFG_GAME_TWINKLE,y   ; read while Y is still 16-bit
             sep   #$30
             lda   #$80          ; BRA instruction (skip the star animation)
             cpx   #0
@@ -599,9 +572,7 @@ BF_ApplyConfig
             rep   #$30
             rts
 
-            DO    SHOW_DEBUG_VARS+RENDER_VBL_COUNT+SHOW_FPS ; debug text (DrawByte / DrawWord)
-            put   ../../misc/App.Msg.s
-            FIN
+            put   ../../misc/App.Msg.s         ; Text (DrawByte / DrawWord): VIDEO > SHOW FPS and the debug displays
             put   ../../misc/io.s
 
             mput  ../../ppu
@@ -622,7 +593,6 @@ BF_ApplyConfig
             put    ../../ppu/ppu_grid_quads.s
             put    ../../ppu/ppu_sprites.s
             put    ../../ppu/ppu_tile_blitters.s
-            put    ../../ppu/scanline_bitmap.s
 ; AUTOINC:END
 
             put   ../../apu/apu.s

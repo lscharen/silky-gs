@@ -5,7 +5,6 @@ ppu_shadowlist.s
 ppu.s
 ppu_attributes.s
 ppu_tiles.s
-# ppu_dirty.s -- not ready yet
 ppu_metatiles.s
 # ppu_nametable.s -- transitioning away from TILE_ROW and TILE_COL tables
 ppu_nametable2.s
@@ -17,4 +16,3 @@ ppu_grid.s
 ppu_grid_quads.s
 ppu_sprites.s
 ppu_tile_blitters.s
-scanline_bitmap.s

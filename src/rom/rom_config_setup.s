@@ -6,18 +6,32 @@
 ;
 ;   CONFIG_DEFAULT_AUDIO equ APU_60HZ / APU_120HZ / APU_240HZ
 ;                                  Default audio quality
-;   CONFIG_VIDEO_MENU    equ 0/1   Show the VIDEO menu (status bar, fast blit)
+;   CONFIG_VIDEO_MENU    equ 0/1   Show the VIDEO menu (show FPS, show NES CPU, status bar, fast blit)
+;   CONFIG_VIDEO_STATUSBAR equ 0/1 Show the STATUS BAR option on the VIDEO menu (needs CONFIG_VIDEO_MENU).
+;                                  For the games with a separately drawn status bar (SMB, Excitebike,
+;                                  Balloon Fight); the value is config_video_statusbar (CFG_VIDEO_STATUSBAR).
+;   CONFIG_VIDEO_FASTBLIT equ 0/1  Show the FAST BLIT option on the VIDEO menu (needs CONFIG_VIDEO_MENU).
+;                                  Only useful for scrolling games, which do full renders.  When 0, a
+;                                  fast blit setting in an old preferences file is ignored.
 ;   CONFIG_INPUT_BUTTONS equ 0/1   Allow remapping the A/B buttons for keyboard input
 ;   CONFIG_INPUT_2P      equ 0/1   Show P1/P2 tabs on the INPUT menu (otherwise P1 only)
 ;   CONFIG_GAME_MENU     equ 0/1   Append the game's own menu.  Main.s must then define a menu
 ;                                  block labeled GAME_CONFIG whose previous menu item is
-;                                  INPUT_CONFIG and next menu item is 0.
+;                                  INPUT_CONFIG and next menu item is CREDITS_CONFIG.
 ;
-;   config_game_start / config_game_end
-;                                  Labels (required, may be empty) bracketing the game's own
-;                                  configuration variables.  This block is saved to / loaded
-;                                  from the preferences file right after the built-in block,
-;                                  so game controls can point their value address into it.
+; The CREDITS menu is always last.  At most 10 menus fit on the screen.
+;
+;   CONFIG_GAME_DEFAULTS mac       The game's own configuration values: CONFIG_GAME_SIZE (128) bytes
+;                                  at config_game_start, right after the built-in block and saved with
+;                                  it.  The macro lays out their default values (dw / db), each at its
+;                                  ID: the value's byte offset in the block, which the game defines
+;                                  (e.g. CFG_GAME_X equ 0, CFG_GAME_Y equ 2 for two words).  The rest
+;                                  of the block is 0.  A game control's value address is
+;                                  config_game_start+ID, and the hook below reads ID,y.  New values
+;                                  go after the existing ones, with a default of 0 in an older
+;                                  preferences file, so the file keeps its size and keeps loading.
+;                                  A single ';' line for a game with no values (an empty macro body
+;                                  breaks the build).
 ;
 ;   CONFIG_APPLY_HOOK mac          Callback invoked at the end of ApplyConfig, after the built-in
 ;                                  settings have been applied.  Define an empty macro for no
@@ -31,6 +45,7 @@
 ; Read the variables set up by the configuration screen and apply them to the runtime engine.
             mx    %00
 ApplyConfig
+            DO    CONFIG_VIDEO_FASTBLIT
             lda   config_video_fastmode
             beq   :normal_video
             lda   #CTRL_EVEN_RENDER
@@ -40,8 +55,8 @@ ApplyConfig
             lda   #CTRL_EVEN_RENDER
             trb   ControlBits
 :apply_video
-            lda   #0
-            jsr   FillScreen
+            FIN
+            jsr   _ClearShadowScreen          ; With shadowing on, so fast blit leaves no stale lines
             jsr   _InitRenderMode
 
             lda   config_audio_quality
@@ -91,7 +106,25 @@ config_input_p2_key_down  dw  'k'
 config_input_p2_snesmax_port dw 4
 config_input_p2_button_a  dw  MOD_REG_CONTROL_DOWN
 config_input_p2_button_b  dw  MOD_REG_SHIFT_DOWN
+
+; Added after the original layout, so the values above keep their offsets
+config_video_fps       dw  0  ; show the renders per second at the top-left of the screen (DrawFPS)
+config_video_nescpu    dw  0  ; border = the task that owns the CPU, a raster bar of game logic time (saveCtx)
+
+; Room for new built-in values.  Add them here (taking from the reserve), so the size of the block, and
+; with it the preferences file, stays the same and older files keep loading (misc/io.s checks the size).
+; A new value must default to 0, since an older file has 0 in its place.
+config_reserved        ds  126
 config_block_end
+
+; The game's own values (CONFIG_GAME_DEFAULTS, the game's Main.s), in a block of a fixed size, saved and
+; loaded together with the built-in block (misc/io.s)
+CONFIG_GAME_SIZE equ 128
+config_game_start
+            CONFIG_GAME_DEFAULTS
+            ERR   {*-config_game_start}/{CONFIG_GAME_SIZE+1}  ; The game's values are over CONFIG_GAME_SIZE
+            ds    CONFIG_GAME_SIZE-{*-config_game_start}
+config_game_end
 
 ; Offsets of the built-in values from config_block_start (X register in CONFIG_APPLY_HOOK)
 CFG_AUDIO_QUALITY   equ config_audio_quality-config_block_start
@@ -99,6 +132,8 @@ CFG_VIDEO_STATUSBAR equ config_video_statusbar-config_block_start
 CFG_VIDEO_FASTMODE  equ config_video_fastmode-config_block_start
 CFG_INPUT_P1        equ config_block_p1-config_block_start
 CFG_INPUT_P2        equ config_block_p2-config_block_start
+CFG_VIDEO_FPS       equ config_video_fps-config_block_start
+CFG_VIDEO_NESCPU    equ config_video_nescpu-config_block_start
 
              DO   CONFIG_INPUT_2P
 config_tab_value    dw 0      ; selected INPUT tab (UI state only, not saved)
@@ -113,6 +148,8 @@ AUDIO_QUALITY_240HZ str '240 HZ'
              DO   CONFIG_VIDEO_MENU
 VIDEO_TITLE_STR      str 'VIDEO'
 VIDEO_FASTMODE_STR   str 'FAST BLIT'
+VIDEO_FPS_STR        str 'SHOW FPS'
+VIDEO_NESCPU_STR     str 'SHOW NES CPU'
 VIDEO_STATUS_BAR_STR str 'STATUS BAR'
              FIN
 
@@ -130,6 +167,22 @@ INPUT_SNESMAX_PORT_STR str 'SLOT'
 INPUT_BUTTON_A_STR  str 'A BUTTON'
 INPUT_BUTTON_B_STR  str 'B BUTTON'
              FIN
+
+CREDITS_TITLE_STR   str 'CREDITS'
+
+; The credits text: upper case letters, digits and spaces only (other characters are drawn blank),
+; at most 19 characters per line
+CREDITS_HEADER_STR  str 'THANKS TO'
+CREDITS_LINE_1      str ' ALEX LEE'
+CREDITS_LINE_2      str ' BRUTAL DELUXE'
+CREDITS_LINE_3      str ' CHRIS VAVRUSKA'
+CREDITS_LINE_4      str ' FATDOG'
+CREDITS_LINE_5      str ' IAN BRUMBY'
+CREDITS_LINE_6      str ' JAWAID BAZYAR'
+CREDITS_LINE_7      str ' JAY CRAFT'
+CREDITS_LINE_8      str 'AND EVERYONE ON THE'
+CREDITS_LINE_9      str 'APPLE II INFINITUM'
+CREDITS_LINE_10     str 'THANK YOU ALL'
 
              DO   CONFIG_INPUT_2P
 PLAYER_INPUT_STR    str 'PLAYER INPUTS'
@@ -149,8 +202,8 @@ CONFIG_BLK   db   CONFIG_PALETTE        ; Which background palette to use
              db   TILE_A                ; First tile for the alphabet A - Z characters
              db   TILE_SPACE
 
-; Menu list: "Audio", ["Video"], "Input", [game menu]
-CONFIG_MENU  dw   2+CONFIG_VIDEO_MENU+CONFIG_GAME_MENU
+; Menu list: "Audio", ["Video"], "Input", [game menu], "Credits"
+CONFIG_MENU  dw   3+CONFIG_VIDEO_MENU+CONFIG_GAME_MENU
              dw   AUDIO_CONFIG
              DO   CONFIG_VIDEO_MENU
              dw   VIDEO_CONFIG
@@ -159,6 +212,7 @@ CONFIG_MENU  dw   2+CONFIG_VIDEO_MENU+CONFIG_GAME_MENU
              DO   CONFIG_GAME_MENU
              dw   GAME_CONFIG
              FIN
+             dw   CREDITS_CONFIG
 
 AUDIO_CONFIG dw   AUDIO_TITLE_STR
              dw   0                     ; previous menu item
@@ -196,21 +250,45 @@ VIDEO_CONFIG dw   VIDEO_TITLE_STR
              dw   AUDIO_CONFIG          ; previous menu item
              dw   INPUT_CONFIG          ; next menu item
 
-             dw   2                     ; Two configuration elements
-             dw   VIDEO_ITEM_1
-             dw   VIDEO_ITEM_2
+             dw   2+CONFIG_VIDEO_STATUSBAR+CONFIG_VIDEO_FASTBLIT ; Number of configuration elements
+             dw   VIDEO_ITEM_FPS
+             dw   VIDEO_ITEM_NESCPU
+             DO   CONFIG_VIDEO_STATUSBAR
+             dw   VIDEO_ITEM_SB
+             FIN
+             DO   CONFIG_VIDEO_FASTBLIT
+             dw   VIDEO_ITEM_FB
+             FIN
 
-VIDEO_ITEM_1 dw   CHKBOX                ; Checkbox just forces a 0/1 for False/True
+; SHOW FPS and SHOW NES CPU are always shown; STATUS BAR (CONFIG_VIDEO_STATUSBAR) and FAST BLIT
+; (CONFIG_VIDEO_FASTBLIT) follow when the game shows them.  Every item is assembled, so the links and
+; rows are expressions of the flags rather than DO / ELSE blocks.  A link to the item itself means there
+; is nothing in that direction (moving there leaves the cursor where it is).
+VIDEO_ITEM_FPS dw CHKBOX                ; Checkbox just forces a 0/1 for False/True
              dw   0                     ; previous control
-             dw   VIDEO_ITEM_2          ; next control
+             dw   VIDEO_ITEM_NESCPU     ; next control
              dw   3,2
+             dw   VIDEO_FPS_STR
+             dw   config_video_fps
+
+VIDEO_ITEM_NESCPU dw CHKBOX
+             dw   VIDEO_ITEM_FPS        ; previous control
+             dw   VIDEO_ITEM_NESCPU+{CONFIG_VIDEO_STATUSBAR*{VIDEO_ITEM_SB-VIDEO_ITEM_NESCPU}}+{{1-CONFIG_VIDEO_STATUSBAR}*CONFIG_VIDEO_FASTBLIT*{VIDEO_ITEM_FB-VIDEO_ITEM_NESCPU}} ; next: STATUS BAR, FAST BLIT or none
+             dw   3,4
+             dw   VIDEO_NESCPU_STR
+             dw   config_video_nescpu
+
+VIDEO_ITEM_SB dw  CHKBOX
+             dw   VIDEO_ITEM_NESCPU     ; previous control
+             dw   VIDEO_ITEM_SB+{CONFIG_VIDEO_FASTBLIT*{VIDEO_ITEM_FB-VIDEO_ITEM_SB}} ; next: FAST BLIT or none
+             dw   3,6
              dw   VIDEO_STATUS_BAR_STR
              dw   config_video_statusbar
 
-VIDEO_ITEM_2 dw   CHKBOX
-             dw   VIDEO_ITEM_1          ; previous control
+VIDEO_ITEM_FB dw  CHKBOX
+             dw   VIDEO_ITEM_NESCPU+{CONFIG_VIDEO_STATUSBAR*{VIDEO_ITEM_SB-VIDEO_ITEM_NESCPU}} ; previous: STATUS BAR or SHOW NES CPU
              dw   0                     ; next control
-             dw   3,4
+             dw   3,6+{2*CONFIG_VIDEO_STATUSBAR}
              dw   VIDEO_FASTMODE_STR
              dw   config_video_fastmode
              FIN
@@ -224,7 +302,7 @@ INPUT_CONFIG dw   INPUT_TITLE_STR
              DO   CONFIG_GAME_MENU
              dw   GAME_CONFIG           ; next menu item
              ELSE
-             dw   0
+             dw   CREDITS_CONFIG
              FIN
 
              dw   1
@@ -444,3 +522,36 @@ INPUT_ITEM_13 dw  BTNMAP
              dw   config_input_p2_button_b
              FIN
              FIN
+
+; Credits.  The panel is cleared down to row 18, so the text must end there.
+CREDITS_CONFIG dw CREDITS_TITLE_STR
+             DO   CONFIG_GAME_MENU
+             dw   GAME_CONFIG           ; previous menu item
+             ELSE
+             dw   INPUT_CONFIG
+             FIN
+             dw   0                     ; next menu item
+
+             dw   1
+             dw   CREDITS_ITEM_1
+
+CREDITS_ITEM_1 dw TEXT
+             dw   0                     ; previous control
+             dw   0                     ; next control
+             dw   1,2
+             dw   CREDITS_HEADER_STR
+             dw   0                     ; no value
+
+             dw   12                    ; number of lines (0 = blank line)
+             dw   CREDITS_LINE_1
+             dw   CREDITS_LINE_2
+             dw   CREDITS_LINE_3
+             dw   CREDITS_LINE_4
+             dw   CREDITS_LINE_5
+             dw   CREDITS_LINE_6
+             dw   CREDITS_LINE_7
+             dw   0
+             dw   CREDITS_LINE_8
+             dw   CREDITS_LINE_9
+             dw   0
+             dw   CREDITS_LINE_10

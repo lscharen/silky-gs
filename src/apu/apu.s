@@ -102,6 +102,23 @@ stop_interrupts
                         cmp   #APU_60HZ
                         beq   :no_doc_interrupts
 
+; The timer oscillator is halted (stop_playing), but an interrupt it raised before that is still
+; latched in the DOC and would go to the handler restored below.  Reading the oscillator interrupt
+; register ($E0) clears one pending interrupt; bit 7 is set once none is left.  (Interrupts are off.)
+                        sep   #$20
+                        mx    %10
+                        jsr   access_doc_registers
+                        ldx   #32                       ; at most one per oscillator
+:drain                  lda   #$e0
+                        sta   sound_address
+                        lda   sound_data                ; (the first read returns the previous value)
+                        lda   sound_data
+                        bmi   :drained
+                        dex
+                        bne   :drain
+:drained                rep   #$20
+                        mx    %00
+
                         lda   backup_interrupt_ptr      ; restore old interrupt ptr
                         stal  sound_interrupt_ptr
                         lda   backup_interrupt_ptr+2

@@ -46,10 +46,10 @@ The runtime sets up a dual-context environment: the IIgs runs as host, with a se
 
 **PPU Simulation (`src/ppu/`)** — Intercepts all NES PPU register writes:
 - `ppu.s` — ~2600 lines; converts NES tile data to IIgs format, maintains nametables and OAM, handles mirroring
-- `ppu_dirty.s` — Dirty-state tracking for the optimized rendering path
+- `ppu_grid.s`, `ppu_grid_quads.s` — The dirty renderer: a screen-aligned 8x8 grid with quadrant masks that erases from the PEA field and redraws only changed cells
 
 **Rendering Pipeline (`src/core/`)** — The performance-critical path:
-- `blitter/BlitterLite.s` — Scanline renderer; supports full and dirty (changed-only) modes
+- `blitter/BlitterLite.s` — Scanline renderer for full renders
 - `blitter/TemplateLiteBank1.s` & `TemplateLiteBank2.s` — Two banks of pre-compiled, self-modifying scanline code
 - `blitter/PEISlammer.s` — Emits fast PEI instructions for screen writes
 - `tiles/CompileTile.s` — Compiles 8×8 NES background tiles to native 65816 code at load time
@@ -91,7 +91,8 @@ The IIgs shows 16 colors at once (one palette of 16 slots); the NES shows up to 
 |---|---|
 | `PPU_BG_TILE_ADDR` | NES address of background CHR tiles |
 | `PPU_SPR_TILE_ADDR` | NES address of sprite CHR tiles |
-| `ENABLE_DIRTY_RENDERING` | Enable optimized dirty-scanline rendering |
+| `ENABLE_DIRTY_RENDERING` | Use the quad grid dirty renderer when the background is still (0 = every frame is a full render) |
+| `SPR_PIXEL_SHIFT` | Draw sprites on single pixels (shifted compiled variants, bigger cache slots); 0 = even pixels with the scroll half-pixel correction |
 | `NO_VERTICAL_CLIP` | Disable vertical sprite clipping |
 | `DIRECT_OAM_READ` | OAM access method |
 | `ROM_DRIVER_MODE` | Reset/restart behavior |
@@ -112,6 +113,6 @@ The IIgs shows 16 colors at once (one palette of 16 slots); the NES shows up to 
 
 - **Code compilation**: Tiles and sprites are compiled to native 65816 sequences at startup, eliminating per-pixel interpretation overhead.
 - **PEI slammer**: Uses the `PEI` instruction (push effective indirect) for fast screen writes.
-- **Dirty rendering**: Only re-renders scanlines where tile or sprite content changed.
+- **Dirty rendering**: The quad grid renderer redraws only the 8x8 cells (quadrants) where tile or sprite content changed.
 - **Self-modifying blitter**: Scanline templates in `TemplateLiteBank1/2.s` are patched at runtime for scroll positions.
 - **Dual-bank rendering**: Two blitter banks alternate to allow rendering while the other bank is displayed.

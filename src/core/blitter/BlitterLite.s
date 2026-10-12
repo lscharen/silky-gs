@@ -18,26 +18,6 @@ _BltRangeLite
                 bcc   *+3
                 rts
 
-                DO    DIRTY_RENDERING_VISUALS
-; Set SCB values for debugging
-                php
-                phx
-                phy
-:dbg_loop
-                sep  #$20
-                lda  DebugSCB
-                oral $E19D00,x
-                stal $E19D00,x
-                rep  #$30
-                inx
-                txa
-                cmp  1,s
-                bcc  :dbg_loop
-                ply
-                plx
-                plp
-                FIN
-
                 lda   ControlBits             ; The common case (background on, every line) needs
                 and   #CTRL_EVEN_RENDER+CTRL_BKGND_ENABLE   ; one test and falls into the body
                 cmp   #CTRL_BKGND_ENABLE
@@ -328,7 +308,7 @@ _UpdateScrollStart
 ; X = number of lines
 ; Y = horizontal offset in bytes (0 - 255)
 ;
-; Returns the row-relative offset of the exit PEA, which is passed to _RestoreBG0OpcodesAltLite
+; Returns the row-relative offset of the exit PEA
 _BltSetup
                ldy   StartX
                lda   #0
@@ -437,6 +417,8 @@ _BltSetupAlt
                lda   stkCurXM
                sta   stkKeyXM,x
                stz   stkSkipEntry        ; New rows: patch everything
+               lda   #1
+               sta   stkSetOpcode
 
                ldx   :num_lines
                ldy   #_SetupStack
@@ -455,6 +437,10 @@ _BltSetupAlt
                sta   stkSkipEntry
                bra   :patch
 :new_x         jsr   stkRestore           ; The exits move: put the old ones back first
+               lda   stkCurXM             ; The even / odd opcode only changes with the offset's parity
+               eor   stkKeyXM,x
+               and   #$0001
+               sta   stkSetOpcode
                lda   stkCurXM
                sta   stkKeyXM,x
                stz   stkSkipEntry
@@ -560,25 +546,6 @@ _PEAFieldStable
                plp
                rts
 
-; A small variant for dirty rendering that just sets the BRA instruction in the code field assuming
-; that everything else has not changed, e.g. saved value and entry/exit points.
-_BltSetupDirty
-               ldy   StartX
-               lda   #0
-               ldx   ScreenHeight
-
-_BltSetupDirtyAlt
-:num_lines     equ tmp3
-:exit_addr     equ tmp4
-
-               jsr   _BltSetupCommon
-               ldx   :num_lines
-               ldy   #_SetupPEAFieldLinesDirty
-               jsr   _Apply
-
-               lda   :exit_addr
-               rts
-
 ; Common setup for a range of lines.  Calculates the patch values from the horizontal scroll.
 ;
 ; A = first screen line
@@ -601,15 +568,7 @@ _BltSetupCommon
                stx   :num_lines
                asl
                sta   :rtbl_idx_x2        ; Relative location on the screen to draw
-
-; The instruction patched into each line to select the even or odd code path
-
-               tya
-               lsr                       ; C = odd-aligned
-               lda   #BLT_ALIGN_EVEN
-               bcc   *+5
-               lda   #BLT_ALIGN_ODD
-               sta   :align
+               sty   :align              ; (the offset, until the code path is chosen below)
 
 ; The exit point is the PEA of the left-most word on the screen, L.  Words 64 - 127 are in the odd
 ; page of the row, which only happens with vertical mirroring because the scroll position is masked
@@ -630,20 +589,29 @@ _BltSetupCommon
                ora   #$0100
                sta   :exit_addr
 
-; The BRA instruction is the same for both pages, but differs between the even and odd cases
+; The even or odd code path.  It selects the exit BRA (the same for both pages), the opcode patched into
+; each line (low byte of :align) and the location of the entry BRL's operand (high byte of :align), and
+; the entry BRL's offset from the PEA, which is added to the entry point below (:entry_rel).
 
-               lda   :align
-               cmp   #BLT_ALIGN_ODD
-               beq   :odd_bra
+               lsr   :align              ; C = odd-aligned
+               bcs   :odd_path
                lda   CodeFieldEvenBRA,x
-               bra   :set_bra
-:odd_bra       lda   CodeFieldOddBRA,x
-:set_bra       sta   :exit_bra
+               sta   :exit_bra
+               lda   #BLT_ALIGN_EVEN+{{_ALIGN_PATCH+1}*256}
+               sta   :align
+               lda   #_PEA_OFFSET-_ALIGN_PATCH-3
+               bra   :set_path
+:odd_path      lda   CodeFieldOddBRA,x
+               sta   :exit_bra
+               lda   #BLT_ALIGN_ODD+{{_ODD_ENTRY_PATCH+1}*256}
+               sta   :align
+               lda   #_PEA_OFFSET-_ODD_ENTRY_PATCH-3
+:set_path      sta   :entry_rel
 
 ; For odd-aligned blits, the right edge byte is the low byte of word L+64.  With horizontal mirroring
 ; that is word L itself, whose operand gets copied into the save slot.  With vertical mirroring it is
 ; the same column in the other page and can be read directly from the PEA operand.  The offset is
-; patched into the LDX at _EDGE_PATCH.
+; patched into the LDX operand at _ALIGN_PATCH+1.
 
                lda   BltMirrorP
                beq   :vert_edge
@@ -673,8 +641,8 @@ _BltSetupCommon
                cpy   #64
                bcc   *+5
                ora   #$0100
-               clc
-               adc   #_PEA_OFFSET-_ENTRY_PATCH-3  ; Make it relative to the BRL
+               clc                        ; Make it relative to the BRL of the line's code path
+               adc   :entry_rel
                sta   :entry_rel
 
 ; Map the first line to a virtual line in the code field
@@ -776,9 +744,9 @@ _SetupPEAFieldLines
                 sec
                 adc   #lsc_bottom
                 sta   :set_bra+1                  ; patch for inserting the BRA instruction,
-                sta   :set_entry+1                ; the entry BRL operand,
-                sta   :set_align+1                ; the even/odd code path
-                sta   :set_edge+1                 ; and the right edge byte offset
+                sta   :set_align+1                ; the even/odd opcode,
+                sta   :set_edge+1                 ; the right edge byte offset (odd)
+                sta   :set_entry+1                ; and the entry BRL operand
 
                 sep   #$20
                 lda   BTableHigh,y                ; Get the bank for this range of PEA field lines
@@ -807,69 +775,38 @@ _SetupPEAFieldLines
                 ldal  stkSkipEntry        ; Entry / alignment / edge already in place (_BltSetupAlt)
                 bne   :done
 
-                lda   :btable_low
+                ldal  stkSetOpcode        ; Zero: these rows were last set up with the same parity, so
+                beq   :operands           ; the opcode is already in place
+                lda   :btable_low         ; Select the even or odd code path (8-bit opcode stores)
                 clc
-                adc   #_ENTRY_PATCH+1
+                adc   #_ALIGN_PATCH
+                tay
+                lda   :align
+                sep   #$20
+:set_align      jsr   $0000
+                rep   #$20
+
+:operands       lda   :align
+                bit   #BLT_ALIGN_EVEN!BLT_ALIGN_ODD
+                beq   :entry              ; Even
+                lda   :btable_low         ; Odd: the LDX operand at _ALIGN_PATCH is the offset of the
+                clc                       ; right edge byte
+                adc   #_ALIGN_PATCH+1
+                tay
+                lda   :edge_offset
+:set_edge       jsr   $0000
+                lda   :align
+
+:entry          xba                       ; The entry BRL's operand: at _ALIGN_PATCH+1 (even) or
+                and   #$00FF              ; _ODD_ENTRY_PATCH+1 (odd), from the high byte of :align
+                clc
+                adc   :btable_low
                 tay
                 lda   :entry_rel          ; The BRL is always in the even page, so add the page offset
                 adc   BltSegPage          ; to jump into the odd page
 :set_entry      jsr   $0000
 
-                lda   :btable_low         ; Select the even or odd code path
-                clc
-                adc   #_ALIGN_PATCH
-                tay
-                lda   :align
-:set_align      jsr   $0000
-
-                cmp   #BLT_ALIGN_ODD      ; Odd lines also need the offset of the right edge byte
-                bne   :done
-                lda   :btable_low
-                clc
-                adc   #_EDGE_PATCH+1
-                tay
-                lda   :edge_offset
-:set_edge       jsr   $0000
-
 :done           plb                       ; Restore the data bank
-                rts
-
-; Only patch the BRA instructions
-_SetupPEAFieldLinesDirty
-:exit_addr     equ tmp4
-:exit_bra      equ tmp5
-:draw_count_x2 equ tmp9
-
-                phb
-
-                asl                              ; 2 x :virt_line
-                tay                              ; use to load the base address
-
-                txa
-                asl
-                sta   :draw_count_x2
-                txa
-                adc   :draw_count_x2              ; multiply by 3 to calculate the jump offset (carry is clear)
-                eor   #$FFFF
-                sec
-                adc   #lsc_bottom
-                sta   :set_bra+1
-
-                sep   #$20
-                lda   BTableHigh,y                ; Get the bank for this range of PEA field lines
-                pha
-                rep   #$21
-
-                lda   BTableLow,y
-                adc   BltSegPage
-                adc   :exit_addr
-                tay
-
-                plb                       ; Set the data bank to the target PEA field range
-                lda   :exit_bra           ; The same constant value is set for all lines
-:set_bra        jsr   $0000
-
-                plb                       ; Restore the data bank
                 rts
 
 ; The ranges remembered by _BltSetupAlt (count $FFFF = unused)
@@ -886,3 +823,4 @@ stkCurXM       dw    0                    ; this setup's horizontal offset | mir
 stkCurSlot     dw    0
 stkNextSlot    dw    0                    ; Entry to replace when all are in use
 stkSkipEntry   dw    0                    ; non-zero: _SetupPEAFieldLines skips the entry patches
+stkSetOpcode   dw    1                    ; non-zero: _SetupPEAFieldLines writes the even / odd opcode

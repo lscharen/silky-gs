@@ -1,4 +1,4 @@
-; ppu_grid_quads.s - Grid dirty renderer, quadrant masks (GRID_QUADS)
+; ppu_grid_quads.s - Grid dirty renderer, quadrant masks
 ;
 ; Each 8x8 cell is split into 4 quadrants of 4 lines x 1 word (TL = 1, TR = 2, BL = 4, BR = 8).  The cell
 ; state is one word, with the masks pre-shifted so that an AND gives mask * 2 for the dispatch tables:
@@ -9,8 +9,9 @@
 ; The grid is padded (one column on the right, rows above and below the playfield), so a sprite always
 ; touches the cells at Y, Y+2, Y+PITCH and Y+PITCH+2 (plus one more row for 8x16) with no bounds checks;
 ; anything that lands in a pad cell is ignored because pad cells have no SHR address.  Byte tables
-; indexed by the OAM coordinates give the cell offset and the table index (k * 8 + b * 2, k = y & 7,
-; b = x/2 & 3), and the quadrant tables give each of the sprite's cells directly.
+; indexed by the OAM coordinates give the cell offset and the table index (k * 16 + p * 2, k = y & 7,
+; p = x & 7: sprites are drawn on single pixels), and the quadrant tables give each of the sprite's cells
+; directly.
 ;
 ; Lists are code.  The cells touched this frame form an array of "ldy #cell / jsr gqCellOp" entries: a
 ; cell's first touch just stores its index into the next entry's operand.  A pass patches gqCellOp to
@@ -22,8 +23,7 @@
 ; The sprites drawn this frame are recorded the same way, as "ldx #index / ldy #cell / jsr gqRep8|16"
 ; entries, so the next frame replays them into the erase nibble by calling the array.
 
-            DO    GRID_DIRTY_RENDERING
-            DO    GRID_QUADS
+            DO    ENABLE_DIRTY_RENDERING
 
 GQ_ROWS     equ   {GRID_ROWS+4}             ; Pad row above, playfield rows, pad rows below (8x16 reach)
 GQ_BYTES    equ   {GQ_ROWS*GQ_PITCH2}
@@ -37,7 +37,8 @@ GQ_RENTRY   equ   9                         ; ldx #index / ldy #cell / jsr gqRep
 GQ_RECBYTES equ   {GQ_MAXREC+1}*GQ_RENTRY
 GQ_ERASE    equ   $001E                     ; Erase nibble (mask * 2)
 GQ_EXPOSE   equ   $1E00                     ; Expose nibble (mask * 2 << 8)
-GRID_CELL_STATS equ 0                       ; Count cells erased / exposed (~7 cycles per cell per pass)
+GRID_CELL_STATS equ 0
+GQ_TBL_SIZE equ 64+{64*SPR_PIXEL_SHIFT}     ; bytes per quadrant table (gqL*, gqH*, GQ_X*; see Tables)                       ; Count cells erased / exposed (~7 cycles per cell per pass)
 
 ; ---------------------------------------------------------------------------
 ; gqInitTables -- coordinate lookup tables and code array templates (once, from PPUStartUp)
@@ -48,8 +49,9 @@ gqInitTables
             phk
             plb
 
-; y (OAM, already +1): row offset in the padded grid (low / high bytes) and k * 8.  Rows above the
-; playfield map to the pad row above it and rows below map to the pad rows below it.
+; y (OAM, already +1): row offset in the padded grid (low / high bytes) and k * 16 (k * 8 without
+; SPR_PIXEL_SHIFT).  Rows above the playfield map to the pad row above it and rows below map to the pad
+; rows below it.
 
             ldy   #0
 :yl         tya
@@ -60,6 +62,9 @@ gqInitTables
             asl
             asl
             asl
+            DO    SPR_PIXEL_SHIFT
+            asl
+            FIN
             sep   #$20
             sta   gridKIdx,y
             rep   #$20
@@ -91,22 +96,27 @@ gqInitTables
             cpy   #256
             bcc   :yl
 
-; x (NES pixels): column offset and b * 2.  The scroll is always a multiple of 8 when the grid is used,
-; so the half-pixel parity in :setupSprite is 0.
+; x (NES pixels): column offset and p * 2 (b * 2 without SPR_PIXEL_SHIFT, b = the sprite's byte in its cell,
+; x / 2 & 3).  The scroll is always a multiple of 8 when the grid is used, so the half-pixel parity in
+; SPR_SETUP is 0, and the sprite's pixel in its cell is x & 7.
 
             ldy   #0
 :xl         tya
             lsr                           ; IIgs byte
-            pha
             lsr
             lsr
             asl
             sep   #$20
             sta   gridColOff,y
             rep   #$20
-            pla
-            and   #$0003
+            tya
+            DO    SPR_PIXEL_SHIFT
+            and   #$0007                  ; p * 2
             asl
+            FIN
+            DO    1-SPR_PIXEL_SHIFT
+            and   #$0006                  ; b * 2
+            FIN
             sep   #$20
             sta   gridBIdx,y
             rep   #$20
@@ -153,19 +163,19 @@ gqInitTables
             bcc   :rf
 
             DO    GRID_SPRITE_SKIP
-            ldx   #62                     ; gqX* = gqL* | gqH* (cascade test tables)
+            ldx   #GQ_TBL_SIZE-2          ; GQ_X* = gqL* | gqH* (cascade test tables)
 :xo         lda   gqLTL,x
             ora   gqHTL,x
-            sta   gqXTL,x
+            stal  PPU_MEM+GQ_XTL,x
             lda   gqLTR,x
             ora   gqHTR,x
-            sta   gqXTR,x
+            stal  PPU_MEM+GQ_XTR,x
             lda   gqLBL,x
             ora   gqHBL,x
-            sta   gqXBL,x
+            stal  PPU_MEM+GQ_XBL,x
             lda   gqLBR,x
             ora   gqHBR,x
-            sta   gqXBR,x
+            stal  PPU_MEM+GQ_XBR,x
             dex
             dex
             bpl   :xo
@@ -174,6 +184,7 @@ gqInitTables
             lda   #gqRec                  ; Current records in the first array, none previous
             sta   gqRecBase
             sta   gqRecPtr
+            sta   gqRecEnd
             lda   #gqRec+GQ_RECBYTES
             sta   gqPrevBase
             sta   gqPrevEnd
@@ -194,8 +205,19 @@ gridMarkSprite8
 
             sep   #$30                    ; 8-bit: the coordinates index the byte tables directly
             mx    %11
+            DO    SPR_PIXEL_SHIFT
             lda   OAM_COPY,x              ; Y-coordinate (already adjusted by +1)
             ldy   OAM_COPY+3,x            ; X-coordinate
+            FIN
+            DO    1-SPR_PIXEL_SHIFT
+            lda   OAM_COPY+3,x            ; X: the pixel the sprite is drawn at (SPR_SETUP), the NES pixel
+            clc                           ; + the scroll's parity, as the background starts at an even pixel
+            adc   sprXPar
+            bcc   *+4
+            lda   #$FF                    ; (off the right edge)
+            tay
+            lda   OAM_COPY,x              ; Y-coordinate (already adjusted by +1)
+            FIN
             tax
             lda   gridRowLo,x             ; cell = row offset + column offset
             clc
@@ -204,7 +226,7 @@ gridMarkSprite8
             lda   gridRowHi,x
             adc   #0
             sta   gqCell+1
-            lda   gridKIdx,x              ; table index = k * 8 + b * 2
+            lda   gridKIdx,x              ; table index = k * 16 + p * 2 (k * 8 + b * 2)
             ora   gridBIdx,y
             tax
             rep   #$30                    ; X high byte is 0
@@ -217,9 +239,9 @@ gridMarkSprite8
             sta:  $0004,y
             lda   #gqRep8
             sta:  $0007,y
-            tya
-            clc
-            adc   #GQ_RENTRY
+            tya                           ; The next record down: the sprites are drawn last to first
+            sec
+            sbc   #GQ_RENTRY
             sta   gqRecPtr
             ldy   gqCell
 
@@ -306,8 +328,19 @@ gridMarkSprite16
 
             sep   #$30                    ; 8-bit: the coordinates index the byte tables directly
             mx    %11
+            DO    SPR_PIXEL_SHIFT
             lda   OAM_COPY,x              ; Y-coordinate (already adjusted by +1)
             ldy   OAM_COPY+3,x            ; X-coordinate
+            FIN
+            DO    1-SPR_PIXEL_SHIFT
+            lda   OAM_COPY+3,x            ; X: the pixel the sprite is drawn at (SPR_SETUP), the NES pixel
+            clc                           ; + the scroll's parity, as the background starts at an even pixel
+            adc   sprXPar
+            bcc   *+4
+            lda   #$FF                    ; (off the right edge)
+            tay
+            lda   OAM_COPY,x              ; Y-coordinate (already adjusted by +1)
+            FIN
             tax
             lda   gridRowLo,x             ; cell = row offset + column offset
             clc
@@ -316,7 +349,7 @@ gridMarkSprite16
             lda   gridRowHi,x
             adc   #0
             sta   gqCell+1
-            lda   gridKIdx,x              ; table index = k * 8 + b * 2
+            lda   gridKIdx,x              ; table index = k * 16 + p * 2 (k * 8 + b * 2)
             ora   gridBIdx,y
             tax
             rep   #$30                    ; X high byte is 0
@@ -329,9 +362,9 @@ gridMarkSprite16
             sta:  $0004,y
             lda   #gqRep16
             sta:  $0007,y
-            tya
-            clc
-            adc   #GQ_RENTRY
+            tya                           ; The next record down: the sprites are drawn last to first
+            sec
+            sbc   #GQ_RENTRY
             sta   gqRecPtr
             ldy   gqCell
 
@@ -1020,7 +1053,7 @@ gqSwap
             sta   gqPrevTall
             lda   gqRecBase
             sta   gqPrevBase
-            lda   gqRecPtr
+            lda   gqRecEnd
             sta   gqPrevEnd
             lda   gqRecBase
             cmp   #gqRec
@@ -1030,6 +1063,7 @@ gqSwap
 :second     lda   #gqRec+GQ_RECBYTES
 :set        sta   gqRecBase
             sta   gqRecPtr
+            sta   gqRecEnd
             lda   #gqCode+1
             sta   GridLPtr
             stz   gmtEnd
@@ -1052,7 +1086,7 @@ gqSwap
 ; record themselves for the next frame (gridRecordSprite8).
 
 ; Per sprite (X = OAM offset): changed test.  An unchanged sprite gets its cell / table index and skip flag
-; and its old record turned into a no-op; a changed one only updates gqPrevOAM.  DBR = K.
+; and its old record turned into a no-op; a changed one only updates GQ_PREV_OAM.  DBR = K.
             mx    %00
 gqSkipPrepare
             stz   gqUnch
@@ -1061,16 +1095,24 @@ gqSkipPrepare
             ora   gqPrevTall
             beq   :go
             jmp   gqSkipSync              ; 8x16 now or last frame: no skipping
-:go         lda   gqPrevBase
+:go
+            DO    1-SPR_PIXEL_SHIFT
+            lda   _ppuscroll_x            ; The scroll's parity changed since the sprites were drawn (the
+            eor   gqLastPar               ; byte it shows didn't): a sprite at an odd pixel moves a byte
+            and   #$0001                  ; even if its OAM bytes didn't change, so none is skipped
+            beq   *+5
+            jmp   gqSkipSync
+            FIN
+            lda   gqPrevBase
             sta   gqRecK                  ; Previous frame's record of sprite 0
             ldx   #0
 :loop       cpx   spriteCount
             bcs   :inv
             lda   OAM_COPY,x
-            cmp   gqPrevOAM,x
+            cmpl  PPU_MEM+GQ_PREV_OAM,x
             bne   :chg
             lda   OAM_COPY+2,x
-            cmp   gqPrevOAM+2,x
+            cmpl  PPU_MEM+GQ_PREV_OAM+2,x
             bne   :chg
             jsr   gqCellIdx               ; Unchanged: cell / index, skip flag
             ora   #$0100
@@ -1083,9 +1125,9 @@ gqSkipPrepare
             inc   gqUnch
             bra   :nx
 :chg        lda   OAM_COPY,x
-            sta   gqPrevOAM,x
+            stal  PPU_MEM+GQ_PREV_OAM,x
             lda   OAM_COPY+2,x
-            sta   gqPrevOAM+2,x
+            stal  PPU_MEM+GQ_PREV_OAM+2,x
 :nx         lda   gqRecK
             clc
             adc   #GQ_RENTRY
@@ -1098,7 +1140,7 @@ gqSkipPrepare
 :inv        lda   #$FFFF                  ; Entries past the count were not drawn: never match
 :il         cpx   gqOAMEnd
             bcs   :id
-            sta   gqPrevOAM,x
+            stal  PPU_MEM+GQ_PREV_OAM,x
             inx
             inx
             inx
@@ -1114,7 +1156,17 @@ gqCellIdx
             stx   gqLoopX
             sep   #$30
             mx    %11
+            DO    SPR_PIXEL_SHIFT
             lda   OAM_COPY+3,x
+            FIN
+            DO    1-SPR_PIXEL_SHIFT
+            lda   _ppuscroll_x            ; the pixel the sprite is drawn at: + the scroll's parity
+            and   #$01
+            clc
+            adc   OAM_COPY+3,x
+            bcc   *+4
+            lda   #$FF
+            FIN
             tay
             lda   OAM_COPY,x
             tax
@@ -1134,10 +1186,10 @@ gqCellIdx
             ldx   gqLoopX
             rts
 
-; gqPrevOAM := OAM_COPY (every sprite was drawn), entries past the count invalidated.  DBR = K.
+; GQ_PREV_OAM := OAM_COPY (every sprite was drawn), entries past the count invalidated.  DBR = K.
 ;
 ; Not needed while the sprites are 8x16: they are never skipped, and the first 8x8 frame after them
-; comes here anyway (gqPrevTall), so gqPrevOAM is only read after it has been synced again.
+; comes here anyway (gqPrevTall), so GQ_PREV_OAM is only read after it has been synced again.
             mx    %00
 gqSkipSync
             stz   gqUnch
@@ -1149,9 +1201,9 @@ gqSkipSync
 :cp         cpx   spriteCount
             bcs   :inv
             lda   OAM_COPY,x
-            sta   gqPrevOAM,x
+            stal  PPU_MEM+GQ_PREV_OAM,x
             lda   OAM_COPY+2,x
-            sta   gqPrevOAM+2,x
+            stal  PPU_MEM+GQ_PREV_OAM+2,x
             inx
             inx
             inx
@@ -1160,7 +1212,7 @@ gqSkipSync
 :inv        lda   #$FFFF
 :il         cpx   gqOAMEnd
             bcs   :id
-            sta   gqPrevOAM,x
+            stal  PPU_MEM+GQ_PREV_OAM,x
             inx
             inx
             inx
@@ -1205,16 +1257,16 @@ gqSkipCascade
             and   #$00FF
             tax
             lda   gqGrid,y                ; Any of its quadrants being erased, or under a changed sprite?
-            and   gqXTL,x
+            andl  PPU_MEM+GQ_XTL,x
             bne   :hit
             lda   gqGrid+2,y
-            and   gqXTR,x
+            andl  PPU_MEM+GQ_XTR,x
             bne   :hit
             lda   gqGrid+GQ_PITCH2,y
-            and   gqXBL,x
+            andl  PPU_MEM+GQ_XBL,x
             bne   :hit
             lda   gqGrid+GQ_PITCH2+2,y
-            and   gqXBR,x
+            andl  PPU_MEM+GQ_XBR,x
             bne   :hit
             ldx   gqLoopX
             bra   :c2n
@@ -1267,12 +1319,54 @@ gridRecordSprite8
             sta:  $0004,y
             lda   #gqRep8
             sta:  $0007,y
-            tya
-            clc
-            adc   #GQ_RENTRY
+            tya                           ; The next record down: the sprites are drawn last to first
+            sec
+            sbc   #GQ_RENTRY
             sta   gqRecPtr
             plb
             plx
+            rts
+
+; A sprite that is hidden entirely (sprClipTop) is not marked: its record erases nothing next frame.
+; Called from drawSprites (any DBR).  X = OAM offset, preserved.
+            mx    %00
+gridRecordNone
+            phx
+            phb
+            phk
+            plb
+            ldy   gqRecPtr
+            lda   #gqRepNop
+            sta:  $0007,y
+            tya                           ; The next record down: the sprites are drawn last to first
+            sec
+            sbc   #GQ_RENTRY
+            sta   gqRecPtr
+            plb
+            plx
+            rts
+
+; The records are in OAM_COPY order, one per sprite, so gqSkipPrepare finds sprite k's record at entry k.
+; drawSprites draws the sprites from the last to the first, and every sprite writes exactly one record
+; (gridMarkSprite8/16, gridRecordSprite8 or gridRecordNone), so the write pointer starts at the last
+; sprite's entry and moves down one entry per sprite.  A path that skipped a record would put the
+; records out of step.  Set the end of this frame's records (where the replay pokes its RTS) and the
+; write pointer from the sprite count.  Called from drawSprites (any DBR).  A is trashed.
+            mx    %00
+gridRecordsBegin
+            ldal  spriteCount             ; count * 4
+            pha
+            lsr
+            lsr                           ; count
+            clc
+            adc   1,s
+            adc   1,s                     ; 9 * count = GQ_RENTRY * count
+            adcl  gqRecBase
+            stal  gqRecEnd
+            sec
+            sbc   #GQ_RENTRY              ; the last sprite's entry
+            stal  gqRecPtr
+            pla
             rts
 
 gqRepNop    rts
@@ -1581,123 +1675,138 @@ gridXQTbl   dw    gridQX0,gridQX1,gridQX2,gridQX3,gridQX4,gridQX5,gridQX6,gridQX
 ; ---------------------------------------------------------------------------
 ; Tables
 ; ---------------------------------------------------------------------------
-; Quadrants per cell, indexed by k * 8 + b * 2.  T = first cell row, B = next cell row, F = full middle row
-; of an 8x16 sprite (depends only on b); L = the cell the sprite starts in, R = the cell to its right.
+; Quadrants per cell, indexed by k * 16 + p * 2 (k = the sprite's line in its cell, p = its pixel).  A quadrant
+; is 4 pixels wide, and a sprite at pixel p covers pixels p to p + 7.  T = first cell row, B = next cell row,
+; F = full middle row of an 8x16 sprite (depends only on p); L = the cell the sprite starts in (quadrant
+; columns p / 4 to 1), R = the cell to its right (columns 0 to (p - 1) / 4, none at p = 0).
+; (Generated; the even pixels are the same as the old 2-pixel tables.)  Without SPR_PIXEL_SHIFT, sprites are
+; drawn on even pixels, so the tables only have the even pixels, indexed by k * 8 + b * 2 (p = 2 * b).
+
+; One row of a table: the 8 pixels, or the even ones
+GQROW       mac
+            DO    SPR_PIXEL_SHIFT
+            dw    ]1,]2,]3,]4,]5,]6,]7,]8
+            FIN
+            DO    1-SPR_PIXEL_SHIFT
+            dw    ]1,]3,]5,]7
+            FIN
+            <<<
 ; gqL* mark the erase nibble (bits 1-4) when replaying records, gqH* the expose nibble (bits 9-12).
 gqLTL
-            dw    $001E,$001E,$0014,$0014   ; k = 0
-            dw    $001E,$001E,$0014,$0014   ; k = 1
-            dw    $001E,$001E,$0014,$0014   ; k = 2
-            dw    $001E,$001E,$0014,$0014   ; k = 3
-            dw    $0018,$0018,$0010,$0010   ; k = 4
-            dw    $0018,$0018,$0010,$0010   ; k = 5
-            dw    $0018,$0018,$0010,$0010   ; k = 6
-            dw    $0018,$0018,$0010,$0010   ; k = 7
+            GQROW $001E;$001E;$001E;$001E;$0014;$0014;$0014;$0014   ; k = 0
+            GQROW $001E;$001E;$001E;$001E;$0014;$0014;$0014;$0014   ; k = 1
+            GQROW $001E;$001E;$001E;$001E;$0014;$0014;$0014;$0014   ; k = 2
+            GQROW $001E;$001E;$001E;$001E;$0014;$0014;$0014;$0014   ; k = 3
+            GQROW $0018;$0018;$0018;$0018;$0010;$0010;$0010;$0010   ; k = 4
+            GQROW $0018;$0018;$0018;$0018;$0010;$0010;$0010;$0010   ; k = 5
+            GQROW $0018;$0018;$0018;$0018;$0010;$0010;$0010;$0010   ; k = 6
+            GQROW $0018;$0018;$0018;$0018;$0010;$0010;$0010;$0010   ; k = 7
 gqLTR
-            dw    $0000,$000A,$000A,$001E   ; k = 0
-            dw    $0000,$000A,$000A,$001E   ; k = 1
-            dw    $0000,$000A,$000A,$001E   ; k = 2
-            dw    $0000,$000A,$000A,$001E   ; k = 3
-            dw    $0000,$0008,$0008,$0018   ; k = 4
-            dw    $0000,$0008,$0008,$0018   ; k = 5
-            dw    $0000,$0008,$0008,$0018   ; k = 6
-            dw    $0000,$0008,$0008,$0018   ; k = 7
+            GQROW $0000;$000A;$000A;$000A;$000A;$001E;$001E;$001E   ; k = 0
+            GQROW $0000;$000A;$000A;$000A;$000A;$001E;$001E;$001E   ; k = 1
+            GQROW $0000;$000A;$000A;$000A;$000A;$001E;$001E;$001E   ; k = 2
+            GQROW $0000;$000A;$000A;$000A;$000A;$001E;$001E;$001E   ; k = 3
+            GQROW $0000;$0008;$0008;$0008;$0008;$0018;$0018;$0018   ; k = 4
+            GQROW $0000;$0008;$0008;$0008;$0008;$0018;$0018;$0018   ; k = 5
+            GQROW $0000;$0008;$0008;$0008;$0008;$0018;$0018;$0018   ; k = 6
+            GQROW $0000;$0008;$0008;$0008;$0008;$0018;$0018;$0018   ; k = 7
 gqLBL
-            dw    $0000,$0000,$0000,$0000   ; k = 0
-            dw    $0006,$0006,$0004,$0004   ; k = 1
-            dw    $0006,$0006,$0004,$0004   ; k = 2
-            dw    $0006,$0006,$0004,$0004   ; k = 3
-            dw    $0006,$0006,$0004,$0004   ; k = 4
-            dw    $001E,$001E,$0014,$0014   ; k = 5
-            dw    $001E,$001E,$0014,$0014   ; k = 6
-            dw    $001E,$001E,$0014,$0014   ; k = 7
+            GQROW $0000;$0000;$0000;$0000;$0000;$0000;$0000;$0000   ; k = 0
+            GQROW $0006;$0006;$0006;$0006;$0004;$0004;$0004;$0004   ; k = 1
+            GQROW $0006;$0006;$0006;$0006;$0004;$0004;$0004;$0004   ; k = 2
+            GQROW $0006;$0006;$0006;$0006;$0004;$0004;$0004;$0004   ; k = 3
+            GQROW $0006;$0006;$0006;$0006;$0004;$0004;$0004;$0004   ; k = 4
+            GQROW $001E;$001E;$001E;$001E;$0014;$0014;$0014;$0014   ; k = 5
+            GQROW $001E;$001E;$001E;$001E;$0014;$0014;$0014;$0014   ; k = 6
+            GQROW $001E;$001E;$001E;$001E;$0014;$0014;$0014;$0014   ; k = 7
 gqLBR
-            dw    $0000,$0000,$0000,$0000   ; k = 0
-            dw    $0000,$0002,$0002,$0006   ; k = 1
-            dw    $0000,$0002,$0002,$0006   ; k = 2
-            dw    $0000,$0002,$0002,$0006   ; k = 3
-            dw    $0000,$0002,$0002,$0006   ; k = 4
-            dw    $0000,$000A,$000A,$001E   ; k = 5
-            dw    $0000,$000A,$000A,$001E   ; k = 6
-            dw    $0000,$000A,$000A,$001E   ; k = 7
+            GQROW $0000;$0000;$0000;$0000;$0000;$0000;$0000;$0000   ; k = 0
+            GQROW $0000;$0002;$0002;$0002;$0002;$0006;$0006;$0006   ; k = 1
+            GQROW $0000;$0002;$0002;$0002;$0002;$0006;$0006;$0006   ; k = 2
+            GQROW $0000;$0002;$0002;$0002;$0002;$0006;$0006;$0006   ; k = 3
+            GQROW $0000;$0002;$0002;$0002;$0002;$0006;$0006;$0006   ; k = 4
+            GQROW $0000;$000A;$000A;$000A;$000A;$001E;$001E;$001E   ; k = 5
+            GQROW $0000;$000A;$000A;$000A;$000A;$001E;$001E;$001E   ; k = 6
+            GQROW $0000;$000A;$000A;$000A;$000A;$001E;$001E;$001E   ; k = 7
 gqLFL
-            dw    $001E,$001E,$0014,$0014   ; k = 0
-            dw    $001E,$001E,$0014,$0014   ; k = 1
-            dw    $001E,$001E,$0014,$0014   ; k = 2
-            dw    $001E,$001E,$0014,$0014   ; k = 3
-            dw    $001E,$001E,$0014,$0014   ; k = 4
-            dw    $001E,$001E,$0014,$0014   ; k = 5
-            dw    $001E,$001E,$0014,$0014   ; k = 6
-            dw    $001E,$001E,$0014,$0014   ; k = 7
+            GQROW $001E;$001E;$001E;$001E;$0014;$0014;$0014;$0014   ; k = 0
+            GQROW $001E;$001E;$001E;$001E;$0014;$0014;$0014;$0014   ; k = 1
+            GQROW $001E;$001E;$001E;$001E;$0014;$0014;$0014;$0014   ; k = 2
+            GQROW $001E;$001E;$001E;$001E;$0014;$0014;$0014;$0014   ; k = 3
+            GQROW $001E;$001E;$001E;$001E;$0014;$0014;$0014;$0014   ; k = 4
+            GQROW $001E;$001E;$001E;$001E;$0014;$0014;$0014;$0014   ; k = 5
+            GQROW $001E;$001E;$001E;$001E;$0014;$0014;$0014;$0014   ; k = 6
+            GQROW $001E;$001E;$001E;$001E;$0014;$0014;$0014;$0014   ; k = 7
 gqLFR
-            dw    $0000,$000A,$000A,$001E   ; k = 0
-            dw    $0000,$000A,$000A,$001E   ; k = 1
-            dw    $0000,$000A,$000A,$001E   ; k = 2
-            dw    $0000,$000A,$000A,$001E   ; k = 3
-            dw    $0000,$000A,$000A,$001E   ; k = 4
-            dw    $0000,$000A,$000A,$001E   ; k = 5
-            dw    $0000,$000A,$000A,$001E   ; k = 6
-            dw    $0000,$000A,$000A,$001E   ; k = 7
+            GQROW $0000;$000A;$000A;$000A;$000A;$001E;$001E;$001E   ; k = 0
+            GQROW $0000;$000A;$000A;$000A;$000A;$001E;$001E;$001E   ; k = 1
+            GQROW $0000;$000A;$000A;$000A;$000A;$001E;$001E;$001E   ; k = 2
+            GQROW $0000;$000A;$000A;$000A;$000A;$001E;$001E;$001E   ; k = 3
+            GQROW $0000;$000A;$000A;$000A;$000A;$001E;$001E;$001E   ; k = 4
+            GQROW $0000;$000A;$000A;$000A;$000A;$001E;$001E;$001E   ; k = 5
+            GQROW $0000;$000A;$000A;$000A;$000A;$001E;$001E;$001E   ; k = 6
+            GQROW $0000;$000A;$000A;$000A;$000A;$001E;$001E;$001E   ; k = 7
 gqHTL
-            dw    $1E00,$1E00,$1400,$1400   ; k = 0
-            dw    $1E00,$1E00,$1400,$1400   ; k = 1
-            dw    $1E00,$1E00,$1400,$1400   ; k = 2
-            dw    $1E00,$1E00,$1400,$1400   ; k = 3
-            dw    $1800,$1800,$1000,$1000   ; k = 4
-            dw    $1800,$1800,$1000,$1000   ; k = 5
-            dw    $1800,$1800,$1000,$1000   ; k = 6
-            dw    $1800,$1800,$1000,$1000   ; k = 7
+            GQROW $1E00;$1E00;$1E00;$1E00;$1400;$1400;$1400;$1400   ; k = 0
+            GQROW $1E00;$1E00;$1E00;$1E00;$1400;$1400;$1400;$1400   ; k = 1
+            GQROW $1E00;$1E00;$1E00;$1E00;$1400;$1400;$1400;$1400   ; k = 2
+            GQROW $1E00;$1E00;$1E00;$1E00;$1400;$1400;$1400;$1400   ; k = 3
+            GQROW $1800;$1800;$1800;$1800;$1000;$1000;$1000;$1000   ; k = 4
+            GQROW $1800;$1800;$1800;$1800;$1000;$1000;$1000;$1000   ; k = 5
+            GQROW $1800;$1800;$1800;$1800;$1000;$1000;$1000;$1000   ; k = 6
+            GQROW $1800;$1800;$1800;$1800;$1000;$1000;$1000;$1000   ; k = 7
 gqHTR
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 0
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 1
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 2
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 3
-            dw    $0000,$0800,$0800,$1800   ; k = 4
-            dw    $0000,$0800,$0800,$1800   ; k = 5
-            dw    $0000,$0800,$0800,$1800   ; k = 6
-            dw    $0000,$0800,$0800,$1800   ; k = 7
+            GQROW $0000;$0A00;$0A00;$0A00;$0A00;$1E00;$1E00;$1E00   ; k = 0
+            GQROW $0000;$0A00;$0A00;$0A00;$0A00;$1E00;$1E00;$1E00   ; k = 1
+            GQROW $0000;$0A00;$0A00;$0A00;$0A00;$1E00;$1E00;$1E00   ; k = 2
+            GQROW $0000;$0A00;$0A00;$0A00;$0A00;$1E00;$1E00;$1E00   ; k = 3
+            GQROW $0000;$0800;$0800;$0800;$0800;$1800;$1800;$1800   ; k = 4
+            GQROW $0000;$0800;$0800;$0800;$0800;$1800;$1800;$1800   ; k = 5
+            GQROW $0000;$0800;$0800;$0800;$0800;$1800;$1800;$1800   ; k = 6
+            GQROW $0000;$0800;$0800;$0800;$0800;$1800;$1800;$1800   ; k = 7
 gqHBL
-            dw    $0000,$0000,$0000,$0000   ; k = 0
-            dw    $0600,$0600,$0400,$0400   ; k = 1
-            dw    $0600,$0600,$0400,$0400   ; k = 2
-            dw    $0600,$0600,$0400,$0400   ; k = 3
-            dw    $0600,$0600,$0400,$0400   ; k = 4
-            dw    $1E00,$1E00,$1400,$1400   ; k = 5
-            dw    $1E00,$1E00,$1400,$1400   ; k = 6
-            dw    $1E00,$1E00,$1400,$1400   ; k = 7
+            GQROW $0000;$0000;$0000;$0000;$0000;$0000;$0000;$0000   ; k = 0
+            GQROW $0600;$0600;$0600;$0600;$0400;$0400;$0400;$0400   ; k = 1
+            GQROW $0600;$0600;$0600;$0600;$0400;$0400;$0400;$0400   ; k = 2
+            GQROW $0600;$0600;$0600;$0600;$0400;$0400;$0400;$0400   ; k = 3
+            GQROW $0600;$0600;$0600;$0600;$0400;$0400;$0400;$0400   ; k = 4
+            GQROW $1E00;$1E00;$1E00;$1E00;$1400;$1400;$1400;$1400   ; k = 5
+            GQROW $1E00;$1E00;$1E00;$1E00;$1400;$1400;$1400;$1400   ; k = 6
+            GQROW $1E00;$1E00;$1E00;$1E00;$1400;$1400;$1400;$1400   ; k = 7
 gqHBR
-            dw    $0000,$0000,$0000,$0000   ; k = 0
-            dw    $0000,$0200,$0200,$0600   ; k = 1
-            dw    $0000,$0200,$0200,$0600   ; k = 2
-            dw    $0000,$0200,$0200,$0600   ; k = 3
-            dw    $0000,$0200,$0200,$0600   ; k = 4
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 5
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 6
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 7
+            GQROW $0000;$0000;$0000;$0000;$0000;$0000;$0000;$0000   ; k = 0
+            GQROW $0000;$0200;$0200;$0200;$0200;$0600;$0600;$0600   ; k = 1
+            GQROW $0000;$0200;$0200;$0200;$0200;$0600;$0600;$0600   ; k = 2
+            GQROW $0000;$0200;$0200;$0200;$0200;$0600;$0600;$0600   ; k = 3
+            GQROW $0000;$0200;$0200;$0200;$0200;$0600;$0600;$0600   ; k = 4
+            GQROW $0000;$0A00;$0A00;$0A00;$0A00;$1E00;$1E00;$1E00   ; k = 5
+            GQROW $0000;$0A00;$0A00;$0A00;$0A00;$1E00;$1E00;$1E00   ; k = 6
+            GQROW $0000;$0A00;$0A00;$0A00;$0A00;$1E00;$1E00;$1E00   ; k = 7
 gqHFL
-            dw    $1E00,$1E00,$1400,$1400   ; k = 0
-            dw    $1E00,$1E00,$1400,$1400   ; k = 1
-            dw    $1E00,$1E00,$1400,$1400   ; k = 2
-            dw    $1E00,$1E00,$1400,$1400   ; k = 3
-            dw    $1E00,$1E00,$1400,$1400   ; k = 4
-            dw    $1E00,$1E00,$1400,$1400   ; k = 5
-            dw    $1E00,$1E00,$1400,$1400   ; k = 6
-            dw    $1E00,$1E00,$1400,$1400   ; k = 7
+            GQROW $1E00;$1E00;$1E00;$1E00;$1400;$1400;$1400;$1400   ; k = 0
+            GQROW $1E00;$1E00;$1E00;$1E00;$1400;$1400;$1400;$1400   ; k = 1
+            GQROW $1E00;$1E00;$1E00;$1E00;$1400;$1400;$1400;$1400   ; k = 2
+            GQROW $1E00;$1E00;$1E00;$1E00;$1400;$1400;$1400;$1400   ; k = 3
+            GQROW $1E00;$1E00;$1E00;$1E00;$1400;$1400;$1400;$1400   ; k = 4
+            GQROW $1E00;$1E00;$1E00;$1E00;$1400;$1400;$1400;$1400   ; k = 5
+            GQROW $1E00;$1E00;$1E00;$1E00;$1400;$1400;$1400;$1400   ; k = 6
+            GQROW $1E00;$1E00;$1E00;$1E00;$1400;$1400;$1400;$1400   ; k = 7
 gqHFR
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 0
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 1
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 2
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 3
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 4
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 5
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 6
-            dw    $0000,$0A00,$0A00,$1E00   ; k = 7
+            GQROW $0000;$0A00;$0A00;$0A00;$0A00;$1E00;$1E00;$1E00   ; k = 0
+            GQROW $0000;$0A00;$0A00;$0A00;$0A00;$1E00;$1E00;$1E00   ; k = 1
+            GQROW $0000;$0A00;$0A00;$0A00;$0A00;$1E00;$1E00;$1E00   ; k = 2
+            GQROW $0000;$0A00;$0A00;$0A00;$0A00;$1E00;$1E00;$1E00   ; k = 3
+            GQROW $0000;$0A00;$0A00;$0A00;$0A00;$1E00;$1E00;$1E00   ; k = 4
+            GQROW $0000;$0A00;$0A00;$0A00;$0A00;$1E00;$1E00;$1E00   ; k = 5
+            GQROW $0000;$0A00;$0A00;$0A00;$0A00;$1E00;$1E00;$1E00   ; k = 6
+            GQROW $0000;$0A00;$0A00;$0A00;$0A00;$1E00;$1E00;$1E00   ; k = 7
 
 gqCell      dw    0
 gqEraseEnd  dw    0
 gqRunEnd    dw    0
 gqRecBase   dw    0
-gqRecPtr    dw    0
+gqRecPtr    dw    0                         ; Write pointer (moves down: see gridRecordsBegin)
+gqRecEnd    dw    0                         ; End of this frame's records
 gqPrevBase  dw    0
 gqPrevEnd   dw    0
 gbErase     dw    0
@@ -1717,17 +1826,12 @@ gqGrid      ds    GQ_BYTES
 gqSC        ds    256                     ; Per OAM offset: +0 cell, +2 table index, +3 skip flag
 gqSI        equ   gqSC+2                  ;   (byte; read as a word, the high byte is the skip flag)
 gqSkip      equ   gqSC+2                  ;   word: table index | skip << 8 -- skip when >= $100
-gqPrevOAM   ds    256                     ; OAM_COPY as last drawn
 gqOAMEnd    dw    256
-gqXTL       ds    64                      ; gqL* | gqH*: a sprite's quadrants in either nibble
-gqXTR       ds    64
-gqXBL       ds    64
-gqXBR       ds    64
 gqPrevTall  dw    1                       ; (no skipping before the first full frame)
 gqUnch      dw    0                       ; Unchanged sprites this frame (0: no skipping, no cascade)
 gqRecK      dw    0
 gqLoopX     dw    0
+gqLastPar   dw    0                         ; scroll_x & 1 when the sprites were last drawn (no SPR_PIXEL_SHIFT)
 gqMore      dw    0
 
-            FIN
             FIN

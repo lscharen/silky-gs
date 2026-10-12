@@ -1,0 +1,9 @@
+; gameplay palette (DATA_F203 in rom.s), used by the phases and the demo
+BG0: $0F $30 $2C $12
+BG1: $0F $30 $29 $09
+BG2: $0F $30 $27 $18
+BG3: $0F $30 $26 $06
+SP0: $0F $16 $37 $12
+SP1: $0F $30 $27 $19
+SP2: $0F $30 $27 $16
+SP3: $0F $2C $12 $25

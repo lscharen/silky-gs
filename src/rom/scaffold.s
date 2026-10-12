@@ -15,21 +15,16 @@
 NES_StartUp
             stx   UserId
             and   #HORIZONTAL_MIRRORING+VERTICAL_MIRRORING
-            sta   PendingMirrorMode       ; Applied by PPUStartUp
+            sta   PendingMirrorMode       ; Applied by PPUStartUp (before A is reused below)
+            sep   #$20                    ; The video state to put back when the game quits
+            ldal  SHADOW_REG
+            sta   SavedShadow
+            ldal  NEW_VIDEO_REG
+            sta   SavedNewVideo
+            rep   #$20
             _MTStartUp                    ; Require the miscellaneous toolset to be running
             bcc   *+5
             brl   Fail
-
-; Set up the bank 00 buffer used for the sprite save and restore
-
-            tsc
-            ora   #$00FF                  ; Move to top of the page
-            sec
-            sbc   #$0300                  ; Leave this much space to the application
- 
-            sta   SprSaveTop
-            sta   SprSaveAddr
-            stz   SprAddrCount
 
 ; Keep a copy of the application's direct page to be restored later
 
@@ -107,6 +102,24 @@ NES_StartUp
 
             jsr   InitYExclude
 
+; Load the user preferences (PREF_FILENAME, written by NES_ShutDown).  If there is no file yet (first
+; run), the defaults in rom_config_setup.s are kept.  The audio quality is used by APUStartUp below;
+; the fast blit mode and the game's own values are applied here, as ApplyConfig would.
+
+            jsr   LoadPrefData
+            DO    CONFIG_VIDEO_FASTBLIT
+            lda   config_video_fastmode
+            beq   :prefs_done
+            lda   #CTRL_EVEN_RENDER
+            tsb   ControlBits
+            jsr   _InitRenderMode
+:prefs_done
+            FIN
+            ldx   #config_block_start
+            ldy   #config_game_start
+            CONFIG_APPLY_HOOK
+            rep   #$30
+
 ; Initialize the sound hardware for APU emulation
 
             DO    NO_INTERRUPTS
@@ -121,10 +134,10 @@ NES_StartUp
             jsr   APUCacheDMC
             FIN
 
-; Clear the IIgs screen and initialize the rendering infrastrucure
+; Clear the IIgs screen and initialize the rendering infrastrucure.  Shadowing is turned on for the
+; clear, so a fast blit setting from the preferences file starts with no stale lines.
 
-            lda   #0
-            jsr   _ClearToColor
+            jsr   _ClearShadowScreen
             jsr   InitPlayfield
 
 ; CHR-ROM games have their tiles converted offline into the tiledata bank by
@@ -205,8 +218,7 @@ NES_EvtLoop
 ; driven manually
 
             DO    NO_INTERRUPTS
-            jsr   NES_TriggerNMI
-            jsr   NES_ReadInput           ; .fm2 docs imply that the controller input is latched following the NMI
+            jsr   NES_TriggerNMI          ; (the frame reads the controller through NES_ReadJoy)
             ELSE
 
 ; Wait for a frame to become available.  This almost never waits, unless
@@ -223,33 +235,15 @@ NES_EvtLoop
 
             jsr   NES_RenderFrame
 
-; MAME bench harness (scripts/run-bench.js): once the canned input file
-; (BenchInputData) is exhausted, quit -- this has to happen here, right
-; after a frame has actually rendered, rather than relying on the normal
-; LastRead/PAD_KEY_DOWN check below returning control to the caller,
-; since BENCH_MODE's NES_ReadInput never sets LastRead and the check
-; below would just loop back to NES_EvtLoop forever.
-            DO    BENCH_MODE
-            ldal  BenchInputIndex
-            cmp   #BENCH_MODE_LEN-1
-            bcc   :bench_not_done
-            lda   #'q'             ; make it a quit
-            brl   :exit
-:bench_not_done
-            FIN
+; Take the last new key press (each press, or auto-repeat, is one event).  If there is none,
+; then nothing else to do here
 
-; The input is read from the VBL interrupt handler.  If no
-; new key input is available, then nothing else to do here
+            jsr   NES_TakeKey            ; (Z set if there is none)
+            bne   *+5
+            brl   NES_EvtLoop
 
-            lda   LastRead
-            bit   #PAD_KEY_DOWN
-            beq   NES_EvtLoop
-
-; Isolate the keycode and handle all of the built-in
-; actions.  Afterwared, allow for application-specific
-; handlers.
-
-            and   #$007F
+; Handle all of the built-in actions with the keycode.  Afterwards, allow for
+; application-specific handlers.
 
 ; '?' to bring up the configuration screen and reapply the settings
 
@@ -351,6 +345,8 @@ NES_EvtLoop
 ; Clean up the runtime
             mx  %00
 NES_ShutDown
+            jsr   NES_StopExecution        ; First stop the VBL task from running NES frames and the 60Hz
+                                           ; audio driver while the runtime is taken down
             lda   BorderColor              ; Restore the border color
             jsr   _SetBorderColor
 
@@ -359,6 +355,13 @@ NES_ShutDown
             jsr   APUShutDown
             FIN
             jsr   ShutDown
+
+            sep   #$20                     ; The shadowing and video modes the game started with
+            lda   SavedShadow
+            stal  SHADOW_REG
+            lda   SavedNewVideo
+            stal  NEW_VIDEO_REG
+            rep   #$20
 
 ; Battery-backed cartridges: write the WRAM image back out.  Done after ShutDown, when the NES task
 ; can no longer be scheduled, so WRAM can't change while it is being written.
@@ -369,6 +372,10 @@ NES_ShutDown
             ldy   #wrCreateRec
             jsr   SaveROMFile
             FIN
+
+; Save the user preferences for the next run (loaded by NES_StartUp)
+
+            jsr   SavePrefData
             rts
 
 OneSecondCounter  dw  0
@@ -376,6 +383,8 @@ DPSave            dw  0
 DP_OAM            dw  0
 DP_NES            dw  0
 BorderColor       dw  0            ; save/restore border color
+SavedShadow       dw  0            ; $C035 at start-up, put back by NES_ShutDown
+SavedNewVideo     dw  0            ; $C029 at start-up, put back by NES_ShutDown
 
 ; Runtime nametable-mirroring mask, set by SetMirrorMode (ControlBits.s).
 ; Duplicates the DP MirrorMask (Defs.s) for use from contexts where the
@@ -451,7 +460,7 @@ NES_RenderFrame
 ; If there are background updates to make, force a screen refresh.  The grid renderer decides for
 ; itself in gridPrepare, since it can apply a limited number of background tile updates directly.
 
-            DO   GRID_DIRTY_RENDERING
+            DO   ENABLE_DIRTY_RENDERING
             bra  :no_force
             FIN
             lda  prev_at_list_start       ; Any queued attribute group means background changes
@@ -534,9 +543,9 @@ NES_RenderFrame
             jsr   DrawByte
             FIN
 
-            DO    SHOW_FPS                ; Renders per second at the top-left of the screen
+            lda   config_video_fps        ; VIDEO > SHOW FPS: renders per second at the top-left of the screen
+            beq   *+5
             jsr   DrawFPS
-            FIN
 
 ; Game specific post-render logic
 
@@ -545,19 +554,12 @@ NES_RenderFrame
 ; Internal post-render logic
 
             inc   frameCount       ; Tick over to a new frame
-
-            lda   CurrShadowBitmap ; Swap the bitmap pointers
-            ldx   PrevShadowBitmap
-            sta   PrevShadowBitmap
-            stx   CurrShadowBitmap
-
             rts
 
-; SHOW_FPS: once a second (OneSecondCounter), draw the number of renders in the last second
-; (framesPerSecond), in decimal, at the top-left of the screen (SHR $2000, the border left of the
-; playfield).
-; fpsValue keeps the number for tools that read memory.
-            DO    SHOW_FPS
+; VIDEO > SHOW FPS (config_video_fps): once a second (OneSecondCounter), draw the number of renders in
+; the last second (framesPerSecond), in decimal, at the top-left of the screen (SHR $2000, the border
+; left of the playfield).  Leaving the configuration screen clears the screen, which removes it when
+; the option is turned off.  fpsValue keeps the number for tools that read memory.
             mx    %00
 DrawFPS
             ldal  OneSecondCounter
@@ -588,26 +590,6 @@ DrawFPS
 fpsLastSec   dw  0
 fpsValue     dw  0
 fpsTmp       dw  0
-            FIN
-
-; Helper functions for patching and restoring the PEA field.  These could
-; be overridden for games that want to preserve the ability to switch between
-; dirty and full rendering, but still have a custom screen layout
-            mx  %00
-_SetupPEAField
-            jsr   _BltSetup
-            sta   exitOffset              ; cache the :exit_offset value returned from this function
-
-            lda   #1
-            sta   peaFieldIsPatched
-            rts
-
-            mx  %00
-_ResetPEAField
-            stz   peaFieldIsPatched
-
-            ldy   exitOffset              ; offset to patch
-            jmp   _RestoreBG0OpcodesLite
 
 ; Given a nametable address ($2000 - $2FFF), return the screen address taking into account the current
 ; scroll position.
@@ -778,11 +760,11 @@ RenderScreen
             tsb   DirtyBits
 :no_refresh
 
-; Allow dirty rendering or not
+; Dirty rendering (the grid renderer) or not
 
             DO    ENABLE_DIRTY_RENDERING
 
-; If this frame did not scroll, we can perform a dirty update
+; If this frame did not scroll, the grid renderer may be able to draw only what changed
 
             lda   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_Y+DIRTY_BIT_BG0_REFRESH
             bit   DirtyBits
@@ -790,33 +772,13 @@ RenderScreen
             lda   disableDirtyRendering
             bne   :full_update
 
-            DO    GRID_DIRTY_RENDERING
 ; The grid renderer never executes the code field, so it does not need the exit points patched
             jsr   gridPrepare
             bcs   :full_update
-            DO    GRID_FALLBACK_BORDER
-            lda   #FB_COLOR_GRID          ; Grid frame: no fallback
-            jsr   gridFallbackBorder
-            FIN
             jsr   gridDrawDirty
-            bra   :done
-            FIN
-
-; This is code path for performing dirty rendering.
-
-            jsr   _PEAFieldStable         ; _BltSetupDirty patches the exits itself
-            jsr   _BltSetupDirty
-            sta   exitOffset
-            jsr   drawDirtyScreen
-            ldy   exitOffset
-            jsr   _RestoreBG0OpcodesNowLite
             bra   :done
 
 :full_update
-            DO    GRID_DIRTY_RENDERING*GRID_FALLBACK_BORDER
-            jsr   gridFallbackColor       ; Border color = why we fell back to a full render
-            jsr   gridFallbackBorder
-            FIN
             lda   #0                      ; (grid builds: drawScreenRange records the sprite cells
             ldx   ScreenHeight            ; for the next frame)
             jsr   drawScreenRange
@@ -825,71 +787,18 @@ RenderScreen
             ELSE
 
             jsr   _BltSetup
-            sta   exitOffset              ; cache the :exit_offset value returned from this function
 
 ; Copy the sprites and buffer to the graphics screen
 
             jsr   drawScreen
-
-; Restore the buffer
-
-            ldy   exitOffset              ; offset to patch
-            jsr   _RestoreBG0OpcodesLite
             FIN
 
             stz   DirtyBits
             rts
 
-            DO    ENABLE_DIRTY_RENDERING*GRID_DIRTY_RENDERING*GRID_FALLBACK_BORDER
-; Returns A = the border color for the reason this frame fell back to a full render.  The scaffold's
-; own reasons are checked first; if none apply, gridPrepare was called and recorded its reason in
-; gridFbReason.  Colors are listed with GRID_FALLBACK_BORDER in Defs.s.
-            mx    %00
-gridFallbackColor
-            lda   DirtyBits
-            bit   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_Y
-            bne   :scroll
-            bit   #DIRTY_BIT_PAL_CHANGE
-            bne   :palette
-            bit   #DIRTY_BIT_BG0_REFRESH
-            bne   :refresh
-            lda   disableDirtyRendering
-            bne   :disabled
-            ldal  gridFbReason
-            and   #$000F
-            rts
-:scroll     lda   #FB_COLOR_SCROLL
-            rts
-:palette    lda   #FB_COLOR_PALETTE
-            rts
-:refresh    lda   #FB_COLOR_REFRESH
-            rts
-:disabled   lda   #FB_COLOR_DISABLED
-            rts
-
-; A = border color (0-15).  Only the low nibble of $C034 is the border; the high nibble is the
-; RTC interface and must be preserved.
-            mx    %00
-gridFallbackBorder
-            sep   #$20
-            pha
-            ldal  BORDER_REG
-            and   #$F0
-            ora   1,s
-            stal  BORDER_REG
-            pla
-            rep   #$20
-            rts
-            FIN
-
-; Track if the PEA field is patched or not (for dirty rendering)
-peaFieldIsPatched dw 0
-
 ; If dirty rendering is turned on, provide a way to override it
 disableDirtyRendering dw 0
 
-; PEA field offset for the right edge where the BRA instructions are patched in
-exitOffset   ds 2
 
 ; Tracks the number of times NES_RenderFrame has been called
 frameCount      dw  0

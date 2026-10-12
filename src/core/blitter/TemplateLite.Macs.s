@@ -14,21 +14,22 @@
 ; was entered in (a 256-pixel wide line).
 ;
 ; The even/odd alignment is patched into each line at _ALIGN_PATCH, so lines with different
-; alignments can be drawn in a single pass.  Even lines BRA over the edge byte code.  Odd lines
-; execute an 8-bit LDA #imm (a two byte no-op) and push the right edge byte, whose P0-relative
-; offset is patched into the LDX.
+; alignments can be drawn in a single pass.  The opcode there selects the path: even lines BRL
+; straight to the first PEA; odd lines LDX the P0-relative offset of the right edge byte, push it
+; and BRL from _ODD_ENTRY_PATCH.  The patches depend only on the horizontal offset and the mirroring,
+; never on the PEA field's contents, and the opcode only changes with the offset's parity.
 ;
 ; Every row is entered at P0+_ENTRY_OFFSET, regardless of which page the blit actually starts in.
-; The BRL at P0+_ENTRY_PATCH is patched to reach the first PEA in either page. The next-row JMPs
-; always target the next row's P0, so line chaining is static.
+; The BRL operand (at _ALIGN_PATCH+1 or _ODD_ENTRY_PATCH+1) is patched to reach the first PEA in
+; either page. The next-row JMPs always target the next row's P0, so line chaining is static.
 ;
 ; P0 layout                                   P1 layout
 ;  $00 interrupt window (17 bytes)             $00 -- unused --
 ;  $11 ldx #0000 / txs                         $21 jmp P0+exit_even
-;  $15 bra $1E (even) / lda #imm (odd)         $24 jmp P0+exit_odd
-;  $17 ldx #edge                               $27 64 x pea
-;  $1A lda: P0,x / pha                         $E7 bvc *+5
-;  $1E brl <entry>                             $E9 jmp P1+$27   (horizontal: stay in page)
+;  $15 brl <entry> (even) / ldx #edge (odd)    $24 jmp P0+exit_odd
+;  $18 lda: P0,x / pha                         $27 64 x pea
+;  $1C brl <entry> (odd)                       $E7 bvc *+5
+;  $1F -- unused --                            $E9 jmp P1+$27   (horizontal: stay in page)
 ;  $21 jmp exit_even                           $EC jmp P0+$27   (vertical: cross to P0)
 ;  $24 jmp exit_odd                            $EF jmp P0+exit_even
 ;  $27 64 x pea                                $F6 jmp P0+exit_odd
@@ -123,11 +124,12 @@ LITE_P0            mac
 
                    ldx   #0000                      ; $11: Normal entry.  Screen address (right edge)
                    txs
-                   dw    BLT_ALIGN_EVEN             ; $15: Patched. BRA to the BRL (even) or LDA #imm (odd)
-                   ldx   #0000                      ; $17: Odd-aligned, P0-relative offset of the right edge byte
-                   lda:  ]page,x                    ; $1A: Push the right edge byte
+                   brl   ]page+_E_OUT_OFFSET        ; $15: Patched. BRL to the first PEA (even) or
+                                                    ;      LDX #imm, the P0-relative offset of the right edge byte (odd)
+                   lda:  ]page,x                    ; $18: Odd: push the right edge byte
                    pha
-                   brl   ]page+_E_OUT_OFFSET        ; $1E: Patched to jump to the first PEA in P0 or P1
+                   brl   ]page+_E_OUT_OFFSET        ; $1C: Odd: patched to jump to the first PEA in P0 or P1
+                   ds    2                          ; $1F
                    jmp   ]page+_E_EXIT_OFFSET       ; $21
                    jmp   ]page+_O_EXIT_OFFSET       ; $24
                    PEA64                            ; $27

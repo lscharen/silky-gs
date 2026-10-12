@@ -174,7 +174,8 @@ vblank  pha
 ;        bne     :l3
 
 native_joy    EXT
-        ldal  native_joy
+NES_ReadJoy1    EXT
+        jsl   NES_ReadJoy1            ; (was ldal native_joy: read on demand)
         sta   j0stat
 
         pla
