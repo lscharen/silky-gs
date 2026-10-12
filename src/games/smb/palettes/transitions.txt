@@ -1,0 +1,72 @@
+; Palette transitions.  Each [section] lists the palettes that can follow it.  The layouts are chosen
+; to keep the redraws on these transitions down, and DetectNESPalette tries them first.
+;
+; A level loads its area palette (GroundPaletteData, ...) while the screen is off, then the snow or
+; mushroom BG0 overlay; pipes, vines and warp zones change areas the same way.  A castle ends with
+; Bowser's sprite colors.  Game over and the end of the demo go back to the title screen (ground).
+
+[init]
+ground
+
+[ground]
+underground
+water
+castle
+ground_snow
+ground_mushroom
+
+[ground_snow]
+ground
+underground
+water
+castle
+ground_mushroom
+
+[ground_mushroom]
+ground
+underground
+water
+castle
+ground_snow
+
+[underground]
+ground
+ground_snow
+ground_mushroom
+water
+castle
+
+[water]
+ground
+ground_snow
+ground_mushroom
+underground
+castle
+
+[castle]
+castle_bowser
+ground
+ground_snow
+ground_mushroom
+underground
+water
+
+[castle_bowser]
+castle
+ground
+ground_snow
+ground_mushroom
+underground
+water
+
+; The question block color (BG3:1, ColorRotation) and the player colors (SP0:1 and SP0:3,
+; GetPlayerColors) keep one IIgs slot in every palette: Main.s writes their colors straight to the IIgs
+; palette (PAL_SLOT_* in pal_transitions.s), without a palette change.
+[fixed BG3:1 SP0:1 SP0:3]
+ground
+ground_snow
+ground_mushroom
+underground
+water
+castle
+castle_bowser

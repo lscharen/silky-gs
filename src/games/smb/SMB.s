@@ -40,7 +40,7 @@
 
 ; Palette swizzle tables (long-addressed data, kept out of the main segment)
 
-            ASM   pal_w11.s
+            ASM   palettes.s
             KND   #$1100
             SNA   PALDATA
 

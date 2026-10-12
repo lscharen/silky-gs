@@ -371,7 +371,7 @@ function swizzleSource(graph, best, source) {
 }
 
 function transitionsSource(graph, best, source, warnings) {
-  const { names, succ, pals } = graph;
+  const { names, succ, pals, pins, pinsOf } = graph;
   const T = [];
   if (warnings.length) {
     T.push('; Warnings from generation:');
@@ -394,6 +394,18 @@ function transitionsSource(graph, best, source, warnings) {
   T.push('; Palette ids, word-aligned so they index the tables below directly.  0 = no palette.');
   names.forEach((n, p) => T.push(`PAL_${U(n)} equ ${2 * (p + 1)}`));
   T.push('');
+  if (pins.length) {
+    // A cell pinned by [fixed] has the same slot in every palette that lists it, so code that writes
+    // its color straight to the IIgs palette (e.g. a color the game cycles) can use the slot number.
+    T.push('; Slots of the cells pinned by [fixed] sections (the same in every palette that pins them)');
+    for (const c of pins) {
+      const slots = new Set(names.map((n, p) => (pinsOf[p].has(c) ? best.layouts[p].cellSlot[c] : undefined))
+        .filter(s => s !== undefined));
+      if (slots.size !== 1) fail(`pinned cell ${c} is in different slots: ${[...slots].join(', ')}`);
+      T.push(`PAL_SLOT_${c.replace(':', '_')} equ ${[...slots][0]}`);
+    }
+    T.push('');
+  }
   T.push('; Layouts (NES color -> [slots] per group; *reserved, ~shown as):');
   names.forEach((n, p) => {
     T.push(`;   ${n}`);

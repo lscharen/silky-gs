@@ -9,10 +9,6 @@
             use   GTE.Macs.s
 
             put   ../../Externals.s
-AT0_T0      EXT                       ; Swizzle tables live in the PALDATA segment (pal_w11.s)
-AT1_T0      EXT
-AT2_T0      EXT
-AT3_T0      EXT
             put   ../../core/Defs.s
 
             mx    %00
@@ -38,11 +34,11 @@ EVT_LOOP_END mac
              <<<
 
 PRE_RENDER   mac
-;
+             jsr  ApplyPaletteChange ; switch to a new palette detected since the last frame
              <<<
 
 POST_RENDER  mac
-             jsr  CheckForPaletteChange
+;
              <<<
 
 ; Callback before each sprite is set up and drawn (drawSprites, ppu.s): X = OAM index, ]1 = the
@@ -200,9 +196,6 @@ x_offset    equ   16                      ; number of bytes from the left edge
 ; Now, initialize the game-specific functionality that this wrapper needs in order to
 ; run the game in an effective manner.
 
-            stz   LastAreaType            ; Check if the palettes need to be updated
-            stz   LastAreaStyle
-
 ; Set the palettes and swizzle tables
 
             jsr   SetDefaultPalette
@@ -279,8 +272,6 @@ Greyscale   dw    $0000,$5555,$AAAA,$FFFF
             dw    $0000,$5555,$AAAA,$FFFF
 
 ; Program variables
-LastAreaType      dw  0
-LastAreaStyle     dw  0
 
 show_vbl_cpu      dw  0
 user_break        dw  0
@@ -361,112 +352,9 @@ InitPlayfield
             adc   #$2000+x_offset
 ;            sta   ScreenBase
 
-; Set a default palette for the title screen
+; Start with the title screen's (ground) palette
 
-            ldx   #Area1Palette
-            lda   #TmpPalette
-            jsr   NES_PaletteToIIgs
-
-            lda   #0
-            ldx   #TmpPalette
-            jsr   _SetPalette
-
-            rts
-
-; When the NES ROM code tried to write to the PPU palette space, intercept here.
-;
-; Based on the palette data that SMB uses, we remap the NES palette entries
-; based on the AreaType, so most of the PPU writes are ignored.  However,
-; we do update some specific palette entries to support some color cycling effects
-;
-; BG0,0 maps to IIgs Palette index 0    (Background color)
-; BG3,1 maps to IIgs Palette index 1    (Color cycle for blocks)
-; SP0,1 maps to IIgs Palette index 14   (Player primary color; changes with fire flower)
-; SP0,3 maps to IIgs Palette index 15   (Player primary color; changes with fire flower)
-
-SMB_PALETTE_DISPATCH
-        dw   ppu_3F00,ppu_3F01,ppu_3F02,ppu_3F03
-        dw   ppu_3F04,ppu_3F05,ppu_3F06,ppu_3F07
-        dw   ppu_3F08,ppu_3F09,ppu_3F0A,ppu_3F0B
-        dw   ppu_3F0C,SMB_3F0D,ppu_3F0E,ppu_3F0F
-        dw   ppu_3F10,SMB_3F11,ppu_3F12,SMB_3F13
-        dw   ppu_3F14,SMB_3F15,SMB_3F16,SMB_3F17
-        dw   ppu_3F18,ppu_3F19,ppu_3F1A,ppu_3F1B
-        dw   ppu_3F1C,ppu_3F1D,ppu_3F1E,ppu_3F1F
-
-; Tile palette 3, color 1
-SMB_3F0D    ldal PPU_MEM+$3F0D
-            jsr  NES_ColorToIIgs
-            stal $E19E02
-            rts
-
-; Sprite Palette 0, color 1
-SMB_3F11    ldal PPU_MEM+$3F11
-            jsr  NES_ColorToIIgs
-            stal $E19E00+28
-            rts
-
-; Sprite Palette 0, color 3
-SMB_3F13    ldal PPU_MEM+$3F13
-            jsr  NES_ColorToIIgs
-            stal $E19E00+30
-            rts
-
-; Allow the second sprite palette to be set by the ROM in world *-4 because it switches to the bowser
-; palette when player reaches the end of the level.  Mapped to IIgs palette indices 8, 9, 10
-CASTLE_AREA_TYPE equ 3
-SMB_3F15
-            lda  LastAreaType
-            cmp  #CASTLE_AREA_TYPE
-            bne  :no_change
-
-            ldal PPU_MEM+$3F15
-            jsr  NES_ColorToIIgs
-            stal $E19E00+{8*2}
-:no_change  rts
-
-SMB_3F16
-            lda  LastAreaType
-            cmp  #CASTLE_AREA_TYPE
-            bne  :no_change
-
-            ldal PPU_MEM+$3F16
-            jsr  NES_ColorToIIgs
-            stal $E19E00+{9*2}
-:no_change  rts
-
-SMB_3F17
-            lda  LastAreaType
-            cmp  #CASTLE_AREA_TYPE
-            bne  :no_change
-
-            ldal PPU_MEM+$3F17
-            jsr  NES_ColorToIIgs
-            stal $E19E00+{10*2}
-:no_change  rts
-
-; Check the AreaType and see if the palette needs to be changed. We do this after the screen is blitted
-; so the palette does not get changed too early while old pixels are still on the screen.
-
-CheckForPaletteChange
-            ldal  ROMBase+$074E
-            and   #$0003                  ; There are four area types
-            cmp   LastAreaType            ;   order is WaterPaletteData, <GroundPaletteData, <UndergroundPaletteData, <CastlePaletteData
-            beq   :no_area_change
-            sta   LastAreaType
-            jmp   SetAreaPalette
-
-:no_area_change
-            lda   ROMBase+$0733
-            and   #$0001
-            cmp   LastAreaStyle
-            beq   :no_style_change
-            sta   LastAreaStyle
-            lda   LastAreaType
-            jmp   SetAreaPalette
-
-:no_style_change
-            rts
+            jmp   SetDefaultPalette
 
 ; Make the screen appear
 _RenderScreen
@@ -540,54 +428,81 @@ _RenderScreen
             stz   DirtyBits
             rts
 
+; Palette management.  The palettes the game shows (ground, snow, mushroom, underground, water, castle and
+; castle with Bowser's colors) are described in palettes/, and pal_transitions.s (generated from them by
+; build.js) gives each one a fixed IIgs slot layout and swizzle tables.  A palette RAM write (SMB_PalWrite)
+; only marks the palette dirty; at the next render, ApplyPaletteChange (GS task) identifies the palette in
+; palette RAM and switches to it (redrawing tiles when needed), or shows the changed colors in the current
+; palette's layout (the question block color cycling and the player colors are reserved cells).
+smbCurPal   dw    0                         ; PAL_* id of the palette on screen
+smbPalDirty dw    0                         ; palette RAM changed since the last render
+
+; Start with the ground palette (the title screen), so its layout is used until the game's palette is
+; detected.  Called by InitPlayfield (NES_StartUp) and at start-up.
 SetDefaultPalette
-            lda   #0
-SetAreaPalette
-            cmp   #5
-            bcs   :out
+            ldy   #PAL_GROUND
+            sty   smbCurPal
+            ldx   PAL_SWIZZLE_LO,y
+            lda   PAL_SWIZZLE_HI,y
+            jmp   NES_SetPaletteMap
 
-            asl
-            tay
-            ldx   AreaPalettes,y      ; First parameter to NESColorToIIgs
-            phx
+; Palette RAM write ($3F01-$3F1F, except the color 0s), on the NES task.  The palette RAM is already
+; updated (and only changed values get here): just note that it changed.
+SMB_PalWrite
+            lda   #1
+            sta   smbPalDirty
+SMB_PalNone rts
 
-            asl
-            tay
-            lda   SwizzleTables+2,y
-            ldx   SwizzleTables,y
-            jsr   NES_SetPaletteMap
+; PRE_RENDER, on the GS task: if the palette RAM changed, identify the palette in it and switch to it,
+; or show its changed colors in the current palette's layout
+ApplyPaletteChange
+            lda   smbPalDirty
+            beq   :none
+            lda   _ppumask                  ; While the background is off (the game is rebuilding the
+            and   #NES_PPUMASK_BG           ; screen), keep the old colors on whatever is left on the
+            beq   :none                     ; screen; the new ones come with the new screen
+            stz   smbPalDirty               ; (first, so a write from here on is seen next time)
+            ldx   smbCurPal
+            jsr   DetectNESPalette          ; A = Y = palette id, 0 if none
+            beq   :colors                   ; not a known palette
+            cmp   smbCurPal
+            beq   :colors
+            ldx   smbCurPal
+            sty   smbCurPal
+            jmp   UpdatePalette             ; X = from, Y = to
+:colors     ldy   smbCurPal
+            jmp   LoadPaletteColors
+:none       rts
 
-            plx
+            put   pal_transitions.s
 
-            ldal  ROMBase+$075f       ; World number
-            and   #$00FF
-            beq   :no_alt
+; Color 0: $3F00 / $3F10 is always IIgs slot 0, so it is set straight away (ppu_palette.s); the
+; other color 0s aren't shown.  The question block color and the player colors are pinned to one slot in
+; every palette (the [fixed] section in palettes/transitions.txt), so they are also set straight away.
+; The rest go to SMB_PalWrite.
+SMB_PALETTE_DISPATCH
+        dw   ppu_3F00,SMB_PalWrite,SMB_PalWrite,SMB_PalWrite
+        dw   SMB_PalNone,SMB_PalWrite,SMB_PalWrite,SMB_PalWrite
+        dw   SMB_PalNone,SMB_PalWrite,SMB_PalWrite,SMB_PalWrite
+        dw   SMB_PalNone,SMB_3F0D,SMB_PalWrite,SMB_PalWrite
+        dw   ppu_3F10,SMB_3F11,SMB_PalWrite,SMB_3F13
+        dw   SMB_PalNone,SMB_PalWrite,SMB_PalWrite,SMB_PalWrite
+        dw   SMB_PalNone,SMB_PalWrite,SMB_PalWrite,SMB_PalWrite
+        dw   SMB_PalNone,SMB_PalWrite,SMB_PalWrite,SMB_PalWrite
 
-            lda   LastAreaStyle       ; Check area style
-            and   #$00FF
-            cmp   #$0001
-            bne   :no_alt
-            ldx   #MushroomPalette
-
-:no_alt
-            lda   #TmpPalette
-            jsr   NES_PaletteToIIgs
-
-; Special copy routine; do not touch color indices 0, 1, 14 or 15 -- we let the NES PPU handle those
-
-            ldx   #4
-:loop
-            lda   TmpPalette,x
-            stal  $E19E00,x
-            inx
-            inx
-            cpx   #2*14
-            bcc   :loop
-:out
+; The pinned colors, written straight to their IIgs palette slots (PAL_SLOT_*, pal_transitions.s).  A =
+; the NES color.  They are reserved cells, so palette detection doesn't depend on them either.
+SMB_3F0D    jsr  NES_ColorToIIgs            ; BG3:1, the question block color (ColorRotation)
+            stal SHR_PALETTES+{2*PAL_SLOT_BG3_1}
             rts
 
-AreaPalettes  dw   WaterPalette,Area1Palette,Area2Palette,Area3Palette,Area2Palette
-SwizzleTables adrl AT0_T0,AT1_T0,AT2_T0,AT3_T0,AT2_T0
+SMB_3F11    jsr  NES_ColorToIIgs            ; SP0:1, player color (GetPlayerColors)
+            stal SHR_PALETTES+{2*PAL_SLOT_SP0_1}
+            rts
+
+SMB_3F13    jsr  NES_ColorToIIgs            ; SP0:3, player color (GetPlayerColors)
+            stal SHR_PALETTES+{2*PAL_SLOT_SP0_3}
+            rts
 
 ; Copy just the tiles that change directly to the graphics screen
 
@@ -664,23 +579,6 @@ CONFIG_GAME_DEFAULTS mac
             put    ../../ppu/ppu_sprites.s
             put    ../../ppu/ppu_tile_blitters.s
 ; AUTOINC:END
-
-; If AreaStyle is 1 then load an alternate palette 'b'
-;
-; Palettes of NES color indexes
-Area1Palette dw     $22, $00, $29, $1A, $0F, $36, $17, $30, $21, $27, $1A, $16, $00, $00, $16, $18
-
-; Underground
-Area2Palette dw     $0F, $00, $29, $1A, $09, $3C, $1C, $30, $21, $17, $27, $36, $16, $1D, $16, $18
-
-; Castle
-Area3Palette dw     $0F, $00, $30, $10, $00, $16, $17, $27, $1C, $36, $1D, $00, $00, $00, $16, $18
-
-; Water
-WaterPalette dw     $22, $00, $15, $12, $25, $3A, $1A, $0F, $30, $12, $27, $10, $16, $00, $16, $18
-
-; AreaStyle = $01 (almost the same as Area1Palette)
-MushroomPalette dw  $22, $00, $27, $16, $0F, $36, $17, $30, $21, $27, $1A, $16, $00, $00, $16, $18
 
             put   ../../apu/apu.s
 

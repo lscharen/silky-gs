@@ -1,0 +1,16 @@
+; water palette (WaterPaletteData in rom.s).  SP0's color 0 is written as $22, which is the background
+; color ($3F10 mirrors $3F00), not part of the palette.
+; BG3:1 cycles (ColorRotation, the question blocks) and SP0:1 / SP0:3 are the player colors (GetPlayerColors:
+; Mario, Luigi or fiery; SP0:2 is $27 for all of them), so they are reserved.
+; Color 0 is the background color ($3F00, IIgs slot 0, set directly).  Cells of the same color share slot 0,
+; so it is the color of these areas' background: $22 (sky / water) for ground, snow, mushroom and water --
+; night levels show black there instead, and nothing else uses $22 -- and $0F (black) for underground and
+; castle.
+BG0: $22 $15 $12 $25
+BG1: $22 $3A $1A $0F
+BG2: $22 $30 $12 $0F
+BG3: $22 *$27 $12 $0F
+SP0: $22 *$16 $27 *$18
+SP1: $22 $10 $30 $27
+SP2: $22 $16 $30 $27
+SP3: $22 $0F $30 $10
