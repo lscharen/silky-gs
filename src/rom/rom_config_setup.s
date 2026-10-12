@@ -6,7 +6,10 @@
 ;
 ;   CONFIG_DEFAULT_AUDIO equ APU_60HZ / APU_120HZ / APU_240HZ
 ;                                  Default audio quality
-;   CONFIG_VIDEO_MENU    equ 0/1   Show the VIDEO menu (status bar, fast blit, show FPS, show NES CPU)
+;   CONFIG_VIDEO_MENU    equ 0/1   Show the VIDEO menu (show FPS, show NES CPU, status bar, fast blit)
+;   CONFIG_VIDEO_STATUSBAR equ 0/1 Show the STATUS BAR option on the VIDEO menu (needs CONFIG_VIDEO_MENU).
+;                                  For the games with a separately drawn status bar (SMB, Excitebike,
+;                                  Balloon Fight); the value is config_video_statusbar (CFG_VIDEO_STATUSBAR).
 ;   CONFIG_VIDEO_FASTBLIT equ 0/1  Show the FAST BLIT option on the VIDEO menu (needs CONFIG_VIDEO_MENU).
 ;                                  Only useful for scrolling games, which do full renders.  When 0, a
 ;                                  fast blit setting in an old preferences file is ignored.
@@ -247,43 +250,47 @@ VIDEO_CONFIG dw   VIDEO_TITLE_STR
              dw   AUDIO_CONFIG          ; previous menu item
              dw   INPUT_CONFIG          ; next menu item
 
-             dw   3+CONFIG_VIDEO_FASTBLIT ; Number of configuration elements
-             dw   VIDEO_ITEM_1
-             DO   CONFIG_VIDEO_FASTBLIT
-             dw   VIDEO_ITEM_2
+             dw   2+CONFIG_VIDEO_STATUSBAR+CONFIG_VIDEO_FASTBLIT ; Number of configuration elements
+             dw   VIDEO_ITEM_FPS
+             dw   VIDEO_ITEM_NESCPU
+             DO   CONFIG_VIDEO_STATUSBAR
+             dw   VIDEO_ITEM_SB
              FIN
-             dw   VIDEO_ITEM_3
-             dw   VIDEO_ITEM_4
+             DO   CONFIG_VIDEO_FASTBLIT
+             dw   VIDEO_ITEM_FB
+             FIN
 
-; FAST BLIT (VIDEO_ITEM_2) is only listed with CONFIG_VIDEO_FASTBLIT.  It is always assembled, so the links
-; and positions are expressions of the flag rather than more DO / ELSE blocks.
-VIDEO_ITEM_1 dw   CHKBOX                ; Checkbox just forces a 0/1 for False/True
+; SHOW FPS and SHOW NES CPU are always shown; STATUS BAR (CONFIG_VIDEO_STATUSBAR) and FAST BLIT
+; (CONFIG_VIDEO_FASTBLIT) follow when the game shows them.  Every item is assembled, so the links and
+; rows are expressions of the flags rather than DO / ELSE blocks.  A link to the item itself means there
+; is nothing in that direction (moving there leaves the cursor where it is).
+VIDEO_ITEM_FPS dw CHKBOX                ; Checkbox just forces a 0/1 for False/True
              dw   0                     ; previous control
-             dw   VIDEO_ITEM_3+{CONFIG_VIDEO_FASTBLIT*{VIDEO_ITEM_2-VIDEO_ITEM_3}} ; next: FAST BLIT, or SHOW FPS
+             dw   VIDEO_ITEM_NESCPU     ; next control
              dw   3,2
-             dw   VIDEO_STATUS_BAR_STR
-             dw   config_video_statusbar
-
-VIDEO_ITEM_2 dw   CHKBOX
-             dw   VIDEO_ITEM_1          ; previous control
-             dw   VIDEO_ITEM_3          ; next control
-             dw   3,4
-             dw   VIDEO_FASTMODE_STR
-             dw   config_video_fastmode
-
-VIDEO_ITEM_3 dw   CHKBOX
-             dw   VIDEO_ITEM_1+{CONFIG_VIDEO_FASTBLIT*{VIDEO_ITEM_2-VIDEO_ITEM_1}} ; previous: FAST BLIT, or STATUS BAR
-             dw   VIDEO_ITEM_4          ; next control
-             dw   3,4+{2*CONFIG_VIDEO_FASTBLIT}
              dw   VIDEO_FPS_STR
              dw   config_video_fps
 
-VIDEO_ITEM_4 dw   CHKBOX
-             dw   VIDEO_ITEM_3          ; previous control
-             dw   0                     ; next control
-             dw   3,6+{2*CONFIG_VIDEO_FASTBLIT}
+VIDEO_ITEM_NESCPU dw CHKBOX
+             dw   VIDEO_ITEM_FPS        ; previous control
+             dw   VIDEO_ITEM_NESCPU+{CONFIG_VIDEO_STATUSBAR*{VIDEO_ITEM_SB-VIDEO_ITEM_NESCPU}}+{{1-CONFIG_VIDEO_STATUSBAR}*CONFIG_VIDEO_FASTBLIT*{VIDEO_ITEM_FB-VIDEO_ITEM_NESCPU}} ; next: STATUS BAR, FAST BLIT or none
+             dw   3,4
              dw   VIDEO_NESCPU_STR
              dw   config_video_nescpu
+
+VIDEO_ITEM_SB dw  CHKBOX
+             dw   VIDEO_ITEM_NESCPU     ; previous control
+             dw   VIDEO_ITEM_SB+{CONFIG_VIDEO_FASTBLIT*{VIDEO_ITEM_FB-VIDEO_ITEM_SB}} ; next: FAST BLIT or none
+             dw   3,6
+             dw   VIDEO_STATUS_BAR_STR
+             dw   config_video_statusbar
+
+VIDEO_ITEM_FB dw  CHKBOX
+             dw   VIDEO_ITEM_NESCPU+{CONFIG_VIDEO_STATUSBAR*{VIDEO_ITEM_SB-VIDEO_ITEM_NESCPU}} ; previous: STATUS BAR or SHOW NES CPU
+             dw   0                     ; next control
+             dw   3,6+{2*CONFIG_VIDEO_STATUSBAR}
+             dw   VIDEO_FASTMODE_STR
+             dw   config_video_fastmode
              FIN
 
 INPUT_CONFIG dw   INPUT_TITLE_STR
