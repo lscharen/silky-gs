@@ -21,6 +21,7 @@ npm run build:zelda     # Zelda
 npm run build:all       # All games
 
 npm run build-image     # Package built binaries into Target.2mg ProDOS disk image
+npm run build:dist      # One 800KB disk per game in emu/ (build-single.bat <game>: app at the root, icon in Icons/)
 npm run test            # Build image and launch in GSPort emulator
 npm run debug:<game>    # Launch Crossrunner debugger (smb, bf, lo, wump, eb, dk, ic, mb)
 ```
