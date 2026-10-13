@@ -1,0 +1,10 @@
+; 100M (rivets) palette (Layout_Phase100M_F71C in _rom.s).  It only uploads BG0, BG1 and SP3 (Kong);
+; the rest are 25M's.  SP2 is the flame enemies (Palette_FlameEnemy_C6A6); see 100m_hammer.
+BG0: $0F $2C $27 $02
+BG1: $0F $30 $12 $24
+BG2: $0F $30 $36 $06
+BG3: $0F $30 $2C $24
+SP0: $0F $02 $36 $16
+SP1: $0F $30 $27 $24
+SP2: $0F $16 $30 $37
+SP3: $0F $06 $30 $12

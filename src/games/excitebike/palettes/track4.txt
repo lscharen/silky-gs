@@ -1,0 +1,12 @@
+; Color scheme of track 4 (ram_0043 = 3)
+; The track's colors (_off_000_D40F_15 in rom.s: BG0, BG1 and SP0) and the colors all the tracks share
+; (_off_000_D435_17: BG2, BG3 and SP1-SP3).  BG0 colors 1 and 3 cycle when the race is over
+; (tbl_C166 / tbl_C170), so they are reserved.
+BG0: $00 *$26 $22 *$30
+BG1: $00 $27 $18 $37
+BG2: $00 $22 $0F $20
+BG3: $00 $22 $0F $16
+SP0: $00 $20 $16 $0F
+SP1: $00 $13 $20 $0F
+SP2: $00 $31 $1C $0F
+SP3: $00 $20 $19 $0F

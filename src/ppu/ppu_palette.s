@@ -17,12 +17,21 @@
 ; NES background color to IIgs SHR palette index 0.  All other entries fall
 ; through to the nearest `rts` stub.
 ;
+; $3F10 is a hardware mirror of $3F00, so a write to either one is stored in both.
+; PPUDATA writes only reach a handler when the value at their own address changes;
+; without the mirroring, $3F00 = A, $3F10 = B, $3F00 = A would skip the last write
+; and leave the background B.
+;
 ; The dispatch table itself (PPU_PALETTE_DISPATCH) is defined by the game in
 ; Main.s and typically points either here or to game-specific handlers.
 
-; Background color
+; Background color.  A = the NES color.
         mx   %00
-ppu_3F00  ldal PPU_MEM+$3F00
+ppu_3F00
+ppu_3F10  sep  #$20
+          stal PPU_MEM+$3F00            ; $3F00 and $3F10 are the same entry
+          stal PPU_MEM+$3F10
+          rep  #$20
           jsr  NES_ColorToIIgs
           stal $E19E00
           rts
@@ -46,10 +55,6 @@ ppu_3F0D
 ppu_3F0E
 ppu_3F0F  rts
 
-ppu_3F10  ldal PPU_MEM+$3F10
-          jsr  NES_ColorToIIgs
-          stal $E19E00
-          rts
 ppu_3F11
 ppu_3F12
 ppu_3F13

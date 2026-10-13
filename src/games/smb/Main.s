@@ -133,7 +133,6 @@ CONFIG_APPLY_HOOK mac
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
 ; set the background color.
 PPU_PALETTE_DISPATCH equ SMB_PALETTE_DISPATCH
-AUTOMATIC_PALETTE_MAPPING equ 0
 
 ; Turn on some off-screen information
 SHOW_DEBUG_VARS equ 0

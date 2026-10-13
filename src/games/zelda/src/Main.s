@@ -147,7 +147,6 @@ CACHE_DMC_SAMPLES equ 1
 
 ; Dispatch table for palette RAM writes: every entry goes to Z_PalWrite (palette management)
 PPU_PALETTE_DISPATCH equ ZELDA_PALETTE_DISPATCH
-AUTOMATIC_PALETTE_MAPPING equ 0
 
 ; Turn on some off-screen information
 SHOW_DEBUG_VARS equ 0

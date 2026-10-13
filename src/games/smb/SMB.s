@@ -43,32 +43,3 @@
             ASM   palettes.s
             KND   #$1100
             SNA   PALDATA
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

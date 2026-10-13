@@ -9,7 +9,6 @@
             use   GTE.Macs.s
 
             put   ../../Externals.s
-L1_T0       EXT                       ; Swizzle tables live in the PALDATA segment (palettes.s)
             put   ../../core/Defs.s
 
             mx    %00
@@ -36,15 +35,9 @@ EVT_LOOP_END mac
 ;
              <<<
 
-; Pre-render check to see if there are any background tiles queued for updates.  If so, we will do
-; a regular rendering.  If not, use dirty rendering.
+; Before each render: pick up the palette changes
 PRE_RENDER   mac
-;             stz  disableDirtyRendering
-;             lda  at_queue_tail
-;             cmp  tmp4                    ; If there are any attribute changes, render the full screen
-;             bne  do_full
-;             inc  disableDirtyRendering
-;do_full
+             jsr  ApplyPaletteChange ; switch to a new palette detected since the last frame
              <<<
 
 POST_RENDER  mac
@@ -143,7 +136,6 @@ CONFIG_APPLY_HOOK mac
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
 ; set the background color.
 PPU_PALETTE_DISPATCH equ PALETTE_DISPATCH
-AUTOMATIC_PALETTE_MAPPING equ 0
 
 ; Turn on some off-screen information
 SHOW_DEBUG_VARS equ 0
@@ -229,38 +221,64 @@ qtRec       adrl  $0000
 SAVE_FILENAME strl '1/wump.sav'
 PREF_FILENAME strl '1/wump.prefs'
 
+; Palette management.  The game's single palette is described in palettes/, and pal_transitions.s
+; (generated from them by build.js) gives each palette a fixed IIgs slot layout and swizzle tables.  A palette
+; RAM write (WUMP_PalWrite) only marks the palette dirty; at the next render, ApplyPaletteChange (GS task)
+; identifies the palette in palette RAM and switches to it (redrawing tiles when needed), or shows the
+; changed colors in the current palette's layout.
+wumpCurPal    dw    0                         ; PAL_* id of the palette on screen
+wumpPalDirty  dw    0                         ; palette RAM changed since the last render
+
+; The ROM uploads its palette once, at start-up.  InitPlayfield is called by NES_StartUp.
 InitPlayfield
-            ldx   #TitleScreen
-            lda   #0
-            jsr   NES_SetPalette
-            rts
-
-TitleScreen  dw    $22, $30, $15, $14, $02, $38, $3C, $1C, $29, $1A, $0F, $17, $21, $00, $00, $00
-
-; When the NES ROM code tried to write to the PPU palette space, intercept here.
-PALETTE_DISPATCH
-        dw   ppu_3F00,ppu_3F01,ppu_3F02,ppu_3F03
-        dw   ppu_3F04,ppu_3F05,ppu_3F06,ppu_3F07
-        dw   ppu_3F08,ppu_3F09,ppu_3F0A,ppu_3F0B
-        dw   ppu_3F0C,ppu_3F0D,ppu_3F0E,ppu_3F0F
-
-        dw   ppu_3F10,ppu_3F11,ppu_3F12,ppu_3F13
-        dw   ppu_3F14,ppu_3F15,ppu_3F16,ppu_3F17
-        dw   ppu_3F18,ppu_3F19,ppu_3F1A,ppu_3F1B
-        dw   ppu_3F1C,ppu_3F1D,ppu_3F1E,ppu_3F1F
-
-
-; For this game, we utilize a single, static palette
 SetDefaultPalette
+            ldy   #PAL_GAME
+            sty   wumpCurPal
+            ldx   PAL_SWIZZLE_LO,y
+            lda   PAL_SWIZZLE_HI,y
+            jmp   NES_SetPaletteMap
 
-; Set the tile/sprite mapping
+; Palette RAM write ($3F01-$3F1F, except the color 0s), on the NES task.  The palette RAM is already
+; updated (and only changed values get here): just note that it changed.
+WUMP_PalWrite
+            lda   #1
+            sta   wumpPalDirty
+WUMP_PalNone  rts
 
-            lda   SwizzleTables+2
-            ldx   SwizzleTables
-            jsr   NES_SetPaletteMap
-            rts
+; PRE_RENDER, on the GS task: if the palette RAM changed, identify the palette in it and switch to it,
+; or show its changed colors in the current palette's layout
+ApplyPaletteChange
+            lda   wumpPalDirty
+            beq   :none
+            lda   _ppumask                  ; While the background is off (the game is rebuilding the
+            and   #NES_PPUMASK_BG           ; screen), keep the old colors on whatever is left on the
+            beq   :none                     ; screen; the new ones come with the new screen
+            stz   wumpPalDirty                ; (first, so a write from here on is seen next time)
+            ldx   wumpCurPal
+            jsr   DetectNESPalette          ; A = Y = palette id, 0 if none
+            beq   :colors                   ; not a known palette (e.g. at power-on)
+            cmp   wumpCurPal
+            beq   :colors
+            ldx   wumpCurPal
+            sty   wumpCurPal
+            jmp   UpdatePalette             ; X = from, Y = to
+:colors     ldy   wumpCurPal
+            jmp   LoadPaletteColors
+:none       rts
 
-SwizzleTables adrl L1_T0
+            put   pal_transitions.s
+
+; Color 0: $3F00 / $3F10 is always IIgs slot 0, so it is set straight away (ppu_palette.s); the
+; other color 0s aren't shown.  The rest go to WUMP_PalWrite.
+PALETTE_DISPATCH
+        dw   ppu_3F00,WUMP_PalWrite,WUMP_PalWrite,WUMP_PalWrite
+        dw   WUMP_PalNone,WUMP_PalWrite,WUMP_PalWrite,WUMP_PalWrite
+        dw   WUMP_PalNone,WUMP_PalWrite,WUMP_PalWrite,WUMP_PalWrite
+        dw   WUMP_PalNone,WUMP_PalWrite,WUMP_PalWrite,WUMP_PalWrite
+        dw   ppu_3F10,WUMP_PalWrite,WUMP_PalWrite,WUMP_PalWrite
+        dw   WUMP_PalNone,WUMP_PalWrite,WUMP_PalWrite,WUMP_PalWrite
+        dw   WUMP_PalNone,WUMP_PalWrite,WUMP_PalWrite,WUMP_PalWrite
+        dw   WUMP_PalNone,WUMP_PalWrite,WUMP_PalWrite,WUMP_PalWrite
 
 ; Game-specific configuration values (none): CONFIG_GAME_DEFAULTS lays out their defaults at their IDs in
 ; the game's block (see rom/rom_config_setup.s, which also has the built-in values, menus and ApplyConfig)

@@ -27,8 +27,9 @@
  * looked up through the swizzle tables every frame, so their slots are free.
  *
  * Within a layout, cells with the same color share a slot, except reserved colors (*$xx: changed on
- * the fly by the game), which get a slot of their own, and approximated colors ($xx~$yy), which are
- * shown in the slot of $yy.  Slot 0 is the universal background color ($3F00).
+ * the fly by the game), which get a slot of their own, approximated colors ($xx~$yy), which are
+ * shown in the slot of $yy, and unused colors (--), which are shown in slot 0, the universal
+ * background color ($3F00).
  *
  * Usage:
  *   node scripts/generate-palette-transitions.js <transitions-file> <palettes-dir> [options]
@@ -148,6 +149,7 @@ function makeSolver({ pals, pins = [], pinsOf = [] }) {
   const NP = pals.length;
   const univ = pals.map(p => p.BG0[0]);
   const res = (p, G, i) => pals[p].reserved.has(G + ':' + i);
+  const un = (p, G, i) => pals[p].unused.has(G + ':' + i);   // unused: any slot will do
   const shown = (p, G, i) => pals[p].approx.get(G + ':' + i) || pals[p][G][i];
   const col = (p, g, i) => shown(p, BG_GROUPS[g], i);
   const cells = [];                    // the background cells that can be canonical
@@ -160,14 +162,14 @@ function makeSolver({ pals, pins = [], pinsOf = [] }) {
     const inP = (p, g) => (K[p] >> g) & 1;
 
     // Give the canonical cells global slots, sharing a slot when every palette that keeps both
-    // shows the same (unreserved) color in them
+    // shows the same (unreserved) color in them (or doesn't use one of them)
     const slotOf = new Array(cells.length);
     const members = [];
     for (let c = 0; c < cells.length; c++) {
       const { g, i } = cells[c];
       let ok0 = true;
       for (let p = 0; p < NP; p++) {
-        if (inP(p, g) && (col(p, g, i) !== univ[p] || res(p, BG_GROUPS[g], i))) { ok0 = false; break; }
+        if (inP(p, g) && !un(p, BG_GROUPS[g], i) && (col(p, g, i) !== univ[p] || res(p, BG_GROUPS[g], i))) { ok0 = false; break; }
       }
       if (ok0) { slotOf[c] = 0; continue; }
       let placed = false;
@@ -176,7 +178,7 @@ function makeSolver({ pals, pins = [], pinsOf = [] }) {
         for (const d of members[s]) {
           const { g: h, i: j } = cells[d];
           for (let p = 0; p < NP; p++) {
-            if (!inP(p, g) || !inP(p, h)) continue;
+            if (!inP(p, g) || !inP(p, h) || un(p, BG_GROUPS[g], i) || un(p, BG_GROUPS[h], j)) continue;
             if (col(p, g, i) !== col(p, h, j) || res(p, BG_GROUPS[g], i) || res(p, BG_GROUPS[h], j)) { ok = false; break; }
           }
           if (!ok) break;
@@ -204,7 +206,7 @@ function makeSolver({ pals, pins = [], pinsOf = [] }) {
         const { g, i } = cells[c];
         if (!inP(p, g)) continue;
         const s = slotOf[c];
-        clut[s] = col(p, g, i);
+        if (!un(p, BG_GROUPS[g], i)) clut[s] = col(p, g, i);
         cellSlot[BG_GROUPS[g] + ':' + i] = s;
         if (res(p, BG_GROUPS[g], i)) locked.add(s);
       }
@@ -212,7 +214,7 @@ function makeSolver({ pals, pins = [], pinsOf = [] }) {
         if (cellSlot[c] !== undefined) continue;          // (a canonical background cell)
         const [G, i] = c.split(':');
         const s = pinSlot(c);
-        clut[s] = shown(p, G, +i);
+        if (!un(p, G, +i)) clut[s] = shown(p, G, +i);
         cellSlot[c] = s;
         if (res(p, G, +i)) locked.add(s);
       }
@@ -338,8 +340,9 @@ const U = n => n.toUpperCase();
 const hex2 = v => '$' + v.toString(16).toUpperCase().padStart(2, '0');
 const hex4 = v => '$' + v.toString(16).toUpperCase().padStart(4, '0');
 const slotsOf = (L, G) => [0, 1, 2, 3].map(i => L.cellSlot[G + ':' + i]);
-const markColor = (pal, G, i) => (pal.reserved.has(G + ':' + i) ? '*' : '') + pal[G][i] +
-  (pal.approx.has(G + ':' + i) ? '~' + pal.approx.get(G + ':' + i) : '');
+const markColor = (pal, G, i) => (pal.unused.has(G + ':' + i) ? '--' :
+  (pal.reserved.has(G + ':' + i) ? '*' : '') + pal[G][i] +
+  (pal.approx.has(G + ':' + i) ? '~' + pal.approx.get(G + ':' + i) : ''));
 
 function swizzleSource(graph, best, source) {
   const { names, pals } = graph;
@@ -505,7 +508,7 @@ DetectNESPalette
 ; X = palette id.  Carry set if its colors are in palette RAM.  X is kept.  Only colors 1-3 of
 ; each group are compared (24 at most): color 0 is always IIgs slot 0.  One pass per group, from
 ; SP3 back to BG0, with its three colors compared inline.  NES colors are $00-$3F, so the $FF of a
-; reserved color is the only table byte with bit 7 set, and bmi skips it.
+; reserved or unused color is the only table byte with bit 7 set, and bmi skips it.
 :match      phx
             lda   PAL_MATCH,x
             clc
@@ -548,12 +551,12 @@ DetectNESPalette
 :ptr        ds    2
 `);
 
-  T.push('; id -> colors 1-3 of each group to match (BG0-BG3, SP0-SP3; $FF = any value: reserved)');
+  T.push('; id -> colors 1-3 of each group to match (BG0-BG3, SP0-SP3; $FF = any value: reserved or unused)');
   T.push('PAL_MATCH');
   T.push('            dw    0');
   names.forEach(n => T.push(`            dw    PAL_${U(n)}_MATCH`));
   names.forEach((n, p) => {
-    const bytes = ALL_GROUPS.flatMap(G => [1, 2, 3].map(i => (pals[p].reserved.has(G + ':' + i) ? '$FF' : pals[p][G][i])));
+    const bytes = ALL_GROUPS.flatMap(G => [1, 2, 3].map(i => (pals[p].reserved.has(G + ':' + i) || pals[p].unused.has(G + ':' + i) ? '$FF' : pals[p][G][i])));
     T.push(`PAL_${U(n)}_MATCH`);
     T.push('            db    ' + bytes.slice(0, 12).join(',') + '   ; BG0-BG3');
     T.push('            db    ' + bytes.slice(12).join(',') + '   ; SP0-SP3');
@@ -599,7 +602,7 @@ DetectNESPalette
     const written = new Set(bytes.filter(b => b !== '$FF'));
     ALL_GROUPS.forEach(G => [1, 2, 3].forEach(i => {
       const slot = L.cellSlot[G + ':' + i];
-      if (slot !== 0 && !written.has(hex2(2 * slot))) {
+      if (slot !== 0 && !written.has(hex2(2 * slot)) && !pals[p].unused.has(G + ':' + i)) {
         fail(`${n}: the slot that ${G}[${i}] is shown in is never loaded -- approximate with a color the palette shows`);
       }
     }));

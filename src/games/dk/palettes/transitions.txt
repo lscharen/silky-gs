@@ -1,0 +1,39 @@
+; Palette transitions.  Each [section] lists the palettes that can follow it.  The layouts are chosen
+; to keep the redraws on these transitions down, and DetectNESPalette tries them first.  The phases
+; go 25M -> 75M -> 100M and back to 25M; game over goes back to the title screen.  (The "PLAYER I"
+; screen before a phase only changes SP3, which the phase sets again.)
+
+[init]
+title_screen
+
+[title_screen]
+25m
+
+[25m]
+75m
+title_screen
+
+[75m]
+100m
+title_screen
+
+; The hammer turns the flame enemies blue (SP2) and back.  Removing the last rivet starts the ending,
+; which gives Kong's sprites their colors (SP3).
+[100m]
+100m_hammer
+100m_ending
+25m
+title_screen
+
+[100m_hammer]
+100m
+100m_ending
+25m
+title_screen
+
+; The ending goes on to 25M (the next loop); the "PLAYER I" screen after a death in 100M looks like the
+; ending and goes back to 100M
+[100m_ending]
+25m
+100m
+title_screen

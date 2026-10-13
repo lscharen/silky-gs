@@ -1,0 +1,11 @@
+; The game's only palette (palette in src/neswumpus.s, uploaded once by LoadPalettes).  Its background
+; color 0s are $00, but the $3F10 write ($22) comes last and $3F10 mirrors $3F00, so $22 is the
+; background color.
+BG0: $22 $30 $16 $13
+BG1: $22 $30 $38 $22
+BG2: $22 $30 $21 $13
+BG3: $22 $30 $17 $13
+SP0: $22 $1C $15 $14
+SP1: $22 $02 $15 $3C
+SP2: $22 $30 $16 $13
+SP3: $22 $30 $16 $0D

@@ -42,52 +42,6 @@
             KND   #$1100
             SNA   PPURAM
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ; Segment #7 -- Palette swizzle tables (long-addressed data, too large for the main segment)
             ASM   palettes.s
             KND   #$1100

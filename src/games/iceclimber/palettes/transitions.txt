@@ -1,0 +1,86 @@
+; Palette transitions.  Each [section] lists the palettes that can follow it.  The layouts are chosen
+; to keep the redraws on these transitions down, and DetectNESPalette tries them first.
+;
+; A mountain starts with the gameplay palette (start), then the sprite palettes for the mountain are
+; loaded: SP2, and SP3 with the colors of the mountain's vegetable (veg0-veg8).  sp3_brown replaces the
+; vegetable colors during play.  A mountain ends with the score counting screen, or the logo screen on
+; game over.
+
+[init]
+logo
+
+[logo]
+start
+
+[start]
+veg0
+veg1
+veg2
+veg3
+veg4
+veg6
+veg7
+veg8
+logo
+
+[veg0]
+sp3_brown
+score
+logo
+
+[veg1]
+sp3_brown
+score
+logo
+
+[veg2]
+sp3_brown
+score
+logo
+
+[veg3]
+sp3_brown
+score
+logo
+
+[veg4]
+sp3_brown
+score
+logo
+
+[veg6]
+sp3_brown
+score
+logo
+
+[veg7]
+sp3_brown
+score
+logo
+
+[veg8]
+sp3_brown
+score
+logo
+
+[sp3_brown]
+score
+logo
+
+[score]
+start
+logo
+
+; The gameplay palettes keep the background in the same slots, so loading the mountain's sprite
+; palettes never redraws the mountain
+[fixed BG0 BG1 BG2 BG3]
+start
+veg0
+veg1
+veg2
+veg3
+veg4
+veg6
+veg7
+veg8
+sp3_brown

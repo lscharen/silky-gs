@@ -1,0 +1,10 @@
+; 75M (elevators) palette (Layout_Phase75M_F7CD in _rom.s).  It only uploads BG0, BG1 and SP3 (Kong);
+; the rest are 25M's, which always comes before it.
+BG0: $0F $15 $2C $06
+BG1: $0F $30 $27 $16
+BG2: $0F $30 $36 $06
+BG3: $0F $30 $2C $24
+SP0: $0F $02 $36 $16
+SP1: $0F $30 $27 $24
+SP2: $0F $16 $30 $37
+SP3: $0F $12 $37 $15

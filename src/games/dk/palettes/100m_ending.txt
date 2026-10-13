@@ -1,0 +1,12 @@
+; 100M ending: when the rivets are gone, the ROM puts Kong's colors in SP3 (DATA_C6F1 in _rom.s,
+; $3F1D = $30 $36 $06) for the sprites he falls as.  The flame enemies are gone by then (SP2 may still
+; hold the hammer colors).  The "PLAYER I" screen writes the same SP3 colors (Tilemap_PlayerScreen_C6AA),
+; so after a death in 100M it looks like this palette too.
+BG0: $0F $2C $27 $02
+BG1: $0F $30 $12 $24
+BG2: $0F $30 $36 $06
+BG3: $0F $30 $2C $24
+SP0: $0F $02 $36 $16
+SP1: $0F $30 $27 $24
+SP2: $0F -- -- --
+SP3: $0F $30 $36 $06

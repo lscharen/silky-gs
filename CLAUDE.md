@@ -42,7 +42,7 @@ The runtime sets up a dual-context environment: the IIgs runs as host, with a se
 **ROM Interface (`src/rom/`)** — Wraps NES game code for execution on IIgs:
 - `scaffold.s` — Main harness: memory init, direct page swapping between IIgs/NES contexts, frame loop
 - `rom_config.s` — Per-game constants (tile addresses, mirroring mode, OAM ranges, feature flags)
-- `rom_exec.s`, `rom_input.s`, `rom_palette.s`, `rom_inject.s`, `rom_helpers.s` — Supporting subsystems
+- `rom_exec.s`, `rom_input.s`, `rom_inject.s`, `rom_helpers.s` — Supporting subsystems
 
 **PPU Simulation (`src/ppu/`)** — Intercepts all NES PPU register writes:
 - `ppu.s` — ~2600 lines; converts NES tile data to IIgs format, maintains nametables and OAM, handles mirroring
@@ -78,6 +78,7 @@ The IIgs shows 16 colors at once (one palette of 16 slots); the NES shows up to 
 - **Source of truth:** `src/games/zelda/palettes/*.txt` (one file per palette the game shows: `BG0:`–`SP3:`, 4 NES colors each) and `palettes/transitions.txt` (INI-style graph: each `[palette]` lists the palettes that can follow it). A `[fixed BG0 BG1 SP0:1 ...]` section lists the palettes that must keep those background groups, or single cells (`group:index`, e.g. a sprite color), in the same slots (Zelda: the status bar's tiles and sprites, since the status bar is not redrawn while the play area is split off, so a slot change would show it in the wrong colors). Sprite slots are otherwise free to move between palettes.
   - `*$xx` — **reserved**: the game changes this color on the fly (color cycling, Link's tunic/rings, per-room enemy palettes in SP3). It gets an IIgs slot of its own and matches any value during detection.
   - `$xx~$yy` — **approximated**: palette RAM holds `$xx` (used for detection) but it is drawn in `$yy`'s slot; used only when a palette can't fit 16 slots otherwise. It never writes the CLUT.
+  - `--` — **unused**: the screen doesn't show this cell and palette RAM holds whatever an earlier palette left there (the ROM uploads only part of the palette, e.g. a title screen). It matches any value during detection, takes no slot and is never loaded.
   - Parser: `scripts/palette-transition.js` (`parsePaletteFile`).
 - **Generator:** `scripts/generate-palette-transitions.js` (run by `src/games/zelda/build.js`; skipped when its outputs are newer than the palette files and scripts — expect ~20s when it does run; `--report` prints layouts, slot use and the redraw matrix). It gives every palette **one fixed IIgs slot layout**, chosen jointly so the background groups that keep the same slots across the graph's transitions don't need redrawing. Outputs (never edit by hand):
   - `src/palettes.s` — 8 swizzle tables × 512 bytes per palette (PALDATA segment; 4KB per palette, so at most 16 palettes per bank).

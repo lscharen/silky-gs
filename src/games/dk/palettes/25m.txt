@@ -1,0 +1,9 @@
+; 25M (girders) palette (Layout_Phase25M_F55B in _rom.s): the only full palette upload
+BG0: $0F $15 $2C $12
+BG1: $0F $27 $02 $17
+BG2: $0F $30 $36 $06
+BG3: $0F $30 $2C $24
+SP0: $0F $02 $36 $16
+SP1: $0F $30 $27 $24
+SP2: $0F $16 $30 $37
+SP3: $0F $06 $27 $02

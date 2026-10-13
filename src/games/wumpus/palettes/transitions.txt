@@ -1,0 +1,4 @@
+; Palette transitions.  Wumpus uploads a single palette once, at start-up.
+
+[init]
+game

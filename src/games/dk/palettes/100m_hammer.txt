@@ -1,0 +1,10 @@
+; 100M while Jumpman holds a hammer: the flame enemies (SP2) turn blue (Palette_FlameEnemy_Threatened_C6A2
+; in _rom.s, uploaded by CODE_D805; CODE_D7F2 puts Palette_FlameEnemy_C6A6 back)
+BG0: $0F $2C $27 $02
+BG1: $0F $30 $12 $24
+BG2: $0F $30 $36 $06
+BG3: $0F $30 $2C $24
+SP0: $0F $02 $36 $16
+SP1: $0F $30 $27 $24
+SP2: $0F $2C $16 $13
+SP3: $0F $06 $30 $12

@@ -66,6 +66,9 @@
  * shares, and it is ignored when identifying the palette. A color written as $xx~$yy is
  * approximated: the NES palette holds $xx (that is what identifies the palette), but it is shown
  * with the IIgs slot of $yy, to save a slot when a palette has more colors than the IIgs can show.
+ * A color written as -- is unused: the screen doesn't show it, and palette RAM holds whatever an
+ * earlier palette left there (a game that uploads only part of the palette), so it matches any value
+ * when identifying the palette, takes no slot (it is drawn in slot 0) and is never loaded.
  * Color 0 of every BG/SP group is expected to be the
  * same value (the NES hardware-mirrored universal background color) in each
  * file; a mismatch is reported as a warning, not an error. That shared
@@ -147,6 +150,7 @@ function parsePaletteFile(filePath) {
   const groups = {};
   const reserved = new Set();
   const approx = new Map();
+  const unused = new Set();
 
   for (const rawLine of text.split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -156,24 +160,35 @@ function parsePaletteFile(filePath) {
     if (!m) fail(`${filePath}: could not parse line: "${rawLine}"`);
     const [, label, rest] = m;
 
-    const colors = rest.trim().split(/\s+/).map((tok, i) => {
+    const colors = [];
+    rest.trim().split(/\s+/).forEach((tok, i) => {
+      if (tok === '--') {
+        // Unused: shown in color 0's slot (an approximation that is never loaded), matches anything
+        if (i === 0) fail(`${filePath}: color 0 of "${label}" is the shared background color`);
+        unused.add(`${label}:${i}`);
+        approx.set(`${label}:${i}`, colors[0]);
+        colors.push(colors[0]);
+        return;
+      }
       const cm = tok.match(/^(\*?)\$([0-9A-Fa-f]{1,2})(?:~\$([0-9A-Fa-f]{1,2}))?$/);
       if (!cm) fail(`${filePath}: bad color token "${tok}" on line: "${rawLine}"`);
       if ((cm[1] || cm[3]) && i === 0) fail(`${filePath}: color 0 of "${label}" is the shared background color`);
       if (cm[1] && cm[3]) fail(`${filePath}: "${tok}" can't be both reserved and approximated`);
       if (cm[1]) reserved.add(`${label}:${i}`);
       if (cm[3]) approx.set(`${label}:${i}`, '$' + cm[3].toUpperCase().padStart(2, '0'));
-      return '$' + cm[2].toUpperCase().padStart(2, '0');
+      colors.push('$' + cm[2].toUpperCase().padStart(2, '0'));
     });
 
     if (groups[label] !== undefined) fail(`${filePath}: duplicate group "${label}"`);
     groups[label] = colors;
   }
 
-  // Reserved colors and approximations ("GROUP:index" keys -> shown color), not enumerable so
+  // Reserved colors, approximations ("GROUP:index" keys -> shown color) and unused colors (also
+  // approximated, by color 0), not enumerable so
   // the groups can still be iterated
   Object.defineProperty(groups, 'reserved', { value: reserved, enumerable: false });
   Object.defineProperty(groups, 'approx', { value: approx, enumerable: false });
+  Object.defineProperty(groups, 'unused', { value: unused, enumerable: false });
 
   for (const g of ALL_GROUPS) {
     if (!groups[g]) fail(`${filePath}: missing required group "${g}"`);

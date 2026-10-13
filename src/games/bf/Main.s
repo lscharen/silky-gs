@@ -138,7 +138,6 @@ CONFIG_APPLY_HOOK mac
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
 ; set the background color.
 PPU_PALETTE_DISPATCH equ BF_PALETTE_DISPATCH
-AUTOMATIC_PALETTE_MAPPING equ 0
 
 ; Turn on some off-screen information
 SHOW_DEBUG_VARS equ 0
@@ -261,15 +260,13 @@ BF_PALETTE_DISPATCH
         dw   ppu_3F18,BF_3F19,BF_3F1A,BF_3F1B
         dw   ppu_3F1C,BF_3F1D,BF_3F1E,BF_3F1F
 
-; Background color
-BF_3F00 ldal PPU_MEM+$3F00
-        jsr  NES_ColorToIIgs
-        stal $E19E00
-        stal $E19E20
-        stal $E19E40
-        rts
-
-BF_3F10 ldal PPU_MEM+$3F10
+; Background color (A = the NES color), in all three IIgs palettes.  $3F00 and $3F10 are the
+; same entry, so store it in both (see ppu_palette.s)
+BF_3F00
+BF_3F10 sep  #$20
+        stal PPU_MEM+$3F00
+        stal PPU_MEM+$3F10
+        rep  #$20
         jsr  NES_ColorToIIgs
         stal $E19E00
         stal $E19E20
