@@ -188,12 +188,6 @@ x_offset    equ   16                      ; number of bytes from the left edge
 
             jsr   SetDefaultPalette
 
-; Start the FPS counter
-            ldal  OneSecondCounter
-            sta   OldOneSec
-            lda   frameCount
-            sta   oldFrameCount
-
 ; Set an internal flag to tell the VBL interrupt handler that it is
 ; ok to start invoking the game logic.  The ROM code has to be run
 ; at 60 Hz because it controls the audio.  Bad audio is way worse
@@ -263,7 +257,6 @@ Greyscale   dw    $0000,$5555,$AAAA,$FFFF
 
 show_vbl_cpu      dw  0
 user_break        dw  0
-oldFrameCount     dw  0
 
 ; Helper to initialize the playfield based on the selected VideoMode
 InitPlayfield
@@ -355,16 +348,6 @@ _RenderScreen
             ldy   #0                      ; We _never_ scroll vertically
             jsr   NES_SetScroll
 
-            lda   ppumask
-            and   ppumask_override
-            and   #NES_PPUMASK_BG
-            jsr   EnableBackground
-
-            lda   ppumask
-            and   ppumask_override
-            and   #NES_PPUMASK_SPR
-            jsr   EnableSprites
-
 ; Now render the top 16 lines to show the status bar area
 
             lda   #0
@@ -387,28 +370,8 @@ _RenderScreen
             jsr   drawScreen
 
             DO    SHOW_DEBUG_VARS
-            ldal  OneSecondCounter
-            cmp   OldOneSec
-            beq   :skip_fps
-
-            sta   OldOneSec
-            ldx   frameCount
-            txa
-            sec
-            sbc   oldFrameCount
-            stx   oldFrameCount
-            ldx   #0
-            ldy   #$FFFF
-            jsr   DrawByte
-:skip_fps
-
-            lda   InputPlayer1
-            ldx   #8*160
-            ldy   #$FFFF
-            jsr   DrawWord
-
-            lda   LastRead
-            ldx   #16*160
+            lda   LastRead                ; The keyboard input (_ShowDebugInfo has the rest)
+            ldx   #32*160
             ldy   #$FFFF
             jsr   DrawWord
             FIN

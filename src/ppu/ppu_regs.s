@@ -70,75 +70,74 @@ chr_bank    ENT
 ; ntbase    db $20,$24,$28,$2c
 
 
-; $2000 - PPUCTRL (Write only) (optimized, if we can defer resolving ntaddr, spadr and bgadr, this can be simplified further))
+; $2000 - PPUCTRL (Write only)
+;
+; Only the VRAM increment is resolved here, because the next $2007 access (NES task) needs it right away.
+; The values only the render reads (ntaddr, spadr, bgadr and the derived _hi/_lo values) are resolved
+; from ppuctrl by PPUCtrlDecode when NES_RenderFrame latches the registers.
         mx    %11
 PPUCTRL_WRITE ENT
         php
         cmpl ppuctrl
         beq  :fast_exit
 
-; Save the control byte
         stal ppuctrl
-        phx
-
-; Cache the value
-        tax
-
-; Set the pattern table base address
-        and  #$03
-        asl
-        asl
-        ora  #$20
-        stal ntaddr+1
-
-; Set the vram increment
-        txa
-        and  #$04
+        pha
+        and  #$04             ; Set the vram increment
         beq  :v1
         lda  #$21
 :v1     eor  #$01
         stal ppuincr
-
-; Set the sprite table address
-        txa
-        and  #$08
-        beq  :sp_zero
-        lda  #$10
-        stal spadr+1
-        lda  #$80
-        stal spadr_hi+1
-        bra :sp_done
-
-:sp_zero
-        stal spadr+1
-        stal spadr_hi+1
-
-:sp_done
-
-; Set the background table address
-        txa
-        and  #$10
-        beq  :bg_zero
-        stal bgadr+1          ; This takes the literal value $10, so if the AND is non-zero, this must be the value
-        lda  #$80
-        stal bgadr_hi+1
-        lda  #$01
-        stal bgadr_lo+1
-        bra  :bg_done
-
-:bg_zero
-        stal bgadr+1
-        stal bgadr_hi+1
-        stal bgadr_lo+1
-
-:bg_done
-
-        txa
-        plx
+        pla
 
 :fast_exit
         plp
         rtl
+
+; PPUCtrlDecode
+;
+; Resolve the render's values from the last PPUCTRL write: the base nametable address, and the sprite
+; and background pattern table addresses with their derived values.  Called by NES_RenderFrame, with
+; interrupts off, before anything in the render reads them.  Only A is changed.  DBR = the main bank.
+        mx    %00
+PPUCtrlDecode
+        lda  ppuctrl          ; (only the low byte is ever written, so the high byte is 0)
+        and  #$0003           ; Base nametable address: $2000 + 1KB per nametable
+        xba
+        asl
+        asl
+        ora  #$2000
+        sta  ntaddr
+
+        lda  ppuctrl          ; Sprite pattern table ($0000 / $1000)
+        and  #$0008
+        beq  :sp
+        lda  #$1000
+:sp     sta  spadr
+        asl
+        asl
+        asl
+        sta  spadr_hi         ; $0000 / $8000
+
+        lda  ppuctrl          ; Background pattern table ($0000 / $1000)
+        and  #$0010
+        beq  :bg
+        lda  #$1000
+:bg     sta  bgadr
+        lsr
+        lsr
+        lsr
+        lsr
+        sta  bgadr_lo         ; $0000 / $0100
+        asl
+        asl
+        asl
+        asl
+        asl
+        asl
+        asl
+        sta  bgadr_hi         ; $0000 / $8000
+        rts
 
 ; $2001 - PPUMASK (Write only)
         mx    %11

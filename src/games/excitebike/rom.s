@@ -54,6 +54,21 @@ IIgs_memclear
         plx
         rts
 
+; The sprite loop in sub_D14E (bra_D16D_loop), moved here from the ROM code: write $F8 into the Y
+; coordinate of sprites 1-59, which moves them off the screen.  This runs every frame during a race, so
+; the original indexed loop (16 cycles per sprite) is unrolled into absolute stores (4 cycles each; the
+; data bank holds the NES RAM).  Leaves A = $F8 and Y = 0, as the loop did.
+            mx    %11
+HideSprites1to59
+            lda   #$F8
+]spr        =     4
+            lup   59
+            sta   ram_spr_Y+]spr
+]spr        =     ]spr+4
+            --^
+            ldy   #$00
+            rts
+
         ds   $C000-*              ; Pad up to the start of the NES PRG-ROM
 
 tbl_C000
@@ -3227,15 +3242,19 @@ bra_D14E_infinite_loop
   LDA ram_0041
   CMP #$09
   BEQ bra_D17E
-  LDA #$F8
-  LDY #$EC
-bra_D16D_loop
-  STA ram_spr_Y,Y
-  DEY
-  DEY
-  DEY
-  DEY
-  BNE bra_D16D_loop
+;  LDA #$F8
+;  LDY #$EC
+;bra_D16D_loop
+;  STA ram_spr_Y,Y
+;  DEY
+;  DEY
+;  DEY
+;  DEY
+;  BNE bra_D16D_loop
+  jsr HideSprites1to59        ; IIgs - the loop, unrolled
+  bra :skip
+  ds  8                       ; use the same amount of space
+:skip
   JSR sub_D0C6
   JSR sub_D0F4
   LDX #$28

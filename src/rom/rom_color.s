@@ -23,8 +23,8 @@ NES_ColorPalette
             dw    $0940   ;  7
             dw    $0740   ;  8
             dw    $0240   ;  9
-            dw    $0072   ;  10
-            dw    $0090   ;  11
+            dw    $0080   ;  10
+            dw    $0083   ;  11
             dw    $0044   ;  12
             dw    $0000   ;  13 illegal
             dw    $0000   ;  14 illegal
@@ -37,8 +37,8 @@ NES_ColorPalette
             dw    $0B0F   ;  20
             dw    $0F09   ;  21
             dw    $0F00   ;  22
-            dw    $0E60   ;  23
-            dw    $0970   ;  24
+            dw    $0B50   ;  23
+            dw    $0770   ;  24
             dw    $0290   ;  25
             dw    $0090   ;  26
             dw    $00B7   ;  27
@@ -53,14 +53,14 @@ NES_ColorPalette
             dw    $0D6F   ;  35
             dw    $0F0F   ;  36
             dw    $0F6F   ;  37
-            dw    $0F90   ;  38
-            dw    $0FB0   ;  39
+            dw    $0F75   ;  38
+            dw    $0FA4   ;  39
             dw    $0DD0   ;  40
             dw    $06D0   ;  41
             dw    $00F0   ;  42
             dw    $04FD   ;  43
             dw    $00FF   ;  44
-            dw    $0440   ;  45 "illegal"
+            dw    $0555   ;  45 "illegal"
             dw    $0000   ;  46 illegal
             dw    $0000   ;  47 illegal
 
@@ -69,13 +69,13 @@ NES_ColorPalette
             dw    $0DBF   ;  50
             dw    $0FBF   ;  51
             dw    $0F9F   ;  52
-            dw    $0FBB   ;  53
-            dw    $0FD9   ;  54
-            dw    $0FF4   ;  55
+            dw    $0FBD   ;  53
+            dw    $0FCB   ;  54
+            dw    $0FEA   ;  55
             dw    $0FF7   ;  56
-            dw    $0BF4   ;  57
-            dw    $09F6   ;  58
-            dw    $04FD   ;  59
+            dw    $0DF9   ;  57
+            dw    $0BFB   ;  58
+            dw    $0BFD   ;  59
             dw    $08DF   ;  60
             dw    $0BBB   ;  61 "illegal"
             dw    $0000   ;  62 illegal

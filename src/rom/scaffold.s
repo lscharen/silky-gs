@@ -65,9 +65,6 @@ NES_StartUp
 
 ; Initialize some application variables
 
-            ldal  OneSecondCounter
-            sta   OldOneSec
-
             stz   ShowFPS
 
             lda   #$0008
@@ -476,6 +473,7 @@ NES_RenderFrame
             lda  ppuctrl                  ;  Cache these values that are used to set the view port
             FIN
             sta  _ppuctrl
+            jsr  PPUCtrlDecode            ; Resolve the pattern table addresses from the last PPUCTRL write
 
             DO   CUSTOM_PPU_SCROLL_LOCK
             CUSTOM_PPU_SCROLL_LOCK_CODE

@@ -111,7 +111,6 @@ LastStatusUdt          equ   138
 ActiveBank             equ   140
 ROMZeroPg              equ   142
 ROMStk                 equ   144
-OldOneSec              equ   146
 NesTop                 equ   148
 
 ; PPUFlushQueuesAlt (ppu_queues.s) locals. These must survive a nested

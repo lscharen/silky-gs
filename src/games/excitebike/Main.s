@@ -321,16 +321,6 @@ _RenderScreen
         ldy   #0
         jsr   NES_SetScroll
 
-        lda   ppumask
-        and   ppumask_override
-        and   #NES_PPUMASK_BG
-        jsr   EnableBackground
-
-        lda   ppumask
-        and   ppumask_override
-        and   #NES_PPUMASK_SPR
-        jsr   EnableSprites
-
 ; First, render the crowd (40 scanlines)
 
         lda   #0
@@ -357,28 +347,8 @@ _RenderScreen
         jsr   drawScreen
 
         DO    SHOW_DEBUG_VARS
-        ldal  OneSecondCounter
-        cmp   OldOneSec
-        beq   :skip_fps
-
-        sta   OldOneSec
-        ldx   frameCount
-        txa
-        sec
-        sbc   oldFrameCount
-        stx   oldFrameCount
-        ldx   #0
-        ldy   #$FFFF
-        jsr   DrawByte
-:skip_fps
-
-        lda   InputPlayer1
-        ldx   #8*160
-        ldy   #$FFFF
-        jsr   DrawWord
-
-        lda   LastRead
-        ldx   #16*160
+        lda   LastRead                ; The keyboard input (_ShowDebugInfo has the rest)
+        ldx   #32*160
         ldy   #$FFFF
         jsr   DrawWord
         FIN
