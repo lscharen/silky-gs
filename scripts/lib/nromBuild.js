@@ -23,6 +23,7 @@ const fs   = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { convertRomTile2 } = require('./nesTileConvert.js');
+const { compactFile } = require('../omf-compact.js');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const PACKAGE_JSON = require(path.join(PROJECT_ROOT, 'package.json'));
@@ -148,7 +149,26 @@ function assembleGame(gameDir, linkFile) {
 }
 
 /**
- * Build an NROM game: precompute tiledata.bin, then assemble it.
+ * Take the zeros out of an assembled game's load file (scripts/omf-compact.js) and make the given
+ * segments whole banks, so they start at $0000.  The load file is the link file's DSK, next to it;
+ * the link file must not have XPL.  Prints the segment sizes.
+ *
+ *   gameDir       - the directory that holds the link file
+ *   linkFile      - Merlin32 link file, relative to gameDir (e.g. 'Master.s')
+ *   bankSegments  - names of the segments to make whole banks
+ */
+function compactGame(gameDir, linkFile, bankSegments) {
+  const link = fs.readFileSync(path.join(gameDir, linkFile), 'utf8');
+  const m = link.match(/^\s+DSK\s+(\S+)/m);
+  if (!m) throw new Error(`${linkFile}: no DSK line`);
+  const app = path.join(gameDir, m[1]);
+  console.log(`Compacting ${m[1]}`);
+  compactFile(app, app, bankSegments);
+}
+
+/**
+ * Build an NROM game: precompute tiledata.bin, assemble it, then compact the load file with the
+ * PPU memory (PPURAM) and tiledata (CHRDATA) segments as whole banks.
  *
  *   gameDir    - the game's directory (holds PPU.s, Main.s, TileData.s)
  *   linkFile   - Merlin32 link file, relative to gameDir (e.g. 'Master.s')
@@ -156,6 +176,7 @@ function assembleGame(gameDir, linkFile) {
 function buildNromGame(gameDir, linkFile) {
   generateTileData(gameDir);
   assembleGame(gameDir, linkFile);
+  compactGame(gameDir, linkFile, ['PPURAM', 'CHRDATA']);
 }
 
-module.exports = { buildNromGame, assembleGame, generateTileData, loadChrFromPPU, parseDataSource };
+module.exports = { buildNromGame, assembleGame, compactGame, generateTileData, loadChrFromPPU, parseDataSource };
