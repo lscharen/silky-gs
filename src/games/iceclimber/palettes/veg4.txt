@@ -1,0 +1,12 @@
+; Vegetable group 4 (mountains 5, 15, 25, ...)
+; Gameplay: SP2 is set to $30 $16 $27 (sub_F691, X = $0A) and SP3 to the colors of the mountain's
+; vegetable (sub_F63B: tbl_F5D3, group = mountains completed mod 10).  The players' colors 2 are reserved
+; (see start.txt).
+BG0: $0F $30 $21 $01
+BG1: $0F $26 $2A $30
+BG2: $0F $38 $29 $0A
+BG3: $0F $27 $17 $07
+SP0: $0F $30 *$11 $26
+SP1: $0F $30 *$15 $26
+SP2: $0F $30 $16 $27
+SP3: $0F $29 $26 $07

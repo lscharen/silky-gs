@@ -9,7 +9,6 @@
             use   GTE.Macs.s
 
             put   ../../Externals.s
-L1_T0       EXT                       ; Swizzle tables live in the PALDATA segment (palettes.s)
             put   ../../core/Defs.s
 
             mx    %00
@@ -36,10 +35,9 @@ EVT_LOOP_END mac
 ;
              <<<
 
-; Pre-render check to see if there are any background tiles queued for updates.  If so, we will do
-; a regular rendering.  If not, use dirty rendering.
+; Before each render: pick up the palette changes
 PRE_RENDER   mac
-             jsr  CheckForPaletteChange   ; Update the swizzle tables before drawing any tiles
+             jsr  ApplyPaletteChange ; switch to a new palette detected since the last frame
              <<<
 
 POST_RENDER  mac
@@ -138,8 +136,6 @@ CONFIG_APPLY_HOOK mac
 ; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
 ; set the background color.
 PPU_PALETTE_DISPATCH equ PALETTE_DISPATCH
-PPU_PALETTE_MAP equ eb_palette_map
-AUTOMATIC_PALETTE_MAPPING equ 1
 
 ; Turn on some off-screen information
 SHOW_DEBUG_VARS equ 0
@@ -240,146 +236,64 @@ qtRec       adrl  $0000
 SAVE_FILENAME strl '1/eb.sav'
 PREF_FILENAME strl '1/eb.prefs'
 
+; Palette management.  The palettes the game uses (title screen and the five track color schemes) are described in palettes/, and pal_transitions.s
+; (generated from them by build.js) gives each palette a fixed IIgs slot layout and swizzle tables.  A palette
+; RAM write (EB_PalWrite) only marks the palette dirty; at the next render, ApplyPaletteChange (GS task)
+; identifies the palette in palette RAM and switches to it (redrawing tiles when needed), or shows the
+; changed colors in the current palette's layout.
+ebCurPal    dw    0                         ; PAL_* id of the palette on screen
+ebPalDirty  dw    0                         ; palette RAM changed since the last render
+
+; Start with the title screen palette.  InitPlayfield is called by NES_StartUp.
 InitPlayfield
-            ldx   #TitleScreen
-            lda   #0
-            jsr   NES_SetPalette
-            rts
+SetDefaultPalette
+            ldy   #PAL_TITLE_SCREEN
+            sty   ebCurPal
+            ldx   PAL_SWIZZLE_LO,y
+            lda   PAL_SWIZZLE_HI,y
+            jmp   NES_SetPaletteMap
 
-TitleScreen  dw    $02,$0F,$30,$21
-             dw    $15,$02,$2A,$3C
-             dw    $27,$20,$16,$13
-             dw    $2C,$08,$0F,$0F
+; Palette RAM write ($3F01-$3F1F, except the color 0s), on the NES task.  The palette RAM is already
+; updated (and only changed values get here): just note that it changed.
+EB_PalWrite
+            lda   #1
+            sta   ebPalDirty
+EB_PalNone  rts
 
-RacePal1     dw    $29,$27,$22,$30
-             dw    $18,$36,$0F,$16
-             dw    $13,$31,$1C,$19
-             dw    $0F,$0F,$0F,$0F
+; PRE_RENDER, on the GS task: if the palette RAM changed, identify the palette in it and switch to it,
+; or show its changed colors in the current palette's layout
+ApplyPaletteChange
+            lda   ebPalDirty
+            beq   :none
+            lda   _ppumask                  ; While the background is off (the game is rebuilding the
+            and   #NES_PPUMASK_BG           ; screen), keep the old colors on whatever is left on the
+            beq   :none                     ; screen; the new ones come with the new screen
+            stz   ebPalDirty                ; (first, so a write from here on is seen next time)
+            ldx   ebCurPal
+            jsr   DetectNESPalette          ; A = Y = palette id, 0 if none
+            beq   :colors                   ; not a known palette (e.g. at power-on)
+            cmp   ebCurPal
+            beq   :colors
+            ldx   ebCurPal
+            sty   ebCurPal
+            jmp   UpdatePalette             ; X = from, Y = to
+:colors     ldy   ebCurPal
+            jmp   LoadPaletteColors
+:none       rts
 
-; When the NES ROM code tried to write to the PPU palette space, intercept here.
-;PALETTE_DISPATCH
-;        dw   ppu_3F00,ppu_3F01,ppu_3F02,ppu_3F03
-;        dw   ppu_3F04,ppu_3F05,ppu_3F06,ppu_3F07
-;        dw   ppu_3F08,ppu_3F09,ppu_3F0A,ppu_3F0B
-;        dw   ppu_3F0C,ppu_3F0D,ppu_3F0E,ppu_3F0F
+            put   pal_transitions.s
 
-;        dw   ppu_3F10,ppu_3F11,ppu_3F12,ppu_3F13
-;        dw   ppu_3F14,ppu_3F15,ppu_3F16,ppu_3F17
-;        dw   ppu_3F18,ppu_3F19,ppu_3F1A,ppu_3F1B
-;        dw   ppu_3F1C,ppu_3F1D,ppu_3F1E,ppu_3F1F
-
+; Color 0: $3F00 / $3F10 is always IIgs slot 0, so it is set straight away (ppu_palette.s); the
+; other color 0s aren't shown.  The rest go to EB_PalWrite.
 PALETTE_DISPATCH
-        dw   ppu_3F00,dk_3Fxx,dk_3Fxx,dk_3Fxx
-        dw   ppu_3F04,dk_3Fxx,dk_3Fxx,dk_3Fxx
-        dw   ppu_3F08,dk_3Fxx,dk_3Fxx,dk_3Fxx
-        dw   ppu_3F0C,dk_3Fxx,dk_3Fxx,dk_3Fxx
-
-        dw   ppu_3F10,dk_3Fxx,dk_3Fxx,dk_3Fxx
-        dw   ppu_3F14,dk_3Fxx,dk_3Fxx,dk_3Fxx
-        dw   ppu_3F18,dk_3Fxx,dk_3Fxx,dk_3Fxx
-        dw   ppu_3F1C,dk_3Fxx,dk_3Fxx,dk_3Fxx
-
-eb_palette_map
-            dw    0,  1, -1,  2    ; These two color are used for end-of-race color cycling
-            dw    0, -1, -1, -1 
-            dw    0, -1, -1, -1 
-            dw    0, -1, -1, -1
-
-            dw    0,  4,  5,  6    ; reserve player colors
-            dw    0, -1, -1, -1
-            dw    0, -1, -1, -1
-            dw    0, -1, -1, -1
-
-
-; When the phase changes, set a flag, but wait for the transition time to drop below $70
-; before applying the change.
-HasPaletteChange dw 0
-
-; X = 2*nes_palette_index
-dk_3Fxx
-        txy
-        txa
-        lsr
-        tax
-
-        ldal PPU_MEM+$3F00,x
-        and  #$003F
-        sta  nes_palette,y
-
-        inc
-        sta  HasPaletteChange
-
-        rts
-
-CheckForPaletteChange
-
-        lda  HasPaletteChange
-        bne  :update_palette
-        rts
-
-:update_palette
-        jsr  NES_BuildPalette         ; Create a mapping of the NES palette to the Apple IIgs palette
-
-        ldy  #current
-        lda  SwizzleTables
-        ldx  SwizzleTables+2
-        jsr  NES_BuildSwizzleTable
-
-        clc
-        ldy  #current+{4*2}
-        lda  SwizzleTables
-        adc  #$200
-        ldx  SwizzleTables+2
-        jsr  NES_BuildSwizzleTable
-
-        clc
-        ldy  #current+{8*2}
-        lda  SwizzleTables
-        adc  #$400
-        ldx  SwizzleTables+2
-        jsr  NES_BuildSwizzleTable
-
-        clc
-        ldy  #current+{12*2}
-        lda  SwizzleTables
-        adc  #$600
-        ldx  SwizzleTables+2
-        jsr  NES_BuildSwizzleTable
-
-        clc
-        ldy  #current+{16*2}
-        lda  SwizzleTables
-        adc  #$800
-        ldx  SwizzleTables+2
-        jsr  NES_BuildSwizzleTable
-
-        clc
-        ldy  #current+{20*2}
-        lda  SwizzleTables
-        adc  #$A00
-        ldx  SwizzleTables+2
-        jsr  NES_BuildSwizzleTable
-
-        clc
-        ldy  #current+{24*2}
-        lda  SwizzleTables
-        adc  #$C00
-        ldx  SwizzleTables+2
-        jsr  NES_BuildSwizzleTable
-
-        clc
-        ldy  #current+{28*2}
-        lda  SwizzleTables
-        adc  #$E00
-        ldx  SwizzleTables+2
-        jsr  NES_BuildSwizzleTable
-        
-        stz  HasPaletteChange
-
-;        jsr  ForceMetatileRefresh     ; Repaint the scene
-;        jsr  RenderScreen
-
-        rts
+        dw   ppu_3F00,EB_PalWrite,EB_PalWrite,EB_PalWrite
+        dw   EB_PalNone,EB_PalWrite,EB_PalWrite,EB_PalWrite
+        dw   EB_PalNone,EB_PalWrite,EB_PalWrite,EB_PalWrite
+        dw   EB_PalNone,EB_PalWrite,EB_PalWrite,EB_PalWrite
+        dw   ppu_3F10,EB_PalWrite,EB_PalWrite,EB_PalWrite
+        dw   EB_PalNone,EB_PalWrite,EB_PalWrite,EB_PalWrite
+        dw   EB_PalNone,EB_PalWrite,EB_PalWrite,EB_PalWrite
+        dw   EB_PalNone,EB_PalWrite,EB_PalWrite,EB_PalWrite
 
 ; Make the screen appear
 _topscroll      ds 2
@@ -482,19 +396,6 @@ _RenderScreen
 
         stz   DirtyBits
         rts
-
-; For this game, we utilize a single, static palette
-SetDefaultPalette
-
-; Set the tile/sprite mapping
-
-            lda   SwizzleTables+2
-            ldx   SwizzleTables
-            jsr   NES_SetPaletteMap
-            rts
-
-SwizzleTables adrl L1_T0
-;              adrl L2_T0
 
 ; Game-specific configuration values (none): CONFIG_GAME_DEFAULTS lays out their defaults at their IDs in
 ; the game's block (see rom/rom_config_setup.s, which also has the built-in values, menus and ApplyConfig)

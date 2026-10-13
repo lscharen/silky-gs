@@ -1,0 +1,11 @@
+; Start of a mountain: the gameplay palette (_off000_C694_04 in rom.s), before the sprite palettes for
+; the mountain are loaded.  The players' colors 2 change while they are stunned (sub_D446 loads
+; $21 / $25, sub_D0B8 puts $11 / $15 back), so they are reserved.
+BG0: $0F $30 $21 $01
+BG1: $0F $26 $2A $30
+BG2: $0F $38 $29 $0A
+BG3: $0F $27 $17 $07
+SP0: $0F $30 *$11 $26
+SP1: $0F $30 *$15 $26
+SP2: $0F $30 $21 $12
+SP3: $0F $38 $29 $0A

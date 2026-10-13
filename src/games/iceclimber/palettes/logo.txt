@@ -1,0 +1,11 @@
+; logo (title) screen palette (the $3F00 record in PPU_bg.s, which the ROM copies to ram_0500_data+$4C).
+; The ROM only uploads the backgrounds and SP0 (20 bytes), so SP1-SP3 hold whatever was there before
+; (start-up values, or the gameplay colors after a game over); the logo screen doesn't use them.
+BG0: $0F $31 $12 $30
+BG1: $0F $25 $29 $0A
+BG2: $0F $30 $21 $01
+BG3: $0F $27 $17 $07
+SP0: $0F $30 $12 $26
+SP1: $0F -- -- --
+SP2: $0F -- -- --
+SP3: $0F -- -- --

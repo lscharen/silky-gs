@@ -1,0 +1,12 @@
+; score counting screen palette (the second $3F00/$3F10 record in PPU_bg.s, which the ROM copies to
+; ram_0400_data+$DF).  The ROM only uploads BG0, BG1 and SP0-SP2.  The screen only uses BG0 and BG1, so
+; BG2 and BG3 (the gameplay colors) are unused; SP3 keeps the colors of the mountain's vegetable (one of
+; ten groups), so it is reserved.
+BG0: $0F $30 $21 $11
+BG1: $0F $30 $25 $15
+BG2: $0F -- -- --
+BG3: $0F -- -- --
+SP0: $0F $30 $11 $26
+SP1: $0F $30 $15 $26
+SP2: $0F $30 $21 $12
+SP3: $0F *$38 *$29 *$0A

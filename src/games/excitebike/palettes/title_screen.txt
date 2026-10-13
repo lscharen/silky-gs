@@ -1,0 +1,10 @@
+; title screen palette (_off_000_D450_18 in rom.s).  It uploads $3F00-$3F1B, so SP3 holds whatever was
+; there before; the title screen doesn't use it.
+BG0: $02 $0F $30 $21
+BG1: $02 $15 $02 $2A
+BG2: $02 $3C $02 $30
+BG3: $02 $30 $02 $27
+SP0: $02 $20 $16 $0F
+SP1: $02 $27 $13 $3C
+SP2: $02 $27 $16 $30
+SP3: $02 -- -- --

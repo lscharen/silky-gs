@@ -1,0 +1,34 @@
+; Palette transitions.  Each [section] lists the palettes that can follow it.  The layouts are chosen
+; to keep the redraws on these transitions down, and DetectNESPalette tries them first.  A race uploads
+; its track's colors (one of five schemes) and then the colors all the tracks share; the game can go
+; from the title screen to any track, from a track to the next one, and back to the title screen.
+
+[init]
+title_screen
+
+[title_screen]
+track1
+track2
+track3
+track4
+track5
+
+[track1]
+track2
+title_screen
+
+[track2]
+track3
+title_screen
+
+[track3]
+track4
+title_screen
+
+[track4]
+track5
+title_screen
+
+[track5]
+track1
+title_screen

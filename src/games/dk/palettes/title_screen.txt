@@ -1,0 +1,11 @@
+; title screen palette (Layout_TitleScreen_F8D9 in _rom.s).  The ROM only uploads $3F00-$3F0C and $3F11
+; (the cursor), so the other colors hold whatever was there before (start-up values, or the colors of
+; the phase the game ended in); the title screen doesn't use them.
+BG0: $0F $2C $38 $12
+BG1: $0F $27 $27 $27
+BG2: $0F $30 $30 $30
+BG3: $0F -- -- --
+SP0: $0F $25 -- --
+SP1: $0F -- -- --
+SP2: $0F -- -- --
+SP3: $0F -- -- --

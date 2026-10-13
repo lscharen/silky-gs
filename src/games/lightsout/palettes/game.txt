@@ -1,0 +1,9 @@
+; The game's only palette (screen_base in full/main.s, uploaded once with the screen)
+BG0: $0F $00 $0F $10
+BG1: $0F $00 $16 $10
+BG2: $0F $0F $0F $0F
+BG3: $0F $0F $0F $0F
+SP0: $0F $0F $00 $30
+SP1: $0F $0F $0F $0F
+SP2: $0F $0F $0F $0F
+SP3: $0F $0F $0F $0F

@@ -127,7 +127,7 @@ DetectNESPalette
 ; X = palette id.  Carry set if its colors are in palette RAM.  X is kept.  Only colors 1-3 of
 ; each group are compared (24 at most): color 0 is always IIgs slot 0.  One pass per group, from
 ; SP3 back to BG0, with its three colors compared inline.  NES colors are $00-$3F, so the $FF of a
-; reserved color is the only table byte with bit 7 set, and bmi skips it.
+; reserved or unused color is the only table byte with bit 7 set, and bmi skips it.
 :match      phx
             lda   PAL_MATCH,x
             clc
@@ -169,7 +169,7 @@ DetectNESPalette
 :from       ds    2
 :ptr        ds    2
 
-; id -> colors 1-3 of each group to match (BG0-BG3, SP0-SP3; $FF = any value: reserved)
+; id -> colors 1-3 of each group to match (BG0-BG3, SP0-SP3; $FF = any value: reserved or unused)
 PAL_MATCH
             dw    0
             dw    PAL_TITLE_SCREEN_MATCH
