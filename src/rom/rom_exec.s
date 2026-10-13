@@ -14,7 +14,7 @@
 ; assumed.
 ;
 ; The NES task is a coroutine.  It runs one NES frame (the NMI handler and, for
-; ROM_DRIVER_MODE games, the main loop up to its next yield), clears nesBusy and
+; games whose reset code is their main loop, that loop up to its next yield), clears nesBusy and
 ; voluntarily switches back to the GS task.
 ;
 ; With interrupts enabled, the VBL heartbeat (schedTask) is a pure scheduler.  It
@@ -156,8 +156,8 @@ nesTaskInit
 
 ; nesTaskMain
 ;
-; Body of the NES task.  For ROM_DRIVER_MODE games, the reset code never returns
-; here; its main loop calls yield every frame instead.
+; Body of the NES task.  When the reset code is the game's main loop, it never returns
+; here; the loop calls yield every frame instead.
             mx    %00
 nesTaskMain
             ldal  ROMBase+$FFFC           ; Reset Vector
@@ -216,9 +216,9 @@ nesCall
             rep   #$30
             rts
 
-; yield - allow the ROM to give up control.  Called with JSL from the NES main loop of
-;         ROM_DRIVER_MODE games when it is waiting for the next VBL.  The current frame
-;         is complete; when the next frame starts, the NMI handler runs and control
+; yield - allow the ROM to give up control.  Called with JSL from the main loop of games
+;         whose reset code is their main loop, when it is waiting for the next VBL.  The
+;         current frame is complete; when the next frame starts, the NMI handler runs and control
 ;         then returns to the main loop.
             mx    %11
 yield       ENT

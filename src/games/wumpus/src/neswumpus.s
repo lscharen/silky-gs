@@ -260,6 +260,8 @@ clrmem
 	jsr STA_2001
 
 Forever
+	lda #0              ; (port) the NMI handler sets it: see EndMain
+	sta nmiStarted
 	lda #>EndMain
 	pha
 	lda #<EndMain
@@ -274,6 +276,13 @@ Forever
 
 EndMain	 ;return label
 	nop
+; (port) On the NES this loop spins, and the NMI interrupts it once per frame.  Here the NMI only
+; runs when the ROM yields, so yield only if the main function didn't wait for an NMI itself (most of
+; them wait for one with yield, and then must run again straight away, as on the NES: TitleMain and the
+; others look at buttonPresses right after the NMI, which recomputes it every frame, so a yield here
+; as well made them see only every other frame's presses).
+	lda nmiStarted
+	bne Forever
 	jsl yield
 	jmp Forever     ;jump back to Forever, infinite loop
 
@@ -2340,6 +2349,7 @@ NMI
 	lda #$02 ; page 200
 	jsr STA_4014       ; set the high byte (02) of the RAM address, start the transfer
 
+	lda #1           ; (port) for EndMain
 	sta nmiStarted
 	lda NMIHanlderLo
 	sta :p+1

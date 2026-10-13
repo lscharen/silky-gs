@@ -474,8 +474,8 @@ ReadController
 ;	cpx #8
 ;	bne :lp
 
-native_joy    EXT
-    ldal  native_joy
+NES_ReadJoy1  EXT
+    jsl   NES_ReadJoy1        ; (port; was ldal native_joy: read on demand, see rom/rom_input.s)
 	sta   controllerState
 
 ;keep button A from toggling

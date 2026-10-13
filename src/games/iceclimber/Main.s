@@ -66,17 +66,6 @@ HAS_CHR_RAM equ 0
 HAS_BACKED_WRAM equ 0
 
 
-; Flag if the NES_StartUp code should keep a spriteable bitmap copy of the background tiles,
-; in addition to the compiled representation (usually yes, since this is used for the config
-; screen)
-BG_TILES_AS_SPRITES equ 1
-
-; Define what kind of execution harness to use
-;
-; 0 = Reset code drops into an infinite loop
-; 1 = Reset code is the game code
-ROM_DRIVER_MODE   equ 1
-
 ; Flag whether the backend should use the OAMDMA to get the sprite information,
 ; or if it can scan the NES RAM area directly
 ;
@@ -112,7 +101,7 @@ NO_VERTICAL_CLIP  equ 0
 NO_INTERRUPTS     equ 0
 
 ; Flag to turn off the configuration support
-NO_CONFIG         equ 1
+NO_CONFIG         equ 0
 
 ; Decode the DMC samples listed in DMC_SAMPLE_LIST into DOC RAM at start-up (see apu/apu.s).
 ; 0 = decode each sample when the game plays it.

@@ -25,6 +25,8 @@ npm run test            # Build image and launch in GSPort emulator
 npm run debug:<game>    # Launch Crossrunner debugger (smb, bf, lo, wump, eb, dk, ic, mb)
 ```
 
+After assembling, every build compacts the load file with `scripts/omf-compact.js` (runs of zeros become OMF DS records and reserved space; PPURAM and CHRDATA are made whole, bank-aligned segments) and prints the segment sizes. ExpressLoad can't load compacted files, so the link files must not use `XPL`, and segments that need a whole bank get it from `--bank` rather than a trailing `ds`.
+
 External tools are configured in `package.json` under `config`: Merlin32 assembler, Cadius disk utility, GSPort emulator, Crossrunner debugger, Cyrene/KegsCyrene. There is no automated test suite — testing is done by running in emulators.
 
 ## Architecture
@@ -96,7 +98,6 @@ The IIgs shows 16 colors at once (one palette of 16 slots); the NES shows up to 
 | `SPR_PIXEL_SHIFT` | Draw sprites on single pixels (shifted compiled variants, bigger cache slots); 0 = even pixels with the scroll half-pixel correction |
 | `NO_VERTICAL_CLIP` | Disable vertical sprite clipping |
 | `DIRECT_OAM_READ` | OAM access method |
-| `ROM_DRIVER_MODE` | Reset/restart behavior |
 
 ### Memory Layout
 
