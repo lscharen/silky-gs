@@ -74,6 +74,8 @@ chr_bank    ENT
         mx    %11
 PPUCTRL_WRITE ENT
         php
+        cmpl ppuctrl
+        beq  :fast_exit
 
 ; Save the control byte
         stal ppuctrl
@@ -133,6 +135,8 @@ PPUCTRL_WRITE ENT
 
         txa
         plx
+
+:fast_exit
         plp
         rtl
 
@@ -157,8 +161,8 @@ PPUSTATUS_READ_X ENT
         stal ppustatus
 
         pla                    ; Restore the accumulator (return value in X)
-        phx                    ; re-read x to set any relevant flags
-        plx
+        inx                    ; reset x to set any relevant flags
+        dex
 
         rtl
 
@@ -171,11 +175,11 @@ PPUSTATUS_READ ENT
         stal w_bit           ; Reset the address latch used by PPUSCROLL and PPUADDR
 
         ldal ppustatus
-        pha
+        bpl  :out
         and  #$7F            ; Clear the VBL flag
         stal ppustatus
-
-        pla                  ; re-read accumulator to set any relevant flags
+        ora  #$80            ; Restore negative value
+:out
         rtl
 
 
