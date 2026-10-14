@@ -17,7 +17,7 @@ HAS_CHR_RAM           equ 0
 // 32KB covers 16KB VRAM ($0000-$3FFF) + 16KB tile-version tracking ($4000-$7FFF).
 const STUBS = `\
 PPU_MEM              ds    $8000
-curr_at_list_end     ds    2
+at_count             ds    2
 curr_nt_list_end     ds    2
 at_list              ds    512
 nt_list              ds    512

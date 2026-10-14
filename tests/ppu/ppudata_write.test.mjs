@@ -98,12 +98,12 @@ describe('PPUDATA_WRITE — write to already-queued address', () => {
       .jsl('PPUDATA_WRITE', { A: 0xBB, mx: 3 })
       .captureMemory({ label: 'PPU_MEM',          offset: 0x2000, count: 2, as: 'byte' })
       .captureMemory({ label: 'curr_nt_list_end', as: 'word' })
-      .captureMemory({ label: 'curr_at_list_end', as: 'word' })
+      .captureMemory({ label: 'at_count', as: 'word' })
       .run();
 
     expect(r.memory['PPU_MEM'][0]).toBe(0xBB);   // value was written to PPU_MEM
     expect(r.memory['curr_nt_list_end']).toBe(0); // nt_list untouched
-    expect(r.memory['curr_at_list_end']).toBe(0); // at_list untouched
+    expect(r.memory['at_count']).toBe(0); // at_list untouched
   });
 });
 
@@ -168,7 +168,7 @@ describe('PPUDATA_WRITE — nametable tile write enqueues address in nt_list', (
       .jsl('PPUDATA_WRITE', { A: 0xAA, mx: 3 })
       .captureMemory({ label: 'curr_nt_list_end', as: 'word' })
       .captureMemory({ label: 'nt_list',          as: 'word' })
-      .captureMemory({ label: 'curr_at_list_end', as: 'word' })
+      .captureMemory({ label: 'at_count', as: 'word' })
       .captureMemory({ label: 'at_list',          as: 'word' })
       .run();
 
@@ -177,7 +177,7 @@ describe('PPUDATA_WRITE — nametable tile write enqueues address in nt_list', (
     // The stored entry is the (possibly mirrored) PPU address of the write.
     expect(r.memory['nt_list']).toBe(0x2000);
     // at_list must be completely untouched.
-    expect(r.memory['curr_at_list_end']).toBe(0);
+    expect(r.memory['at_count']).toBe(0);
     expect(r.memory['at_list']).toBe(0);
   });
 });
@@ -198,14 +198,14 @@ describe('PPUDATA_WRITE — attribute write enqueues address in at_list', () => 
       .jsl('PPUADDR_WRITE', { A: 0x23, mx: 3 })
       .jsl('PPUADDR_WRITE', { A: 0xC0, mx: 3 })
       .jsl('PPUDATA_WRITE', { A: 0xAA, mx: 3 })
-      .captureMemory({ label: 'curr_at_list_end', as: 'word' })
+      .captureMemory({ label: 'at_count', as: 'word' })
       .captureMemory({ label: 'at_list',          as: 'word' })
       .captureMemory({ label: 'curr_nt_list_end', as: 'word' })
       .captureMemory({ label: 'nt_list',          as: 'word' })
       .run();
 
     // One word was appended to at_list, so the end pointer advanced by 2.
-    expect(r.memory['curr_at_list_end']).toBe(2);
+    expect(r.memory['at_count']).toBe(2);
     // The stored entry is the (possibly mirrored) PPU address of the write.
     expect(r.memory['at_list']).toBe(0x23C0);
     // nt_list must be completely untouched.

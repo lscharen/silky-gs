@@ -440,19 +440,9 @@ NES_RenderFrame
             php
             sei
 
-; Swap the attribute list halves so that any new PPU writes do not interfere with the current screen
-; rendering code (PPUFreezeNametableUpdates below moves the write path to the other shadow buffer)
-
-            lda  curr_at_list_start
-            ldy  curr_at_list_end
-
-            ldx  prev_at_list_start       ; Copy the previous list start address
-
-            sta  prev_at_list_start       ; Make the previous list range point to the memory range
-            sty  prev_at_list_end         ; of the current list and then reset the current list
-
-            stx  curr_at_list_start       ; to point at the other memory range and initialize it
-            stx  curr_at_list_end         ; to be an empty list ready for the next round of PPU writes
+; Freeze the nametable updates: the buffer and attribute list the ROM has been filling become the ones
+; this render draws, and new PPU writes go to the other buffer, so they don't interfere with the render
+            jsr  PPUFreezeNametableUpdates
 
 ; If there are background updates to make, force a screen refresh.  The grid renderer decides for
 ; itself in gridPrepare, since it can apply a limited number of background tile updates directly.
@@ -460,8 +450,7 @@ NES_RenderFrame
             DO   ENABLE_DIRTY_RENDERING
             bra  :no_force
             FIN
-            lda  prev_at_list_start       ; Any queued attribute group means background changes
-            cmp  prev_at_list_end
+            lda  at_prev_count            ; Any queued attribute group means background changes
             beq  :no_force
             lda  #DIRTY_BIT_BG0_REFRESH
             tsb  DirtyBits
@@ -498,7 +487,6 @@ NES_RenderFrame
             jsr  EnableSprites
 
             jsr  scanOAMSprites            ; Copy the sprite OAM data into internal RAM space for rendering
-            jsr  PPUFreezeNametableUpdates ; Copy the updated tile data into internal RAM space for rendering
 
             plp
 
@@ -710,16 +698,12 @@ _ShowDebugInfo
 
 
 ; Show the size of the attribute queues (current, previous)
-            lda   curr_at_list_end
-            sec
-            sbc   curr_at_list_start
+            lda   at_count
             ldx   #{0*160}+144
             ldy   #$FFFF
             jsr   DrawWord
 
-            lda   prev_at_list_end
-            sec
-            sbc   prev_at_list_start
+            lda   at_prev_count
             ldx   #{8*160}+144
             ldy   #$FFFF
             jsr   DrawWord
