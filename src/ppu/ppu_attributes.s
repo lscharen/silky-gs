@@ -196,8 +196,15 @@ DrawPPUTile
         DO    HAS_CHR_RAM
         rep   #$20
         lda   patch0+1                ; the slot: tile * 128 | bgadr_hi
+        phx
+        CHR_INDEX                     ; X = the tile's ChrRamDirty index
+        ldal  ChrRamDirty,x
+        plx
+        bit   #CHRRAM_BG_DIRTY        ; (tested here: the call only when the tile is dirty)
+        beq   :chr_ok
+        lda   patch0+1
         jsr   CheckBgTileDirty        ; (preserves X and Y)
-        sep   #$20
+:chr_ok sep   #$20
         FIN
 
         clc

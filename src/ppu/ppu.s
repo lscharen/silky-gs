@@ -36,6 +36,23 @@ SPR_FLIP_PAGE equ 1
         FIN
 SPR_MAX_SLOTS equ SPR_BANK_SLOTS*SPR_MAX_BANKS   ; (SPR_MAX_BANKS is in Defs.s: InitMemory uses it too)
 
+; 8x16 sprites: the pattern table is bit 0 of the sprite's own tile ID (PPUCTRL doesn't select it), so
+; set the sprite's sprTmp5 (the table's offset in the tiledata bank: $0000 / $8000) and sprCompTbl (its
+; half of SPR_COMP_TBL).  A = the OAM tile and attribute word; A is trashed.  (Relative branches, not
+; local labels: the macro is expanded twice in drawSprites.)
+SPR16_TABLE mac
+        and   #$0001                   ; the pattern table bit
+        beq   *+14                     ; (table 0: the three lines after the bra)
+        lda   #$8000
+        sta   sprTmp5
+        lda   #SPR_COMP_TBL+$1000
+        sta   sprCompTbl
+        bra   *+9
+        stz   sprTmp5
+        lda   #SPR_COMP_TBL
+        sta   sprCompTbl
+        <<<
+
 ; Set up a sprite for drawing.  X = OAM index (preserved).
 ;
 ; Sets sprTmp1 = SHR address, sprTmp4 = horizontal clip amount (0 = no clipping), sprShift = $0004 for
@@ -301,19 +318,7 @@ drawSprites
 :drawSprite16
         ldal  OAM_COPY+1,x
         sta   sprTmp2                  ; {attribute, tile_id}
-
-        and   #$0001                   ; isolate the pattern-table select bit
-        beq   :spr16_tbl0
-        lda   #$8000
-        sta   sprTmp5
-        lda   #SPR_COMP_TBL+$1000      ; pattern table 1's half of SPR_COMP_TBL
-        sta   sprCompTbl
-        bra   :spr16_tbl_done
-:spr16_tbl0
-        stz   sprTmp5
-        lda   #SPR_COMP_TBL
-        sta   sprCompTbl
-:spr16_tbl_done
+        SPR16_TABLE                    ; the pattern table from the tile ID's bit 0
 
         lda   sprTmp2
         and   #$FFFE                   ; top-half tile id (pattern-table bit cleared), attribute preserved
@@ -358,19 +363,7 @@ drawSprites
 :drawSprite16c
         ldal  OAM_COPY+1,x
         sta   sprTmp2                  ; {attribute, tile_id}
-
-        and   #$0001                   ; isolate the pattern-table select bit
-        beq   :c16tbl0
-        lda   #$8000
-        sta   sprTmp5
-        lda   #SPR_COMP_TBL+$1000
-        sta   sprCompTbl
-        bra   :c16tbl
-:c16tbl0
-        stz   sprTmp5
-        lda   #SPR_COMP_TBL
-        sta   sprCompTbl
-:c16tbl
+        SPR16_TABLE                    ; the pattern table from the tile ID's bit 0
         lda   sprTmp2
         and   #$FFFE                   ; top-half tile id
         sta   sprTmp2
@@ -492,13 +485,11 @@ sprCacheMiss
         cmp  #2*SPR_COMPILE_PER_RENDER
         bcs  :no_queue
         tax                            ; X = end of the pending list
-        lda  sprTmp5                   ; A = key offset (both horizontal flips are compiled together): Y
-        lsr                            ; with the pattern table, $8000 -> $1000
-        lsr
-        lsr
-        phy
-        ora  1,s
-        ply
+        tya                            ; A = key offset (both horizontal flips are compiled together): Y
+        clc                            ; with the pattern table, from its half of SPR_COMP_TBL
+        adc  sprCompTbl
+        sec
+        sbc  #SPR_COMP_TBL
         stal PPU_MEM+SPR_PEND,x
         inx
         inx
@@ -514,7 +505,12 @@ sprCacheMiss
 as_bitmap
         phx                           ; the OAM index
 as_bitmap_saved
-        DO   HAS_CHR_RAM
+        DO   HAS_CHR_RAM              ; The tile's address first: reconvert it if CHR-RAM changed it
+        lda  sprTmp2-1
+        and  #$FF00
+        lsr                           ; Each tile is 128 bytes of data -- this clears the carry flag
+        ora  sprTmp5                  ; fold in the pattern-table offset ($0000 or $8000)
+        tay                           ; (kept across the check)
         jsr  sprChrCheck
         FIN
         DO   SHOW_DEBUG_VARS
@@ -531,10 +527,14 @@ as_bitmap_saved
 
 ; Calculate the address of the tile data
 
+        DO   HAS_CHR_RAM
+        tya                           ; (computed above)
+        ELSE
         lda  sprTmp2-1
         and  #$FF00
         lsr                           ; Each tile is 128 bytes of data -- this clears the carry flag
         ora  sprTmp5                  ; fold in the pattern-table offset ($0000 or $8000)
+        FIN
         pei  sprBankSwap              ; The tile routines read the tile data with DBR = tiledata
         plb
         jsr  (drawProcs,x)
@@ -549,7 +549,12 @@ as_bitmap_saved
         mx    %00
 as_bitmap_clip
         phx                           ; the OAM index
-        DO   HAS_CHR_RAM
+        DO   HAS_CHR_RAM              ; The tile's address first: reconvert it if CHR-RAM changed it
+        lda  sprTmp2-1
+        and  #$FF00
+        lsr                           ; Each tile is 128 bytes of data -- this clears the carry flag
+        ora  sprTmp5                  ; fold in the pattern-table offset ($0000 or $8000)
+        tay                           ; (kept across the check)
         jsr  sprChrCheck
         FIN
         lda  sprTmp2+1
@@ -559,10 +564,14 @@ as_bitmap_clip
         lsr
         lsr
         tax
+        DO   HAS_CHR_RAM
+        tya                           ; (computed above)
+        ELSE
         lda  sprTmp2-1
         and  #$FF00
         lsr                           ; Each tile is 128 bytes of data -- this clears the carry flag
         ora  sprTmp5                  ; fold in the pattern-table offset ($0000 or $8000)
+        FIN
         pei  sprBankSwap              ; The tile routines read the tile data with DBR = tiledata
         plb
         jsr  (drawProcsClipped,x)
@@ -570,66 +579,38 @@ as_bitmap_clip
         plx
         rts
 
-; CHR-RAM support, for the bitmap draws (as_bitmap, as_bitmap_clip): if the sprite's tile was
-; rewritten since it was converted, reconvert it.  sprTmp2 = tile and attributes, sprTmp5 = the
-; pattern table select.  DBR = $01.  A, X and Y are trashed.
+; CHR-RAM support, for the bitmap draws (as_bitmap, as_bitmap_clip): if the sprite's tile was rewritten
+; since it was converted, reconvert it (FastROMMaskedTileToLookup).  A = Y = the tile's address in the
+; tiledata bank (tile * 128 | sprTmp5).  DBR = $01.  Y is preserved; A and X are not.
         DO    HAS_CHR_RAM
         mx    %00
 sprChrCheck
-        lda  sprTmp5                  ; ($0000 / $8000 -> $0000 / $0100)
-        xba
-        asl
-        pha
-        lda  sprTmp2
-        and  #$00FF
-        ora  1,s                      ; tile | pattern table select: the 0-511 index of ChrRamDirty
-        tax
-        pla
-        ldal ChrRamDirty,x
-        bit  #CHRRAM_SPR_DIRTY
-        bne  *+3
-        rts
-        pei  sprBankSwap              ; (with DBR = the tiledata bank, as it was written for)
-        plb
-        jsr  CheckSprTileDirty
-        plb
-        rts
-        FIN
-
-; CHR-RAM support: reconvert one sprite tile whose sprite dirty flag is set (the
-; caller, sprChrCheck, tests it), with FastROMMaskedTileToLookup.
-;
-; X = the 0-511 index of the tile in ChrRamDirty (tile | pattern table << 8).
-; 16-bit A/X/Y; all are trashed.
-        DO    HAS_CHR_RAM
-        mx    %00
-CheckSprTileDirty
-
-; The ChrRamDirty array is indexed 0-511, spanning *both* CHR-RAM pattern
-; tables.  Clear the flag with an 8-bit store: a 16-bit one would also write the next
-; tile's flags, which the NES task may set in between.
-
-        sep   #$20
+        CHR_INDEX                     ; X = the tile's ChrRamDirty index
         ldal  ChrRamDirty,x
+        bit   #CHRRAM_SPR_DIRTY
+        bne   :dirty
+        rts
+
+; Clear the flag with an 8-bit store: a 16-bit one would also write the next tile's flags, which the
+; NES task may set in between.  The tile has no compiled sprites to drop: PPUDATA_WRITE dropped them
+; when the flag was set, and SprCompileTile does not compile a tile while its flag is set.
+:dirty  sep   #$20
         and   #CHRRAM_SPR_DIRTY!$FF   ; clear only the sprite bit, preserve the BG bit
         stal  ChrRamDirty,x
         rep   #$20
-
-        txa                           ; get back the value $0 - $1FF
-        asl   a
-        asl   a
-        asl   a
-        asl   a
-        tax                           ; X = CHR-RAM source address (tile ID * 16)
-
-        asl   a
-        asl   a
-        asl   a                       ; A = tile ID * 128 (tiledata offset)
-
-; The tile has no compiled sprites to drop: PPUDATA_WRITE dropped them when the flag was set, and
-; SprCompileTile does not compile a tile while its flag is set.
-
-        jmp   FastROMMaskedTileToLookup
+        phy
+        pei   sprBankSwap             ; (with DBR = the tiledata bank, as it was written for)
+        plb
+        tya
+        lsr
+        lsr
+        lsr
+        tax                           ; X = the CHR-RAM source address (index * 16 = address / 8)
+        tya                           ; A = the tiledata address
+        jsr   FastROMMaskedTileToLookup
+        plb
+        ply
+        rts
         FIN
 
 ; A compiled sprite on an odd pixel whose shifted pair is not compiled yet: called by its stub
@@ -645,11 +626,9 @@ SprQueueShift
         cmp  #2*SPR_COMPILE_PER_RENDER
         bcs  :full
         tax                            ; X = end of the pending list
-        lda  sprTmp5                   ; the pattern table, $8000 -> $1000, and the shift request
-        lsr
-        lsr
-        lsr
-        ora  #$0001
+        lda  sprCompTbl                ; the pattern table (from its half of SPR_COMP_TBL: $0000 / $1000)
+        sec
+        sbc  #SPR_COMP_TBL-1           ; and the shift request (+ 1)
         pha
         lda  sprTmp2                   ; the key offset, as in :blitResolvedSprite
         and  #$83FF                    ; tile, palette and vertical flip
