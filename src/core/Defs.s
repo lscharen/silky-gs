@@ -348,10 +348,6 @@ SPR_ST_SIZE   equ 24
 
 ; Grid renderer, quad mode (ppu_grid_quads.s): the unchanged-sprite skip's tables, out of the main segment
 GQ_PREV_OAM   equ $6800               ; OAM_COPY as last drawn (256 bytes)
-GQ_XTL        equ $6900               ; gqL* | gqH*: a sprite's quadrants in either nibble (128 bytes each)
-GQ_XTR        equ $6980
-GQ_XBL        equ $6A00
-GQ_XBR        equ $6A80
 
 ;TILE_ROW      equ $B000          ; pre-calculated row of the PPU address
 ;TILE_COL      equ $C000          ; pre-calculated column of the PPU address

@@ -57,6 +57,7 @@ SEG_ENGINE  equ   1
             put    ppu/ppu_render.s
             put    ppu/ppu_grid.s
             put    ppu/ppu_grid_quads.s
+            put    ppu/ppu_grid_marks.s
             put    ppu/ppu_sprites.s
             put    ppu/ppu_tile_blitters.s
             put    ppu/ppu_frame.s

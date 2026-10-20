@@ -402,12 +402,12 @@ OAM_COPY      ds 256
             DO    ENABLE_DIRTY_RENDERING
 gridRowLo   ds    256                     ; Indexed by OAM y
 gridRowHi   ds    256
-gridKIdx    ds    256
+gridKCls    ds    256                     ; Quadrant pattern * 2 = k class * 8 (by OAM y) | p class * 2 (by OAM x)
 gridColOff  ds    256                     ; Indexed by OAM x
-gridBIdx    ds    256
-gqSC        ds    256                     ; Per OAM offset: +0 cell, +2 table index, +3 skip flag
+gridPCls    ds    256
+gqSC        ds    256                     ; Per OAM offset: +0 cell, +2 pattern * 2, +3 skip flag
 gqSI        equ   gqSC+2                  ;   (byte; read as a word, the high byte is the skip flag)
-gqSkip      equ   gqSC+2                  ;   word: table index | skip << 8 -- skip when >= $100
+gqSkip      equ   gqSC+2                  ;   word: pattern * 2 | skip << 8 -- skip when >= $100
             FIN
 
 ; ---- rom_tiles.s: tile conversion lookup tables ----

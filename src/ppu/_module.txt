@@ -14,6 +14,7 @@ ppu_regs.s
 ppu_render.s
 ppu_grid.s
 ppu_grid_quads.s
+ppu_grid_marks.s
 ppu_sprites.s
 ppu_tile_blitters.s
 ppu_frame.s
