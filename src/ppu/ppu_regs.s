@@ -34,10 +34,13 @@ vram_buff dw 0     ; latched data when reading VRAM ($0000 - $3EFF)
 ppuincr   dw 1     ; 1 or 32 depending on bit 2 of PPUCTRL
 spadr     dw PPU_SPR_TILE_ADDR ; Sprite pattern table ($0000 or $1000) depending on bit 3 of PPUCTRL
 ntaddr    dw $2000 ; Base nametable address ($2000, $2400, $2800, $2C00), bits 0 and 1 of PPUCTRL
-bgadr     dw PPU_BG_TILE_ADDR ; Background pattern table address
-ppuctrl   dw 0     ; Copy of the ppu ctrl byte
+bgadr ENT
+          dw PPU_BG_TILE_ADDR ; Background pattern table address
+ppuctrl ENT
+          dw 0     ; Copy of the ppu ctrl byte
 ppumask   dw 0     ; Copy of the ppu mask byte
-ppustatus dw 0
+ppustatus ENT
+          dw 0
 oamaddr   dw 0     ; Typically this will always be 0
 ppuscroll dw 0     ; Y X coordinates
 
@@ -49,7 +52,8 @@ bgadr_hi  dw $0000 ; Set to $8000 if bgadr is $1000. Used to get address in tile
 bgadr_lo  dw $0000 ; Set to $0100 if bgadr is $1000. Used to merge with tile ID values
 
 ; Value to mask with ppumask to allow the runtime to override some bits
-ppumask_override dw $FFFF
+ppumask_override ENT
+                 dw $FFFF
 
 ; MMC1 registers
 mmc1_shft   ENT

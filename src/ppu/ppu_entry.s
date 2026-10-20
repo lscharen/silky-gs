@@ -1,0 +1,90 @@
+; ppu_entry.s - Long entry points into the engine
+;
+; The engine (the ppu/ files, the blitter, the tile and sprite compilers) is assembled into its own
+; segment, ENGINE, in its own bank (each game's Engine.s); the rest of the runtime (scaffold.s, the
+; configuration, the APU, the game's frame hooks) is in MAIN.  MAIN calls the engine only through
+; these: JSL, which set DBR to the engine bank, as the engine's routines expect, and return with RTL.
+; N and Z are not preserved (PLB); C, V and the registers are.
+;
+; RenderLatch and RenderDraw (ppu_frame.s) are entered the same way.
+;
+; Everything MAIN uses from the engine is exported with ENT at its definition ("label ENT", never
+; the operand form: see scripts/check-xbank.js); MAIN imports it all (ImportEngine.s).
+
+            mx    %00
+
+; Start-up (scaffold.s NES_StartUp)
+PPUStartUpL ENT
+            phb
+            phk
+            plb
+            jsr   PPUStartUp
+            plb
+            rtl
+
+InitYExcludeL ENT
+            phb
+            phk
+            plb
+            jsr   InitYExclude
+            plb
+            rtl
+
+; Control-% (scaffold.s)
+ForceMetatileRefreshL ENT
+            phb
+            phk
+            plb
+            jsr   ForceMetatileRefresh
+            plb
+            rtl
+
+; A mirroring change (ControlBits.s ApplyMirrorMode)
+PPUSetMirrorModeL ENT
+            phb
+            phk
+            plb
+            jsr   PPUSetMirrorMode
+            plb
+            rtl
+
+; ROM_CompileBackgroundTiles (rom_helpers.s)
+CompileTileL ENT
+            phb
+            phk
+            plb
+            jsr   CompileTile
+            plb
+            rtl
+
+; NES_SetPaletteMap (rom_helpers.s)
+SprRequestFlushL ENT
+            phb
+            phk
+            plb
+            jsr   SprRequestFlush
+            plb
+            rtl
+
+; _SetScreenMode (Graphics.s).  Returns A.
+SetScreenRectL ENT
+            phb
+            phk
+            plb
+            jsr   SetScreenRect
+            plb
+            rtl
+
+; InitGraphics, _ClearShadowScreen (Graphics.s).  (_ShadowOn doesn't use DBR.)
+_ShadowOnL ENT
+            jsr   _ShadowOn
+            rtl
+
+; UpdatePalette (pal_transitions.s)
+RefreshPPUAttributesL ENT
+            phb
+            phk
+            plb
+            jsr   RefreshPPUAttributes
+            plb
+            rtl

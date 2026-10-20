@@ -10,7 +10,7 @@
 ; is sufficient room to compile *all* 256 tiles.
 ROM_CompileBackgroundTiles
 
-            lda  bgadr           ; address in PPU memory to read for each tile 
+            ldal bgadr           ; address in PPU memory to read for each tile 
             cmp  #$1000
             lda  #$0000
             ror                  ; pattern table select determines if the tile is saved in first or second half of memory
@@ -21,7 +21,7 @@ ROM_CompileBackgroundTiles
             phy                  ; save the compiled tile slot address (Y) across the call
 
             ldx  #^tiledata
-            jsr  CompileTile
+            jsl  CompileTileL
 
             pla
             clc
@@ -96,7 +96,7 @@ NES_SetPaletteMap
             cpx   SwizzlePtr
             beq   :set
 :changed    pha
-            jsr   SprRequestFlush
+            jsl   SprRequestFlushL
             pla
 :set
             sta   SwizzlePtr+2

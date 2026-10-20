@@ -87,7 +87,7 @@ config_video_fastmode  ds  2  ; use the "skip line" rendering mode
 
 ; player 1 config block (layout is fixed by the PLAYER_INPUT_* offsets in core/CoreImpl.s)
 config_block_p1
-config_input_p1_type   dw  0  ; keyboard / snes max
+config_input_p1_type   dw  0  ; 0 = keyboard, 2 = snes max, INPUT_KEYBOARD2 = keyboard 2
 config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
@@ -158,6 +158,7 @@ INPUT_TYPE_STR      str 'TYPE'
 INPUT_TYPE_OPT_1    str 'KEYBOARD'
 INPUT_TYPE_OPT_2    str 'JOYSTICK'
 INPUT_TYPE_OPT_3    str 'SNES MAX'
+INPUT_TYPE_OPT_4    str 'KEYBOARD 2'   ; several keys held at once (rom/rom_keyboard2.s)
 INPUT_LEFT_MAP_STR  str 'LEFT'
 INPUT_RIGHT_MAP_STR str 'RIGHT'
 INPUT_UP_MAP_STR    str 'UP'
@@ -315,8 +316,8 @@ INPUT_CONFIG dw   INPUT_TITLE_STR
 ; Vertical layout of the input controls.  The P1/P2 tabs push everything down.
              DO   CONFIG_INPUT_2P
 INPUT_TYPE_Y   equ 5
-INPUT_LIST_Y   equ 10
-INPUT_BUTTON_Y equ 15
+INPUT_LIST_Y   equ 11
+INPUT_BUTTON_Y equ 16
              ELSE
 INPUT_TYPE_Y   equ 2
 INPUT_LIST_Y   equ 8
@@ -356,10 +357,14 @@ INPUT_ITEM_1 dw   RADIO
              dw   3,INPUT_TYPE_Y
              dw   INPUT_TYPE_STR
              dw   config_input_p1_type
-             dw   2
+             dw   3
 
              dw   0
              dw   INPUT_TYPE_OPT_1
+             dw   KEYBOARD_LIST
+
+             dw   INPUT_KEYBOARD2
+             dw   INPUT_TYPE_OPT_4
              dw   KEYBOARD_LIST
 
              dw   2
@@ -443,10 +448,14 @@ INPUT_ITEM_P2 dw  RADIO
              dw   3,INPUT_TYPE_Y
              dw   INPUT_TYPE_STR
              dw   config_input_p2_type
-             dw   2
+             dw   3
 
              dw   0
              dw   INPUT_TYPE_OPT_1
+             dw   KEYBOARD_LIST_2
+
+             dw   INPUT_KEYBOARD2
+             dw   INPUT_TYPE_OPT_4
              dw   KEYBOARD_LIST_2
 
              dw   2

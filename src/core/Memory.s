@@ -45,8 +45,10 @@ InitMemory
 mem_err
                rts
 
-SprBanks       ds        SPR_MAX_BANKS               ; The sprite cache's banks
-SprBankCount   dw        0                           ; and how many there are (1 - SPR_MAX_BANKS)
+SprBanks ENT
+               ds        SPR_MAX_BANKS               ; The sprite cache's banks
+SprBankCount ENT
+               dw        0                           ; and how many there are (1 - SPR_MAX_BANKS)
 
 ; Bank allocator (for one full, fixed bank of memory. Can be immediately deferenced)
 

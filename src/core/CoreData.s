@@ -1,12 +1,6 @@
-; All of the data tables and structures
+; All of the data tables and structures (the page-sized ones, Mul160Tbl and ChrRamDirty among them, are
+; in core/Data.s)
 
-; A table of pre-multiplied values of 160
-Mul160Tbl
-]step       equ   0
-            lup   256
-            dw    160*]step
-]step       equ   ]step+1
-            --^
 
 ; The blitter table (BTable) holds the full 4-byte address of the even page (P0) of each of the 240
 ; PEA rows.  The row for CIRAM page 1 is at +$0100.  The high and low words are kept in separate
@@ -198,9 +192,3 @@ RTable            ds    400
 ; separately by the BG- and sprite-side consumers:
 CHRRAM_BG_DIRTY   equ   $01     ; DrawPPUTile / CheckBgTileDirty
 CHRRAM_SPR_DIRTY  equ   $02     ; CheckSprTileDirty
-;
-; This array is just a block of 512 bytes.  There are direct page pointers
-; to access the background vs sprite ranges since those are configurable at
-; runtime.
-ChrRamDirty       ENT
-                  ds    512

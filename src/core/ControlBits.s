@@ -1,41 +1,3 @@
-; A = 0 turn off background
-; A > 0 turn on background
-          mx    %00
-EnableBackground
-    cmp   #0
-    beq   :turn_off
-    lda   #CTRL_BKGND_ENABLE
-    tsb   ControlBits
-    bne   :done
-    lda   #DIRTY_BIT_BG0_REFRESH     ; If the state of the background enable bit changed, trigger a refresh
-    tsb   DirtyBits
-    rts
-
-:turn_off
-    lda   #CTRL_BKGND_ENABLE
-    trb   ControlBits
-    beq   :done
-    lda   #DIRTY_BIT_BG0_REFRESH     ; If the state of the background enable bit changed, trigger a refresh
-    tsb   DirtyBits
-
-:done
-    rts
-
-; A = 0 turn off sprites
-; A > 0 turn on sprites
-          mx    %00
-EnableSprites
-    cmp   #0
-    beq   :turn_off
-    lda   #CTRL_SPRITE_ENABLE
-    tsb   ControlBits
-    rts
-
-:turn_off
-    lda   #CTRL_SPRITE_ENABLE
-    trb   ControlBits
-    rts
-
 ; A = HORIZONTAL_MIRRORING or VERTICAL_MIRRORING
 ;
 ; Lightweight entry point, safe to call directly from NES ROM code (JSL,
@@ -43,7 +5,7 @@ EnableSprites
 ; engine's own direct page is NOT active there (NES ROM code runs with its
 ; own direct page), so this must touch only absolute/long-addressable
 ; state, never DP -- it just remembers the requested mode in
-; PendingMirrorMode (scaffold.s) for ApplyMirrorMode (below) to pick up at
+; PendingMirrorMode (ppu_init.s) for ApplyMirrorMode (below) to pick up at
 ; render time, when the engine's own direct page is active again and it's
 ; safe to actually reconfigure anything.
           mx    %00
@@ -60,11 +22,12 @@ SetMirrorMode ENT
 ; matching the existing CheckForPaletteChange precedent).
           mx    %00
 ApplyMirrorMode
-    lda   PendingMirrorMode
+    ldal  PendingMirrorMode
     beq   :done
 
-    jsr   PPUSetMirrorMode
-    stz   PendingMirrorMode
+    jsl   PPUSetMirrorModeL
+    lda   #0
+    stal  PendingMirrorMode
 
 :done
     rts

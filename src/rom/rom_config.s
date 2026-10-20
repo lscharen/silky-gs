@@ -1473,7 +1473,7 @@ _DrawMenuCursor
 
             asl                           ; x2 for indexing
             tax
-            lda   Mul160Tbl,x
+            ldal  Mul160Tbl,x
             clc
             adc   #MENU_PANEL_ORIGIN+{MENU_FIRST_ROW*ROW_STEP}+{1*COL_STEP} ; A blank column before the title
             tay
@@ -1682,6 +1682,109 @@ ConfigDrawString
             dex
             bne   :loop
             rts
+
+; Draw one tile of the built-in font (moved here from ppu.s: only the configuration screen uses it).
+; The tile data is read through DBR (this bank); the rest is direct page and long stores.
+        mx    %00
+_blitTileNoMask
+; A = tile address
+; Y = screen address
+; X = palette select 0,2,4,6
+;
+; Raw data draw -- expands the tile data from w_wxxy_yzz0 to 00ww_00xx_00yy_00zz and then adds an offset based on the
+; palette select
+
+        sta   sprTmp0
+        sty   sprTmp1
+
+        txa
+        and   #$0006
+        asl
+        sta   sprTmp3
+        asl
+        asl
+        asl
+        asl
+        ora   sprTmp3
+        sta   sprTmp3
+        xba
+        ora   sprTmp3
+        sta   sprTmp3
+
+        ldy   sprTmp0
+        ldx   sprTmp1
+        lda   #8
+        sta   sprTmp4
+
+]line   equ   0
+:loop
+        lda:  {]line*4},y                            ; Load the tile data lookup value
+        lsr
+        and   #$0003
+        sta   sprTmp2
+        lda:  {]line*4},y
+        asl
+        and   #$0030
+        tsb   sprTmp2
+        lda:  {]line*4},y
+        asl
+        asl
+        asl
+        and   #$0300
+        tsb   sprTmp2
+        lda:  {]line*4},y
+        asl
+        asl
+        asl
+        asl
+        asl
+        and   #$3000
+        ora   sprTmp2
+        xba
+        ora   sprTmp3
+        stal  $010000+{]line*SHR_LINE_WIDTH},x
+
+        lda:  {]line*4}+2,y
+        lsr
+        and   #$0003
+        sta   sprTmp2
+        lda:  {]line*4}+2,y
+        asl
+        and   #$0030
+        tsb   sprTmp2
+        lda:  {]line*4}+2,y
+        asl
+        asl
+        asl
+        and   #$0300
+        tsb   sprTmp2
+        lda:  {]line*4}+2,y
+        asl
+        asl
+        asl
+        asl
+        asl
+        and   #$3000
+        ora   sprTmp2
+        xba
+        ora   sprTmp3
+        stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+
+        iny
+        iny
+        iny
+        iny
+
+        txa
+        clc
+        adc   #160
+        tax
+
+        dec   sprTmp4
+        beq   :done
+        brl   :loop
+:done
+        rts
 
 ; Built-in font w/widgets to avoid depending on CHR-ROMs (32 bytes/tile)
 ;

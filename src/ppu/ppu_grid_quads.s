@@ -1812,20 +1812,11 @@ gqPrevEnd   dw    0
 gbErase     dw    0
 gbExpose    dw    0
 
-; Byte tables read with 8-bit index registers in gridMarkSprite8/16: page-aligned so no indexed read
-; crosses a page (no extra cycle).  The five tables are 256 bytes each, so one alignment covers them all.
-            ds    \,$00
-gridRowLo   ds    256                     ; Indexed by OAM y
-gridRowHi   ds    256
-gridKIdx    ds    256
-gridColOff  ds    256                     ; Indexed by OAM x
-gridBIdx    ds    256
+; The OAM coordinate tables gridRowLo, gridRowHi, gridKIdx, gridColOff and gridBIdx (read with 8-bit
+; index registers in gridMarkSprite8/16) and gqSC / gqSI / gqSkip are in core/Data.s, page-aligned
 gqRec       ds    GQ_RECBYTES*2           ; Two record code arrays (current / previous)
 gqCode      ds    GQ_CODEBYTES            ; Cell code array
 gqGrid      ds    GQ_BYTES
-gqSC        ds    256                     ; Per OAM offset: +0 cell, +2 table index, +3 skip flag
-gqSI        equ   gqSC+2                  ;   (byte; read as a word, the high byte is the skip flag)
-gqSkip      equ   gqSC+2                  ;   word: table index | skip << 8 -- skip when >= $100
 gqOAMEnd    dw    256
 gqPrevTall  dw    1                       ; (no skipping before the first full frame)
 gqUnch      dw    0                       ; Unchanged sprites this frame (0: no skipping, no cascade)

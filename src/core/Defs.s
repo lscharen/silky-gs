@@ -72,6 +72,11 @@ SprChrMem              equ   54
 unused59               equ   59
 
 pputmp                 equ   60          ; 16 bytes of temporary storage for the ppu subsystem
+sprTmp0                equ pputmp
+sprTmp1                equ pputmp+2
+sprTmp2                equ pputmp+4
+sprTmp3                equ pputmp+6
+sprTmp4                equ pputmp+8
 
 unused76               equ   76
 unused78               equ   78
@@ -299,6 +304,10 @@ TILE_ADDR_HI  equ $6000          ; pre-calculated address (high byte) of the loc
 ; Without SPR_PIXEL_SHIFT (the game's Main.s) there are only the first two variants, in 512 byte slots,
 ; 128 in one bank: as is at slot + $000 and flipped horizontally at slot + $100.  The slot sizes are in
 ; ppu.s (SPR_SLOT_SIZE, SPR_BANK_SLOTS, SPR_MAX_BANKS, SPR_MAX_SLOTS, SPR_FLIP_PAGE), after the game's flags.
+;
+; The most compile banks the sprite cache uses: 4 with the shifted variants (SPR_PIXEL_SHIFT, a game
+; flag defined after this file), else 1.  Here rather than in ppu.s, as InitMemory uses it as well.
+SPR_MAX_BANKS          equ   1+{3*SPR_PIXEL_SHIFT}
 ;
 ; SPR_COMP_TBL maps a sprite to the slot of its compiled code, as bank << 8 | page (the high two bytes of
 ; the slot's 24-bit address), or 0.  The bank is never 0, so 0 means "not compiled".  It is indexed by the

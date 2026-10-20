@@ -291,61 +291,6 @@ _InitLiteBlitter
                   stal      lite_start_page_2+_O_JMP_OFFSET+1,x
                   rts
 
-; Mirroring
-;
-; The PEA field rows map 1:1 onto the CIRAM pages, so a mirroring change only needs to update the
-; address masks and the V flag that is used to enter the blitter.  Nothing in the code field is
-; patched, so these are cheap enough to call whenever a mapper changes the mirroring mode.
-;
-; The scroll values derived by _UpdateScrollStart and the entry and exit points in the code field
-; depend on the mirroring mode, so a change updates them and forces a full setup of the code field
-; on the next render.
-;
-; With horizontal mirroring each line stays within one CIRAM page, which creates a virtual 256x480
-; rendering surface.
-_InitHorizontalMirroring
-                  lda       #HORIZONTAL_MIRROR_MASK
-                  sta       MirrorMaskLong
-                  lda       #$07E0
-                  sta       CIRAMRowMask         ; V = 0x3E0, H = 0x7E0
-                  lda       #$001F
-                  sta       CIRAMColMask         ; V = $041F, H = $001F
-
-                  lda       #480
-                  sta       MaxY
-                  lda       #256
-                  sta       MaxX
-
-                  lda       #BLT_P_HORZ          ; V = 1: lines loop within their CIRAM page
-                  sta       BltMirrorP
-
-                  jsr       _UpdateScrollStart   ; The scroll values depend on the mirroring
-                  lda       #DIRTY_BIT_BG0_X
-                  tsb       DirtyBits
-                  rts
-
-; With vertical mirroring each line spans both CIRAM pages, which creates a virtual 512x240
-; rendering surface.
-_InitVerticalMirroring
-                  lda       #VERTICAL_MIRROR_MASK
-                  sta       MirrorMaskLong
-                  lda       #$03E0
-                  sta       CIRAMRowMask         ; V = 0x3E0, H = 0x7E0
-                  lda       #$041F
-                  sta       CIRAMColMask         ; V = $041F, H = $001F
-
-                  lda       #240
-                  sta       MaxY
-                  lda       #512
-                  sta       MaxX
-
-                  stz       BltMirrorP           ; V = 0: lines continue into the other CIRAM page
-
-                  jsr       _UpdateScrollStart   ; The scroll values depend on the mirroring
-                  lda       #DIRTY_BIT_BG0_X
-                  tsb       DirtyBits
-                  rts
-
                 mx %00
 WaitForKey        sep       #$20
                   stal      KBD_STROBE_REG      ; clear the strobe
@@ -375,6 +320,7 @@ _ReadControl
                   jsr       _ReadKeypress        ; Always poll for a keystroke
                   sta       InputPlayer1
                   sta       InputPlayer2         ; Replicate the raw keyboard info into both players' input values
+                  jsr       KB2_Poll             ; The held keys for KEYBOARD 2 (rom/rom_keyboard2.s)
 
 ; Now read the specific input device for each player
 
@@ -389,8 +335,8 @@ _ReadControl
                   lda       InputPlayer1
                   rts
 
-:input_proc1      dw        _ReadKeyboard1,_ReadSNESMAX1
-:input_proc2      dw        _ReadKeyboard2,_ReadSNESMAX2
+:input_proc1      dw        _ReadKeyboard1,_ReadSNESMAX1,_ReadKeyboardB1
+:input_proc2      dw        _ReadKeyboard2,_ReadSNESMAX2,_ReadKeyboardB2
 
 ; Reset the keypress state to clear the current keypress and set up to wait until the next key
 ; is pressed to regiter
@@ -430,10 +376,13 @@ _ReadKeypress
                   bit       #$80                ; was the strobe bit set? If yes, then this is a new key
                   beq       :no_new_key
 
-                  stal      KBD_STROBE_REG      ; reset the strobe
                   sta       LastKey
                   sta       1,s
                   stal      KeyEvent            ; a new press, for the event loop (NES_TakeKey)
+                  stal      kb2New              ; and for KEYBOARD 2 (KB2_Poll)
+                  ldal      MOD_REG             ; with the modifiers of the key (read before the strobe is
+                  stal      KeyEvent+1          ; reset, while they still belong to it)
+                  stal      KBD_STROBE_REG      ; reset the strobe
                   bra       :done               ; return the key value
 
 :no_new_key
@@ -483,6 +432,20 @@ _ReadKeyboard1    lda       InputPlayer1
 _ReadKeyboard2    lda       InputPlayer2
                   ldx       #config_block_p2
                   jmp       _ReadKeyboard
+
+; KEYBOARD 2: the directions, Start and Select from every held key (KB2_Pad), the buttons as for KEYBOARD
+_ReadKeyboardB1   ldx       #config_block_p1
+                  bra       _ReadKeyboardB
+_ReadKeyboardB2   ldx       #config_block_p2
+_ReadKeyboardB    phx
+                  jsr       KB2_Pad
+                  plx
+                  pha
+                  lda       #0                  ; no key: _ReadKeyboard only reads the buttons
+                  jsr       _ReadKeyboard
+                  ora       1,s
+                  plx
+                  rts
 
 ; Called with the X-register set to the configuration block
 _ReadKeyboard     pha                           ; low byte = key code, high byte = %ABsSUDLR  S = Start, s = select

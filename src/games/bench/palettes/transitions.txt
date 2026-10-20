@@ -1,0 +1,4 @@
+; Palette transitions.  The bench uploads a single palette once, with its screen.
+
+[init]
+ground

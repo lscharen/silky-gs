@@ -151,7 +151,7 @@ RefreshPPUTiles
         phx
         jsr   DrawPPUTile
         plx
-        inx`
+        inx
         dec   pputmp               ; 256 * 4 iterations
         bne   :loop
 

@@ -5,14 +5,11 @@
 _ppuctrl     ds  2
 _ppuscroll_y dw  0          ; Pad the top-byte with zero to allow 8- or 16-bit access
 _ppuscroll_x dw  0          ; Pad the top-byte with zero to allow 8- or 16-bit access
-_ppumask     ds  2
+_ppumask ENT
+             ds  2
 
 
-sprTmp0      equ pputmp
-sprTmp1      equ pputmp+2
-sprTmp2      equ pputmp+4
-sprTmp3      equ pputmp+6
-sprTmp4      equ pputmp+8
+; sprTmp0 - sprTmp4 (pputmp + 0 - 8) are in Defs.s: the configuration screen's font blitter uses them too
 sprMul160    equ pputmp+12          ; (3 bytes) long pointer to Mul160Tbl
 sprXPar      equ pputmp+15          ; (byte) scroll_x & 1, the half-pixel offset of every sprite this frame (byte-positioned sprites only)
 sprBankSwap  equ unused174          ; $01 << 8 | ^tiledata: pei / plb selects the tiledata bank, plb back to $01
@@ -31,15 +28,13 @@ sprTmp5      equ sprTmp5Hi          ; tiledata bank offset for the tile to draw:
         DO    SPR_PIXEL_SHIFT
 SPR_SLOT_SIZE equ $0800
 SPR_BANK_SLOTS equ 32
-SPR_MAX_BANKS equ 4
 SPR_FLIP_PAGE equ 2
         ELSE
 SPR_SLOT_SIZE equ $0200
 SPR_BANK_SLOTS equ 128
-SPR_MAX_BANKS equ 1
 SPR_FLIP_PAGE equ 1
         FIN
-SPR_MAX_SLOTS equ SPR_BANK_SLOTS*SPR_MAX_BANKS
+SPR_MAX_SLOTS equ SPR_BANK_SLOTS*SPR_MAX_BANKS   ; (SPR_MAX_BANKS is in Defs.s: InitMemory uses it too)
 
 ; Set up a sprite for drawing.  X = OAM index (preserved).
 ;
@@ -674,7 +669,8 @@ SprQueueShift
 
 ; Lines to hide at the top of the sprite being drawn, set by the game's SPRITE_PRE_DRAW callback
 ; (stays 0 if the game never sets it).  At least the sprite's height hides it entirely.
-sprClipTop    dw 0
+sprClipTop ENT
+              dw 0
 
 drawProcs
         dw drawTileToScreen,drawTileToScreenP,drawTileToScreenH,drawTileToScreenPH
@@ -686,107 +682,6 @@ drawProcsClipped
 
 ; The compiled sprite dispatch table is in the PPU_MEM bank (PPU_MEM+SPR_COMP_TBL, Defs.s), indexed by the
 ; key offset built in :blitResolvedSprite.  An entry of $0000 means the sprite has no compiled version.
-
-        mx    %00
-_blitTileNoMask
-; A = tile address
-; Y = screen address
-; X = palette select 0,2,4,6
-;
-; Raw data draw -- expands the tile data from w_wxxy_yzz0 to 00ww_00xx_00yy_00zz and then adds an offset based on the
-; palette select
-
-        sta   sprTmp0
-        sty   sprTmp1
-
-        txa
-        and   #$0006
-        asl
-        sta   sprTmp3
-        asl
-        asl
-        asl
-        asl
-        ora   sprTmp3
-        sta   sprTmp3
-        xba
-        ora   sprTmp3
-        sta   sprTmp3
-
-        ldy   sprTmp0
-        ldx   sprTmp1
-        lda   #8
-        sta   sprTmp4
-
-]line   equ   0
-:loop
-        lda:  {]line*4},y                            ; Load the tile data lookup value
-        lsr
-        and   #$0003
-        sta   sprTmp2
-        lda:  {]line*4},y
-        asl
-        and   #$0030
-        tsb   sprTmp2
-        lda:  {]line*4},y
-        asl
-        asl
-        asl
-        and   #$0300
-        tsb   sprTmp2
-        lda:  {]line*4},y
-        asl
-        asl
-        asl
-        asl
-        asl
-        and   #$3000
-        ora   sprTmp2
-        xba
-        ora   sprTmp3
-        stal  $010000+{]line*SHR_LINE_WIDTH},x
-
-        lda:  {]line*4}+2,y
-        lsr
-        and   #$0003
-        sta   sprTmp2
-        lda:  {]line*4}+2,y
-        asl
-        and   #$0030
-        tsb   sprTmp2
-        lda:  {]line*4}+2,y
-        asl
-        asl
-        asl
-        and   #$0300
-        tsb   sprTmp2
-        lda:  {]line*4}+2,y
-        asl
-        asl
-        asl
-        asl
-        asl
-        and   #$3000
-        ora   sprTmp2
-        xba
-        ora   sprTmp3
-        stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
-
-        iny
-        iny
-        iny
-        iny
-
-        txa
-        clc
-        adc   #160
-        tax
-
-        dec   sprTmp4
-        beq   :done
-        brl   :loop
-:done
-        rts
 
 ; Blits from the top-half of the tiledata bank.  Assumes no mask. This routine is used in the dirty
 ; renderer to selectively update the screen when a small number of backgrond tiles have changed.

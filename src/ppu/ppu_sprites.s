@@ -6,12 +6,9 @@
 ; bitmap of the lines with sprites, which segments the screen into "sprite" and "background" runs;
 ; it is built from OAM_COPY when first asked for (ensureShadowBitmap).
 
-              DO ENABLE_DIRTY_RENDERING
-              ds \,$00             ; Page-aligned: the grid renderer reads it with 8-bit index registers
-              FIN
-OAM_COPY      ds 256
+; OAM_COPY (the sprites that passed the filters) and shadowBitmap0 (the lines with sprites, one bit
+; per line) are in core/Data.s: the renderers read them with 8-bit index registers
 spriteCount   dw 0
-shadowBitmap0 ds 32                ; Lines with sprites, one bit per line (ensureShadowBitmap)
 
 ; scanOAMSprites reads the OAM straight from NES RAM at DIRECT_OAM_READ in the ROMBase bank.
 ; ROMBase is at offset $0000 of its bank in every game, so with DBR set to that bank the plain
