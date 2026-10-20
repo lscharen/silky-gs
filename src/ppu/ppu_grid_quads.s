@@ -159,6 +159,33 @@ gqInitTables
             cpx   #GQ_RECBYTES*2
             bcc   :rf
 
+; Erase routine sets: every cell starts as a pad cell (nothing to copy); gridBuildTable sets the playfield
+; cells to their code field bank's set
+
+            ldx   #0
+            lda   #64
+:eq         stal  PPU_MEM+GRID_CELL_EQ,x
+            inx
+            inx
+            cpx   #GQ_BYTES
+            bcc   :eq
+
+; The erase routines read the code field with long addressing: store each set's bank in its operands
+
+            ldx   #0
+:eb         sep   #$20
+            ldy   gqEBSites1,x
+            lda   #^lite_base_1
+            sta:  $0000,y
+            ldy   gqEBSites2,x
+            lda   #^lite_base_2
+            sta:  $0000,y
+            rep   #$20
+            inx
+            inx
+            cpx   #GQ_EBSITES*2
+            bcc   :eb
+
             lda   #gqRec                  ; Current records in the first array, none previous
             sta   gqRecBase
             sta   gqRecPtr
@@ -356,11 +383,9 @@ gridDrawDirty
             jsr   gqSkipCascade           ; Changed sprites' new positions, then everything they reach
             FIN
 
-; 3. Erase (shadowing off) every cell listed so far.  The erase handler leaves DBR on the last code
-;    field bank it used; tmp4 tracks it.
+; 3. Erase (shadowing off) every cell listed so far: the code field into the shadow screen
 
             jsr   _ShadowOff
-            stz   tmp4                    ; No code field bank selected yet
             DO    GRID_CELL_STATS
             stz   tmp7                    ; Cells erased
             stz   gbEraseW
@@ -369,9 +394,7 @@ gridDrawDirty
             lda   GridLPtr
             dec
             tax                           ; Opcode of the first unused entry
-            phk
-            phk
-            ply                           ; Run with DBR = K
+            ldy   #$0101                  ; Run with DBR = $01 (the copy routines index the SHR page)
             lda   #gqEraseOp
             jsr   gqRunCells
             DO    GRID_CELL_STATS
@@ -454,7 +477,7 @@ gqRunCells
             plb
             plb
             jsr   gqCode
-            phk                           ; The handlers may leave DBR anywhere
+            phk                           ; Back to DBR = K
             plb
             ldx   gqRunEnd
             sep   #$20
@@ -468,42 +491,35 @@ gqRunCells
 ; Every cell array entry calls this; it is patched to jump to the current pass's handler (Y = cell)
 gqCellOp    jmp   $0000
 
-; Erase handler.  Y = cell.  Every entry in the erase range was appended by a replay or background mark, so
-; it always has erase bits.  The cell keeps them: the expose pass exposes the erase and expose quadrants.
-; DBR = K or a code field bank (everything here is long or direct page).
+; Erase handler.  Y = cell.  The cell keeps its erase bits: the expose pass exposes the erase and expose
+; quadrants.  DBR = $01: the copy routines read the code field with long addressing, from the routine set
+; of the cell's code field bank (GRID_CELL_EQ, which also sends a pad cell to an RTS).
             mx    %00
 gqEraseOp
             tyx
-            ldal  PPU_MEM+GRID_CELL_SCR,x
-            beq   :out                    ; Pad cell
-            sta   tmp6
-            ldal  PPU_MEM+GRID_CELL_BANK,x
-            cmp   tmp4
-            beq   :same
-            sta   tmp4
-            pha
-            plb
-            plb                           ; DBR = code field bank
-:same
-            DO    GRID_CELL_STATS
-            inc   tmp7
-            FIN
-            ldal  PPU_MEM+GRID_CELL_PEA,x
-            tay                           ; Y = code field address
             ldal  gqGrid,x
             and   #GQ_ERASE
-            tax
             DO    GRID_CELL_STATS
+            pha
+            tax
             ldal  gqQuadWords,x
             clc
             adcl  gbEraseW
             stal  gbEraseW
+            inc   tmp7                    ; (pad cells included)
+            tyx
+            pla
             FIN
+            oral  PPU_MEM+GRID_CELL_EQ,x
+            tax
             ldal  gridEQTbl,x
             stal  :pp+1
-            ldx   tmp6                    ; X = SHR address
+            tyx
+            ldal  PPU_MEM+GRID_CELL_SCR,x
+            tay                           ; Y = SHR address
+            ldal  PPU_MEM+GRID_CELL_PEA,x
+            tax                           ; X = code field address
 :pp         jmp   $0000                   ; The copy routine returns to the cell array
-:out        rts
 
 ; Expose handler.  Y = cell.  DBR = $01, so the grid and cell tables are reached with long addressing and
 ; the copy routine is entered with an indexed indirect jump (Y = SHR address).
@@ -917,309 +933,10 @@ gridRecordsBegin
 
 gqRepNop    rts
 
-; ---------------------------------------------------------------------------
-; Copy routines: one per quadrant mask
-; ---------------------------------------------------------------------------
-; Erase: X = SHR address, Y = code field address, DBR = code field bank.  Expose: Y = SHR address,
-; DBR = $01.  Both return straight to the cell code array.
-; Each mask is its highest quadrant's block followed by the routine for the remaining quadrants,
-; so the routines share their tails: a chain falls through to the next smaller mask, and ends with
-; an RTS at mask 0 or a branch into a routine laid out earlier.  (Generated; every entry point copies
-; exactly its mask's quadrants.)
-gridQE14
-            lda:  {4*_LINE_SPAN}+1,y
-            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
-            lda:  {5*_LINE_SPAN}+1,y
-            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
-            lda:  {6*_LINE_SPAN}+1,y
-            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
-            lda:  {7*_LINE_SPAN}+1,y
-            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
-gridQE6
-            lda:  {4*_LINE_SPAN}+4,y
-            stal  $010000+{4*SHR_LINE_WIDTH},x
-            lda:  {5*_LINE_SPAN}+4,y
-            stal  $010000+{5*SHR_LINE_WIDTH},x
-            lda:  {6*_LINE_SPAN}+4,y
-            stal  $010000+{6*SHR_LINE_WIDTH},x
-            lda:  {7*_LINE_SPAN}+4,y
-            stal  $010000+{7*SHR_LINE_WIDTH},x
-gridQE2
-            lda:  {0*_LINE_SPAN}+1,y
-            stal  $010000+{0*SHR_LINE_WIDTH}+2,x
-            lda:  {1*_LINE_SPAN}+1,y
-            stal  $010000+{1*SHR_LINE_WIDTH}+2,x
-            lda:  {2*_LINE_SPAN}+1,y
-            stal  $010000+{2*SHR_LINE_WIDTH}+2,x
-            lda:  {3*_LINE_SPAN}+1,y
-            stal  $010000+{3*SHR_LINE_WIDTH}+2,x
-gridQE0
-            rts
-gridQE12
-            lda:  {4*_LINE_SPAN}+1,y
-            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
-            lda:  {5*_LINE_SPAN}+1,y
-            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
-            lda:  {6*_LINE_SPAN}+1,y
-            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
-            lda:  {7*_LINE_SPAN}+1,y
-            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
-gridQE4
-            lda:  {4*_LINE_SPAN}+4,y
-            stal  $010000+{4*SHR_LINE_WIDTH},x
-            lda:  {5*_LINE_SPAN}+4,y
-            stal  $010000+{5*SHR_LINE_WIDTH},x
-            lda:  {6*_LINE_SPAN}+4,y
-            stal  $010000+{6*SHR_LINE_WIDTH},x
-            lda:  {7*_LINE_SPAN}+4,y
-            stal  $010000+{7*SHR_LINE_WIDTH},x
-            rts
-gridQE10
-            lda:  {4*_LINE_SPAN}+1,y
-            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
-            lda:  {5*_LINE_SPAN}+1,y
-            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
-            lda:  {6*_LINE_SPAN}+1,y
-            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
-            lda:  {7*_LINE_SPAN}+1,y
-            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
-            bra   gridQE2
-gridQE13
-            lda:  {4*_LINE_SPAN}+1,y
-            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
-            lda:  {5*_LINE_SPAN}+1,y
-            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
-            lda:  {6*_LINE_SPAN}+1,y
-            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
-            lda:  {7*_LINE_SPAN}+1,y
-            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
-gridQE5
-            lda:  {4*_LINE_SPAN}+4,y
-            stal  $010000+{4*SHR_LINE_WIDTH},x
-            lda:  {5*_LINE_SPAN}+4,y
-            stal  $010000+{5*SHR_LINE_WIDTH},x
-            lda:  {6*_LINE_SPAN}+4,y
-            stal  $010000+{6*SHR_LINE_WIDTH},x
-            lda:  {7*_LINE_SPAN}+4,y
-            stal  $010000+{7*SHR_LINE_WIDTH},x
-gridQE1
-            lda:  {0*_LINE_SPAN}+4,y
-            stal  $010000+{0*SHR_LINE_WIDTH},x
-            lda:  {1*_LINE_SPAN}+4,y
-            stal  $010000+{1*SHR_LINE_WIDTH},x
-            lda:  {2*_LINE_SPAN}+4,y
-            stal  $010000+{2*SHR_LINE_WIDTH},x
-            lda:  {3*_LINE_SPAN}+4,y
-            stal  $010000+{3*SHR_LINE_WIDTH},x
-            rts
-gridQE11
-            lda:  {4*_LINE_SPAN}+1,y
-            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
-            lda:  {5*_LINE_SPAN}+1,y
-            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
-            lda:  {6*_LINE_SPAN}+1,y
-            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
-            lda:  {7*_LINE_SPAN}+1,y
-            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
-gridQE3
-            lda:  {0*_LINE_SPAN}+1,y
-            stal  $010000+{0*SHR_LINE_WIDTH}+2,x
-            lda:  {1*_LINE_SPAN}+1,y
-            stal  $010000+{1*SHR_LINE_WIDTH}+2,x
-            lda:  {2*_LINE_SPAN}+1,y
-            stal  $010000+{2*SHR_LINE_WIDTH}+2,x
-            lda:  {3*_LINE_SPAN}+1,y
-            stal  $010000+{3*SHR_LINE_WIDTH}+2,x
-            bra   gridQE1
-gridQE9
-            lda:  {4*_LINE_SPAN}+1,y
-            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
-            lda:  {5*_LINE_SPAN}+1,y
-            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
-            lda:  {6*_LINE_SPAN}+1,y
-            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
-            lda:  {7*_LINE_SPAN}+1,y
-            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
-            bra   gridQE1
-gridQE15
-            lda:  {4*_LINE_SPAN}+1,y
-            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
-            lda:  {5*_LINE_SPAN}+1,y
-            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
-            lda:  {6*_LINE_SPAN}+1,y
-            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
-            lda:  {7*_LINE_SPAN}+1,y
-            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
-gridQE7
-            lda:  {4*_LINE_SPAN}+4,y
-            stal  $010000+{4*SHR_LINE_WIDTH},x
-            lda:  {5*_LINE_SPAN}+4,y
-            stal  $010000+{5*SHR_LINE_WIDTH},x
-            lda:  {6*_LINE_SPAN}+4,y
-            stal  $010000+{6*SHR_LINE_WIDTH},x
-            lda:  {7*_LINE_SPAN}+4,y
-            stal  $010000+{7*SHR_LINE_WIDTH},x
-            bra   gridQE3
-gridQE8
-            lda:  {4*_LINE_SPAN}+1,y
-            stal  $010000+{4*SHR_LINE_WIDTH}+2,x
-            lda:  {5*_LINE_SPAN}+1,y
-            stal  $010000+{5*SHR_LINE_WIDTH}+2,x
-            lda:  {6*_LINE_SPAN}+1,y
-            stal  $010000+{6*SHR_LINE_WIDTH}+2,x
-            lda:  {7*_LINE_SPAN}+1,y
-            stal  $010000+{7*SHR_LINE_WIDTH}+2,x
-            rts
-
-gridQX15
-            lda:  {4*SHR_LINE_WIDTH}+2,y
-            sta:  {4*SHR_LINE_WIDTH}+2,y
-            lda:  {5*SHR_LINE_WIDTH}+2,y
-            sta:  {5*SHR_LINE_WIDTH}+2,y
-            lda:  {6*SHR_LINE_WIDTH}+2,y
-            sta:  {6*SHR_LINE_WIDTH}+2,y
-            lda:  {7*SHR_LINE_WIDTH}+2,y
-            sta:  {7*SHR_LINE_WIDTH}+2,y
-gridQX7
-            lda:  {4*SHR_LINE_WIDTH},y
-            sta:  {4*SHR_LINE_WIDTH},y
-            lda:  {5*SHR_LINE_WIDTH},y
-            sta:  {5*SHR_LINE_WIDTH},y
-            lda:  {6*SHR_LINE_WIDTH},y
-            sta:  {6*SHR_LINE_WIDTH},y
-            lda:  {7*SHR_LINE_WIDTH},y
-            sta:  {7*SHR_LINE_WIDTH},y
-gridQX3
-            lda:  {0*SHR_LINE_WIDTH}+2,y
-            sta:  {0*SHR_LINE_WIDTH}+2,y
-            lda:  {1*SHR_LINE_WIDTH}+2,y
-            sta:  {1*SHR_LINE_WIDTH}+2,y
-            lda:  {2*SHR_LINE_WIDTH}+2,y
-            sta:  {2*SHR_LINE_WIDTH}+2,y
-            lda:  {3*SHR_LINE_WIDTH}+2,y
-            sta:  {3*SHR_LINE_WIDTH}+2,y
-gridQX1
-            lda:  {0*SHR_LINE_WIDTH},y
-            sta:  {0*SHR_LINE_WIDTH},y
-            lda:  {1*SHR_LINE_WIDTH},y
-            sta:  {1*SHR_LINE_WIDTH},y
-            lda:  {2*SHR_LINE_WIDTH},y
-            sta:  {2*SHR_LINE_WIDTH},y
-            lda:  {3*SHR_LINE_WIDTH},y
-            sta:  {3*SHR_LINE_WIDTH},y
-gridQX0
-            rts
-gridQX13
-            lda:  {4*SHR_LINE_WIDTH}+2,y
-            sta:  {4*SHR_LINE_WIDTH}+2,y
-            lda:  {5*SHR_LINE_WIDTH}+2,y
-            sta:  {5*SHR_LINE_WIDTH}+2,y
-            lda:  {6*SHR_LINE_WIDTH}+2,y
-            sta:  {6*SHR_LINE_WIDTH}+2,y
-            lda:  {7*SHR_LINE_WIDTH}+2,y
-            sta:  {7*SHR_LINE_WIDTH}+2,y
-gridQX5
-            lda:  {4*SHR_LINE_WIDTH},y
-            sta:  {4*SHR_LINE_WIDTH},y
-            lda:  {5*SHR_LINE_WIDTH},y
-            sta:  {5*SHR_LINE_WIDTH},y
-            lda:  {6*SHR_LINE_WIDTH},y
-            sta:  {6*SHR_LINE_WIDTH},y
-            lda:  {7*SHR_LINE_WIDTH},y
-            sta:  {7*SHR_LINE_WIDTH},y
-            bra   gridQX1
-gridQX11
-            lda:  {4*SHR_LINE_WIDTH}+2,y
-            sta:  {4*SHR_LINE_WIDTH}+2,y
-            lda:  {5*SHR_LINE_WIDTH}+2,y
-            sta:  {5*SHR_LINE_WIDTH}+2,y
-            lda:  {6*SHR_LINE_WIDTH}+2,y
-            sta:  {6*SHR_LINE_WIDTH}+2,y
-            lda:  {7*SHR_LINE_WIDTH}+2,y
-            sta:  {7*SHR_LINE_WIDTH}+2,y
-            bra   gridQX3
-gridQX9
-            lda:  {4*SHR_LINE_WIDTH}+2,y
-            sta:  {4*SHR_LINE_WIDTH}+2,y
-            lda:  {5*SHR_LINE_WIDTH}+2,y
-            sta:  {5*SHR_LINE_WIDTH}+2,y
-            lda:  {6*SHR_LINE_WIDTH}+2,y
-            sta:  {6*SHR_LINE_WIDTH}+2,y
-            lda:  {7*SHR_LINE_WIDTH}+2,y
-            sta:  {7*SHR_LINE_WIDTH}+2,y
-            bra   gridQX1
-gridQX14
-            lda:  {4*SHR_LINE_WIDTH}+2,y
-            sta:  {4*SHR_LINE_WIDTH}+2,y
-            lda:  {5*SHR_LINE_WIDTH}+2,y
-            sta:  {5*SHR_LINE_WIDTH}+2,y
-            lda:  {6*SHR_LINE_WIDTH}+2,y
-            sta:  {6*SHR_LINE_WIDTH}+2,y
-            lda:  {7*SHR_LINE_WIDTH}+2,y
-            sta:  {7*SHR_LINE_WIDTH}+2,y
-gridQX6
-            lda:  {4*SHR_LINE_WIDTH},y
-            sta:  {4*SHR_LINE_WIDTH},y
-            lda:  {5*SHR_LINE_WIDTH},y
-            sta:  {5*SHR_LINE_WIDTH},y
-            lda:  {6*SHR_LINE_WIDTH},y
-            sta:  {6*SHR_LINE_WIDTH},y
-            lda:  {7*SHR_LINE_WIDTH},y
-            sta:  {7*SHR_LINE_WIDTH},y
-gridQX2
-            lda:  {0*SHR_LINE_WIDTH}+2,y
-            sta:  {0*SHR_LINE_WIDTH}+2,y
-            lda:  {1*SHR_LINE_WIDTH}+2,y
-            sta:  {1*SHR_LINE_WIDTH}+2,y
-            lda:  {2*SHR_LINE_WIDTH}+2,y
-            sta:  {2*SHR_LINE_WIDTH}+2,y
-            lda:  {3*SHR_LINE_WIDTH}+2,y
-            sta:  {3*SHR_LINE_WIDTH}+2,y
-            rts
-gridQX12
-            lda:  {4*SHR_LINE_WIDTH}+2,y
-            sta:  {4*SHR_LINE_WIDTH}+2,y
-            lda:  {5*SHR_LINE_WIDTH}+2,y
-            sta:  {5*SHR_LINE_WIDTH}+2,y
-            lda:  {6*SHR_LINE_WIDTH}+2,y
-            sta:  {6*SHR_LINE_WIDTH}+2,y
-            lda:  {7*SHR_LINE_WIDTH}+2,y
-            sta:  {7*SHR_LINE_WIDTH}+2,y
-gridQX4
-            lda:  {4*SHR_LINE_WIDTH},y
-            sta:  {4*SHR_LINE_WIDTH},y
-            lda:  {5*SHR_LINE_WIDTH},y
-            sta:  {5*SHR_LINE_WIDTH},y
-            lda:  {6*SHR_LINE_WIDTH},y
-            sta:  {6*SHR_LINE_WIDTH},y
-            lda:  {7*SHR_LINE_WIDTH},y
-            sta:  {7*SHR_LINE_WIDTH},y
-            rts
-gridQX10
-            lda:  {4*SHR_LINE_WIDTH}+2,y
-            sta:  {4*SHR_LINE_WIDTH}+2,y
-            lda:  {5*SHR_LINE_WIDTH}+2,y
-            sta:  {5*SHR_LINE_WIDTH}+2,y
-            lda:  {6*SHR_LINE_WIDTH}+2,y
-            sta:  {6*SHR_LINE_WIDTH}+2,y
-            lda:  {7*SHR_LINE_WIDTH}+2,y
-            sta:  {7*SHR_LINE_WIDTH}+2,y
-            bra   gridQX2
-gridQX8
-            lda:  {4*SHR_LINE_WIDTH}+2,y
-            sta:  {4*SHR_LINE_WIDTH}+2,y
-            lda:  {5*SHR_LINE_WIDTH}+2,y
-            sta:  {5*SHR_LINE_WIDTH}+2,y
-            lda:  {6*SHR_LINE_WIDTH}+2,y
-            sta:  {6*SHR_LINE_WIDTH}+2,y
-            lda:  {7*SHR_LINE_WIDTH}+2,y
-            sta:  {7*SHR_LINE_WIDTH}+2,y
-            rts
-gridEQTbl   dw    gridQE0,gridQE1,gridQE2,gridQE3,gridQE4,gridQE5,gridQE6,gridQE7,gridQE8,gridQE9,gridQE10,gridQE11,gridQE12,gridQE13,gridQE14,gridQE15
+; The quadrant copy routines and their dispatch tables (gridEQTbl / gridXQTbl) are in ppu_grid_marks.s
             DO    GRID_CELL_STATS
 gqQuadWords dw    0,4,4,8,4,8,8,12,4,8,8,12,8,12,12,16   ; words copied per mask (4 per quadrant)
             FIN
-gridXQTbl   dw    gridQX0,gridQX1,gridQX2,gridQX3,gridQX4,gridQX5,gridQX6,gridQX7,gridQX8,gridQX9,gridQX10,gridQX11,gridQX12,gridQX13,gridQX14,gridQX15
 
 
 ; Class of a sprite's line k or pixel p in its cell: {0}, {1-3}, {4}, {5-7} (the patterns, ppu_grid_marks.s)

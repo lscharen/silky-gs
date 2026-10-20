@@ -198,6 +198,15 @@ Both steps drew the same pictures (7/7 `--shots` hashes) and ended in the same g
 | Before | 244,315,144 | |
 | 1: erase handler | 241,209,866 | -1.27% |
 | 1 + 2: 8x16 patterns | 237,364,380 | -2.85% |
-| 1 + 2 + 3: 8x8 patterns, 6-byte records | **236,909,279** | **-3.03%** |
+| 1 + 2 + 3: 8x8 patterns, 6-byte records | 236,909,279 | -3.03% |
+| 1 - 4: erase with DBR = $01 | **234,612,321** | **-3.97%** |
 
 The route averages about 13 8x16 sprites and 40 erased cells per dirty frame (`--gridstats`).
+
+4. The erase pass runs with DBR = $01, like the expose pass: the erase copy routines read the code field with
+   `ldal bank:offset,x` (X = code field address) and write the shadow screen with `sta shr,y` (Y = SHR address),
+   one routine set per code field bank.  `GRID_CELL_EQ` (replacing `GRID_CELL_BANK`) selects the cell's set, and
+   pad cells get a set of RTSs, so the handler has no bank switch and no pad test.  The copy routines are now
+   generated too (`ppu_grid_marks.s`); the erase operands have bank $00 and `gqInitTables` stores `^lite_base_1` /
+   `^lite_base_2` into them (`gqEBSites1/2`): an EXT label + a negative constant relocated into the wrong bank (the
+   line 0 reads came from the other bank).  Donkey Kong: 83,089,916 -> 82,455,295 (-0.76%), 6/6 hashes identical.
