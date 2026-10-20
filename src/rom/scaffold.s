@@ -137,7 +137,7 @@ NES_StartUp
 ; writes selects them (PPUCtrlDecode).  CHR-ROM games have their tiles converted offline into the
 ; tiledata bank by build.js (scripts/lib/nromBuild.js): compile all 512 now (sprites are compiled when
 ; they are first drawn, SprCompileTile).  CHR-RAM games don't have a fixed image -- mark every tile
-; dirty instead, so DrawPPUTile / CheckBgTileDirty / CheckSprTileDirty compile each tile the first
+; dirty instead, so DrawPPUTile / CheckBgTileDirty / sprChrCheck compile each tile the first
 ; time it's drawn (once the game has uploaded real data for it).
 
             DO    HAS_CHR_RAM

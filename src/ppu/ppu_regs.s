@@ -317,7 +317,7 @@ PPUDATA_WRITE ENT
 ; Write into CHR-RAM ($0000-$1FFF). Store the byte where the tile-conversion
 ; routines will read it from (mirrors the nametable-write pattern below),
 ; then mark the affected tile ID dirty for on-demand recompilation at draw
-; time (DrawPPUTile / CheckSprTileDirty), instead of pre-compiling everything
+; time (DrawPPUTile / sprChrCheck), instead of pre-compiling everything
 ; up front like a fixed CHR-ROM game does.
 
         sep  #$20

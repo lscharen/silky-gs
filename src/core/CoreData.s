@@ -175,7 +175,7 @@ RTable            ds    400
 
 ; CHR-RAM support: two independent dirty bits per tile, set by PPUDATA_WRITE
 ; when the game writes into CHR-RAM ($0000-$1FFF) and checked at draw time
-; (DrawPPUTile / CheckBgTileDirty / CheckSprTileDirty) to recompile just that
+; (DrawPPUTile / CheckBgTileDirty / sprChrCheck) to recompile just that
 ; tile on demand. Only used by games with HAS_CHR_RAM equ 1, but reserved
 ; unconditionally (512 bytes) since MarkTileDirty (ppu_regs.s)
 ;
@@ -185,10 +185,10 @@ RTable            ds    400
 ; compiled background code field vs. SPR_COMP_TBL/tiledata's sprite layout)
 ; by a different consumer. Whichever consumer runs first must NOT clear the
 ; other consumer's need to recompile -- that was the bug: a single "dirty"
-; flag got zeroed by whichever of CheckSprTileDirty/DrawPPUTile/
+; flag got zeroed by whichever of sprChrCheck/DrawPPUTile/
 ; CheckBgTileDirty happened to see it first, leaving the other form's
 ; compiled code uninitialized, which a later unconditional jump into it would
 ; crash on. So each byte holds two independent bits, tested/cleared
 ; separately by the BG- and sprite-side consumers:
 CHRRAM_BG_DIRTY   equ   $01     ; DrawPPUTile / CheckBgTileDirty
-CHRRAM_SPR_DIRTY  equ   $02     ; CheckSprTileDirty
+CHRRAM_SPR_DIRTY  equ   $02     ; sprChrCheck

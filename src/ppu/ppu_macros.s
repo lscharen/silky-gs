@@ -50,6 +50,17 @@ SET_COMPILED_TILE_HI mac
         sta   ]1+1
         <<<
 
+; A tile's ChrRamDirty index (0 - 511: the CHR tile number) from its address in the tiledata bank (or its
+; compiled slot, the same offset): X = A >> 7.  16-bit A and X; A is trashed.
+CHR_INDEX mac
+        asl                           ; C = the pattern table bit, the high byte = the tile ID
+        xba
+        and   #$00FF
+        bcc   *+5
+        ora   #$0100                  ; (pattern table $1000)
+        tax
+        <<<
+
 ; Call the compiled tile set by SET_COMPILED_TILE (label this line: it is the jsl to patch).
 ; X = the tile's address in the code field, DBR = the code field bank, 16-bit A, C = 0.
 CALL_COMPILED_TILE mac

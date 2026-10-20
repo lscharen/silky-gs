@@ -5,7 +5,7 @@
 
 ; This game uploads its own CHR data at runtime rather than using a fixed
 ; CHR-ROM image -- see MarkTileDirty (ppu_regs.s), DrawPPUTile
-; (ppu_attributes.s), CheckSprTileDirty (ppu.s), and NES_StartUp (scaffold.s).
+; (ppu_attributes.s), sprChrCheck (ppu.s), and NES_StartUp (scaffold.s).
 HAS_CHR_RAM equ 1
 
 ; The cartridge has battery-backed WRAM ($6000-$7FFF).  NES_StartUp loads it from

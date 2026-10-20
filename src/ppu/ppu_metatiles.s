@@ -198,12 +198,8 @@ bad_row2
         mx    %00
 CheckBgTileDirty
         phx
-        asl                           ; C = the pattern table bit, the high byte = the tile ID
-        xba
-        and   #$00FF
-        bcc   :t0
-        ora   #$0100                  ; (pattern table $1000)
-:t0     tax                           ; X = the ChrRamDirty index
+        pha                           ; the slot, which is also the tile's tiledata address
+        CHR_INDEX                     ; X = the tile's ChrRamDirty index
 
         sep   #$20                    ; 8-bit A for the byte-table check/clear
         ldal  ChrRamDirty,x
@@ -212,28 +208,23 @@ CheckBgTileDirty
         and   #CHRRAM_BG_DIRTY!$FF    ; clear only the BG bit, preserve the sprite bit
         stal  ChrRamDirty,x
         rep   #$20
-        phy
+        phy                           ; (the slot at 3,s)
 
-        txa                           ; A = the index (tile ID | pattern table)
-        asl   a
-        asl   a
-        asl   a
-        asl   a                       ; A = the CHR-RAM source address (index * 16)
-        tax                           ; X = CHR-RAM source address (FastROMTileToLookup's X arg)
-        asl   a
-        asl   a
-        asl   a                       ; A = index * 128: the tiledata destination, and the compiled slot
-        pha
-        jsr   FastROMTileToLookup     ; A = tiledata destination, X = CHR-RAM source address -- writes the
-                                      ; 32-byte bitmap directly into tiledata; trashes A/X/Y
-        lda   1,s
-        tay                           ; Y = the compiled-code slot (CompileTile's Y arg)
-        pla                           ; A = the tiledata address (CompileTile's "low address of bitmap" arg)
-        ldx   #^tiledata              ; X = bank of the bitmap source (CompileTile's "high address" arg)
-        jsr   CompileTile             ; A = bitmap source addr, X = bitmap source bank, Y = dest slot
+        lda   3,s
+        lsr
+        lsr
+        lsr
+        tax                           ; X = the CHR-RAM source address (index * 16 = slot / 8)
+        lda   3,s                     ; A = the tiledata destination (the slot)
+        jsr   FastROMTileToLookup     ; writes the 32-byte bitmap directly into tiledata; trashes A/X/Y
+        lda   3,s
+        tay                           ; Y = the compiled-code slot, A = the bitmap (the same offset)
+        ldx   #^tiledata              ; X = bank of the bitmap source
+        jsr   CompileTile
         ply
 :bgclean
         rep   #$20
+        pla                           ; (the slot)
         plx
         rts
         FIN
