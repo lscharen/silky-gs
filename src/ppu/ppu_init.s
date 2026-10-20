@@ -15,18 +15,9 @@
         mx   %00
 PPUStartUp
 
-; Set the pointers to the CHR memory dirty bytes for CHR-RAM games
-
-        lda   #ChrRamDirty
-        sta   TileChrMem
-        clc
-        adc   #$100
-        sta   SprChrMem
-        lda   #^ChrRamDirty
-        sta   TileChrMem+2
-        sta   SprChrMem+2
-
-        lda   CompileBank0+1            ; Patch some dispatch addresses with the tile compilation bank
+; Put the compile bank into the CALL_COMPILED_TILE jsls (the bank byte, at +3; this also clears the
+; address' high byte, which SET_COMPILED_TILE sets before each call)
+        lda   CompileBank0+1
         sta   patch0+2
         sta   patch1+2
         sta   patch2+2

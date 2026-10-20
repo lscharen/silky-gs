@@ -58,7 +58,7 @@ The runtime sets up a dual-context environment: the IIgs runs as host, with a se
 - `blitter/BlitterLite.s` — Scanline renderer for full renders
 - `blitter/TemplateLiteBank1.s` & `TemplateLiteBank2.s` — Two banks of pre-compiled, self-modifying scanline code
 - `blitter/PEISlammer.s` — Emits fast PEI instructions for screen writes
-- `tiles/CompileTile.s` — Compiles 8×8 NES background tiles to native 65816 code at load time
+- `tiles/CompileTile.s` — Compiles 8×8 NES background tiles to native 65816 code: tile n (0-511, both pattern tables; NROM games compile all 512 at start-up, CHR-RAM games on demand) goes to the 128-byte slot at n × 128 of the compile bank, the same offset as its tiledata. A compiled tile stores 15 of its 16 words and returns word 0's value in A (worst case 126 bytes); callers use `SET_COMPILED_TILE` / `CALL_COMPILED_TILE` (`ppu/ppu_macros.s`), which point the patched `jsl` at the tile and store word 0
 - `sprites/CompileSprites.s` — Compiles sprite tiles in 4 variants (normal, H-flip, V-flip, HV-flip) + mask
 - `Data.s` — The engine's indexed tables, page-aligned in one place (put first in the engine segment, at offset `$0000`): every table that is a whole number of pages, then the small lookup tables read with 8-bit index registers. Add any new table read with 8-bit index registers here (an `abs,X` read pays a cycle on a page crossing; with 16-bit index registers it always does)
 - `static/TileData.s` — Static bank holding compiled tile data (128 bytes/sprite × up to 256 = 32KB)
@@ -100,8 +100,6 @@ The IIgs shows 16 colors at once (one palette of 16 slots); the NES shows up to 
 
 | Constant | Purpose |
 |---|---|
-| `PPU_BG_TILE_ADDR` | NES address of background CHR tiles |
-| `PPU_SPR_TILE_ADDR` | NES address of sprite CHR tiles |
 | `ENABLE_DIRTY_RENDERING` | Use the quad grid dirty renderer when the background is still (0 = every frame is a full render) |
 | `SPR_PIXEL_SHIFT` | Draw sprites on single pixels (shifted compiled variants, bigger cache slots); 0 = even pixels with the scroll half-pixel correction |
 | `NO_VERTICAL_CLIP` | Disable vertical sprite clipping |

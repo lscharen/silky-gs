@@ -2,7 +2,7 @@
 ;
 ; * $01/2000 - $01/9FFF for the shadow screen
 ; * $xx/0000 - $xx/07FF for NES RAM in the NES code bank
-; * 1 bank for cached tiles
+; * 1 bank for the compiled background tiles: 512 slots of 128 bytes (CompileTile)
 ; * 1 - SPR_MAX_BANKS banks for cached sprites (as many as there is memory for, at least 1)
 
                mx        %00

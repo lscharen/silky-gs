@@ -31,13 +31,6 @@ SEG_ENGINE  equ   0
             lda   #VERTICAL_MIRRORING      ; A = cartridge nametable mirroring at power on
             jsr   NES_StartUp
 
-; This an NROM game, so all of the sprite and background tiles are static.  They have been
-; converted into the runtime's internal representation by build.js and loaded into the tiledata
-; bank, so all that's left is to compile the background tiles (sprites are compiled when they
-; are first drawn, SprCompileTile)
-
-            jsr   ROM_CompileBackgroundTiles    ; Convert the background tiles (PPU:$1000) to compiled format
-
 ; This is set up to let the game define all colors.  We only need to set up a single, static
 ; swizzle table
 

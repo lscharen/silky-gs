@@ -14,7 +14,7 @@
  * tiledata offset.
  *
  * Calling convention:
- *   X (16-bit) = CHR-RAM source address (tile_id*16 + PPU_BG_TILE_ADDR)
+ *   X (16-bit) = CHR-RAM source address (tile_id*16 + bgadr)
  *   Y (16-bit) = destination offset within tiledata (tile_id*128 + $8000
  *                in production; the routine itself is offset-agnostic, so
  *                these tests use small offsets for readability)

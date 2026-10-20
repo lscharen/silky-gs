@@ -10,7 +10,7 @@ PPUStartUpL             EXT
 InitYExcludeL           EXT
 ForceMetatileRefreshL   EXT
 PPUSetMirrorModeL       EXT
-CompileTileL            EXT
+ROM_CompileBackgroundTilesL EXT
 SprRequestFlushL        EXT
 SetScreenRectL          EXT
 _ShadowOnL              EXT
@@ -19,7 +19,6 @@ RefreshPPUAttributesL   EXT
 ; Data
 ppumask_override        EXT
 Mul160Tbl               EXT
-bgadr                   EXT
 _ppumask                EXT
 sprClipTop              EXT
 chr_bank                EXT

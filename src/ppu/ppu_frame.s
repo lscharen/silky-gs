@@ -93,6 +93,21 @@ RenderDraw ENT
 ;            jsr   PPUFlushQueues
             jsr   PPUFlushQueuesAlt
 
+; The game switched the background pattern table (PPUCtrlDecode): every tile in the PEA field is from
+; the old table, so redraw them all -- both pattern tables are compiled -- and render the whole screen.
+; Here, for every renderer, the custom ones included.
+
+            lda   #DIRTY_BIT_TILE_REDRAW
+            trb   DirtyBits               ; (Z: it wasn't set)
+            beq   :no_redraw
+            ldx   #$0000                  ; The tile tables are indexed by CIRAM address, so refresh
+            jsr   RefreshPPUTiles         ; both physical nametables ($000 and $400), not PPU $2000
+            ldx   #$0400
+            jsr   RefreshPPUTiles
+            lda   #DIRTY_BIT_BG0_REFRESH
+            tsb   DirtyBits
+:no_redraw
+
 ; Finally, render the PEA field to the Super Hires screen.  The performance of the runtime is limited by this
 ; step and it is important to keep the high-level rendering code generalized so that optimizations, like falling
 ; back to a dirty-rectangle mode when the NES PPUSCROLL does not change, will be important to support good performance
@@ -219,19 +234,6 @@ RenderScreen
             ldx   _ppuscroll_x            ; PPU register values (the nametable select bits are masked
             ldy   _ppuscroll_y            ; by NES_SetScroll)
             jsr   NES_SetScroll
-
-; If this frame changed any of the background palettes, then we have to refresh all of the background tiles
-
-            lda   #DIRTY_BIT_PAL_CHANGE
-            bit   DirtyBits
-            beq   :no_refresh
-            ldx   #$0000                  ; The tile tables are indexed by CIRAM address, so refresh
-            jsr   RefreshPPUTiles         ; both physical nametables ($000 and $400), not PPU $2000
-            ldx   #$0400
-            jsr   RefreshPPUTiles
-            lda   #DIRTY_BIT_BG0_REFRESH
-            tsb   DirtyBits
-:no_refresh
 
 ; Dirty rendering (the grid renderer) or not
 

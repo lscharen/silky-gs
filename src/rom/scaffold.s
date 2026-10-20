@@ -132,11 +132,13 @@ NES_StartUp
             jsr   _ClearShadowScreen
             jsr   InitPlayfield
 
-; CHR-ROM games have their tiles converted offline into the tiledata bank by
-; build.js (scripts/lib/nromBuild.js) and compiled by Main.s. CHR-RAM games don't
-; have a fixed image to pre-convert -- mark every tile dirty instead, so
-; DrawPPUTile/CheckSprTileDirty lazily compile each tile the first time it's
-; actually drawn (once the game has uploaded real data for it).
+; The background tiles of both pattern tables are compiled, so the engine follows PPUCTRL like the
+; hardware does: the pattern tables are at $0000 at power on (PPUCTRL = 0) and each PPUCTRL the game
+; writes selects them (PPUCtrlDecode).  CHR-ROM games have their tiles converted offline into the
+; tiledata bank by build.js (scripts/lib/nromBuild.js): compile all 512 now (sprites are compiled when
+; they are first drawn, SprCompileTile).  CHR-RAM games don't have a fixed image -- mark every tile
+; dirty instead, so DrawPPUTile / CheckBgTileDirty / CheckSprTileDirty compile each tile the first
+; time it's drawn (once the game has uploaded real data for it).
 
             DO    HAS_CHR_RAM
             ldx   #0
@@ -146,6 +148,8 @@ NES_StartUp
             inx
             cpx   #512
             bcc   :mtloop
+            ELSE
+            jsl   ROM_CompileBackgroundTilesL
             FIN
 
 ; Battery-backed cartridges: restore the WRAM image ($6000-$7FFF of the NES address space, in the

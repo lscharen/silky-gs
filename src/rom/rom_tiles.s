@@ -6,7 +6,7 @@
 ; assembled (and unit tested) without the per-game tile-loading/sprite-
 ; compilation machinery in that file -- see tests/rom/rom_tiles.test.mjs.
 ;
-; Exports: ConvertROMTile3, ROMTileToBitmap, ConvertROMTile2, ROMTileToLookup,
+; Exports: ROM_CompileBackgroundTiles, ConvertROMTile3, ROMTileToBitmap, ConvertROMTile2, ROMTileToLookup,
 ;          reverse2, reverse4, TileBuff, DLUT2, DLUT2_shft, MLUT4,
 ;          FastROMTileToLookup, RLUT0_HI, RLUT0_LO, RLUT1_HI, RLUT1_LO,
 ;          FastROMMaskedTileToLookup, TILE_MASK, TILE_REVERSE
@@ -18,6 +18,27 @@
 ; from the interleaved format into something that the runtime can handle
 ; more efficiently.
 
+
+; ROM_CompileBackgroundTiles
+;
+; Compile all 512 tiles of the tiledata bank (both pattern tables), which build.js has already filled
+; with every converted CHR-ROM tile (scripts/lib/nromBuild.js).  Tile n's data is at n * 128 in the
+; tiledata bank and its compiled code goes to the same offset in the compile bank (see CompileTile), so
+; whichever pattern table PPUCTRL selects, its tiles are ready.  Called once by NES_StartUp (CHR-ROM
+; games), through ROM_CompileBackgroundTilesL.  16-bit A/X/Y, DBR = K.
+            mx    %00
+ROM_CompileBackgroundTiles
+            lda   #0              ; tile 0
+:loop
+            pha                   ; save the offset across the call
+            tay                   ; Y = the compiled tile slot: the same offset as its data
+            ldx   #^tiledata
+            jsr   CompileTile     ; A = the tile's data (tiledata bank), Y = its slot
+            pla
+            clc
+            adc   #128            ; the next tile
+            bne   :loop           ; (512 tiles fill the bank: done when the offset wraps to 0)
+            rts
 
 ; X = address in the rom file
 ; A = address to write

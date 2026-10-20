@@ -65,9 +65,7 @@ ActivePtr              equ   38          ; Work pointer to point at the active s
 unused46               equ   46
 unused48               equ   48
 
-; Pointers to which block of CHR memory is for tiles vs sprites
-TileChrMem             equ   50
-SprChrMem              equ   54
+unused50               equ   50          ; (50 - 57 free)
 
 unused59               equ   59
 
@@ -189,7 +187,7 @@ DOWN_ARROW      equ   $0A
 ; DirtyBits definitions
 DIRTY_BIT_BG0_X        equ   $0001     ; The horizontal scroll position has changed
 DIRTY_BIT_BG0_Y        equ   $0002     ; The veritcal scroll position has changed
-DIRTY_BIT_PAL_CHANGE   equ   $0004     ; There has been a palette change, force a repaint
+DIRTY_BIT_TILE_REDRAW  equ   $0004     ; Redraw every tile into the PEA field (the background pattern table changed)
 DIRTY_BIT_BG0_REFRESH  equ   $0010     ; Force a refresh of the full background
 DIRTY_BIT_SPRITE_ARRAY equ   $0040     
 

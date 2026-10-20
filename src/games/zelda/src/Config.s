@@ -3,16 +3,6 @@
 ; Constants only (no code, no macros): put by every segment source that assembles engine code.  The
 ; callbacks and the flags that enable them are in Hooks.s.
 
-; Define which PPU address has the background and sprite tiles
-;
-; Zelda uses CHR-RAM (tiles uploaded dynamically via PPUDATA writes into
-; $0000-$1FFF), not fixed CHR-ROM -- see HAS_CHR_RAM below. These addresses
-; still matter: they say which 4KB half of CHR-RAM is background vs sprite,
-; used both by PPUDATA_WRITE's dirty-marking and by the on-demand tile
-; recompilation at draw time.
-PPU_BG_TILE_ADDR  equ $1000
-PPU_SPR_TILE_ADDR equ $0000
-
 ; This game uploads its own CHR data at runtime rather than using a fixed
 ; CHR-ROM image -- see MarkTileDirty (ppu_regs.s), DrawPPUTile
 ; (ppu_attributes.s), CheckSprTileDirty (ppu.s), and NES_StartUp (scaffold.s).

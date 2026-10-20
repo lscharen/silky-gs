@@ -2,40 +2,6 @@
 ;
             mx %00
 
-; ROM_CompileBackgroundTiles
-;
-; Compile all 256 tiles of the background pattern table (bgadr) out of the tiledata bank, which
-; build.js has already filled with every converted CHR-ROM tile (scripts/lib/nromBuild.js).  The
-; tiledata bank holds pattern table $0000 in its first half and $1000 in its second half; there
-; is sufficient room to compile *all* 256 tiles.
-ROM_CompileBackgroundTiles
-
-            ldal bgadr           ; address in PPU memory to read for each tile 
-            cmp  #$1000
-            lda  #$0000
-            ror                  ; pattern table select determines if the tile is saved in first or second half of memory
-
-            ldy  #0              ; start at the beginning of the bank
-:loop
-            pha                  ; save the tiledata source address (A) across the call
-            phy                  ; save the compiled tile slot address (Y) across the call
-
-            ldx  #^tiledata
-            jsl  CompileTileL
-
-            pla
-            clc
-            adc  #$100           ; the next compiled tile slot is 256 further
-            tay
-
-            pla
-            clc
-            adc  #128          ; the next set of tile bitmap lookup data is 128 bytes in the tiledata bank
-
-            cpy  #0              ; did we reach the end of the bank?
-            bne  :loop
-            rts
-
 ; ConvertROMTile3, ROMTileToBitmap, ConvertROMTile2, ROMTileToLookup, reverse2,
 ; reverse4, TileBuff, and the DLUT2/DLUT2_shft/DLUT4/MLUT4 lookup tables live
 ; in rom_tiles.s (put alongside this file by each game's Main.s) -- see that

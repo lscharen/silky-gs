@@ -48,12 +48,12 @@ PPUSetMirrorModeL ENT
             plb
             rtl
 
-; ROM_CompileBackgroundTiles (rom_helpers.s)
-CompileTileL ENT
+; NES_StartUp (scaffold.s): compile every CHR-ROM tile (rom_tiles.s)
+ROM_CompileBackgroundTilesL ENT
             phb
             phk
             plb
-            jsr   CompileTile
+            jsr   ROM_CompileBackgroundTiles
             plb
             rtl
 

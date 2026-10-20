@@ -3,10 +3,6 @@
 ; Constants only (no code, no macros): put by every segment source that assembles engine code.  The
 ; callbacks and the flags that enable them are in Hooks.s.
 
-; Define which PPU address has the background and sprite tiles
-PPU_BG_TILE_ADDR  equ $1000
-PPU_SPR_TILE_ADDR equ $0000
-
 ; Flag whether this game uploads its own CHR data at runtime (CHR-RAM) rather
 ; than using a fixed CHR-ROM image loaded once at startup
 HAS_CHR_RAM equ 0
