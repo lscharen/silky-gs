@@ -17,8 +17,8 @@
 ; cell's first touch just stores its index into the next entry's operand.  A pass patches gqCellOp to
 ; jump to its handler, pokes an RTS over the first unused entry and calls the array:
 ;
-;   erase:  copy the erase quadrants, then move them up into the expose nibble
-;   expose: copy the expose quadrants, then zero the cell (this is also the end-of-frame clear)
+;   erase:  copy the erase quadrants (the cell is left as it is)
+;   expose: copy the erase and expose quadrants, then zero the cell (this is also the end-of-frame clear)
 ;
 ; The sprites drawn this frame are recorded the same way, as "ldx #index / ldy #cell / jsr gqRep8|16"
 ; entries, so the next frame replays them into the erase nibble by calling the array.
@@ -830,6 +830,8 @@ gridDrawDirty
             stz   tmp4                    ; No code field bank selected yet
             DO    GRID_CELL_STATS
             stz   tmp7                    ; Cells erased
+            stz   gbEraseW
+            stz   gbExposeW
             FIN
             lda   GridLPtr
             dec
@@ -887,7 +889,14 @@ gridDrawDirty
             beq   :no_mt
             ADD32 gsMtCells
             INC32 gsAttrFrames
-:no_mt      jsr   gridSpriteTiles
+:no_mt
+            DO    GRID_CELL_STATS
+            lda   gbEraseW
+            ADD32 gsEraseWords
+            lda   gbExposeW
+            ADD32 gsExposeWords
+            FIN
+            jsr   gridSpriteTiles
             sta   gsLastSprTiles
             ADD32 gsSprTiles
             FIN
@@ -927,17 +936,11 @@ gqRunCells
 gqCellOp    jmp   $0000
 
 ; Erase handler.  Y = cell.  Every entry in the erase range was appended by a replay or background mark, so
-; it always has erase bits.  DBR = K or a code field bank (everything here is long or direct page).
+; it always has erase bits.  The cell keeps them: the expose pass exposes the erase and expose quadrants.
+; DBR = K or a code field bank (everything here is long or direct page).
             mx    %00
 gqEraseOp
             tyx
-            ldal  gqGrid,x
-            sta   tmp5
-            xba                           ; Erase bits -> expose bits
-            and   #GQ_EXPOSE
-            ora   tmp5
-            and   #$FF00
-            stal  gqGrid,x
             ldal  PPU_MEM+GRID_CELL_SCR,x
             beq   :out                    ; Pad cell
             sta   tmp6
@@ -954,9 +957,15 @@ gqEraseOp
             FIN
             ldal  PPU_MEM+GRID_CELL_PEA,x
             tay                           ; Y = code field address
-            lda   tmp5
+            ldal  gqGrid,x
             and   #GQ_ERASE
             tax
+            DO    GRID_CELL_STATS
+            ldal  gqQuadWords,x
+            clc
+            adcl  gbEraseW
+            stal  gbEraseW
+            FIN
             ldal  gridEQTbl,x
             stal  :pp+1
             ldx   tmp6                    ; X = SHR address
@@ -968,9 +977,9 @@ gqEraseOp
             mx    %00
 gqExposeOp
             tyx
-            ldal  gqGrid,x
-            and   #GQ_EXPOSE
-            xba
+            ldal  gqGrid,x                ; erase | expose quadrants: the high byte read at +1 is in the low
+            oral  gqGrid+1,x              ; byte (bits 8-15 hold the next cell's erase byte)
+            and   #GQ_ERASE
             sta   tmp5                    ; mask * 2
             lda   #0
             stal  gqGrid,x
@@ -981,6 +990,12 @@ gqExposeOp
             inc   tmp7
             FIN
             ldx   tmp5
+            DO    GRID_CELL_STATS
+            ldal  gqQuadWords,x
+            clc
+            adcl  gbExposeW
+            stal  gbExposeW
+            FIN
             jmp   (gridXQTbl,x)           ; The copy routine returns to the cell array
 :out        rts
 
@@ -1670,6 +1685,9 @@ gridQX8
             sta:  {7*SHR_LINE_WIDTH}+2,y
             rts
 gridEQTbl   dw    gridQE0,gridQE1,gridQE2,gridQE3,gridQE4,gridQE5,gridQE6,gridQE7,gridQE8,gridQE9,gridQE10,gridQE11,gridQE12,gridQE13,gridQE14,gridQE15
+            DO    GRID_CELL_STATS
+gqQuadWords dw    0,4,4,8,4,8,8,12,4,8,8,12,8,12,12,16   ; words copied per mask (4 per quadrant)
+            FIN
 gridXQTbl   dw    gridQX0,gridQX1,gridQX2,gridQX3,gridQX4,gridQX5,gridQX6,gridQX7,gridQX8,gridQX9,gridQX10,gridQX11,gridQX12,gridQX13,gridQX14,gridQX15
 
 ; ---------------------------------------------------------------------------
@@ -1811,6 +1829,8 @@ gqPrevBase  dw    0
 gqPrevEnd   dw    0
 gbErase     dw    0
 gbExpose    dw    0
+gbEraseW    dw    0                         ; (GRID_CELL_STATS) words erased / exposed this frame
+gbExposeW   dw    0
 
 ; The OAM coordinate tables gridRowLo, gridRowHi, gridKIdx, gridColOff and gridBIdx (read with 8-bit
 ; index registers in gridMarkSprite8/16) and gqSC / gqSI / gqSkip are in core/Data.s, page-aligned

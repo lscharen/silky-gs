@@ -263,16 +263,20 @@ async function main() {
             result.stats = st;
         }
 
-        // --gridstats: the 32-bit counters after the 'GRIDSTAT' signature in the application bank (ppu_grid.s)
+        // --gridstats: the 32-bit counters after the 'GRIDSTAT' signature (ppu_grid.s), in the ENGINE segment's
+        // bank: the bank byte of the first jsl in NES_RenderFrame (jsl RenderLatch)
         if (o.gridstats) {
-            const m = await gs2.read(bank << 16, 65536);
+            const rf = await gs2.read((bank << 16) | parseSymbolAddr(sym.NES_RenderFrame), 32);
+            const jsl = rf.indexOf(0x22);
+            if (jsl < 0) throw new Error('no jsl in NES_RenderFrame');
+            const m = await gs2.read(rf[jsl + 3] << 16, 65536);
             const at = m.indexOf(Buffer.from('GRIDSTAT'));
             if (at < 0) throw new Error('no GRIDSTAT block');
             const names = ['dirtyFrames', 'fullFrames', 'erased', 'exposed', 'sprTiles', 'bgCells', 'fbBgOff', 'fbAttr',
                            'fbMany', 'fbAlign', 'fbScroll'];
             const g = {};
             names.forEach((n, i) => { g[n] = m.readUInt32LE(at + 8 + i * 4); });
-            const rest = at + 8 + names.length * 4 + 2;           // (gridFbReason is a word)
+            const rest = at + 8 + names.length * 4;
             ['bgFrames', 'metatiles', 'mtCells', 'attrFrames', 'eraseWords', 'exposeWords']
                 .forEach((n, i) => { g[n] = m.readUInt32LE(rest + i * 4); });
             result.grid = g;

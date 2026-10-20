@@ -7,16 +7,16 @@ to the sprite, PPU or render code.
 
 ## How it works
 
-* `BENCH_MODE equ 1` in `src/games/zelda/src/Main.s` reads the controller from a file instead of the keyboard
-  (`rom/rom_input.s`): one byte per NES frame in the A-B-Select-Start-Up-Down-Left-Right layout.  `Main.s` loads
+* The harness is not in the source.  `scripts/bench-zelda.js` (`harnessEdits`) patches it in for the build and puts
+  the files back afterwards: the controller is read from a file instead of the keyboard (`NES_PollInput`,
+  `rom/rom_input.s`), one byte per NES frame in the A-B-Select-Start-Up-Down-Left-Right layout.  `Main.s` loads
   `zelda.bench` (next to the application) into `ROMBase+$0800` before `BenchStart`, and the run ends in a
   `BenchDone` spin loop after `BENCH_MODE_LEN` frames, before `NES_ShutDown`, so nothing is saved.
-* The input index advances once per NES frame when `NO_INTERRUPTS equ 1` (`NES_TriggerNMI`), and once per VBL
-  otherwise (`schedTask`).  **Use `NO_INTERRUPTS` for cycle counts.**  With interrupts on, a run is a fixed number
-  of VBLs, so its length in cycles is fixed by construction (a faster build just idles more) and the game state
-  depends on timing.  With `NO_INTERRUPTS` every NES frame is rendered, the run is deterministic, and the same
-  input gives the same game state in every build (the final room and Link's position are checked).  Two runs of the
-  same build give identical cycle counts.
+* The build uses `NO_INTERRUPTS` (`--noint` is required): the input index advances once per NES frame
+  (`NES_TriggerNMI`), every NES frame is rendered, the run is deterministic, and the same input gives the same
+  game state in every build (the final room and Link's position are checked).  Two runs of the same build give
+  identical cycle counts.  Frame k reads input byte k-1, as the original harness did, so the old recordings still
+  play the same route.
 * The cycles are the `cycle` field of `get_regs`, read at `BenchStart` and `BenchDone` (execute breakpoints).
   The window includes the ROM cold boot and everything the game does for the frames; it excludes the runtime's
   start-up and the GS/OS launch.
@@ -157,3 +157,23 @@ Each step checked with `--shots` (7/7 screen hashes identical to the build that 
 | 2 + 3: flip key, ring | 252.30M | **251.76M** | **-11.8%** |
 
 Best so far: 127 slots, quota 2, **251,764,983 cycles**.
+
+## Results: write-through erase for quadrants without a new sprite (2026-10-19, not kept)
+
+The idea: an erased quadrant that no sprite drawn this frame covers already shows its final pixels, so it can be
+erased with shadowing on and never exposed.  Only quadrants with both a previous and a current sprite need the
+shadowing-off erase, the draw and the expose.  The test build marked every drawn sprite in the expose nibble before
+the erase (`gqPreMark`), erased only the shared quadrants with shadowing off, and wrote the others through from the
+code field in the expose pass.  It drew the same pictures (7/7 `--shots` hashes) and ended in the same game state.
+
+| Build | Cycles | Erased words | Exposed words | Written through |
+|---|---:|---:|---:|---:|
+| Baseline | 244,308,151 | 1,518,812 | 1,573,736 | - |
+| Write-through | 250,404,501 (+2.5%) | 1,523,916 | 1,508,572 | 70,268 |
+
+(3162 dirty frames and 437 full renders in both; the word counts are from the `--gridstats` builds.)
+
+Only 4.6% of the erased words belong to a quadrant without a new sprite: Zelda's sprites move a pixel or two per
+frame, so a sprite's old and new quadrants are nearly always the same.  Saving those words' exposes is worth at most
+about 0.85M cycles, less than the extra work in the two cell handlers alone (about 1.5M), before the pre-mark pass.
+The experiment is saved as `build/grid-three-class.patch` (not committed).
