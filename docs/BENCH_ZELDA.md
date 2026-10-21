@@ -199,7 +199,9 @@ Both steps drew the same pictures (7/7 `--shots` hashes) and ended in the same g
 | 1: erase handler | 241,209,866 | -1.27% |
 | 1 + 2: 8x16 patterns | 237,364,380 | -2.85% |
 | 1 + 2 + 3: 8x8 patterns, 6-byte records | 236,909,279 | -3.03% |
-| 1 - 4: erase with DBR = $01 | **234,612,321** | **-3.97%** |
+| 1 - 4: erase with DBR = $01 | 234,612,321 | -3.97% |
+| 1 - 5: sprite palette set by the bitmap draws only | 234,019,244 | -4.21% |
+| 1 - 6: OAM copy with 8-bit index registers | **233,566,964** | **-4.40%** |
 
 The route averages about 13 8x16 sprites and 40 erased cells per dirty frame (`--gridstats`).
 
@@ -210,3 +212,9 @@ The route averages about 13 8x16 sprites and 40 erased cells per dirty frame (`-
    generated too (`ppu_grid_marks.s`); the erase operands have bank $00 and `gqInitTables` stores `^lite_base_1` /
    `^lite_base_2` into them (`gqEBSites1/2`): an EXT label + a negative constant relocated into the wrong bank (the
    line 0 reads came from the other bank).  Donkey Kong: 83,089,916 -> 82,455,295 (-0.76%), 6/6 hashes identical.
+5. `SPR_SETUP` no longer sets the sprite palette (`ActivePtr`): compiled sprites have their colors built in, so
+   only the bitmap draws (`as_bitmap`, `as_bitmap_clip`) set it, from the attribute byte (`SPR_PALETTE`).
+   234,612,321 -> 234,019,244 (-0.25%), 7/7 screen hashes and the end state identical.
+6. `scanOAMSprites` pass 2 (interrupts off) runs with 8-bit index registers: `plx` pulls the pushed index byte
+   straight into X, instead of `sep / pla / rep / and / tax`.  About 11 cycles less per sprite:
+   234,019,244 -> 233,566,964 (-0.19%), 7/7 screen hashes and the end state identical.

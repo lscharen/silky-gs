@@ -56,7 +56,8 @@ SPR16_TABLE mac
 ; Set up a sprite for drawing.  X = OAM index (preserved).
 ;
 ; Sets sprTmp1 = SHR address, sprTmp4 = horizontal clip amount (0 = no clipping), sprShift = $0004 for
-; a sprite on an odd pixel (else 0; SPR_PIXEL_SHIFT) and ActivePtr = the sprite's palette.  A macro, so each sprite size gets its own copy and the setup is not a nested call.
+; a sprite on an odd pixel (else 0; SPR_PIXEL_SHIFT).  A macro, so each sprite size gets its own copy and the setup is not a nested call.
+; The palette (ActivePtr) is set only by the bitmap draws (SPR_PALETTE): compiled sprites have their colors built in.
 SPR_SETUP mac
         ldal  OAM_COPY,x               ; Y-coordinate
         and   #$00FF
@@ -64,15 +65,9 @@ SPR_SETUP mac
         tay
         db    $B7,sprMul160            ; lda [sprMul160],y
         adc   #$2000-{y_offset*160}+x_offset
-        sta   sprTmp1
+        sta   sprTmp1                  ; (carry clear: the address is below $10000)
 
-        sep   #$20                     ; Palette: ActivePtr selects the swizzle table of the sprite palette
-        ldal  OAM_COPY+2,x
-        and   #$03
-        asl
-        adc   SwizzlePtr2+1            ; (carry clear from the asl)
-        sta   ActivePtr+1
-
+        sep   #$20
         DO    SPR_PIXEL_SHIFT
         ldal  OAM_COPY+3,x             ; X-coordinate: NES pixels to IIgs bytes, the pixel in the byte
         lsr                            ; into the carry.  No scroll correction: the sprite is drawn on
@@ -111,6 +106,18 @@ SPR_SETUP mac
         sbc   #124                     ; (carry set)
         sta   sprTmp4
         FIN
+        <<<
+
+; ActivePtr = the swizzle table of the sprite's palette (attribute bits 1-0, in the high byte of sprTmp2), for
+; the bitmap draws.  A is trashed.
+SPR_PALETTE mac
+        sep   #$20
+        lda   sprTmp2+1
+        and   #$03
+        asl
+        adc   SwizzlePtr2+1            ; (carry clear from the asl)
+        sta   ActivePtr+1
+        rep   #$20
         <<<
 
         mx   %00
@@ -517,6 +524,7 @@ as_bitmap_saved
         lda  #$FFFF         ; color for priority bit
         stal outlineColor
         FIN
+        SPR_PALETTE
         lda  sprTmp2+1
         and  #$00E0
         lsr
@@ -557,6 +565,7 @@ as_bitmap_clip
         tay                           ; (kept across the check)
         jsr  sprChrCheck
         FIN
+        SPR_PALETTE
         lda  sprTmp2+1
         and  #$00E0
         lsr
