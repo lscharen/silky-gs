@@ -10,6 +10,10 @@
 ;   CONFIG_VIDEO_STATUSBAR equ 0/1 Show the STATUS BAR option on the VIDEO menu (needs CONFIG_VIDEO_MENU).
 ;                                  For the games with a separately drawn status bar (SMB, Excitebike,
 ;                                  Balloon Fight); the value is config_video_statusbar (CFG_VIDEO_STATUSBAR).
+;                                  Nothing reads it yet: it is for a deferred optimization that skips
+;                                  redrawing a scrolling game's fixed status bar when no sprite is on it
+;                                  and it hasn't changed, and only redraws the scrolling area (16 lines a
+;                                  frame for SMB).  Left out of dist/README.TXT until it does something.
 ;   CONFIG_VIDEO_FASTBLIT equ 0/1  Show the FAST BLIT option on the VIDEO menu (needs CONFIG_VIDEO_MENU).
 ;                                  Only useful for scrolling games, which do full renders.  When 0, a
 ;                                  fast blit setting in an old preferences file is ignored.
@@ -57,6 +61,7 @@ ApplyConfig
 :apply_video
             FIN
             jsr   _ClearShadowScreen          ; With shadowing on, so fast blit leaves no stale lines
+            jsr   KbdBuildMaps                ; The BASIC keyboard driver's key maps
             DO    JOYSTICK_SUPPORT
             jsl   JoyConfigureL               ; Before _InitRenderMode, which hooks the probe rows if used
             FIN
@@ -109,7 +114,7 @@ _FixPrefInputTypes
 
 config_block_start                    ; range saved / loaded by misc/io.s
 config_audio_quality   dw  CONFIG_DEFAULT_AUDIO  ; good / better / best audio quality (60Hz, 120Hz, 240Hz audio interrupts)
-config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not
+config_video_statusbar dw  1  ; exclude the status bar from the animate playfield area or not (not used yet)
 config_video_fastmode  ds  2  ; use the "skip line" rendering mode
 
 ; player 1 config block (layout is fixed by the PLAYER_INPUT_* offsets in core/CoreImpl.s)
@@ -128,10 +133,10 @@ config_input_button_b  dw  MOD_REG_OPTION_DOWN
 config_block_p2
 config_input_p2_type      ENT
                           dw  0
-config_input_p2_key_left  dw  'j'
-config_input_p2_key_right dw  'l'
-config_input_p2_key_up    dw  'i'
-config_input_p2_key_down  dw  'k'
+config_input_p2_key_left  dw  'a'
+config_input_p2_key_right dw  'd'
+config_input_p2_key_up    dw  'w'
+config_input_p2_key_down  dw  's'
 config_input_p2_snesmax_port dw 4
 config_input_p2_button_a  dw  MOD_REG_CONTROL_DOWN
 config_input_p2_button_b  dw  MOD_REG_SHIFT_DOWN

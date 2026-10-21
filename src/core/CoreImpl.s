@@ -318,9 +318,14 @@ ClearKbdStrobe    sep       #$20
 ; The rest of the bits will be filled in by the configured input selector for each player
 
 
-; Read the keyboard and paddle controls and return in a game-controller-like format
+; Read the keyboard and paddle controls and return in a game-controller-like format.  A new key press
+; that a player's keyboard map uses (kbdHandled) is a control, not a built-in key: it is taken out of
+; KeyEvent so that the event loop doesn't act on it, except '?' (the configuration screen must stay
+; reachable whatever the keys are set to).
                 mx %00
 _ReadControl
+                  stz       kbdNewKey
+                  stz       kbdHandled
                   jsr       _ReadKeypress        ; Always poll for a keystroke
                   sta       InputPlayer1
                   sta       InputPlayer2         ; Replicate the raw keyboard info into both players' input values
@@ -336,8 +341,21 @@ _ReadControl
                   jsr       (:input_proc2,x)
                   tsb       InputPlayer2
 
-                  lda       InputPlayer1
+                  lda       kbdHandled
+                  beq       :out
+                  lda       kbdNewKey
+                  beq       :out
+                  ldal      KeyEvent
+                  and       #$007F
+                  cmp       #'?'
+                  beq       :out
+                  lda       #0
+                  stal      KeyEvent
+:out              lda       InputPlayer1
                   rts
+
+kbdNewKey         dw        0                   ; Non-zero if this poll saw a new key press (_ReadKeypress)
+kbdHandled        dw        0                   ; Non-zero if a player's keyboard map uses this poll's key
 
 :input_proc1      dw        _ReadKeyboard1,_ReadSNESMAX1
                   DO        JOYSTICK_SUPPORT
@@ -388,6 +406,7 @@ _ReadKeypress
 
                   sta       LastKey
                   sta       1,s
+                  sta       kbdNewKey           ; (for _ReadControl)
                   stal      KeyEvent            ; a new press, for the event loop (NES_TakeKey)
                   stal      j13New              ; and for the J13 keyboard driver (J13_Poll)
                   ldal      MOD_REG             ; with the modifiers of the key (read before the strobe is
@@ -438,6 +457,7 @@ PLAYER_INPUT_BUTTON_B  equ 14
 ; for buttons
                 mx %00
 _ReadKeyboard1    ldx       #config_block_p1
+                  ldy       #0                  ; Player 1's half of kbdMaps
                   lda       config_kbd_driver
                   cmp       #KBD_DRIVER_J13
                   beq       _ReadKeyboardJ13
@@ -445,6 +465,7 @@ _ReadKeyboard1    ldx       #config_block_p1
                   jmp       _ReadKeyboard
 
 _ReadKeyboard2    ldx       #config_block_p2
+                  ldy       #$80                ; Player 2's half of kbdMaps
                   lda       config_kbd_driver
                   cmp       #KBD_DRIVER_J13
                   beq       _ReadKeyboardJ13
@@ -454,12 +475,35 @@ _ReadKeyboard2    ldx       #config_block_p2
 ; J13: the directions, Start and Select from every held key (J13_Pad), the buttons as for BASIC
 _ReadKeyboardJ13  phx
                   jsr       J13_Pad
+                  pha
+                  jsr       _KbdJ13Handled
+                  pla
                   plx
                   pha
                   lda       #0                  ; no key: _ReadKeyboard only reads the buttons
                   jsr       _ReadKeyboard
                   ora       1,s
                   plx
+                  rts
+
+; J13: set kbdHandled if the key (InputPlayer1's low byte: every player has it) is one of the player's
+; keys (j13Ids, set by J13_Pad), compared as J13 does, by ADB key code
+_KbdJ13Handled    lda       InputPlayer1
+                  bit       #PAD_KEY_DOWN
+                  beq       :out
+                  and       #PAD_KEY_MASK
+                  tax
+                  lda       J13_ADBKeys,x
+                  and       #$00FF
+                  ldx       #10
+:loop             cmp       j13Ids,x
+                  beq       :handled
+                  dex
+                  dex
+                  bpl       :loop
+:out              rts
+:handled          lda       #1
+                  sta       kbdHandled
                   rts
 
 ; The joystick (INPUT_JOYSTICK): its directions (JoyGetPadL, core/blitter/JoyProbes.s) and buttons 0 / 1
@@ -488,7 +532,11 @@ _ReadJoystick     pha
                   rts
                   FIN
 
-; Called with the X-register set to the configuration block
+; BASIC: the key in A (from _ReadKeypress: bit 7 set if a key was just pressed or one is down, the last
+; key pressed in bits 0 - 6) becomes the pad bits of its kbdMaps entry.  One key gives at most one
+; direction, so never two opposite ones, and nothing is kept from one poll to the next: no key down is no
+; direction, and a key pressed and released between two polls still counts once.  Called with X = the
+; configuration block (the buttons) and Y = the player's half of kbdMaps ($00 / $80).
 _ReadKeyboard     pha                           ; low byte = key code, high byte = %ABsSUDLR  S = Start, s = select
                   sep       #$20
 
@@ -510,58 +558,143 @@ _ReadKeyboard     pha                           ; low byte = key code, high byte
 :apply_opt        ora       2,s
                   sta       2,s
 
-:no_buttons
-                  lda       1,s                 ; read the current keypress
-                  and       #$7F
-                  cmp:      PLAYER_INPUT_KEY_DOWN,x
-                  bne       :not_down
-                  lda       #>PAD_DOWN
-                  ora       2,s
-                  bra       :done
-
-:not_down
-                  cmp:      PLAYER_INPUT_KEY_UP,x
-                  bne       :not_up
-                  lda       #>PAD_UP
-                  ora       2,s
-                  bra       :done
-
-:not_up
-                  cmp:      PLAYER_INPUT_KEY_LEFT,x
-                  bne       :not_left
-                  lda       #>PAD_LEFT
-                  ora       2,s
-                  bra       :done
-
-:not_left
-                  cmp:      PLAYER_INPUT_KEY_RIGHT,x
-                  bne       :not_right
-                  lda       #>PAD_RIGHT
-                  ora       2,s
-                  bra       :done
-
-:not_right
-                  cmp       #9           ; TAB
-                  bne       :not_select
-                  lda       #>PAD_SELECT
-                  ora       2,s
-                  bra       :done
-
-:not_select
-                  cmp       #13          ; Return
-                  bne       :not_start
-                  lda       #>PAD_START
-                  ora       2,s
-                  bra       :done
-
-:not_start
-                  lda       #0                       ; no key matches the configured directions
-:done
+:no_buttons       rep       #$20
+                  lda       1,s                 ; the key
+                  bit       #PAD_KEY_DOWN
+                  beq       :done               ; none
+                  and       #PAD_KEY_MASK
+                  phy
+                  ora       1,s                 ; in this player's map
+                  ply
+                  tax
+                  sep       #$20
+                  lda       kbdMaps,x
+                  beq       :unmapped
+                  sta       kbdHandled          ; (non-zero: a control, not a built-in key)
                   ora       2,s
                   sta       2,s
-                  rep       #$20
-                  pla
+:unmapped         rep       #$20
+:done             pla
+                  rts
 
+; kbdMaps
+;
+; The BASIC keyboard driver's key maps (_ReadKeyboard): the pad bits (the high byte: PAD_UP, PAD_START,
+; ...) of each key code ($00 - $7F), player 1's then player 2's.  Built by KbdBuildMaps from the players'
+; keys, so that a key reads the same whatever modifiers were held when it was pressed (the modifiers can
+; be buttons, and $C000 keeps the code the key had when it went down):
+;
+;   - the player's direction keys, then Tab (Select) and Return (Start), as they are
+;   - then, for a letter, its other case (Shift, Caps Lock) and its Control code, unless that is an arrow
+;     key's code (Control-H, J, K and U are $08, $0A, $0B and $15): every key goes to both players, so
+;     player 2's J (left) would otherwise also be player 1's down arrow
+;
+; An entry already set is kept, so the keys as set come first.
+kbdMaps           ds        256
+
+kbdPlayer         dw        0                   ; KbdBuildMaps: the player's half of kbdMaps
+kbdBlock          dw        0                   ; ... the player's configuration block
+kbdBits           dw        0                   ; ... the key's pad bits
+kbdCode           dw        0                   ; ... the key
+
+; The direction keys' offsets in a configuration block and their pad bits
+KbdKeys           dw        PLAYER_INPUT_KEY_DOWN,PAD_DOWN/256
+                  dw        PLAYER_INPUT_KEY_UP,PAD_UP/256
+                  dw        PLAYER_INPUT_KEY_LEFT,PAD_LEFT/256
+                  dw        PLAYER_INPUT_KEY_RIGHT,PAD_RIGHT/256
+KbdKeysEnd
+
+; KbdBuildMaps
+;
+; Build kbdMaps from the players' keys.  Called at start-up (after the preferences are loaded) and by
+; ApplyConfig.  16-bit registers, DBR = the main bank.
+                mx %00
+KbdBuildMaps
+                  ldx       #256-2
+:clear            stz       kbdMaps,x
+                  dex
+                  dex
+                  bpl       :clear
+                  ldx       #config_block_p1
+                  lda       #0
+                  jsr       :player
+                  ldx       #config_block_p2
+                  lda       #$80
+
+:player           sta       kbdPlayer
+                  stx       kbdBlock
+                  ldy       #0                  ; The direction keys
+:exact            jsr       :key
+                  jsr       :set
+                  iny
+                  iny
+                  iny
+                  iny
+                  cpy       #KbdKeysEnd-KbdKeys
+                  bcc       :exact
+                  lda       #PAD_SELECT/256
+                  sta       kbdBits
+                  lda       #9                  ; Tab
+                  jsr       :set
+                  lda       #PAD_START/256
+                  sta       kbdBits
+                  lda       #13                 ; Return
+                  jsr       :set
+
+                  ldy       #0                  ; The letters' other case and Control code
+:alias            jsr       :key
+                  and       #$007F
+                  sta       kbdCode
+                  and       #$005F              ; Upper case
+                  cmp       #'A'
+                  bcc       :next
+                  cmp       #'Z'+1
+                  bcs       :next
+                  lda       kbdCode
+                  eor       #$0020
+                  jsr       :set
+                  lda       kbdCode
+                  and       #$001F
+                  jsr       :ctrl
+:next             iny
+                  iny
+                  iny
+                  iny
+                  cpy       #KbdKeysEnd-KbdKeys
+                  bcc       :alias
+                  rts
+
+; Y = the KbdKeys entry: returns the player's key in A, and its pad bits in kbdBits
+:key              lda       KbdKeys+2,y
+                  sta       kbdBits
+                  lda       KbdKeys,y
+                  clc
+                  adc       kbdBlock
+                  tax
+                  lda:      0,x
+                  rts
+
+; A = a letter's Control code: as :set, unless it is an arrow key's code
+:ctrl             cmp       #LEFT_ARROW
+                  beq       :arrow
+                  cmp       #RIGHT_ARROW
+                  beq       :arrow
+                  cmp       #UP_ARROW
+                  beq       :arrow
+                  cmp       #DOWN_ARROW
+                  bne       :set
+:arrow            rts
+
+; A = a key code: give it kbdBits, unless it has pad bits already
+:set              and       #$007F
+                  ora       kbdPlayer
+                  tax
+                  sep       #$20
+                  lda       kbdMaps,x
+                  bne       :taken
+                  lda       kbdBits
+                  sta       kbdMaps,x
+:taken            rep       #$20
                   rts
 
 ; Read the sensmax controller input from the configured slot n

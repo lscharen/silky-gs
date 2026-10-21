@@ -351,6 +351,61 @@ ShowConfig
 :no_items
             rts
 
+; ConfirmQuit
+;
+; The quit confirmation (Q in NES_EvtLoop): a box, in the configuration screen's colors, asking the user
+; to confirm.  Y quits; N or Escape goes back to the game.  Returns carry set to quit.
+QUIT_BOX_ORIGIN equ PLAYFIELD_ORIGIN+{8*COL_STEP}+{9*ROW_STEP}   ; 16 x 7 tiles, centered
+
+QUIT_TITLE_STR  str 'QUIT GAME'
+QUIT_KEYS_STR   str 'Y YES   N NO'
+
+            mx   %00
+ConfirmQuit
+            jsr  _ConfigEntry
+            lda  #0
+            jsr  _SetSCBs
+            lda  #0
+            jsr  _ClearToColor
+            lda  #0
+            ldx  #ConfScrnPal
+            jsr  NES_SetPalette
+
+            ldy  #QUIT_BOX_ORIGIN
+            ldx  #14
+            jsr  ConfigDrawTopBorder
+            ldy  #QUIT_BOX_ORIGIN+ROW_STEP
+            ldx  #5
+            lda  #COL_STEP*15
+            jsr  ConfigDrawSideBorder
+            ldy  #QUIT_BOX_ORIGIN+{6*ROW_STEP}
+            ldx  #14
+            jsr  ConfigDrawBottomBorder
+
+            ldx  #QUIT_TITLE_STR
+            ldy  #QUIT_BOX_ORIGIN+{2*ROW_STEP}+{4*COL_STEP}
+            lda  #TEXT_NORMAL
+            jsr  ConfigDrawString
+            ldx  #QUIT_KEYS_STR
+            ldy  #QUIT_BOX_ORIGIN+{4*ROW_STEP}+{2*COL_STEP}
+            lda  #TEXT_NORMAL
+            jsr  ConfigDrawString
+
+:key        jsr  _WaitForKeyUp                     ; (the Q's auto-repeat is ignored)
+            cmp  #$1B                              ; Escape
+            beq  :cancel
+            ora  #$0020                            ; Either case
+            cmp  #'y'
+            beq  :quit
+            cmp  #'n'
+            bne  :key
+:cancel     jsr  _ConfigExit
+            clc
+            rts
+:quit       jsr  _ConfigExit
+            sec
+            rts
+
 ; config_keypress    ds 2    ; use to wait until a keyup event
 config_active_menu ds 2    ; currently selected menu item
 config_active_ctrl ds 2    ; currently selected control

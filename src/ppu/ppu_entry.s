@@ -30,7 +30,7 @@ InitYExcludeL ENT
             plb
             rtl
 
-; Control-% (scaffold.s)
+; !, the full repaint key (scaffold.s)
 ForceMetatileRefreshL ENT
             phb
             phk

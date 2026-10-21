@@ -95,6 +95,7 @@ NES_StartUp
 
             jsr   LoadPrefData
             jsr   _FixPrefInputTypes
+            jsr   KbdBuildMaps            ; The BASIC keyboard driver's key maps (core/CoreImpl.s)
             DO    JOYSTICK_SUPPORT
             jsl   JoyConfigureL           ; The joystick settings; _InitRenderMode hooks the probe rows if used
             jsr   _InitRenderMode
@@ -209,7 +210,7 @@ NES_StartExecution
 
 ; NES_EvtLoop
 ;
-; The main control loop.  Pressing Control-Q or Control-R will exit the driver.
+; The main control loop.  Returns A = USER_SAYS_QUIT (Q, confirmed) or USER_SAYS_RESET (R).
 
             PRE_EVT_LOOP
             mx  %00
@@ -240,109 +241,83 @@ NES_EvtLoop
 ; Take the last new key press (each press, or auto-repeat, is one event).  If there is none,
 ; then nothing else to do here
 
-            jsr   NES_TakeKey            ; (Z set if there is none; X = the modifiers)
+            jsr   NES_TakeKey            ; (Z set if there is none)
             bne   *+5
             brl   NES_EvtLoop
 
 ; Handle all of the built-in actions with the keycode.  Afterwards, allow for
 ; application-specific handlers.
 ;
-; The built-in keys are Control with '?', Q, R or a shifted number key, so that every other key, the
-; letters and the numeric keypad included, can be mapped to the controls.  Control turns a letter into
-; its control code (Control-Q comes in as $11), so both are checked; for '?', every form of its key is.
+; The built-in keys are '?', the shifted number keys (! @ # ...), Q and R, so that every other key, the
+; letters and the numeric keypad included, can be mapped to the controls:
+;
+;   ?  the configuration screen          !  force a full repaint
+;   @  toggle the NES sprites            #  toggle the NES background
+;   Q  quit (after a confirmation screen)
+;   R  reset the console (the game's Main.s warm-boots it: USER_SAYS_RESET)
+;
+; A key that a player's keyboard map uses never gets here (_ReadControl takes it out of KeyEvent), so
+; the controls come first; '?' always does.
 
-            pha
-            txa
-            and   #MOD_REG_CONTROL_DOWN
-            bne   :control
-            pla
-            brl   :next_loop
-:control    pla
-
-; Control-? to bring up the configuration screen and reapply the settings
+; ?: bring up the configuration screen and reapply the settings
 
             DO    NO_CONFIG
             ELSE
             cmp   #'?'
-            beq   :config
-            cmp   #'/'                                    ; (the same key: Control-? can come in as '/',
-            beq   :config                                 ; as a control code, or as DEL)
-            cmp   #'?'-$20
-            beq   :config
-            cmp   #$7F
             bne   :not_config
-:config
-            jsr   APUStop                                ; Turn off the APU (restarted in Apply Config)
-            jsr   NES_StopExecution                       ; Pause emulation nicely
-            DO    JOYSTICK_SUPPORT
-            jsl   JoyScanDisarmL                          ; No joystick scanline interrupts there
-            FIN
+            jsr   NES_Pause
             jsr   ShowConfig                              ; Let the user reconfigure
-            jsr   ApplyConfig                             ; Apply to the running configuration
-            lda   #DIRTY_BIT_BG0_REFRESH                  ; Force a full page refresh on config exit
-            tsb   DirtyBits
-            jsr   NES_StartExecution
+            jsr   NES_Resume                              ; (applies the configuration)
             brl   NES_EvtLoop
 :not_config
             FIN
 
-; Control-): force all of the APU channels to be turned off
-;            cmp   #')'
-;            bne   :not_0
-;            stz   APU_FORCE_OFF
-;            brl   NES_EvtLoop
-;:not_0
-;
-; Control-! / @ / # / $ (shifted 1 - 4): toggle individual APU channels.  Control-@ can't be told from
-; no key (see above), so channel 2 would need another key.
-;            cmp   #'!'
+; $ / % / ^ / & (shifted 4 - 7): toggle individual APU channels; * (shifted 8): force all of the APU
+; channels to be turned off
+;            cmp   #'$'
 ;            bne   :not_1
 ;            lda   #$01
 ;            jsr   ToggleAPUChannel
 ;            brl   NES_EvtLoop
 ;:not_1
 ;
-;            cmp   #'@'-$40
+;            cmp   #'%'
 ;            bne   :not_2
 ;            lda   #$02
 ;            jsr   ToggleAPUChannel
 ;            brl   NES_EvtLoop
 ;:not_2
 ;
-;            cmp   #'#'
+;            cmp   #'^'
 ;            bne   :not_3
 ;            lda   #$04
 ;            jsr   ToggleAPUChannel
 ;            brl   NES_EvtLoop
 ;:not_3
 ;
-;            cmp   #'$'
+;            cmp   #'&'
 ;            bne   :not_4
 ;            lda   #$08
 ;            jsr   ToggleAPUChannel
 ;            brl   NES_EvtLoop
 ;:not_4
+;
+;            cmp   #'*'
+;            bne   :not_0
+;            stz   APU_FORCE_OFF
+;            brl   NES_EvtLoop
+;:not_0
 
-; Control-% (shifted 5): force a full repaint of the screen
-            cmp   #'%'
+; ! (shifted 1): force a full repaint of the screen
+            cmp   #'!'
             bne   :not_f
             jsl   ForceMetatileRefreshL
             brl   NES_EvtLoop
 :not_f
 
-; Control-& (shifted 7): force the NES Background bit to be toggled
+; @ (shifted 2): force the NES Sprite bit to be toggled
 
-            cmp   #'&'
-            bne   :not_b
-            ldal  ppumask_override
-            eor   #NES_PPUMASK_BG
-            stal  ppumask_override
-            brl   NES_EvtLoop
-:not_b
-
-; Control-* (shifted 8): force the NES Sprite bit to be toggled
-
-            cmp   #'*'
+            cmp   #'@'
             bne   :not_s
             ldal  ppumask_override
             eor   #NES_PPUMASK_SPR
@@ -350,17 +325,38 @@ NES_EvtLoop
             brl   NES_EvtLoop
 :not_s
 
-; Control-Q / Control-R: exit (as control codes, or as letters in either case)
+; # (shifted 3): force the NES Background bit to be toggled
 
-            cmp   #'q'-$60
-            beq   :exit
-            cmp   #'r'-$60
-            beq   :exit
-            ora   #$0020
-            cmp   #'q'
-            beq   :exit
+            cmp   #'#'
+            bne   :not_b
+            ldal  ppumask_override
+            eor   #NES_PPUMASK_BG
+            stal  ppumask_override
+            brl   NES_EvtLoop
+:not_b
+
+; R (either case): reset the console
+
             cmp   #'r'
-            beq   :exit
+            beq   :reset
+            cmp   #'R'
+            bne   :not_reset
+:reset      lda   #USER_SAYS_RESET
+            bra   :exit
+:not_reset
+
+; Q (either case): quit, if the user confirms it
+
+            cmp   #'q'
+            beq   :quit
+            cmp   #'Q'
+            bne   :next_loop
+:quit       jsr   NES_Pause
+            jsr   ConfirmQuit                             ; (carry set: quit)
+            lda   #USER_SAYS_QUIT
+            bcs   :exit
+            jsr   NES_Resume
+            brl   NES_EvtLoop
 
 :next_loop
             EVT_LOOP_END
@@ -368,6 +364,26 @@ NES_EvtLoop
 :exit
             POST_EVT_LOOP
             rts
+
+; NES_Pause / NES_Resume
+;
+; Around a screen that takes over the display and the keyboard (the configuration screen, the quit
+; confirmation): stop the game, its audio and the joystick's scanline interrupts, then reapply the
+; configuration (which restarts the audio) and repaint the game's screen.
+            mx  %00
+NES_Pause
+            jsr   APUStop                                ; Turn off the APU (restarted by ApplyConfig)
+            jsr   NES_StopExecution                       ; Pause emulation nicely
+            DO    JOYSTICK_SUPPORT
+            jsl   JoyScanDisarmL                          ; No joystick scanline interrupts there
+            FIN
+            rts
+
+NES_Resume
+            jsr   ApplyConfig                             ; Apply to the running configuration
+            lda   #DIRTY_BIT_BG0_REFRESH                  ; Force a full page refresh
+            tsb   DirtyBits
+            jmp   NES_StartExecution
 
 ; Clean up the runtime
             mx  %00

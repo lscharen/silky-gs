@@ -26,7 +26,7 @@
 ; the NES program (bench_rom.s) only sets up the screen and plays the music from its NMI handler.
 ; Each render scrolls the screen by one IIgs byte (2 NES pixels) and steps the walk animation every
 ; BENCH_ANIM_RENDERS renders (BenchStep), so the speed of the scrolling is the speed of the engine.
-; Turn on VIDEO > SHOW FPS in the configuration screen (Control-?) to see the renders per second.
+; Turn on VIDEO > SHOW FPS in the configuration screen (?) to see the renders per second.
 ;
 ; The keys 1 - 3 pick the height of the playfield (BenchKey): 1 = 256x200, 2 = 256x176, 3 = 256x160.
 ; The playfield is shortened from the top, so the ground and the figures stay where they are.  Picking
