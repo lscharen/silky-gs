@@ -94,6 +94,7 @@ NES_StartUp
 ; the fast blit mode and the game's own values are applied here, as ApplyConfig would.
 
             jsr   LoadPrefData
+            jsr   _FixPrefInputTypes
             DO    CONFIG_VIDEO_FASTBLIT
             lda   config_video_fastmode
             beq   :prefs_done
@@ -107,10 +108,10 @@ NES_StartUp
             CONFIG_APPLY_HOOK
             rep   #$30
 
-; Check whether KEYBOARD 2 can read the held keys from the ADB microcontroller (with interrupts off, so
+; Check whether the J13 keyboard driver can read the held keys from the ADB microcontroller (with interrupts off, so
 ; before the audio interrupts start)
 
-            jsr   KB2_Init
+            jsr   J13_Init
 
 ; Initialize the sound hardware for APU emulation
 
@@ -366,7 +367,7 @@ NES_EvtLoop
 NES_ShutDown
             jsr   NES_StopExecution        ; First stop the VBL task from running NES frames and the 60Hz
                                            ; audio driver while the runtime is taken down
-            jsr   KB2_ShutDown             ; The ADB interrupt enables, if a KEYBOARD 2 row read is in flight
+            jsr   J13_ShutDown             ; The ADB interrupt enables, if a J13 row read is in flight
             lda   BorderColor              ; Restore the border color
             jsr   _SetBorderColor
 

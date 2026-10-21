@@ -151,7 +151,7 @@ GAME_TITLE_STR      str 'GAME'
 GAME_NO_ANIM_STR    str 'STAR ANIM'
 
 GAME_CONFIG  dw   GAME_TITLE_STR
-             dw   INPUT_CONFIG          ; previous menu item
+             dw   DRIVERS_CONFIG        ; previous menu item
              dw   CREDITS_CONFIG        ; next menu item
 
              dw   1

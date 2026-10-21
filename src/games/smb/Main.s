@@ -113,7 +113,7 @@ PREF_FILENAME strl '1/smb.prefs'
             put    ../../rom/rom_color.s        ; (also in Engine.s: for the palette code here)
             put    ../../rom/rom_helpers.s
             put    ../../rom/rom_input.s
-            put    ../../rom/rom_keyboard2.s
+            put    ../../rom/rom_kbd_j13.s
             put    ../../rom/rom_exec.s
             put    ../../rom/rom_config.s
             put    ../../rom/rom_config_setup.s

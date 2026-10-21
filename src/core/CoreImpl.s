@@ -320,7 +320,7 @@ _ReadControl
                   jsr       _ReadKeypress        ; Always poll for a keystroke
                   sta       InputPlayer1
                   sta       InputPlayer2         ; Replicate the raw keyboard info into both players' input values
-                  jsr       KB2_Poll             ; The held keys for KEYBOARD 2 (rom/rom_keyboard2.s)
+                  jsr       J13_Poll             ; The held keys, if the J13 keyboard driver is set (rom/rom_kbd_j13.s)
 
 ; Now read the specific input device for each player
 
@@ -335,8 +335,8 @@ _ReadControl
                   lda       InputPlayer1
                   rts
 
-:input_proc1      dw        _ReadKeyboard1,_ReadSNESMAX1,_ReadKeyboardB1
-:input_proc2      dw        _ReadKeyboard2,_ReadSNESMAX2,_ReadKeyboardB2
+:input_proc1      dw        _ReadKeyboard1,_ReadSNESMAX1
+:input_proc2      dw        _ReadKeyboard2,_ReadSNESMAX2
 
 ; Reset the keypress state to clear the current keypress and set up to wait until the next key
 ; is pressed to regiter
@@ -379,7 +379,7 @@ _ReadKeypress
                   sta       LastKey
                   sta       1,s
                   stal      KeyEvent            ; a new press, for the event loop (NES_TakeKey)
-                  stal      kb2New              ; and for KEYBOARD 2 (KB2_Poll)
+                  stal      j13New              ; and for the J13 keyboard driver (J13_Poll)
                   ldal      MOD_REG             ; with the modifiers of the key (read before the strobe is
                   stal      KeyEvent+1          ; reset, while they still belong to it)
                   stal      KBD_STROBE_REG      ; reset the strobe
@@ -423,22 +423,27 @@ PLAYER_INPUT_SNESMAX_PORT equ 10
 PLAYER_INPUT_BUTTON_A  equ 12
 PLAYER_INPUT_BUTTON_B  equ 14
 
-; Map the current keypress to directional bits and read the command and option registers for buttons
+; The KEYBOARD input type, through the keyboard driver set on the DRIVERS menu (config_kbd_driver): BASIC maps
+; the current keypress to directional bits, J13 the held keys; both read the command and option registers
+; for buttons
                 mx %00
-_ReadKeyboard1    lda       InputPlayer1
-                  ldx       #config_block_p1
+_ReadKeyboard1    ldx       #config_block_p1
+                  lda       config_kbd_driver
+                  cmp       #KBD_DRIVER_J13
+                  beq       _ReadKeyboardJ13
+                  lda       InputPlayer1
                   jmp       _ReadKeyboard
 
-_ReadKeyboard2    lda       InputPlayer2
-                  ldx       #config_block_p2
+_ReadKeyboard2    ldx       #config_block_p2
+                  lda       config_kbd_driver
+                  cmp       #KBD_DRIVER_J13
+                  beq       _ReadKeyboardJ13
+                  lda       InputPlayer2
                   jmp       _ReadKeyboard
 
-; KEYBOARD 2: the directions, Start and Select from every held key (KB2_Pad), the buttons as for KEYBOARD
-_ReadKeyboardB1   ldx       #config_block_p1
-                  bra       _ReadKeyboardB
-_ReadKeyboardB2   ldx       #config_block_p2
-_ReadKeyboardB    phx
-                  jsr       KB2_Pad
+; J13: the directions, Start and Select from every held key (J13_Pad), the buttons as for BASIC
+_ReadKeyboardJ13  phx
+                  jsr       J13_Pad
                   plx
                   pha
                   lda       #0                  ; no key: _ReadKeyboard only reads the buttons
