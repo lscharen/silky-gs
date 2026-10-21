@@ -50,7 +50,7 @@ NO_INTERRUPTS     equ 0
 NO_CONFIG         equ 0
 
 ; Read the game-port joystick with probes hooked into the PEA field (core/blitter/JoyProbes.s)
-JOYSTICK_SUPPORT  equ 0
+JOYSTICK_SUPPORT  equ 1
 
 ; Configuration screen setup (see rom/rom_config_setup.s)
 CONFIG_DEFAULT_AUDIO equ APU_60HZ   ; default audio quality
