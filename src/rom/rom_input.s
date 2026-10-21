@@ -6,8 +6,9 @@
 native_joy  ENT
             db   0,0
 
-; The last new key press (key code | $80), for the event loop (NES_TakeKey).  Set by _ReadKeypress when the
-; keyboard strobe is set, so each press, and each auto-repeat, is one event; taking it clears it.
+; The last new key press (key code | $80, and the modifiers ($C025) in the high byte), for the event loop
+; (NES_TakeKey).  Set by _ReadKeypress when the keyboard strobe is set, so each press, and each
+; auto-repeat, is one event; taking it clears it.
 KeyEvent    dw   0
 
 ; Non-zero once the NES task has polled the inputs since the event loop last looked (NES_TakeKey)
@@ -89,7 +90,8 @@ NES_PollInput
 
 ; NES_TakeKey
 ;
-; For the event loop: A = the key code of the last new key press (0 if none), which is then cleared.
+; For the event loop: A = the key code of the last new key press (0 if none), which is then cleared, and
+; X = the modifiers ($C025 bits) when it was pressed.
 ; The NES task normally polls the inputs every frame; if it hasn't since the last call (it is paused,
 ; or the game is not reading its controller), poll here so the event loop still gets its keys.
 ; D = the runtime's direct page, DBR = the main bank.
@@ -104,5 +106,10 @@ NES_TakeKey
             lda   KeyEvent
             stz   KeyEvent
             plp
+            pha
+            xba
+            and   #$00FF
+            tax                           ; X = the modifiers
+            pla
             and   #$007F                  ; Z set if there is no key
             rts

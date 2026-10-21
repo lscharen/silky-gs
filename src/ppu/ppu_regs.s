@@ -32,24 +32,24 @@ w_bit     dw 1     ; currently writing to high or low to the address latch
 vram_buff dw 0     ; latched data when reading VRAM ($0000 - $3EFF)
 
 ppuincr   dw 1     ; 1 or 32 depending on bit 2 of PPUCTRL
-spadr     dw PPU_SPR_TILE_ADDR ; Sprite pattern table ($0000 or $1000) depending on bit 3 of PPUCTRL
-ntaddr    dw $2000 ; Base nametable address ($2000, $2400, $2800, $2C00), bits 0 and 1 of PPUCTRL
-bgadr     dw PPU_BG_TILE_ADDR ; Background pattern table address
-ppuctrl   dw 0     ; Copy of the ppu ctrl byte
+ppuctrl ENT
+          dw 0     ; Copy of the ppu ctrl byte
 ppumask   dw 0     ; Copy of the ppu mask byte
-ppustatus dw 0
+ppustatus ENT
+          dw 0
 oamaddr   dw 0     ; Typically this will always be 0
 ppuscroll dw 0     ; Y X coordinates
 
 
-; Some derived values from spadr and bgadr that makes it easier to calculate addresses
-; used in the various lookup tables and tile data caches
-spadr_hi  dw $0000 ; Set to $8000 if spadr is $1000. Used to get address in tiledata bank
-bgadr_hi  dw $0000 ; Set to $8000 if bgadr is $1000. Used to get address in tiledata bank
-bgadr_lo  dw $0000 ; Set to $0100 if bgadr is $1000. Used to merge with tile ID values
+; The pattern tables PPUCTRL selects, as the offset of the table's tiles in the tiledata and compile
+; banks (512 tiles of 128 bytes): $8000 for the table at $1000, else $0000.  Both start at $0000, like
+; PPUCTRL at power on.  Set by PPUCtrlDecode, for each render.
+spadr_hi  dw $0000 ; Sprites: PPUCTRL bit 3
+bgadr_hi  dw $0000 ; Background: PPUCTRL bit 4
 
 ; Value to mask with ppumask to allow the runtime to override some bits
-ppumask_override dw $FFFF
+ppumask_override ENT
+                 dw $FFFF
 
 ; MMC1 registers
 mmc1_shft   ENT
@@ -96,48 +96,28 @@ PPUCTRL_WRITE ENT
 
 ; PPUCtrlDecode
 ;
-; Resolve the render's values from the last PPUCTRL write: the base nametable address, and the sprite
-; and background pattern table addresses with their derived values.  Called by NES_RenderFrame, with
-; interrupts off, before anything in the render reads them.  Only A is changed.  DBR = the main bank.
+; Resolve the render's pattern tables from the last PPUCTRL write (spadr_hi, bgadr_hi).  A change of
+; the background table makes every tile in the PEA field stale, so it also asks for every tile to be
+; redrawn (DIRTY_BIT_TILE_REDRAW, done by RenderDraw).  Called by RenderLatch, with interrupts off,
+; before anything in the render reads them.  Only A is changed.  DBR = K.
         mx    %00
 PPUCtrlDecode
         lda  ppuctrl          ; (only the low byte is ever written, so the high byte is 0)
-        and  #$0003           ; Base nametable address: $2000 + 1KB per nametable
-        xba
-        asl
-        asl
-        ora  #$2000
-        sta  ntaddr
-
-        lda  ppuctrl          ; Sprite pattern table ($0000 / $1000)
-        and  #$0008
+        and  #$0008           ; Sprite pattern table
         beq  :sp
-        lda  #$1000
-:sp     sta  spadr
-        asl
-        asl
-        asl
-        sta  spadr_hi         ; $0000 / $8000
+        lda  #$8000
+:sp     sta  spadr_hi
 
-        lda  ppuctrl          ; Background pattern table ($0000 / $1000)
-        and  #$0010
+        lda  ppuctrl
+        and  #$0010           ; Background pattern table
         beq  :bg
-        lda  #$1000
-:bg     sta  bgadr
-        lsr
-        lsr
-        lsr
-        lsr
-        sta  bgadr_lo         ; $0000 / $0100
-        asl
-        asl
-        asl
-        asl
-        asl
-        asl
-        asl
-        sta  bgadr_hi         ; $0000 / $8000
-        rts
+        lda  #$8000
+:bg     cmp  bgadr_hi
+        beq  :same
+        sta  bgadr_hi
+        lda  #DIRTY_BIT_TILE_REDRAW
+        tsb  DirtyBits
+:same   rts
 
 ; $2001 - PPUMASK (Write only)
         mx    %11
@@ -337,7 +317,7 @@ PPUDATA_WRITE ENT
 ; Write into CHR-RAM ($0000-$1FFF). Store the byte where the tile-conversion
 ; routines will read it from (mirrors the nametable-write pattern below),
 ; then mark the affected tile ID dirty for on-demand recompilation at draw
-; time (DrawPPUTile / CheckSprTileDirty), instead of pre-compiling everything
+; time (DrawPPUTile / sprChrCheck), instead of pre-compiling everything
 ; up front like a fixed CHR-ROM game does.
 
         sep  #$20

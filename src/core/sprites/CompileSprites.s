@@ -714,19 +714,8 @@ SprCompileTile
 :chr_dirty
         phx
         txa
-        and   #$1000                     ; pattern table << 12 -> << 8
-        lsr
-        lsr
-        lsr
-        lsr
-        pha
-        txa
-        lsr
-        lsr
-        and   #$00FF                     ; tile
-        ora   1,s                        ; the 0-511 index of ChrRamDirty
-        tax
-        pla
+        jsr   SprKeyTile                 ; the tile's address in the tiledata bank
+        CHR_INDEX                        ; X = its ChrRamDirty index
         ldal  ChrRamDirty,x
         plx
         and   #CHRRAM_SPR_DIRTY
@@ -795,26 +784,36 @@ SprCompileSetup
         lda   SwizzlePtr2+2
         sta   sprPalPtr+2
 
-        txa                              ; The tile in the tiledata bank: pattern table * $8000 + tile * 128
-        and   #$1000
-        asl
-        asl
-        asl
-        sta   tmp14
         txa
+        jsr   SprKeyTile                 ; the tile in the tiledata bank
+        pha
+        txa
+        and   #$0002
+        tax
+        pla
+        ldy   cs_slot
+        rts
+
+; The tile of a cache key in the tiledata bank (pattern table * $8000 + tile * 128).  A = the key offset.
+; Returns A; Y is trashed.
+        mx    %00
+SprKeyTile
+        pha                              ; the key
         and   #$03FC                     ; tile * 4
         asl
         asl
         asl
         asl
+        asl                              ; tile * 128
+        pha
+        lda   3,s
+        and   #$1000                     ; pattern table << 12
         asl
-        ora   tmp14
-        tay
-        txa
-        and   #$0002
-        tax
-        tya
-        ldy   cs_slot
+        asl
+        asl                              ; << 15
+        ora   1,s
+        ply                              ; (drop both)
+        ply
         rts
 
 ; The sprite swizzle tables changed (a new palette map, or a table rebuilt in place), so every compiled

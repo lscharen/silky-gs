@@ -10,8 +10,8 @@
 ;   RefreshPPUTiles       - Refresh all 256 tiles in a nametable page
 ;   DrawPPUTile           - Draw one tile (by PPU address) into the PEA field
 ;
-; patch0 is a jsl instruction label patched at startup (PPUStartUp) with the
-; correct bank address for the tile compilation bank.
+; patch0 is a CALL_COMPILED_TILE (ppu_macros.s): PPUStartUp patches the compile bank into it, and
+; SET_COMPILED_TILE points it at the tile before each call.
 
 ; Alternate entry point to DrawPPUAttribute from the ATQueuePush macro
         mx    %00
@@ -120,6 +120,22 @@ DrawPPUAttribute
 :not_bot_right
         rts
 
+; Attribute byte index -> offset from its nametable ($2000, $2400, $2800, $2C00) to the top-left tile of
+; each metatile (DrawPPUAttribute).  Read with 16-bit index registers, so its alignment doesn't matter.
+metatile_corner
+]row    =    0
+        lup  8
+        dw   {128*{]row}}+0
+        dw   {128*{]row}}+4
+        dw   {128*{]row}}+8
+        dw   {128*{]row}}+12
+        dw   {128*{]row}}+16
+        dw   {128*{]row}}+20
+        dw   {128*{]row}}+24
+        dw   {128*{]row}}+28
+]row    =    ]row+1
+        --^
+
 ; Draw all of the tiles in one physical (CIRAM) nametable.  The attribute bytes at the end
 ; of the nametable have a zero TILE_BANK entry, so DrawPPUTile skips them.
 ;
@@ -151,7 +167,7 @@ RefreshPPUTiles
         phx
         jsr   DrawPPUTile
         plx
-        inx`
+        inx
         dec   pputmp               ; 256 * 4 iterations
         bne   :loop
 
@@ -172,68 +188,23 @@ DrawPPUTile
         jsr   _PEAFieldStable
 :stable pla
 
-        sta   patch0+2                ; Put the tile ID into the page byte of the address first
+        SET_COMPILED_TILE patch0      ; Point the call below at this tile's compiled code first
 
+; CHR-RAM support: if the game changed the tile in CHR-RAM since it was last compiled, recompile it
+; before the call below uses it.  CheckBgTileDirty takes the tile's slot, which SET_COMPILED_TILE has
+; just put into the call's address.
         DO    HAS_CHR_RAM
-; CHR-RAM support: if this tile ID was marked dirty by a PPUDATA write since
-; it was last drawn, recompile it now (FastROMTileToLookup + CompileTile,
-; same technique as CheckBgTileDirty in ppu_metatiles.s) before using the
-; (possibly stale) compiled code below. A = tile ID, X = PPU address (both
-; must be preserved for the rest of the routine).
-
-; ChrRamDirty is indexed 0-511, spanning *both* CHR-RAM pattern tables (see
-; PPUDATA_WRITE, ppu_regs.s), so merge in bgadr_lo (0 or $0100) to check the
-; table the background is actually reading from right now -- otherwise this
-; only ever sees pattern table 0's dirty flags and stale tiles never get
-; recompiled whenever bgadr is $1000. The same combined value is reused
-; below to derive the CHR-RAM source address (same technique as
-; CheckSprTileDirty, ppu.s / CheckBgTileDirty, ppu_metatiles.s).
-
+        rep   #$20
+        lda   patch0+1                ; the slot: tile * 128 | bgadr_hi
         phx
-        rep   #$20                    ; 16-bit A for the table-offset merge
-        and   #$00FF                  ; isolate the tile index
-        oral  bgadr_lo
-        tax                           ; X = dirty-array index (0-511)
-
-        sep   #$20                    ; back to 8-bit A for the byte-table check/clear
+        CHR_INDEX                     ; X = the tile's ChrRamDirty index
         ldal  ChrRamDirty,x
-        bit   #CHRRAM_BG_DIRTY        ; test only the background-form-dirty bit
-        beq   :bgt_clean
-        and   #CHRRAM_BG_DIRTY!$FF    ; clear only the BG bit, preserve the sprite bit
-        stal  ChrRamDirty,x
-
-        rep   #$30                    ; 16-bit A/X/Y for the recompile
-
-; Both the CHR-RAM source address and the tiledata destination stay
-; table-aware -- the combined (tile ID | bgadr_lo) index is kept all the way
-; through, matching CheckBgTileDirty/CheckSprTileDirty.
-
-        txa                           ; A = combined index (tile ID | bgadr_lo)
-        asl   a
-        asl   a
-        asl   a
-        asl   a                       ; A = tile ID * 16 + bgadr (CHR-RAM source address)
-        tax                           ; X = CHR-RAM source address (FastROMTileToLookup's X arg)
-
-        asl   a
-        asl   a
-        asl   a                       ; A = combined index * 128 (tiledata destination)
-        pha                           ; save it -- also needed as CompileTile's bitmap-source address
-
-        jsr   FastROMTileToLookup     ; A = tiledata destination, X = CHR-RAM source address -- writes the
-                                      ; 32-byte bitmap directly into tiledata; trashes A/X/Y
-
-        lda   1,s                     ; reload the tiledata destination of combined index * 128
-        asl   a                       ; one more shift spills the high bit and leaves just the tile ID * 256
-        tay                           ; Y = compiled-code destination page (CompileTile's Y arg)
-
-        pla                           ; A = tiledata destination again (CompileTile's "low address of bitmap" arg)
-        ldx   #^tiledata              ; X = bank of the bitmap source (CompileTile's "high address" arg)
-        jsr   CompileTile             ; A = bitmap source addr, X = bitmap source bank, Y = dest page
-
-        sep   #$20
-:bgt_clean
         plx
+        bit   #CHRRAM_BG_DIRTY        ; (tested here: the call only when the tile is dirty)
+        beq   :chr_ok
+        lda   patch0+1
+        jsr   CheckBgTileDirty        ; (preserves X and Y)
+:chr_ok sep   #$20
         FIN
 
         clc
@@ -253,7 +224,7 @@ DrawPPUTile
         tax
 
         rep   #$21
-patch0  jsl   $000000
+patch0  CALL_COMPILED_TILE
         sep   #$20
         plb
 

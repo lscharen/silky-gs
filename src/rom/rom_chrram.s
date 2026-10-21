@@ -23,7 +23,7 @@
 ; Convert one CHR-RAM tile into tiledata's background slot, without
 ; compiling it.
 ;
-; X = CHR-RAM source address (tile_id*16 + PPU_BG_TILE_ADDR)
+; X = CHR-RAM source address (tile_id*16 + bgadr)
 ; Y = destination offset within tiledata (tile_id*128 + $8000)
 ;
 ; P = 16-bit A/X/Y on entry (mx %00), matching ROMTileToBitmap's own calling

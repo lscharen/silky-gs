@@ -6,7 +6,7 @@
 ; background groups that keep the same slots across the transitions don't need their tiles
 ; redrawn (a group whose slots change has to be recompiled with the new swizzle table).
 ;
-; Requires: NES_ColorToIIgs_X, NES_SetPaletteMap, RefreshPPUAttributes, PPU_MEM, SHR_PALETTES
+; Requires: NES_ColorToIIgs_X, NES_SetPaletteMap, RefreshPPUAttributesL, PPU_MEM, SHR_PALETTES
 
 ; Swizzle tables, in the PALDATA segment (palettes.s)
 PAL_TITLE_SCREEN_SWIZZLE EXT
@@ -16,13 +16,7 @@ PAL_TRACK3_SWIZZLE EXT
 PAL_TRACK4_SWIZZLE EXT
 PAL_TRACK5_SWIZZLE EXT
 
-; Palette ids, word-aligned so they index the tables below directly.  0 = no palette.
-PAL_TITLE_SCREEN equ 2
-PAL_TRACK1 equ 4
-PAL_TRACK2 equ 6
-PAL_TRACK3 equ 8
-PAL_TRACK4 equ 10
-PAL_TRACK5 equ 12
+; The palette ids (PAL_*) and pinned slots (PAL_SLOT_*) are in pal_defs.s.
 
 ; Layouts (NES color -> [slots] per group; *reserved, ~shown as):
 ;   title_screen
@@ -102,7 +96,8 @@ UpdatePalette
 
             jsr   LoadPaletteColors
             pla
-            jmp   RefreshPPUAttributes
+            jsl   RefreshPPUAttributesL   ; (in the engine bank: ppu_entry.s)
+            rts
 
 ; LoadPaletteColors
 ;

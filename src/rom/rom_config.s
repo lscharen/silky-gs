@@ -7,6 +7,7 @@ NUMBER_SELECT   equ 5     ; select from a range of single-digit numbers
 BTNMAP          equ 6     ; button mapping for keyboard
 TAB             equ 7     ; tab control
 TEXT            equ 8     ; static lines of text (no value, no cursor)
+ACTION          equ 9     ; runs a routine (the value word) on space; optional extra draw routine
 
 CHKBOX_YES      str 'YES'
 CHKBOX_NO       str ' NO'
@@ -55,6 +56,7 @@ CTRL_NUMBER_MIN  equ CTRL_DATA
 CTRL_NUMBER_MAX  equ CTRL_DATA+2
 
 CTRL_TEXT_LINE_COUNT equ CTRL_DATA
+CTRL_ACTION_DRAW     equ CTRL_DATA       ; drawn after the title (X = control, Y = title address), 0 = none
 CTRL_TEXT_LINES      equ CTRL_DATA+2   ; string address per line (0 = blank line)
 
 ; Units to move text around
@@ -347,6 +349,61 @@ ShowConfig
             lda:  MENU_CTRL_LIST,x
             sta   config_active_ctrl
 :no_items
+            rts
+
+; ConfirmQuit
+;
+; The quit confirmation (Q in NES_EvtLoop): a box, in the configuration screen's colors, asking the user
+; to confirm.  Y quits; N or Escape goes back to the game.  Returns carry set to quit.
+QUIT_BOX_ORIGIN equ PLAYFIELD_ORIGIN+{8*COL_STEP}+{9*ROW_STEP}   ; 16 x 7 tiles, centered
+
+QUIT_TITLE_STR  str 'QUIT GAME'
+QUIT_KEYS_STR   str 'Y YES   N NO'
+
+            mx   %00
+ConfirmQuit
+            jsr  _ConfigEntry
+            lda  #0
+            jsr  _SetSCBs
+            lda  #0
+            jsr  _ClearToColor
+            lda  #0
+            ldx  #ConfScrnPal
+            jsr  NES_SetPalette
+
+            ldy  #QUIT_BOX_ORIGIN
+            ldx  #14
+            jsr  ConfigDrawTopBorder
+            ldy  #QUIT_BOX_ORIGIN+ROW_STEP
+            ldx  #5
+            lda  #COL_STEP*15
+            jsr  ConfigDrawSideBorder
+            ldy  #QUIT_BOX_ORIGIN+{6*ROW_STEP}
+            ldx  #14
+            jsr  ConfigDrawBottomBorder
+
+            ldx  #QUIT_TITLE_STR
+            ldy  #QUIT_BOX_ORIGIN+{2*ROW_STEP}+{4*COL_STEP}
+            lda  #TEXT_NORMAL
+            jsr  ConfigDrawString
+            ldx  #QUIT_KEYS_STR
+            ldy  #QUIT_BOX_ORIGIN+{4*ROW_STEP}+{2*COL_STEP}
+            lda  #TEXT_NORMAL
+            jsr  ConfigDrawString
+
+:key        jsr  _WaitForKeyUp                     ; (the Q's auto-repeat is ignored)
+            cmp  #$1B                              ; Escape
+            beq  :cancel
+            ora  #$0020                            ; Either case
+            cmp  #'y'
+            beq  :quit
+            cmp  #'n'
+            bne  :key
+:cancel     jsr  _ConfigExit
+            clc
+            rts
+:quit       jsr  _ConfigExit
+            sec
             rts
 
 ; config_keypress    ds 2    ; use to wait until a keyup event
@@ -1232,8 +1289,32 @@ _DrawControl
 :not_tab    cmp  #TEXT
             bne  :not_text
             jmp  _DrawText
-:not_text
+:not_text   cmp  #ACTION
+            bne  :not_action
+            jmp  _DrawAction
+:not_action
             rts
+
+; Y = screen addr
+; X = control addr
+;
+; +------------
+; |  <title> <the control's own drawing>
+_DrawAction
+            jsr  _OffsetToAddr
+            phy
+            phx
+            lda: CTRL_TITLE,x
+            tax
+            lda  #TEXT_NORMAL
+            jsr  ConfigDrawString
+            plx
+            ply
+            lda: CTRL_ACTION_DRAW,x
+            beq  :done
+            db   $7C                         ; jmp (CTRL_ACTION_DRAW,x): Merlin32 can't assemble
+            dw   CTRL_ACTION_DRAW            ; jmp (abs,x) for an operand below $100
+:done       rts
 
 ; Switch the value of the active control
 _ToggleActiveControl
@@ -1271,7 +1352,12 @@ _ToggleActiveControl
             bne  :not_tab
             jmp  _ToggleTab
 
-:not_tab
+:not_tab    cmp  #ACTION
+            bne  :not_action
+            db   $7C                         ; jmp (CTRL_VALUE_ADDR,x): the action's routine (X = the
+            dw   CTRL_VALUE_ADDR             ; control); see _DrawAction
+
+:not_action
             rts
 
 ; Loads the active menu address from config_active_menu
@@ -1473,7 +1559,7 @@ _DrawMenuCursor
 
             asl                           ; x2 for indexing
             tax
-            lda   Mul160Tbl,x
+            ldal  Mul160Tbl,x
             clc
             adc   #MENU_PANEL_ORIGIN+{MENU_FIRST_ROW*ROW_STEP}+{1*COL_STEP} ; A blank column before the title
             tay
@@ -1682,6 +1768,109 @@ ConfigDrawString
             dex
             bne   :loop
             rts
+
+; Draw one tile of the built-in font (moved here from ppu.s: only the configuration screen uses it).
+; The tile data is read through DBR (this bank); the rest is direct page and long stores.
+        mx    %00
+_blitTileNoMask
+; A = tile address
+; Y = screen address
+; X = palette select 0,2,4,6
+;
+; Raw data draw -- expands the tile data from w_wxxy_yzz0 to 00ww_00xx_00yy_00zz and then adds an offset based on the
+; palette select
+
+        sta   sprTmp0
+        sty   sprTmp1
+
+        txa
+        and   #$0006
+        asl
+        sta   sprTmp3
+        asl
+        asl
+        asl
+        asl
+        ora   sprTmp3
+        sta   sprTmp3
+        xba
+        ora   sprTmp3
+        sta   sprTmp3
+
+        ldy   sprTmp0
+        ldx   sprTmp1
+        lda   #8
+        sta   sprTmp4
+
+]line   equ   0
+:loop
+        lda:  {]line*4},y                            ; Load the tile data lookup value
+        lsr
+        and   #$0003
+        sta   sprTmp2
+        lda:  {]line*4},y
+        asl
+        and   #$0030
+        tsb   sprTmp2
+        lda:  {]line*4},y
+        asl
+        asl
+        asl
+        and   #$0300
+        tsb   sprTmp2
+        lda:  {]line*4},y
+        asl
+        asl
+        asl
+        asl
+        asl
+        and   #$3000
+        ora   sprTmp2
+        xba
+        ora   sprTmp3
+        stal  $010000+{]line*SHR_LINE_WIDTH},x
+
+        lda:  {]line*4}+2,y
+        lsr
+        and   #$0003
+        sta   sprTmp2
+        lda:  {]line*4}+2,y
+        asl
+        and   #$0030
+        tsb   sprTmp2
+        lda:  {]line*4}+2,y
+        asl
+        asl
+        asl
+        and   #$0300
+        tsb   sprTmp2
+        lda:  {]line*4}+2,y
+        asl
+        asl
+        asl
+        asl
+        asl
+        and   #$3000
+        ora   sprTmp2
+        xba
+        ora   sprTmp3
+        stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+
+        iny
+        iny
+        iny
+        iny
+
+        txa
+        clc
+        adc   #160
+        tax
+
+        dec   sprTmp4
+        beq   :done
+        brl   :loop
+:done
+        rts
 
 ; Built-in font w/widgets to avoid depending on CHR-ROMs (32 bytes/tile)
 ;

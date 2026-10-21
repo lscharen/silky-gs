@@ -14,7 +14,10 @@
 ; Must return carry clear on success
         mx   %00
 PPUStartUp
-        lda   CompileBank0+1            ; Patch some dispatch addresses with the tile compilation bank
+
+; Put the compile bank into the CALL_COMPILED_TILE jsls (the bank byte, at +3; this also clears the
+; address' high byte, which SET_COMPILED_TILE sets before each call)
+        lda   CompileBank0+1
         sta   patch0+2
         sta   patch1+2
         sta   patch2+2
@@ -75,6 +78,90 @@ PPUSetMirrorMode
         jmp  _InitVerticalMirroring
 
 :horz   jmp  _InitHorizontalMirroring
+
+        mx   %00
+; Mirroring
+;
+; The PEA field rows map 1:1 onto the CIRAM pages, so a mirroring change only needs to update the
+; address masks and the V flag that is used to enter the blitter.  Nothing in the code field is
+; patched, so these are cheap enough to call whenever a mapper changes the mirroring mode.
+;
+; The scroll values derived by _UpdateScrollStart and the entry and exit points in the code field
+; depend on the mirroring mode, so a change updates them and forces a full setup of the code field
+; on the next render.
+;
+; With horizontal mirroring each line stays within one CIRAM page, which creates a virtual 256x480
+; rendering surface.
+_InitHorizontalMirroring
+                  lda       #HORIZONTAL_MIRROR_MASK
+                  sta       MirrorMaskLong
+                  lda       #$07E0
+                  sta       CIRAMRowMask         ; V = 0x3E0, H = 0x7E0
+                  lda       #$001F
+                  sta       CIRAMColMask         ; V = $041F, H = $001F
+
+                  lda       #480
+                  sta       MaxY
+                  lda       #256
+                  sta       MaxX
+
+                  lda       #BLT_P_HORZ          ; V = 1: lines loop within their CIRAM page
+                  sta       BltMirrorP
+
+                  jsr       _UpdateScrollStart   ; The scroll values depend on the mirroring
+                  lda       #DIRTY_BIT_BG0_X
+                  tsb       DirtyBits
+                  rts
+
+; With vertical mirroring each line spans both CIRAM pages, which creates a virtual 512x240
+; rendering surface.
+_InitVerticalMirroring
+                  lda       #VERTICAL_MIRROR_MASK
+                  sta       MirrorMaskLong
+                  lda       #$03E0
+                  sta       CIRAMRowMask         ; V = 0x3E0, H = 0x7E0
+                  lda       #$041F
+                  sta       CIRAMColMask         ; V = $041F, H = $001F
+
+                  lda       #240
+                  sta       MaxY
+                  lda       #512
+                  sta       MaxX
+
+                  stz       BltMirrorP           ; V = 0: lines continue into the other CIRAM page
+
+                  jsr       _UpdateScrollStart   ; The scroll values depend on the mirroring
+                  lda       #DIRTY_BIT_BG0_X
+                  tsb       DirtyBits
+                  rts
+
+; Runtime nametable-mirroring mask, set by SetMirrorMode (ControlBits.s).
+; Duplicates the DP MirrorMask (Defs.s) for use from contexts where the
+; engine's own direct page isn't active (e.g. ppu_regs.s's PPU write
+; handlers, entered from NES ROM code with the NES's own direct page) --
+; those sites access this copy with long addressing (andl MirrorMaskLong)
+; instead.
+MirrorMaskLong ENT
+             dw  0
+
+; Corresponding mask for calculating the CIRAM location for a PPU
+; nametable address
+CIRAMRowMask ENT
+             dw  0
+CIRAMColMask ENT
+             dw  0
+
+; 0 = no mirroring-mode change pending; else HORIZONTAL_MIRRORING/
+; VERTICAL_MIRRORING, the target mode ApplyMirrorMode should switch to at
+; the next render (see core/ControlBits.s SetMirrorMode/ApplyMirrorMode).
+; Absolute, not DP, for the same reason as MirrorMaskLong above --
+; SetMirrorMode writes it via long addressing from NES ROM code.
+;
+; Note that the actual mask values have to be update dimmediately.  This
+; flag is purly for deferred work that needs to happen before the next
+; *render*
+PendingMirrorMode ENT
+            dw  0
 
 ; Fill in the BTable with the address of the even page (CIRAM page 0) of each of the 240
 ; PEA rows.  Rows 0 - 119 are in the first blitter bank and rows 120 - 239 in the second.

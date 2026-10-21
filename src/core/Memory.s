@@ -2,7 +2,7 @@
 ;
 ; * $01/2000 - $01/9FFF for the shadow screen
 ; * $xx/0000 - $xx/07FF for NES RAM in the NES code bank
-; * 1 bank for cached tiles
+; * 1 bank for the compiled background tiles: 512 slots of 128 bytes (CompileTile)
 ; * 1 - SPR_MAX_BANKS banks for cached sprites (as many as there is memory for, at least 1)
 
                mx        %00
@@ -45,8 +45,10 @@ InitMemory
 mem_err
                rts
 
-SprBanks       ds        SPR_MAX_BANKS               ; The sprite cache's banks
-SprBankCount   dw        0                           ; and how many there are (1 - SPR_MAX_BANKS)
+SprBanks ENT
+               ds        SPR_MAX_BANKS               ; The sprite cache's banks
+SprBankCount ENT
+               dw        0                           ; and how many there are (1 - SPR_MAX_BANKS)
 
 ; Bank allocator (for one full, fixed bank of memory. Can be immediately deferenced)
 

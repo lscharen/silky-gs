@@ -6,12 +6,9 @@
 ; bitmap of the lines with sprites, which segments the screen into "sprite" and "background" runs;
 ; it is built from OAM_COPY when first asked for (ensureShadowBitmap).
 
-              DO ENABLE_DIRTY_RENDERING
-              ds \,$00             ; Page-aligned: the grid renderer reads it with 8-bit index registers
-              FIN
-OAM_COPY      ds 256
+; OAM_COPY (the sprites that passed the filters) and shadowBitmap0 (the lines with sprites, one bit
+; per line) are in core/Data.s: the renderers read them with 8-bit index registers
 spriteCount   dw 0
-shadowBitmap0 ds 32                ; Lines with sprites, one bit per line (ensureShadowBitmap)
 
 ; scanOAMSprites reads the OAM straight from NES RAM at DIRECT_OAM_READ in the ROMBase bank.
 ; ROMBase is at offset $0000 of its bank in every game, so with DBR set to that bank the plain
@@ -151,22 +148,23 @@ oam_filter4
          asl
          asl
          sta   spriteCount          ; spriteCount * 4 for easy comparison later
-         tay
-         beq   oam_copy_done
+         beq   oam_copy_done        ; (Z from the asl)
 
 ; The copy is the same for 8x8 and 8x16 sprites: an 8x16 sprite is one OAM entry, and the renderer
 ; reads the sprite size from PPUCTRL.
+;
+; 8-bit index registers: PLX pulls the pushed index byte straight into X, and Y is the OAM_COPY offset.
+; 64 sprites make Y = 0 (256) to start with, which works because Y is tested after the copy.
 
+         sep   #$10
+         mx    %01
+         tay
 oam_copy
          dey
          dey
          dey
          dey
-         sep   #$20                 ; pull the next index (pushed as a byte)
-         pla
-         rep   #$20
-         and   #$00FF
-         tax
+         plx                        ; the next index (pushed as a byte)
 
          ldal  ROMBase+DIRECT_OAM_READ,x    ; Y coordinate and tile
          inc                        ; Increment the y-coordinate to match the PPU delay
@@ -175,8 +173,10 @@ oam_copy
          ldal  ROMBase+DIRECT_OAM_READ+2,x  ; attributes and X coordinate
          sta   OAM_COPY+2,y
 
-         tya
+         cpy   #0
          bne   oam_copy
+         rep   #$10
+         mx    %00
 
 oam_copy_done
          plb

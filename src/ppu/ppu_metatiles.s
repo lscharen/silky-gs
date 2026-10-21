@@ -11,11 +11,8 @@
 ;                           its shadow RAM from a new attribute value
 ;   RefreshMetatile       - Alternate entry: refresh without changing the value
 ;
-; metatile_corner is a lookup table mapping attribute-byte index to the PPU
-; nametable address of the top-left tile of each metatile.
-;
-; patch1-4 are jsl instruction labels patched at startup (PPUStartUp) with the
-; correct bank addresses for the tile compilation banks.
+; patch1-4 are CALL_COMPILED_TILEs (ppu_macros.s): PPUStartUp patches the compile bank into them,
+; and SET_COMPILED_TILE points each at its tile before the calls.
 
 ; Re-sync every metatile with the graphics screen.  Used by the 'f' key.
         mx %00
@@ -107,26 +104,30 @@ RefreshMetatile                            ; Alternate entry point is not settin
         adc   SwizzlePtr+1                 ; Set the palette selection (used for all 4 tiles)
         sta   ActivePtr+1
 
-        ldal  PPU_MEM+TILE_SHADOW+$00,x
-        sta   patch1+2
+; Point the four calls at the tiles' compiled code (16-bit: the tile ID is loaded into the high byte)
+
+        rep   #$20
+        ldal  PPU_MEM+TILE_SHADOW-1+$00,x  ; the tile ID in the high byte
+        SET_COMPILED_TILE_HI patch1
         DO    HAS_CHR_RAM
-        jsr   CheckBgTileDirty
+        jsr   CheckBgTileDirty        ; A = the slot; preserves X and Y
         FIN
-        ldal  PPU_MEM+TILE_SHADOW+$01,x
-        sta   patch2+2
+        ldal  PPU_MEM+TILE_SHADOW-1+$01,x  ; the tile ID in the high byte
+        SET_COMPILED_TILE_HI patch2
         DO    HAS_CHR_RAM
-        jsr   CheckBgTileDirty
+        jsr   CheckBgTileDirty        ; A = the slot; preserves X and Y
         FIN
-        ldal  PPU_MEM+TILE_SHADOW+$20,x
-        sta   patch3+2
+        ldal  PPU_MEM+TILE_SHADOW-1+$20,x  ; the tile ID in the high byte
+        SET_COMPILED_TILE_HI patch3
         DO    HAS_CHR_RAM
-        jsr   CheckBgTileDirty
+        jsr   CheckBgTileDirty        ; A = the slot; preserves X and Y
         FIN
-        ldal  PPU_MEM+TILE_SHADOW+$21,x
-        sta   patch4+2
+        ldal  PPU_MEM+TILE_SHADOW-1+$21,x  ; the tile ID in the high byte
+        SET_COMPILED_TILE_HI patch4
         DO    HAS_CHR_RAM
-        jsr   CheckBgTileDirty
+        jsr   CheckBgTileDirty        ; A = the slot; preserves X and Y
         FIN
+        sep   #$20
 
         ldal  PPU_MEM+TILE_BANK,x     ; The tiles in the same row will have the same bank
         beq   bad_row2                ; The bottom metatile row is not defined
@@ -158,55 +159,47 @@ RefreshMetatile                            ; Alternate entry point is not settin
 
         rep   #$21                    ; 16-bit mode for the tile copy
 
-patch1  jsl   $000000
+patch1  CALL_COMPILED_TILE
 
         txa
         sec
         sbc   #6                      ; Move to the next PEA tile address
         tax
 
-patch2  jsl   $000000
+patch2  CALL_COMPILED_TILE
 
         plx                           ; Load up for the next row
         plb                           ; This almost never changes... :(
 
-patch3  jsl   $000000
+patch3  CALL_COMPILED_TILE
 
         txa
         sec
         sbc   #6                      ; Move the the next PEA tile address
         tax
 
-patch4  jsl   $000000
+patch4  CALL_COMPILED_TILE
 
         plb                           ; Restore the original bank
         sep   #$20
 bad_row2
         rts
 
-; CHR-RAM support: recompile one background tile (ConvertROMTile3) if its
-; dirty flag is set, before RefreshMetatile dispatches through the compiled
-; tile code. Without this, a metatile whose attribute byte changes before
-; DrawPPUTile has ever compiled the referenced tile would jsl into a stale
-; or uninitialized compiled-code address and crash.
+; CHR-RAM support: recompile one background tile if its dirty flag is set, before RefreshMetatile
+; dispatches through the compiled tile code.  Without this, a metatile whose attribute byte changes
+; before DrawPPUTile has ever compiled the referenced tile would jsl into a stale or uninitialized
+; compiled-code address and crash.
 ;
-; A = tile ID (8-bit), P = 8-bit A / 16-bit XY (mx %10)
-; X (metatile PPU address) is preserved for the caller
+; A = the tile's compiled-code slot (tile * 128 | bgadr_hi, from SET_COMPILED_TILE_HI); 16-bit A, X
+; and Y.  X (the metatile's CIRAM address) and Y are preserved; A is not.  The slot >> 7 is the tile's
+; ChrRamDirty index (0 - 511: ChrRamDirty spans both CHR-RAM pattern tables, see PPUDATA_WRITE), and
+; the slot is also the tile's offset in the tiledata bank.
         DO    HAS_CHR_RAM
-        mx    %10
+        mx    %00
 CheckBgTileDirty
-        pha
         phx
-        phy
-
-; ChrRamDirty is indexed 0-511, spanning *both* CHR-RAM pattern tables (see
-; PPUDATA_WRITE, ppu_regs.s); merge in bgadr_lo (0 or $0100) so this checks
-; the table the background is actually reading from right now.
-
-        rep   #$20                    ; go to 16-bit mode
-        and   #$00FF                  ; isolate the tile index
-        oral  bgadr_lo
-        tax
+        pha                           ; the slot, which is also the tile's tiledata address
+        CHR_INDEX                     ; X = the tile's ChrRamDirty index
 
         sep   #$20                    ; 8-bit A for the byte-table check/clear
         ldal  ChrRamDirty,x
@@ -214,56 +207,24 @@ CheckBgTileDirty
         beq   :bgclean
         and   #CHRRAM_BG_DIRTY!$FF    ; clear only the BG bit, preserve the sprite bit
         stal  ChrRamDirty,x
+        rep   #$20
+        phy                           ; (the slot at 3,s)
 
-        rep   #$30                    ; 16-bit A/X/Y for the recompile
-
-; Both the CHR-RAM source address and the tiledata destination stay
-; table-aware -- background respects bgadr the same way sprites respect
-; spadr in CheckSprTileDirty (ppu.s), so the combined (tile ID | bgadr_lo)
-; index is kept all the way through, not just for the source address.
-
-        txa                           ; A = combined index (tile ID | bgadr_lo)
-        asl   a
-        asl   a
-        asl   a
-        asl   a                       ; A = tile ID * 16 + bgadr (CHR-RAM source address)
-        tax                           ; X = CHR-RAM source address (FastROMTileToLookup's X arg)
-
-        asl   a
-        asl   a
-        asl   a                       ; A = combined index * 128 (tiledata destination)
-        pha                           ; save it -- also needed as CompileTile's bitmap-source address,
-
-        jsr   FastROMTileToLookup     ; A = tiledata destination, X = CHR-RAM source address -- writes the
-                                       ; 32-byte bitmap directly into tiledata; trashes A/X/Y
-
-        lda   1,s                     ; reload the tiledata destination of combined index * 128
-        asl   a                       ; one more shift spills the high bit and leaves just the tile ID * 256
-        tay                           ; Y = compiled-code destination page (CompileTile's Y arg)
-
-        pla                           ; A = tiledata destination again (CompileTile's "low address of bitmap" arg)
-        ldx   #^tiledata              ; X = bank of the bitmap source (CompileTile's "high address" arg)
-        jsr   CompileTile             ; A = bitmap source addr, X = bitmap source bank, Y = dest page
-
-        sep   #$20
-:bgclean
+        lda   3,s
+        lsr
+        lsr
+        lsr
+        tax                           ; X = the CHR-RAM source address (index * 16 = slot / 8)
+        lda   3,s                     ; A = the tiledata destination (the slot)
+        jsr   FastROMTileToLookup     ; writes the 32-byte bitmap directly into tiledata; trashes A/X/Y
+        lda   3,s
+        tay                           ; Y = the compiled-code slot, A = the bitmap (the same offset)
+        ldx   #^tiledata              ; X = bank of the bitmap source
+        jsr   CompileTile
         ply
+:bgclean
+        rep   #$20
+        pla                           ; (the slot)
         plx
-        pla
         rts
         FIN
-
-; offset from a nametable ($2000, $2400, $2800, $2C00) to the top-left tile of each metatile
-metatile_corner
-]row    =    0
-        lup  8
-        dw   {128*{]row}}+0
-        dw   {128*{]row}}+4
-        dw   {128*{]row}}+8
-        dw   {128*{]row}}+12
-        dw   {128*{]row}}+16
-        dw   {128*{]row}}+20
-        dw   {128*{]row}}+24
-        dw   {128*{]row}}+28
-]row    =    ]row+1
-        --^

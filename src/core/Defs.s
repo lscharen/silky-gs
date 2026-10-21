@@ -65,13 +65,16 @@ ActivePtr              equ   38          ; Work pointer to point at the active s
 unused46               equ   46
 unused48               equ   48
 
-; Pointers to which block of CHR memory is for tiles vs sprites
-TileChrMem             equ   50
-SprChrMem              equ   54
+unused50               equ   50          ; (50 - 57 free)
 
 unused59               equ   59
 
 pputmp                 equ   60          ; 16 bytes of temporary storage for the ppu subsystem
+sprTmp0                equ pputmp
+sprTmp1                equ pputmp+2
+sprTmp2                equ pputmp+4
+sprTmp3                equ pputmp+6
+sprTmp4                equ pputmp+8
 
 unused76               equ   76
 unused78               equ   78
@@ -184,7 +187,7 @@ DOWN_ARROW      equ   $0A
 ; DirtyBits definitions
 DIRTY_BIT_BG0_X        equ   $0001     ; The horizontal scroll position has changed
 DIRTY_BIT_BG0_Y        equ   $0002     ; The veritcal scroll position has changed
-DIRTY_BIT_PAL_CHANGE   equ   $0004     ; There has been a palette change, force a repaint
+DIRTY_BIT_TILE_REDRAW  equ   $0004     ; Redraw every tile into the PEA field (the background pattern table changed)
 DIRTY_BIT_BG0_REFRESH  equ   $0010     ; Force a refresh of the full background
 DIRTY_BIT_SPRITE_ARRAY equ   $0040     
 
@@ -251,6 +254,40 @@ _O_JMP_OFFSET  equ  $FA                   ; odd exit JMP to the next line (opera
 _LINE_SPAN  equ  512                     ; always 512 bytes between adjacent rows
 _LINES_PER_BANK equ 120
 
+; Joystick probes (core/blitter/JoyProbes.s).  A probe run is a strobe row and up to JOY_SAMPLES probe rows,
+; all between two interrupt windows; each hooked row's exits jump to its probe code in the unused start of
+; its odd page (P1 $00 - $20), which continues with a JMP to the row's original exit target.  The samples
+; are in JOY_DATA of each blitter bank, one JOY_SLOT_SIZE block per run of the bank: VBL_VERT_REG at the
+; strobe, then per probe row VBL_VERT_REG (0 = not sampled) and the timers' bits (7 = X, 6 = Y running).
+_JOY_CODE_OFFSET equ $100                 ; P1+$00: the probe code (relative to the row's P0)
+_JOY_CODE_SIZE   equ $21                  ; P1 $00 - $20
+JOY_DATA         equ $0010                ; Bank offset of the samples (below the first row)
+JOY_SAMPLES      equ 15                   ; Probe rows per run: every row up to the next interrupt window
+JOY_SAMPLES_EVEN equ 7                    ; ... with CTRL_EVEN_RENDER (every other row runs)
+JOY_SLOT_SIZE    equ 1+{2*JOY_SAMPLES}
+JOY_MAX_E        equ 64                   ; Steps (8 ms): a sample this late after the strobe is ignored
+JOY_TOKEN        equ $4A59                ; Y after a strobe row (_BltRangeLiteBody enters with Y = 0)
+JOY_RUN_ROW_0    equ 5                    ; Strobe rows of the two runs in each bank: right after an
+JOY_RUN_ROW_1    equ 53                   ; interrupt window, so a run is never interrupted
+JOY_RUN_ROW_EVEN_0 equ 6                  ; ... with CTRL_EVEN_RENDER (even rows only)
+JOY_RUN_ROW_EVEN_1 equ 54
+
+INPUT_JOYSTICK   equ 4                    ; config_input_p1_type / p2_type: the joystick (_ReadControl)
+JOY_DEFAULT_CENTER equ 10                 ; Steps (1.27 ms), before a calibration
+JOY_DEFAULT_SENS equ 4                    ; Sensitivity 1 - 7: dead zone = 8 - sensitivity steps
+JOY_DIR_LOW      equ 1                    ; An axis' direction: left / up
+JOY_DIR_CENTER   equ 2
+JOY_DIR_HIGH     equ 3                    ; right / down
+
+; Joystick reads from scanline interrupts, for dirty renders (JoyProbes.s): while armed, the SCB of the
+; strobe line and of one line per threshold (2 lines, 127 us, per VBL_VERT_REG step after the strobe line)
+; have the interrupt bit set.
+JOY_SCAN_LINE_0  equ 8                    ; Strobe
+JOY_MAX_THRESHOLD equ 90                  ; Steps (the line stays on the screen: 8 + 2 x 90 < 200)
+SCB_INT_BIT      equ $40                  ; SCB bit 6: scanline interrupt
+VGC_INT_REG      equ $E0C023              ; Bit 1: scanline interrupt enable; bit 5: scanline interrupt pending
+VGC_INT_CLEAR    equ $E0C032              ; Write with bit 5 = 0 to clear the scanline interrupt
+
 ; Opcodes patched into _ALIGN_PATCH (8-bit).  Even lines BRL straight to the first PEA.  Odd lines
 ; LDX the offset of the right edge byte and fall into the code that pushes it.
 BLT_ALIGN_EVEN equ  $82                   ; BRL
@@ -300,6 +337,10 @@ TILE_ADDR_HI  equ $6000          ; pre-calculated address (high byte) of the loc
 ; 128 in one bank: as is at slot + $000 and flipped horizontally at slot + $100.  The slot sizes are in
 ; ppu.s (SPR_SLOT_SIZE, SPR_BANK_SLOTS, SPR_MAX_BANKS, SPR_MAX_SLOTS, SPR_FLIP_PAGE), after the game's flags.
 ;
+; The most compile banks the sprite cache uses: 4 with the shifted variants (SPR_PIXEL_SHIFT, a game
+; flag defined after this file), else 1.  Here rather than in ppu.s, as InitMemory uses it as well.
+SPR_MAX_BANKS          equ   1+{3*SPR_PIXEL_SHIFT}
+;
 ; SPR_COMP_TBL maps a sprite to the slot of its compiled code, as bank << 8 | page (the high two bytes of
 ; the slot's 24-bit address), or 0.  The bank is never 0, so 0 means "not compiled".  It is indexed by the
 ; "key offset":
@@ -341,10 +382,6 @@ SPR_ST_SIZE   equ 24
 
 ; Grid renderer, quad mode (ppu_grid_quads.s): the unchanged-sprite skip's tables, out of the main segment
 GQ_PREV_OAM   equ $6800               ; OAM_COPY as last drawn (256 bytes)
-GQ_XTL        equ $6900               ; gqL* | gqH*: a sprite's quadrants in either nibble (128 bytes each)
-GQ_XTR        equ $6980
-GQ_XBL        equ $6A00
-GQ_XBR        equ $6A80
 
 ;TILE_ROW      equ $B000          ; pre-calculated row of the PPU address
 ;TILE_COL      equ $C000          ; pre-calculated column of the PPU address
@@ -352,7 +389,7 @@ GQ_XBR        equ $6A80
 ; Grid dirty renderer (ppu_grid.s): per-cell lookup tables, one word per 8x8 screen cell (max 800 cells)
 GRID_CELL_SCR  equ $B000         ; SHR address of the cell
 GRID_CELL_PEA  equ $B800         ; code field address of the tile shown in the cell
-GRID_CELL_BANK equ $C000         ; code field bank of that tile (in both bytes)
+GRID_CELL_EQ   equ $C000         ; erase routine set (gridEQTbl): 0 = code field bank 1, 32 = bank 2, 64 = pad cell
 
 ; $C800-$CFFF / $E800-$EFFF: nametable shadow data buffers 0 / 1 (ppu_queues.s, NTM_SB0 / NTM_SB1)
 

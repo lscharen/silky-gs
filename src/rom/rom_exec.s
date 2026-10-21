@@ -44,8 +44,10 @@ nesBusy     dw    0                       ; Non-zero while the NES task owes a f
 nesOverrun  dw    0                       ; Consecutive VBLs that the current NES frame has overrun
 switchPending dw  0                       ; Set by the scheduler, consumed by irqPost
 irqFrameS   dw    0                       ; Address of the hardware IRQ frame while in a native-mode IRQ, else 0
-renderActive dw   0                       ; RENDER_VBL_COUNT: non-zero while the GS task is inside RenderScreen
-renderVblTicks dw 0                       ; RENDER_VBL_COUNT: VBLs counted during the current / last render
+renderActive ENT
+             dw   0                       ; RENDER_VBL_COUNT: non-zero while the GS task is inside RenderScreen
+renderVblTicks ENT
+               dw 0                       ; RENDER_VBL_COUNT: VBLs counted during the current / last render
 
 ; Miscellaneous data fields
 singleStepMode dw  0                      ; If non-zero, the runtime will wait for a user keypress between frames
@@ -389,6 +391,32 @@ schedTask
 irqHook
             clc
             xce                           ; C = interrupted E flag; now native (firmware does the same)
+
+; While the joystick's scanline interrupts are armed (JoyScanArm, core/blitter/JoyProbes.s), take
+; them here: JoyScanService clears the interrupt, and the firmware never sees it.  The test keeps
+; C (the interrupted E flag) and V (BRK).
+            DO    JOYSTICK_SUPPORT
+            bvs   :not_scan_v             ; BRK: leave it to the firmware
+            rep   #$30
+            pha
+            ldal  joyScanArmed
+            beq   :not_scan
+            sep   #$20
+            ldal  VGC_INT_REG
+            rep   #$20
+            and   #$0020                  ; Scanline interrupt pending?
+            beq   :not_scan
+            jsl   JoyScanService
+            pla
+            bcs   :scan_emu
+            rti
+:scan_emu   sec                           ; Back to emulation mode for its 3-byte frame
+            xce
+            rti
+:not_scan   pla
+:not_scan_v
+            FIN
+
             bcs   :emu
             bvs   :chain                  ; BRK: leave the frame alone
 

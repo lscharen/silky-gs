@@ -71,6 +71,27 @@ DrawWord       phx                  ; Save register value
                jsr   DrawString
                rts
 
+; Long entry points for the engine's debug display (_ShowDebugInfo, ppu_frame.s)
+               DO    SHOW_DEBUG_VARS
+               mx    %00
+DrawByteL ENT
+               phb
+               phk
+               plb
+               jsr   DrawByte
+               plb
+               rtl
+
+               mx    %00
+DrawWordL ENT
+               phb
+               phk
+               plb
+               jsr   DrawWord
+               plb
+               rtl
+               FIN
+
                mx    %00
 ClearWord      lda   #EmptyBuff
                jsr   DrawString

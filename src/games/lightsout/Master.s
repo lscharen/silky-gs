@@ -12,6 +12,12 @@
             KND   #$1100
             SNA   MAIN
 
+; The engine (PPU simulation, renderers, blitter, tile / sprite compilers)
+
+            ASM   ../../Engine.s
+            KND   #$1100
+            SNA   ENGINE
+
 ; Segment #2 & #3 -- PPU blitter
 
             ASM   ../../core/blitter/TemplateLiteBank1.s

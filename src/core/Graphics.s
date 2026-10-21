@@ -2,7 +2,7 @@
 ; Graphic screen initialization
                  mx %00
 InitGraphics
-                 jsr   _ShadowOn
+                 jsl   _ShadowOnL
                  jsr   _GrafOn
 
 ; Clear the SCBs and Palettes
@@ -99,7 +99,7 @@ _SetScreenMode
                   ply
                   plx
 
-                  jsr       SetScreenRect
+                  jsl       SetScreenRectL
 
                   lda       #0
                   jmp       FillScreen          ; tail return
@@ -145,7 +145,7 @@ _ClearShadowScreen
                  ldal  SHADOW_REG
                  pha
                  rep   #$20
-                 jsr   _ShadowOn
+                 jsl   _ShadowOnL
                  lda   #0
                  jsr   _ClearToColor
                  sep   #$20
@@ -202,27 +202,6 @@ _GrafOff
                  rep   #$20
                  rts
 
-; Enable/Disable Shadowing.
-                 mx    %00
-_ShadowOn
-                 sep   #$20
-                 ldal  SHADOW_REG
-;                 and   #$F7
-                 and   #$F1
-                 stal  SHADOW_REG
-                 rep   #$20
-                 rts
-
-                 mx    %00
-_ShadowOff
-                 sep   #$20
-                 ldal  SHADOW_REG
-;                 ora   #$08
-                 ora   #$0E
-                 stal  SHADOW_REG
-                 rep   #$20
-                 rts
-
                  mx    %00
 _GetVBL
                  sep   #$20
@@ -244,94 +223,6 @@ _WaitForVBL
                  rep   #$20
                  rts
 
-; Set the physical location of the virtual screen on the physical screen. The
-; screen size must by a multiple of 8
-;
-; A = XXYY where XX is the left edge [0, 159] and YY is the top edge [0, 199]
-; X = width (in bytes)
-; Y = height (in lines)
-;
-; This subroutine stores the screen positions in the direct page space and fills
-; in the double-length ScreenAddrR table that holds the address of the right edge
-; of the playfield.  This table is used to set addresses in the code banks when the
-; virtual origin is changed.
-;
-; We are not concerned about the raw performance of this function because it should
-; usually only be executed once during app initialization.  It doesn't get called
-; with any significant frequency.
-
-                   mx    %00
-SetScreenRect      sty   ScreenHeight               ; Save the screen height and width
-                   stx   ScreenWidth
-
-                   jsr   _PEAFieldStable            ; RTable changes: forget the code field's
-                   pha                              ; ranges (their stack addresses must be
-                   lda   #$FFFF                     ; copied again)
-                   stal  stkKeyCount
-                   stal  stkKeyCount+2
-                   stal  stkKeyCount+4
-                   stal  stkKeyCount+6
-                   pla
-
-                   tax                              ; Temp save of the accumulator
-                   and   #$00FF
-                   sta   ScreenY0
-                   clc
-                   adc   ScreenHeight
-                   sta   ScreenY1
-
-                   txa                              ; Restore the accumulator
-                   xba
-                   and   #$00FF
-                   sta   ScreenX0
-                   clc
-                   adc   ScreenWidth
-                   sta   ScreenX1
-
-                   lda   ScreenY0                   ; Calculate the address of the first byte
-                   asl                              ; of the right side of the playfield
-                   tax
-;                   lda   ScreenAddr,x               ; This is the address for the edge of the physical screen
-;                   clc
-                   lda   Mul160Tbl,x
-                   adc   #$2000
-                   adc   ScreenX1
-                   dec
-                   pha                              ; Save for second loop
-
-                   ldx   #0
-                   ldy   ScreenHeight
-:loop              clc
-                   sta   RTable,x
-                   adc   #160
-                   inx
-                   inx
-                   dey
-                   bne   :loop
-
-                   ldy   ScreenHeight
-                   pla                              ; Reset the address and continue filling in the
-:loop2             clc
-                   sta   RTable,x
-                   adc   #160
-                   inx
-                   inx
-                   dey
-                   bne   :loop2
-
-; Calculate the screen locations for each tile corner
-
-                   lda   ScreenY0                   ; Calculate the address of the first byte
-                   asl                              ; of the right side of the playfield
-                   tax
-;                   lda   ScreenAddr,x               ; This is the address for the left edge of the physical screen
-;                   clc
-                   lda   Mul160Tbl,x
-                   adc   #$2000
-                   adc   ScreenX0
-
-                   rts
-
 ; Clear the SHR screen and then infill the defined field
                    mx    %00
 FillScreen         cmp   #0
@@ -350,7 +241,7 @@ FillScreen         cmp   #0
                    tax
 ;                   lda   ScreenAddr,x
 ;                   clc
-                   lda   Mul160Tbl,x
+                   ldal  Mul160Tbl,x
                    adc   #$2000
                    adc   ScreenX0
                    tax

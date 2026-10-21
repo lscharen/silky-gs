@@ -15,7 +15,7 @@
 NES_StartUp
             stx   UserId
             and   #HORIZONTAL_MIRRORING+VERTICAL_MIRRORING
-            sta   PendingMirrorMode       ; Applied by PPUStartUp (before A is reused below)
+            stal  PendingMirrorMode       ; Applied by PPUStartUp (before A is reused below)
             sep   #$20                    ; The video state to put back when the game quits
             ldal  SHADOW_REG
             sta   SavedShadow
@@ -50,18 +50,8 @@ NES_StartUp
             and   #$00FF
             sta   mapper_bank
 
-            stz   chr_bank                 ; Stub for future MMC1 CHR-bank switching
-
-; Set the pointers to the CHR memory dirty bytes for CHR-RAM games
-
-            lda   #ChrRamDirty
-            sta   TileChrMem
-            clc
-            adc   #$100
-            sta   SprChrMem
-            lda   #^ChrRamDirty
-            sta   TileChrMem+2
-            sta   SprChrMem+2
+            lda   #0
+            stal  chr_bank                 ; Stub for future MMC1 CHR-bank switching
 
 ; Initialize some application variables
 
@@ -91,19 +81,25 @@ NES_StartUp
 
 ; Initialize the PPU
 
-            jsr   PPUStartUp
+            jsl   PPUStartUpL
             bcc   *+5
             jmp   Fail
 
 ; Build the sprite Y filter used by scanOAMSprites from this game's playfield settings
 
-            jsr   InitYExclude
+            jsl   InitYExcludeL
 
 ; Load the user preferences (PREF_FILENAME, written by NES_ShutDown).  If there is no file yet (first
 ; run), the defaults in rom_config_setup.s are kept.  The audio quality is used by APUStartUp below;
 ; the fast blit mode and the game's own values are applied here, as ApplyConfig would.
 
             jsr   LoadPrefData
+            jsr   _FixPrefInputTypes
+            jsr   KbdBuildMaps            ; The BASIC keyboard driver's key maps (core/CoreImpl.s)
+            DO    JOYSTICK_SUPPORT
+            jsl   JoyConfigureL           ; The joystick settings; _InitRenderMode hooks the probe rows if used
+            jsr   _InitRenderMode
+            FIN
             DO    CONFIG_VIDEO_FASTBLIT
             lda   config_video_fastmode
             beq   :prefs_done
@@ -116,6 +112,11 @@ NES_StartUp
             ldy   #config_game_start
             CONFIG_APPLY_HOOK
             rep   #$30
+
+; Check whether the J13 keyboard driver can read the held keys from the ADB microcontroller (with interrupts off, so
+; before the audio interrupts start)
+
+            jsr   J13_Init
 
 ; Initialize the sound hardware for APU emulation
 
@@ -137,20 +138,24 @@ NES_StartUp
             jsr   _ClearShadowScreen
             jsr   InitPlayfield
 
-; CHR-ROM games have their tiles converted offline into the tiledata bank by
-; build.js (scripts/lib/nromBuild.js) and compiled by Main.s. CHR-RAM games don't
-; have a fixed image to pre-convert -- mark every tile dirty instead, so
-; DrawPPUTile/CheckSprTileDirty lazily compile each tile the first time it's
-; actually drawn (once the game has uploaded real data for it).
+; The background tiles of both pattern tables are compiled, so the engine follows PPUCTRL like the
+; hardware does: the pattern tables are at $0000 at power on (PPUCTRL = 0) and each PPUCTRL the game
+; writes selects them (PPUCtrlDecode).  CHR-ROM games have their tiles converted offline into the
+; tiledata bank by build.js (scripts/lib/nromBuild.js): compile all 512 now (sprites are compiled when
+; they are first drawn, SprCompileTile).  CHR-RAM games don't have a fixed image -- mark every tile
+; dirty instead, so DrawPPUTile / CheckBgTileDirty / sprChrCheck compile each tile the first
+; time it's drawn (once the game has uploaded real data for it).
 
             DO    HAS_CHR_RAM
             ldx   #0
             lda   #$0303           ; both bytes = CHRRAM_BG_DIRTY+CHRRAM_SPR_DIRTY
-:mtloop     sta   ChrRamDirty,x
+:mtloop     stal  ChrRamDirty,x
             inx
             inx
             cpx   #512
             bcc   :mtloop
+            ELSE
+            jsl   ROM_CompileBackgroundTilesL
             FIN
 
 ; Battery-backed cartridges: restore the WRAM image ($6000-$7FFF of the NES address space, in the
@@ -205,7 +210,8 @@ NES_StartExecution
 
 ; NES_EvtLoop
 ;
-; The main control loop.  Pressing 'q' will exit the driver.
+; The main control loop.  Returns A = USER_SAYS_QUIT (Q, confirmed) or USER_SAYS_RESET (R).
+
             PRE_EVT_LOOP
             mx  %00
 NES_EvtLoop
@@ -241,96 +247,116 @@ NES_EvtLoop
 
 ; Handle all of the built-in actions with the keycode.  Afterwards, allow for
 ; application-specific handlers.
+;
+; The built-in keys are '?', the shifted number keys (! @ # ...), Q and R, so that every other key, the
+; letters and the numeric keypad included, can be mapped to the controls:
+;
+;   ?  the configuration screen          !  force a full repaint
+;   @  toggle the NES sprites            #  toggle the NES background
+;   Q  quit (after a confirmation screen)
+;   R  reset the console (the game's Main.s warm-boots it: USER_SAYS_RESET)
+;
+; A key that a player's keyboard map uses never gets here (_ReadControl takes it out of KeyEvent), so
+; the controls come first; '?' always does.
 
-; '?' to bring up the configuration screen and reapply the settings
+; ?: bring up the configuration screen and reapply the settings
 
             DO    NO_CONFIG
             ELSE
             cmp   #'?'
             bne   :not_config
-            jsr   APUStop                                ; Turn off the APU (restarted in Apply Config)
-            jsr   NES_StopExecution                       ; Pause emulation nicely
+            jsr   NES_Pause
             jsr   ShowConfig                              ; Let the user reconfigure
-            jsr   ApplyConfig                             ; Apply to the running configuration
-            lda   #DIRTY_BIT_BG0_REFRESH                  ; Force a full page refresh on config exit
-            tsb   DirtyBits
-            jsr   NES_StartExecution
+            jsr   NES_Resume                              ; (applies the configuration)
             brl   NES_EvtLoop
 :not_config
             FIN
 
-; '0': force all of the APU channels to be turned off
-;            cmp   #'0'
-;            bne   :not_0
-;            stz   APU_FORCE_OFF
-;            brl   NES_EvtLoop
-;:not_0
-;
-; '1' - '4': toggle individual APU channels
-;            cmp   #'1'
+; $ / % / ^ / & (shifted 4 - 7): toggle individual APU channels; * (shifted 8): force all of the APU
+; channels to be turned off
+;            cmp   #'$'
 ;            bne   :not_1
 ;            lda   #$01
 ;            jsr   ToggleAPUChannel
 ;            brl   NES_EvtLoop
 ;:not_1
 ;
-;            cmp   #'2'
+;            cmp   #'%'
 ;            bne   :not_2
 ;            lda   #$02
 ;            jsr   ToggleAPUChannel
 ;            brl   NES_EvtLoop
 ;:not_2
 ;
-;            cmp   #'3'
+;            cmp   #'^'
 ;            bne   :not_3
 ;            lda   #$04
 ;            jsr   ToggleAPUChannel
 ;            brl   NES_EvtLoop
 ;:not_3
 ;
-;            cmp   #'4'
+;            cmp   #'&'
 ;            bne   :not_4
 ;            lda   #$08
 ;            jsr   ToggleAPUChannel
 ;            brl   NES_EvtLoop
 ;:not_4
+;
+;            cmp   #'*'
+;            bne   :not_0
+;            stz   APU_FORCE_OFF
+;            brl   NES_EvtLoop
+;:not_0
 
-; From this point forward, only check alpha characters, so normalize to lower case
-
-            ora   #$0020
-
-; 'f': force a full repaint of the screen
-            cmp   #'f'
+; ! (shifted 1): force a full repaint of the screen
+            cmp   #'!'
             bne   :not_f
-            jsr   ForceMetatileRefresh
+            jsl   ForceMetatileRefreshL
             brl   NES_EvtLoop
 :not_f
 
-; 'b': force the NES Background bit to be toggled
+; @ (shifted 2): force the NES Sprite bit to be toggled
 
-            cmp   #'b'
-            bne   :not_b
-            lda   ppumask_override
-            eor   #NES_PPUMASK_BG
-            sta   ppumask_override
-            brl   NES_EvtLoop
-:not_b
-
-; 's': force the NES Sprite bit to be toggled
-
-            cmp   #'s'
+            cmp   #'@'
             bne   :not_s
-            lda   ppumask_override
+            ldal  ppumask_override
             eor   #NES_PPUMASK_SPR
-            sta   ppumask_override
+            stal  ppumask_override
             brl   NES_EvtLoop
 :not_s
 
+; # (shifted 3): force the NES Background bit to be toggled
+
+            cmp   #'#'
+            bne   :not_b
+            ldal  ppumask_override
+            eor   #NES_PPUMASK_BG
+            stal  ppumask_override
+            brl   NES_EvtLoop
+:not_b
+
+; R (either case): reset the console
+
             cmp   #'r'
-            beq   :exit
+            beq   :reset
+            cmp   #'R'
+            bne   :not_reset
+:reset      lda   #USER_SAYS_RESET
+            bra   :exit
+:not_reset
+
+; Q (either case): quit, if the user confirms it
 
             cmp   #'q'
-            beq   :exit
+            beq   :quit
+            cmp   #'Q'
+            bne   :next_loop
+:quit       jsr   NES_Pause
+            jsr   ConfirmQuit                             ; (carry set: quit)
+            lda   #USER_SAYS_QUIT
+            bcs   :exit
+            jsr   NES_Resume
+            brl   NES_EvtLoop
 
 :next_loop
             EVT_LOOP_END
@@ -339,11 +365,35 @@ NES_EvtLoop
             POST_EVT_LOOP
             rts
 
+; NES_Pause / NES_Resume
+;
+; Around a screen that takes over the display and the keyboard (the configuration screen, the quit
+; confirmation): stop the game, its audio and the joystick's scanline interrupts, then reapply the
+; configuration (which restarts the audio) and repaint the game's screen.
+            mx  %00
+NES_Pause
+            jsr   APUStop                                ; Turn off the APU (restarted by ApplyConfig)
+            jsr   NES_StopExecution                       ; Pause emulation nicely
+            DO    JOYSTICK_SUPPORT
+            jsl   JoyScanDisarmL                          ; No joystick scanline interrupts there
+            FIN
+            rts
+
+NES_Resume
+            jsr   ApplyConfig                             ; Apply to the running configuration
+            lda   #DIRTY_BIT_BG0_REFRESH                  ; Force a full page refresh
+            tsb   DirtyBits
+            jmp   NES_StartExecution
+
 ; Clean up the runtime
             mx  %00
 NES_ShutDown
             jsr   NES_StopExecution        ; First stop the VBL task from running NES frames and the 60Hz
                                            ; audio driver while the runtime is taken down
+            jsr   J13_ShutDown             ; The ADB interrupt enables, if a J13 row read is in flight
+            DO    JOYSTICK_SUPPORT
+            jsl   JoyScanDisarmL           ; The joystick's scanline interrupts, if armed
+            FIN
             lda   BorderColor              ; Restore the border color
             jsr   _SetBorderColor
 
@@ -378,38 +428,11 @@ NES_ShutDown
 OneSecondCounter  dw  0
 DPSave            dw  0
 DP_OAM            dw  0
-DP_NES            dw  0
+DP_NES ENT                         ; (read by the games' engine-side render code)
+                  dw  0
 BorderColor       dw  0            ; save/restore border color
 SavedShadow       dw  0            ; $C035 at start-up, put back by NES_ShutDown
 SavedNewVideo     dw  0            ; $C029 at start-up, put back by NES_ShutDown
-
-; Runtime nametable-mirroring mask, set by SetMirrorMode (ControlBits.s).
-; Duplicates the DP MirrorMask (Defs.s) for use from contexts where the
-; engine's own direct page isn't active (e.g. ppu_regs.s's PPU write
-; handlers, entered from NES ROM code with the NES's own direct page) --
-; those sites access this copy with long addressing (andl MirrorMaskLong)
-; instead.
-MirrorMaskLong ENT
-             dw  0
-
-; Corresponding mask for calculating the CIRAM location for a PPU
-; nametable address
-CIRAMRowMask ENT
-             dw  0
-CIRAMColMask ENT
-             dw  0
-
-; 0 = no mirroring-mode change pending; else HORIZONTAL_MIRRORING/
-; VERTICAL_MIRRORING, the target mode ApplyMirrorMode should switch to at
-; the next render (see core/ControlBits.s SetMirrorMode/ApplyMirrorMode).
-; Absolute, not DP, for the same reason as MirrorMaskLong above --
-; SetMirrorMode writes it via long addressing from NES ROM code.
-;
-; Note that the actual mask values have to be update dimmediately.  This
-; flag is purly for deferred work that needs to happen before the next
-; *render*
-PendingMirrorMode ENT
-            dw  0
 
 ; Built-in user key actions
 
@@ -429,97 +452,18 @@ ToggleAPUChannel
             rts
 
 
-; Helper to perform the essential functions of rendering a frame
+; Helper to perform the essential functions of rendering a frame.  The engine latches the NES state
+; (RenderLatch) and draws the screen (RenderDraw, ppu_frame.s); the game's hooks run in between and
+; after.
             mx  %00
 NES_RenderFrame
-
-; First, disable interrupts and perform the most essential functions to copy any critical NES data and
-; registers into local memory so that the rendering is consistent and not affected if a VBL interrupt
-; occures between here and the actual screen blit
-
-            php
-            sei
-
-; Freeze the nametable updates: the buffer and attribute list the ROM has been filling become the ones
-; this render draws, and new PPU writes go to the other buffer, so they don't interfere with the render
-            jsr  PPUFreezeNametableUpdates
-
-; If there are background updates to make, force a screen refresh.  The grid renderer decides for
-; itself in gridPrepare, since it can apply a limited number of background tile updates directly.
-
-            DO   ENABLE_DIRTY_RENDERING
-            bra  :no_force
-            FIN
-            lda  at_prev_count            ; Any queued attribute group means background changes
-            beq  :no_force
-            lda  #DIRTY_BIT_BG0_REFRESH
-            tsb  DirtyBits
-:no_force
-
-            DO   CUSTOM_PPU_CTRL_LOCK
-            CUSTOM_PPU_CTRL_LOCK_CODE
-            ELSE
-            lda  ppuctrl                  ;  Cache these values that are used to set the view port
-            FIN
-            sta  _ppuctrl
-            jsr  PPUCtrlDecode            ; Resolve the pattern table addresses from the last PPUCTRL write
-
-            DO   CUSTOM_PPU_SCROLL_LOCK
-            CUSTOM_PPU_SCROLL_LOCK_CODE
-            ELSE
-            lda  ppuscroll
-            FIN
-            sep  #$20
-            sta  _ppuscroll_y             ; 8-bit values are not contiguous in order to allow blended 8/16 access
-            xba
-            sta  _ppuscroll_x
-            rep  #$20
-
-            lda  ppumask
-            and  ppumask_override
-            sta  _ppumask
-
-            and  #NES_PPUMASK_BG         ; honor the PPU enable flags for sprites and background. It's important to 
-            jsr  EnableBackground        ; set the sprite disable flag here because it is used by scanOAMSprites
-
-            lda  _ppumask
-            and  #NES_PPUMASK_SPR
-            jsr  EnableSprites
-
-            jsr  scanOAMSprites            ; Copy the sprite OAM data into internal RAM space for rendering
-
-            plp
+            jsl   RenderLatch            ; Freeze the queues, latch the PPU registers and the OAM
 
 ; Allow the user code to introspect and intervene at this point
 
             PRE_RENDER
 
-; Apply all of the tile updates that were made during the previous frame(s).  The color attribute bytes are always set
-; in the PPUDATA hook, but then the appropriate tiles are queued up.  These tiles, the tiles written to by PPUDATA in
-; the range ($2{n+0}00 - $2{n+3}C0)
-;
-; The queue is set up as a Set, so if the same tile is affected by more than one action, it will only be drawn once.
-; Practically, most NES games already try to minimize the number of tiles to update per frame.
-
-;            jsr   PPUFlushQueues
-            jsr   PPUFlushQueuesAlt
-
-; Finally, render the PEA field to the Super Hires screen.  The performance of the runtime is limited by this
-; step and it is important to keep the high-level rendering code generalized so that optimizations, like falling
-; back to a dirty-rectangle mode when the NES PPUSCROLL does not change, will be important to support good performance
-; in some games -- especially early games that do not use a scrolling playfield.
-
-            DO    RENDER_VBL_COUNT        ; schedTask counts the VBLs that occur while renderActive is set
-            stz   renderVblTicks
-            lda   #1
-            sta   renderActive
-            FIN
-
-            DO    CUSTOM_RENDER_SCREEN
-            jsr   CUSTOM_RENDER_SCREEN_ADDR
-            ELSE
-            jsr   RenderScreen
-            FIN
+            jsl   RenderDraw             ; Apply the queued tile updates and draw the screen
 
             DO    RENDER_VBL_COUNT        ; Show the VBLs this render took at the top-left of the screen
             stz   renderActive
@@ -577,217 +521,10 @@ fpsLastSec   dw  0
 fpsValue     dw  0
 fpsTmp       dw  0
 
-; Given a nametable address ($2000 - $2FFF), return the screen address taking into account the current
-; scroll position.
-;
-; The address is in the range $2000
-;
-; Input
-;  X = nametable address
-;
-; Output
-;  X = SHR address
-;  C = 0 if visible, 1 if address is off-screen
-            mx  %00
-_NametableToScreen
-
-; The hardest issue to handle here is properly handling wrap-around based on the current mirroring
-; state of the game.
-;
-; Conceptually, the code looks up the logical row and column for the address and then adjusts the
-; value by both the current scroll position as well as the clipped range of what is actually
-; visible on the IIgs screen.
-;
-; Example: scroll_x = 45 and scroll_y = 168.  If vertical mirroring is on, then the maximum Y
-;          value is 239 and the maximum X value is 511.  Assume the 
-;
-; x_blk = 8
-;
-; col[addr] = 0 to 32/64
-; row[addr] = 0 to 30/60
-;
-; if mirror == horizontal, then all columns are always visible
-; if mirror == vertical, then
-; 
-; The visible blocks are
-
-; First, find the IIgs on-screen offset for this nametable address.
-
-;            ldal PPU_MEM+TILE_COL,x       ; Get the logical column of this address
-;            and  #$00FF
-
-            txa
-            ciram2col
-
-            asl
-            asl                           ; Multiple by 4 to convert column to width in IIgs SHR bytes
-            sec
-            sbc  _ppuscroll_x             ; Subtract off the current scroll position
-            clc
-            adc  MaxX                     ; Add in the width of the NES nametables, which depends on the mirroring mode
-            cmp  MaxX
-            bcc  :no_wrap_x
-            sbc  MaxX                     ; If we wrapped around, subtract the width to get back into the visible range
-:no_wrap_x
-            cmp  #128                   ; Check to see if we're off outside of the visible area. C = 1 means abort
-            bcc  :x_visible
-            rts
-
-:x_visible
-;            ldal PPU_MEM+TILE_ROW,x       ; Get the logical row of this address
-;            and  #$00FF
-;            asl
-;            asl
-;            asl
-            
-            txa
-            ciram2rowX8                   ; Get the logical row of this address and multiple by 8 to get a line
-
-            sbc  _ppuscroll_y
-            clc
-            adc  MaxY                     ; Add in the height of the NES nametables,
-            cmp  MaxY
-            bcc  :no_wrap_y               ; If we wrapped around, subtract the height to get back into the visible range
-            sbc  MaxY
-:no_wrap_y
-
-; At this point we have the scanline in term of NES scanlines, but the IIgs screen is only 200 lines tall,
-; so it clips a 200-line range
-
-            cmp  #y_offset
-            bcc  :y_not_visible
-            cmp  #max_nes_y
-            bcc  :y_visible
-:y_not_visible
-            sec
-:y_visible  rts
-
-
-; Helper that can be called by custom renderers to display the standard debug variable
-_ShowDebugInfo
-            DO    SHOW_DEBUG_VARS
-            inc   dirtyCount
-            ldx   frameTick
-            lda   Mul160Tbl,x
-            tax
-            lda   #$EEEE
-            stal  $012000+{40*160},x
-
-; Show the current frames per second
-            lda   framesPerSecond
-            ldx   #0
-            ldy   #$FFFF
-            jsr   DrawByte
-
-; Show the current player one input byte
-            lda   InputPlayer1
-            ldx   #8*160
-            ldy   #$FFFF
-            jsr   DrawWord
-
-; Show the number of dirty and full frames rendered
-            lda   dirtyCount
-            ldx   #16*160
-            ldy   #$EEEE
-            jsr   DrawWord
-
-            lda   fullCount
-            ldx   #24*160
-            ldy   #$8888
-            jsr   DrawWord
-
-
-; Show the size of the attribute queues (current, previous)
-            lda   at_count
-            ldx   #{0*160}+144
-            ldy   #$FFFF
-            jsr   DrawWord
-
-            lda   at_prev_count
-            ldx   #{8*160}+144
-            ldy   #$FFFF
-            jsr   DrawWord
-
-; Move the frameTick to the next position
-            lda   frameTick
-            inc
-            inc
-            and   #$00FE
-            sta   frameTick
-            FIN
-
-            rts
-
-; Default render screen implementation.  The user-code can override this and provide their
-; own to improve performance.
-            mx  %00
-RenderScreen
-            jsr   _ShowDebugInfo
-            
-            lda   _ppuctrl                ; Set the engine to the scroll position from this frame's
-            ldx   _ppuscroll_x            ; PPU register values (the nametable select bits are masked
-            ldy   _ppuscroll_y            ; by NES_SetScroll)
-            jsr   NES_SetScroll
-
-; If this frame changed any of the background palettes, then we have to refresh all of the background tiles
-
-            lda   #DIRTY_BIT_PAL_CHANGE
-            bit   DirtyBits
-            beq   :no_refresh
-            ldx   #$0000                  ; The tile tables are indexed by CIRAM address, so refresh
-            jsr   RefreshPPUTiles         ; both physical nametables ($000 and $400), not PPU $2000
-            ldx   #$0400
-            jsr   RefreshPPUTiles
-            lda   #DIRTY_BIT_BG0_REFRESH
-            tsb   DirtyBits
-:no_refresh
-
-; Dirty rendering (the grid renderer) or not
-
-            DO    ENABLE_DIRTY_RENDERING
-
-; If this frame did not scroll, the grid renderer may be able to draw only what changed
-
-            lda   #DIRTY_BIT_BG0_X+DIRTY_BIT_BG0_Y+DIRTY_BIT_BG0_REFRESH
-            bit   DirtyBits
-            bne   :full_update
-            lda   disableDirtyRendering
-            bne   :full_update
-
-; The grid renderer never executes the code field, so it does not need the exit points patched
-            jsr   gridPrepare
-            bcs   :full_update
-            jsr   gridDrawDirty
-            bra   :done
-
-:full_update
-            lda   #0                      ; (grid builds: drawScreenRange records the sprite cells
-            ldx   ScreenHeight            ; for the next frame)
-            jsr   drawScreenRange
-:done
-
-            ELSE
-
-            jsr   _BltSetup
-
-; Copy the sprites and buffer to the graphics screen
-
-            jsr   drawScreen
-            FIN
-
-            stz   DirtyBits
-            rts
-
-; If dirty rendering is turned on, provide a way to override it
-disableDirtyRendering dw 0
-
-
 ; Tracks the number of times NES_RenderFrame has been called
 frameCount      dw  0
-framesPerSecond dw  0
-fullCount       dw  0
-dirtyCount      dw  0
-frameTick       dw  0
+framesPerSecond ENT
+                dw  0
 
 ; Cleared when the NMI handler has run.  Used to limit updates to 60fps
 frameReady      dw  0

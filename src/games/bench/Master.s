@@ -1,0 +1,53 @@
+; IIgs Game Engine
+
+            TYP   $B3         ; S16 file
+            DSK   BenchGS
+
+; No XPL: build.js takes the zeros out of the file (scripts/omf-compact.js: DS records and reserved
+; space), and ExpressLoad can't load those.
+
+; Segment #1 -- Main execution block
+
+            ASM   Main.s
+            KND   #$1100
+            SNA   MAIN
+
+; The engine (PPU simulation, renderers, blitter, tile / sprite compilers)
+
+            ASM   ../../Engine.s
+            KND   #$1100
+            SNA   ENGINE
+
+; Segment #2 & #3 -- PPU blitter
+
+            ASM   ../../core/blitter/TemplateLiteBank1.s
+            KND   #$1100
+            SNA   PPU1
+
+            ASM   ../../core/blitter/TemplateLiteBank2.s
+            KND   #$1100
+            SNA   PPU2
+
+; Segment #4 -- Converted Tile Storage
+
+            ASM   TileData.s
+            KND   #$1100
+            SNA   CHRDATA
+
+; Segment #5 -- ROM
+
+            ASM   bench_rom.s
+            KND   #$1100
+            SNA   BENCHROM
+
+; Segment #6 -- PPU memory and PPU shadow storage
+
+            ASM   PPU.s
+            KND   #$1100
+            SNA   PPURAM
+
+; Palette swizzle tables (long-addressed data, kept out of the main segment)
+
+            ASM   palettes.s
+            KND   #$1100
+            SNA   PALDATA

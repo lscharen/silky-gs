@@ -103,8 +103,9 @@ gridStartUp
 ; ---------------------------------------------------------------------------
 ; gridBuildTable
 ; ---------------------------------------------------------------------------
-; For every cell, compute the SHR address and the code field location (bank + address) of the
-; nametable tile that is displayed in the cell at the current scroll position.  DBR = K.
+; For every cell, compute the SHR address and the code field location (the erase routine set of its
+; bank + address) of the nametable tile that is displayed in the cell at the current scroll position.
+; DBR = K.
             mx    %00
 gridBuildTable
             lda   StartX
@@ -203,13 +204,16 @@ gridBuildTable
             ldal  PPU_MEM+TILE_ADDR_LO,x
             rep   #$20
             sta   gbPea
+            ldy   #0                                    ; The erase routine set of the tile's bank
             sep   #$20
             ldal  PPU_MEM+TILE_BANK,x
-            xba
-            ldal  PPU_MEM+TILE_BANK,x
+            cmp   #^lite_base_2
             rep   #$20
+            bne   *+5
+            ldy   #32
             plx
-            stal  PPU_MEM+GRID_CELL_BANK,x              ; Bank in both bytes for pha / plb / plb
+            tya
+            stal  PPU_MEM+GRID_CELL_EQ,x
             lda   gbPea
             stal  PPU_MEM+GRID_CELL_PEA,x
 
@@ -430,6 +434,6 @@ gmtOverflow     dw    0
 gmtNib          dw    0
 gmtList         ds    GRID_MAX_METATILES*4    ; (CIRAM address of the top-left tile, nibble of tiles) pairs
 
-; cellScr / cellPea / cellBank live in the PPU_MEM bank (GRID_CELL_* in Defs.s) to save space here
+; cellScr / cellPea / cellEq live in the PPU_MEM bank (GRID_CELL_* in Defs.s) to save space here
 
             FIN

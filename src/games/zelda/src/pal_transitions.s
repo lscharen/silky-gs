@@ -6,7 +6,7 @@
 ; background groups that keep the same slots across the transitions don't need their tiles
 ; redrawn (a group whose slots change has to be recompiled with the new swizzle table).
 ;
-; Requires: NES_ColorToIIgs_X, NES_SetPaletteMap, RefreshPPUAttributes, PPU_MEM, SHR_PALETTES
+; Requires: NES_ColorToIIgs_X, NES_SetPaletteMap, RefreshPPUAttributesL, PPU_MEM, SHR_PALETTES
 
 ; Swizzle tables, in the PALDATA segment (palettes.s)
 PAL_TITLE_SCREEN_SWIZZLE EXT
@@ -24,27 +24,7 @@ PAL_DUNGEON7_SWIZZLE EXT
 PAL_DUNGEON8_SWIZZLE EXT
 PAL_DUNGEON9_SWIZZLE EXT
 
-; Palette ids, word-aligned so they index the tables below directly.  0 = no palette.
-PAL_TITLE_SCREEN equ 2
-PAL_INTRO equ 4
-PAL_SELECT_SCREEN equ 6
-PAL_OVERWORLD equ 8
-PAL_CAVE equ 10
-PAL_DUNGEON1 equ 12
-PAL_DUNGEON2 equ 14
-PAL_DUNGEON3 equ 16
-PAL_DUNGEON4 equ 18
-PAL_DUNGEON5 equ 20
-PAL_DUNGEON6 equ 22
-PAL_DUNGEON7 equ 24
-PAL_DUNGEON8 equ 26
-PAL_DUNGEON9 equ 28
-
-; Slots of the cells pinned by [fixed] sections (the same in every palette that pins them)
-PAL_SLOT_SP0_1 equ 10
-PAL_SLOT_SP1_1 equ 11
-PAL_SLOT_SP1_2 equ 12
-PAL_SLOT_SP0_3 equ 13
+; The palette ids (PAL_*) and pinned slots (PAL_SLOT_*) are in pal_defs.s.
 
 ; Layouts (NES color -> [slots] per group; *reserved, ~shown as):
 ;   title_screen
@@ -196,7 +176,8 @@ UpdatePalette
 
             jsr   LoadPaletteColors
             pla
-            jmp   RefreshPPUAttributes
+            jsl   RefreshPPUAttributesL   ; (in the engine bank: ppu_entry.s)
+            rts
 
 ; LoadPaletteColors
 ;

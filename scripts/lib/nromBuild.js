@@ -24,6 +24,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { convertRomTile2 } = require('./nesTileConvert.js');
 const { compactFile } = require('../omf-compact.js');
+const { checkXBank, report: reportXBank } = require('../check-xbank.js');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const PACKAGE_JSON = require(path.join(PROJECT_ROOT, 'package.json'));
@@ -136,16 +137,48 @@ function run(cmd, args) {
   execFileSync(cmd, args, { stdio: 'inherit', cwd: PROJECT_ROOT });
 }
 
+const ENGINE_SOURCE = path.join(PROJECT_ROOT, 'src', 'Engine.s');
+const STAGE_DIR = path.join(PROJECT_ROOT, 'src', 'game');
+
 /**
- * Assemble a game: expand the mput blocks in Main.s and assemble the Merlin32
- * link file.  Shared by every game, NROM or not.
- *
- *   gameDir    - the directory that holds Main.s and the link file
- *   linkFile   - Merlin32 link file, relative to gameDir (e.g. 'Master.s')
+ * Copy the game's files the shared engine segment (src/Engine.s) puts into src/game/: Merlin32 finds a
+ * put file only relative to the source that puts it.  Config.s and Hooks.s are required; pal_defs.s
+ * (the generated palette ids) is staged empty when the game has none; Extra.s is the given extra
+ * files (e.g. the bench's sprites.s), joined, or empty.  src/game/ is build scratch (gitignored), so
+ * only one game can be assembled at a time.
  */
-function assembleGame(gameDir, linkFile) {
+function stageEngineFiles(gameDir, engineExtra) {
+  fs.mkdirSync(STAGE_DIR, { recursive: true });
+  for (const f of ['Config.s', 'Hooks.s']) {
+    const src = path.join(gameDir, f);
+    if (!fs.existsSync(src)) throw new Error(`${src}: missing (the engine segment puts it)`);
+    fs.copyFileSync(src, path.join(STAGE_DIR, f));
+  }
+  const palDefs = path.join(gameDir, 'pal_defs.s');
+  fs.writeFileSync(path.join(STAGE_DIR, 'pal_defs.s'), fs.existsSync(palDefs) ? fs.readFileSync(palDefs) : '; (no generated palettes)\n');
+  const extra = engineExtra.map((f) => fs.readFileSync(path.join(gameDir, f), 'utf8')).join('\n');
+  fs.writeFileSync(path.join(STAGE_DIR, 'Extra.s'), extra || '; (nothing extra)\n');
+}
+
+/**
+ * Assemble a game: stage its engine-side files for src/Engine.s (stageEngineFiles), expand the mput
+ * blocks in Main.s and src/Engine.s and assemble the Merlin32 link file, then check the engine
+ * segments for 16-bit references into another bank (scripts/check-xbank.js; any is an error).
+ * Shared by every game, NROM or not.
+ *
+ *   gameDir     - the directory that holds Main.s and the link file
+ *   linkFile    - Merlin32 link file, relative to gameDir (e.g. 'Master.s')
+ *   engineExtra - more files of the game's for the engine segment (staged as game/Extra.s)
+ */
+function assembleGame(gameDir, linkFile, { engineExtra = [] } = {}) {
+  stageEngineFiles(gameDir, engineExtra);
   run(process.execPath, [path.join(PROJECT_ROOT, 'scripts', 'gen-includes.js'), path.join(gameDir, 'Main.s')]);
+  run(process.execPath, [path.join(PROJECT_ROOT, 'scripts', 'gen-includes.js'), ENGINE_SOURCE]);
   run(PACKAGE_JSON.config.merlin32, ['-V', PACKAGE_JSON.config.macros, path.join(gameDir, linkFile)]);
+
+  const xbank = checkXBank(gameDir, linkFile);
+  reportXBank(xbank, linkFile);
+  if (xbank.errors.length) throw new Error(`${linkFile}: ${xbank.errors.length} 16-bit reference(s) into another bank`);
 }
 
 /**
@@ -172,10 +205,11 @@ function compactGame(gameDir, linkFile, bankSegments) {
  *
  *   gameDir    - the game's directory (holds PPU.s, Main.s, TileData.s)
  *   linkFile   - Merlin32 link file, relative to gameDir (e.g. 'Master.s')
+ *   options    - passed to assembleGame ({ engineExtra })
  */
-function buildNromGame(gameDir, linkFile) {
+function buildNromGame(gameDir, linkFile, options) {
   generateTileData(gameDir);
-  assembleGame(gameDir, linkFile);
+  assembleGame(gameDir, linkFile, options);
   compactGame(gameDir, linkFile, ['PPURAM', 'CHRDATA']);
 }
 

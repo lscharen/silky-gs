@@ -39,6 +39,10 @@ lite_bank_entry_1  ENT
                    plb
                    jmp   lite_base_1+_ENTRY_OFFSET
 
+; The joystick probe results (JOY_DATA, core/blitter/JoyProbes.s), at the same offset in both banks
+                   ds    JOY_DATA-*,$00
+                   ds    2*JOY_SLOT_SIZE,$00
+
                    ds    \,$00                      ; pad so that the PEA code is aligned on the page boundary
 
 ; lite_base_1 is the P0 base address of row 0.  Rows are _LINE_SPAN bytes apart.
