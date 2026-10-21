@@ -10,6 +10,7 @@ REM
 REM Each game goes into a folder of its own, named after the application (e.g. /ClassicsGS/ZeldaGS/ZeldaGS).
 REM The games keep their .prefs, .sav and .wram files next to the application (the 1/ prefix), so
 REM they stay in that folder, along with anything else that belongs to one game (e.g. a README).
+REM README.TXT (dist\README.TXT: the keys and settings that every game shares) goes at the top level.
 
 set CADIUS="%~1"
 set IMAGE="%~2"
@@ -27,10 +28,19 @@ set GAMES=.\src\games\smb\SuperMarioGS ^
           .\src\games\zelda\src\ZeldaGS
 
 REM Cadius reports ADDFILE errors but always exits 0, so check the inputs up front
-for %%F in (%GAMES% .\emu\Classics .\emu\Finder.Data) do if not exist "%%~F" (
+for %%F in (%GAMES% .\emu\Classics .\emu\Finder.Data .\dist\README.TXT) do if not exist "%%~F" (
     echo build-image: missing %%~F -- build the games first ^(npm run build:all^)
     exit /b 1
 )
+
+REM The README (keys and settings, the same for every game) goes on the disk as a ProDOS text file:
+REM CR line endings, file type TXT.  scripts\prodos-text.js stages that copy in .\build\dist
+node .\scripts\prodos-text.js .\build\dist .\dist\README.TXT
+if errorlevel 1 (
+    echo build-image: could not stage .\dist\README.TXT
+    exit /b 1
+)
+
 
 REM Keep an existing image that is already at least the 8MB target size (8192KB = 8388608 bytes),
 REM so anything else stored on it (such as the games' preference and save files) survives.
@@ -50,6 +60,7 @@ if %REUSE%==1 (
     for %%F in (
         Icons/Classics
         Finder.Data
+        README.TXT
     ) do %CADIUS% DELETEFILE %IMAGE% %FOLDER%%%F >nul
 ) else (
     if exist %IMAGE% del %IMAGE%
@@ -69,3 +80,4 @@ for %%G in (%GAMES%) do (
 %CADIUS% CREATEFOLDER %IMAGE% %FOLDER%Icons
 %CADIUS% ADDFILE %IMAGE% %FOLDER%Icons .\emu\Classics
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\emu\Finder.Data
+%CADIUS% ADDFILE %IMAGE% %FOLDER% .\build\dist\README.TXT
