@@ -69,6 +69,7 @@ SEG_ENGINE  equ   1
 
             put   core/CoreData.s
             put   core/blitter/BlitterLite.s
+            put   core/blitter/JoyProbes.s
             put   core/blitter/PEISlammer.s
             put   core/blitter/HorzLite.s
             put   core/blitter/VertLite.s

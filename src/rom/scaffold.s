@@ -95,6 +95,10 @@ NES_StartUp
 
             jsr   LoadPrefData
             jsr   _FixPrefInputTypes
+            DO    JOYSTICK_SUPPORT
+            jsl   JoyConfigureL           ; The joystick settings; _InitRenderMode hooks the probe rows if used
+            jsr   _InitRenderMode
+            FIN
             DO    CONFIG_VIDEO_FASTBLIT
             lda   config_video_fastmode
             beq   :prefs_done
@@ -270,6 +274,9 @@ NES_EvtLoop
 :config
             jsr   APUStop                                ; Turn off the APU (restarted in Apply Config)
             jsr   NES_StopExecution                       ; Pause emulation nicely
+            DO    JOYSTICK_SUPPORT
+            jsl   JoyScanDisarmL                          ; No joystick scanline interrupts there
+            FIN
             jsr   ShowConfig                              ; Let the user reconfigure
             jsr   ApplyConfig                             ; Apply to the running configuration
             lda   #DIRTY_BIT_BG0_REFRESH                  ; Force a full page refresh on config exit
@@ -368,6 +375,9 @@ NES_ShutDown
             jsr   NES_StopExecution        ; First stop the VBL task from running NES frames and the 60Hz
                                            ; audio driver while the runtime is taken down
             jsr   J13_ShutDown             ; The ADB interrupt enables, if a J13 row read is in flight
+            DO    JOYSTICK_SUPPORT
+            jsl   JoyScanDisarmL           ; The joystick's scanline interrupts, if armed
+            FIN
             lda   BorderColor              ; Restore the border color
             jsr   _SetBorderColor
 

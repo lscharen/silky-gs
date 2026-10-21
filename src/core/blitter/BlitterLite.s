@@ -13,6 +13,9 @@
                 mx    %00
 
 _BltRangeLite
+                DO    JOYSTICK_SUPPORT
+                jsr   JoyScanDisarm  ; The code field reads the joystick itself (JoyProbes.s): no scanline interrupts
+                FIN
                 sty   tmp0           ; Range check
                 cpx   tmp0
                 bcc   *+3
@@ -190,6 +193,10 @@ _BltRangeLiteBody
 
                 lda   STATE_REG_BLIT
                 stal  STATE_REG
+
+                DO    JOYSTICK_SUPPORT
+                ldy   #0                  ; No joystick probe run started in this range (JoyProbes.s)
+                FIN
 
 blt_entry_lite  jml   lite_base_1         ; Jump into the blitter code $ZZ/YYXX
 

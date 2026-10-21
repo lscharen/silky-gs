@@ -48,6 +48,9 @@ NO_INTERRUPTS     equ 0
 ; Flag to turn off the configuration support
 NO_CONFIG         equ 0
 
+; Read the game-port joystick with probes hooked into the PEA field (core/blitter/JoyProbes.s)
+JOYSTICK_SUPPORT  equ 1
+
 ; Decode the DMC samples listed in DMC_SAMPLE_LIST into DOC RAM at start-up (see apu/apu.s).
 ; 0 = decode each sample when the game plays it.
 CACHE_DMC_SAMPLES equ 0

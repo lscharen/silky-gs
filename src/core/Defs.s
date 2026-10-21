@@ -254,6 +254,40 @@ _O_JMP_OFFSET  equ  $FA                   ; odd exit JMP to the next line (opera
 _LINE_SPAN  equ  512                     ; always 512 bytes between adjacent rows
 _LINES_PER_BANK equ 120
 
+; Joystick probes (core/blitter/JoyProbes.s).  A probe run is a strobe row and up to JOY_SAMPLES probe rows,
+; all between two interrupt windows; each hooked row's exits jump to its probe code in the unused start of
+; its odd page (P1 $00 - $20), which continues with a JMP to the row's original exit target.  The samples
+; are in JOY_DATA of each blitter bank, one JOY_SLOT_SIZE block per run of the bank: VBL_VERT_REG at the
+; strobe, then per probe row VBL_VERT_REG (0 = not sampled) and the timers' bits (7 = X, 6 = Y running).
+_JOY_CODE_OFFSET equ $100                 ; P1+$00: the probe code (relative to the row's P0)
+_JOY_CODE_SIZE   equ $21                  ; P1 $00 - $20
+JOY_DATA         equ $0010                ; Bank offset of the samples (below the first row)
+JOY_SAMPLES      equ 15                   ; Probe rows per run: every row up to the next interrupt window
+JOY_SAMPLES_EVEN equ 7                    ; ... with CTRL_EVEN_RENDER (every other row runs)
+JOY_SLOT_SIZE    equ 1+{2*JOY_SAMPLES}
+JOY_MAX_E        equ 64                   ; Steps (8 ms): a sample this late after the strobe is ignored
+JOY_TOKEN        equ $4A59                ; Y after a strobe row (_BltRangeLiteBody enters with Y = 0)
+JOY_RUN_ROW_0    equ 5                    ; Strobe rows of the two runs in each bank: right after an
+JOY_RUN_ROW_1    equ 53                   ; interrupt window, so a run is never interrupted
+JOY_RUN_ROW_EVEN_0 equ 6                  ; ... with CTRL_EVEN_RENDER (even rows only)
+JOY_RUN_ROW_EVEN_1 equ 54
+
+INPUT_JOYSTICK   equ 4                    ; config_input_p1_type / p2_type: the joystick (_ReadControl)
+JOY_DEFAULT_CENTER equ 10                 ; Steps (1.27 ms), before a calibration
+JOY_DEFAULT_SENS equ 4                    ; Sensitivity 1 - 7: dead zone = 8 - sensitivity steps
+JOY_DIR_LOW      equ 1                    ; An axis' direction: left / up
+JOY_DIR_CENTER   equ 2
+JOY_DIR_HIGH     equ 3                    ; right / down
+
+; Joystick reads from scanline interrupts, for dirty renders (JoyProbes.s): while armed, the SCB of the
+; strobe line and of one line per threshold (2 lines, 127 us, per VBL_VERT_REG step after the strobe line)
+; have the interrupt bit set.
+JOY_SCAN_LINE_0  equ 8                    ; Strobe
+JOY_MAX_THRESHOLD equ 90                  ; Steps (the line stays on the screen: 8 + 2 x 90 < 200)
+SCB_INT_BIT      equ $40                  ; SCB bit 6: scanline interrupt
+VGC_INT_REG      equ $E0C023              ; Bit 1: scanline interrupt enable; bit 5: scanline interrupt pending
+VGC_INT_CLEAR    equ $E0C032              ; Write with bit 5 = 0 to clear the scanline interrupt
+
 ; Opcodes patched into _ALIGN_PATCH (8-bit).  Even lines BRL straight to the first PEA.  Odd lines
 ; LDX the offset of the right edge byte and fall into the code that pushes it.
 BLT_ALIGN_EVEN equ  $82                   ; BRL

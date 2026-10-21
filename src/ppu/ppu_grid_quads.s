@@ -302,6 +302,9 @@ gridMarkSprite16
 ; ---------------------------------------------------------------------------
             mx    %00
 gridDrawDirty
+            DO    JOYSTICK_SUPPORT
+            jsr   JoyScanArm              ; Read the joystick from scanline interrupts (JoyProbes.s)
+            FIN
             jsr   _PEAFieldStable         ; Erased cells are copied from the PEA field
             phb
             phk

@@ -7,6 +7,7 @@ NUMBER_SELECT   equ 5     ; select from a range of single-digit numbers
 BTNMAP          equ 6     ; button mapping for keyboard
 TAB             equ 7     ; tab control
 TEXT            equ 8     ; static lines of text (no value, no cursor)
+ACTION          equ 9     ; runs a routine (the value word) on space; optional extra draw routine
 
 CHKBOX_YES      str 'YES'
 CHKBOX_NO       str ' NO'
@@ -55,6 +56,7 @@ CTRL_NUMBER_MIN  equ CTRL_DATA
 CTRL_NUMBER_MAX  equ CTRL_DATA+2
 
 CTRL_TEXT_LINE_COUNT equ CTRL_DATA
+CTRL_ACTION_DRAW     equ CTRL_DATA       ; drawn after the title (X = control, Y = title address), 0 = none
 CTRL_TEXT_LINES      equ CTRL_DATA+2   ; string address per line (0 = blank line)
 
 ; Units to move text around
@@ -1232,8 +1234,32 @@ _DrawControl
 :not_tab    cmp  #TEXT
             bne  :not_text
             jmp  _DrawText
-:not_text
+:not_text   cmp  #ACTION
+            bne  :not_action
+            jmp  _DrawAction
+:not_action
             rts
+
+; Y = screen addr
+; X = control addr
+;
+; +------------
+; |  <title> <the control's own drawing>
+_DrawAction
+            jsr  _OffsetToAddr
+            phy
+            phx
+            lda: CTRL_TITLE,x
+            tax
+            lda  #TEXT_NORMAL
+            jsr  ConfigDrawString
+            plx
+            ply
+            lda: CTRL_ACTION_DRAW,x
+            beq  :done
+            db   $7C                         ; jmp (CTRL_ACTION_DRAW,x): Merlin32 can't assemble
+            dw   CTRL_ACTION_DRAW            ; jmp (abs,x) for an operand below $100
+:done       rts
 
 ; Switch the value of the active control
 _ToggleActiveControl
@@ -1271,7 +1297,12 @@ _ToggleActiveControl
             bne  :not_tab
             jmp  _ToggleTab
 
-:not_tab
+:not_tab    cmp  #ACTION
+            bne  :not_action
+            db   $7C                         ; jmp (CTRL_VALUE_ADDR,x): the action's routine (X = the
+            dw   CTRL_VALUE_ADDR             ; control); see _DrawAction
+
+:not_action
             rts
 
 ; Loads the active menu address from config_active_menu

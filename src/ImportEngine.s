@@ -14,6 +14,13 @@ ROM_CompileBackgroundTilesL EXT
 SprRequestFlushL        EXT
 SetScreenRectL          EXT
 _ShadowOnL              EXT
+JoyInstallProbesL       EXT
+JoyScanService          EXT
+JoyScanDisarmL          EXT
+JoyConfigureL           EXT
+JoyGetPadL              EXT
+JoyClassifyL            EXT
+joyScanArmed            EXT
 RefreshPPUAttributesL   EXT
 
 ; Data

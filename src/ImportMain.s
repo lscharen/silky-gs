@@ -12,3 +12,9 @@ framesPerSecond         EXT
 DP_NES                  EXT                ; rom/scaffold.s: the NES direct page (custom renderers, scroll locks)   ; rom/scaffold.s: SHOW_DEBUG_VARS
 DrawByteL               EXT   ; misc/App.Msg.s: SHOW_DEBUG_VARS
 DrawWordL               EXT
+config_input_p1_type    EXT   ; rom/rom_config_setup.s: the joystick settings (JoyConfigureL)
+config_input_p2_type    EXT
+config_joy_cx           EXT
+config_joy_cy           EXT
+config_joy_sens         EXT
+config_joy_offset       EXT

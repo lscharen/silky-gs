@@ -57,6 +57,9 @@ ApplyConfig
 :apply_video
             FIN
             jsr   _ClearShadowScreen          ; With shadowing on, so fast blit leaves no stale lines
+            DO    JOYSTICK_SUPPORT
+            jsl   JoyConfigureL               ; Before _InitRenderMode, which hooks the probe rows if used
+            FIN
             jsr   _InitRenderMode
 
             lda   config_audio_quality
@@ -71,10 +74,14 @@ ApplyConfig
 
 ; _FixPrefInputTypes
 ;
-; After LoadPrefData: an input type with no reader in _ReadControl becomes KEYBOARD.  The type 4 of the
-; KEYBOARD 2 builds becomes KEYBOARD with the J13 keyboard driver, which replaced it.
+; After LoadPrefData: an input type with no reader in _ReadControl becomes KEYBOARD, and an older file's
+; joystick sensitivity (0) the default.
             mx    %00
 _FixPrefInputTypes
+            lda   config_joy_sens
+            bne   *+8
+            lda   #JOY_DEFAULT_SENS
+            sta   config_joy_sens
             ldx   #config_input_p1_type
             jsr   :fix
             ldx   #config_input_p2_type
@@ -82,11 +89,11 @@ _FixPrefInputTypes
             beq   :ok                         ; KEYBOARD
             cmp   #2
             beq   :ok                         ; SNES MAX
-            cmp   #4
-            bne   :reset
-            lda   #KBD_DRIVER_J13
-            sta   config_kbd_driver
-:reset      stz:  0,x
+            DO    JOYSTICK_SUPPORT
+            cmp   #INPUT_JOYSTICK
+            beq   :ok
+            FIN
+            stz:  0,x
 :ok         rts
 
 ; Configuration screen and variables
@@ -107,7 +114,8 @@ config_video_fastmode  ds  2  ; use the "skip line" rendering mode
 
 ; player 1 config block (layout is fixed by the PLAYER_INPUT_* offsets in core/CoreImpl.s)
 config_block_p1
-config_input_p1_type   dw  0  ; keyboard / snes max
+config_input_p1_type   ENT
+                       dw  0  ; 0 = keyboard, 2 = snes max, INPUT_JOYSTICK = joystick
 config_input_key_left  dw  LEFT_ARROW
 config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
@@ -118,7 +126,8 @@ config_input_button_b  dw  MOD_REG_OPTION_DOWN
 
 ; player 2 config block
 config_block_p2
-config_input_p2_type      dw  0
+config_input_p2_type      ENT
+                          dw  0
 config_input_p2_key_left  dw  'j'
 config_input_p2_key_right dw  'l'
 config_input_p2_key_up    dw  'i'
@@ -131,11 +140,19 @@ config_input_p2_button_b  dw  MOD_REG_SHIFT_DOWN
 config_video_fps       dw  0  ; show the renders per second at the top-left of the screen (DrawFPS)
 config_video_nescpu    dw  0  ; border = the task that owns the CPU, a raster bar of game logic time (saveCtx)
 config_kbd_driver      dw  KBD_DRIVER_BASIC  ; keyboard driver of the KEYBOARD input type (rom/rom_kbd_j13.s)
+config_joy_cx          ENT                ; The joystick's calibrated center, X (VBL_VERT_REG steps x 16;
+                       dw  0              ; 0 = not calibrated)
+config_joy_cy          ENT                ; ... Y
+                       dw  0
+config_joy_sens        ENT                ; Its sensitivity, 1 - 7 (dead zone = 8 - it steps; an older
+                       dw  JOY_DEFAULT_SENS  ; file's 0 is made the default by _FixPrefInputTypes)
+config_joy_offset      ENT                ; Its offset, 0 - 7: the dead zone moves this many steps earlier
+                       dw  0
 
 ; Room for new built-in values.  Add them here (taking from the reserve), so the size of the block, and
 ; with it the preferences file, stays the same and older files keep loading (misc/io.s checks the size).
 ; A new value must default to 0, since an older file has 0 in its place.
-config_reserved        ds  124
+config_reserved        ds  116
 config_block_end
 
 ; The game's own values (CONFIG_GAME_DEFAULTS, the game's Main.s), in a block of a fixed size, saved and
@@ -339,8 +356,8 @@ INPUT_CONFIG dw   INPUT_TITLE_STR
 ; Vertical layout of the input controls.  The P1/P2 tabs push everything down.
              DO   CONFIG_INPUT_2P
 INPUT_TYPE_Y   equ 5
-INPUT_LIST_Y   equ 10
-INPUT_BUTTON_Y equ 15
+INPUT_LIST_Y   equ 10+JOYSTICK_SUPPORT          ; (the JOYSTICK option is a third line)
+INPUT_BUTTON_Y equ 15+JOYSTICK_SUPPORT
              ELSE
 INPUT_TYPE_Y   equ 2
 INPUT_LIST_Y   equ 8
@@ -380,11 +397,17 @@ INPUT_ITEM_1 dw   RADIO
              dw   3,INPUT_TYPE_Y
              dw   INPUT_TYPE_STR
              dw   config_input_p1_type
-             dw   2
+             dw   2+JOYSTICK_SUPPORT
 
              dw   0
              dw   INPUT_TYPE_OPT_1
              dw   KEYBOARD_LIST
+
+             DO   JOYSTICK_SUPPORT
+             dw   INPUT_JOYSTICK
+             dw   INPUT_TYPE_OPT_2
+             dw   JOYSTICK_LIST
+             FIN
 
              dw   2
              dw   INPUT_TYPE_OPT_3
@@ -467,11 +490,17 @@ INPUT_ITEM_P2 dw  RADIO
              dw   3,INPUT_TYPE_Y
              dw   INPUT_TYPE_STR
              dw   config_input_p2_type
-             dw   2
+             dw   2+JOYSTICK_SUPPORT
 
              dw   0
              dw   INPUT_TYPE_OPT_1
              dw   KEYBOARD_LIST_2
+
+             DO   JOYSTICK_SUPPORT
+             dw   INPUT_JOYSTICK
+             dw   INPUT_TYPE_OPT_2
+             dw   JOYSTICK_LIST_2
+             FIN
 
              dw   2
              dw   INPUT_TYPE_OPT_3
@@ -575,6 +604,419 @@ DRIVERS_ITEM_1 dw RADIO
              dw   KBD_DRIVER_J13
              dw   DRIVERS_KBD_J13
              dw   0
+
+
+; The joystick (INPUT_JOYSTICK)
+;
+; Its settings: the calibrated center of each axis (config_joy_cx / cy), the sensitivity (the dead zone
+; around the center) and the offset (moves the dead zone earlier: where the probe rows run fast, as on
+; GSPlus, they reach less far, and a smaller, earlier window can still be reached).  JoyConfigureL (core/blitter/JoyProbes.s) turns them into thresholds.  The
+; configuration screen measures the timers itself, by busy reads (JoyMeasure): spinning is fine there.
+             DO   JOYSTICK_SUPPORT
+
+JOYSTICK_LIST dw  CTRL_LIST
+              dw  4
+              dw  JOY_ITEM_CAL
+              dw  JOY_ITEM_SENS
+              dw  JOY_ITEM_OFFS
+              dw  JOY_ITEM_TEST
+
+JOY_ITEM_CAL dw ACTION
+             dw   INPUT_ITEM_1
+             dw   JOY_ITEM_SENS
+             dw   3,INPUT_LIST_Y
+             dw   JOY_CAL_STR
+             dw   JoyCalibrate          ; The action
+             dw   JoyDrawCenter         ; Drawn after the title
+
+JOY_ITEM_SENS dw NUMBER_SELECT
+             dw   JOY_ITEM_CAL
+             dw   JOY_ITEM_OFFS
+             dw   3,INPUT_LIST_Y+1
+             dw   JOY_SENS_STR
+             dw   config_joy_sens
+             dw   1                     ; minimum value
+             dw   7                     ; maximum value
+
+JOY_ITEM_OFFS dw NUMBER_SELECT
+             dw   JOY_ITEM_SENS
+             dw   JOY_ITEM_TEST
+             dw   3,INPUT_LIST_Y+2
+             dw   JOY_OFFS_STR
+             dw   config_joy_offset
+             dw   0
+             dw   7
+
+JOY_ITEM_TEST dw ACTION
+             dw   JOY_ITEM_OFFS
+             dw   0
+             dw   3,INPUT_LIST_Y+3
+             dw   JOY_TEST_STR
+             dw   JoyTest
+             dw   0
+
+             DO   CONFIG_INPUT_2P
+JOYSTICK_LIST_2 dw CTRL_LIST
+              dw  4
+              dw  JOY_ITEM_CAL_2
+              dw  JOY_ITEM_SENS_2
+              dw  JOY_ITEM_OFFS_2
+              dw  JOY_ITEM_TEST_2
+
+JOY_ITEM_CAL_2 dw ACTION
+             dw   INPUT_ITEM_P2
+             dw   JOY_ITEM_SENS_2
+             dw   3,INPUT_LIST_Y
+             dw   JOY_CAL_STR
+             dw   JoyCalibrate          ; The action
+             dw   JoyDrawCenter         ; Drawn after the title
+
+JOY_ITEM_SENS_2 dw NUMBER_SELECT
+             dw   JOY_ITEM_CAL_2
+             dw   JOY_ITEM_OFFS_2
+             dw   3,INPUT_LIST_Y+1
+             dw   JOY_SENS_STR
+             dw   config_joy_sens
+             dw   1                     ; minimum value
+             dw   7                     ; maximum value
+
+JOY_ITEM_OFFS_2 dw NUMBER_SELECT
+             dw   JOY_ITEM_SENS_2
+             dw   JOY_ITEM_TEST_2
+             dw   3,INPUT_LIST_Y+2
+             dw   JOY_OFFS_STR
+             dw   config_joy_offset
+             dw   0
+             dw   7
+
+JOY_ITEM_TEST_2 dw ACTION
+             dw   JOY_ITEM_OFFS_2
+             dw   0
+             dw   3,INPUT_LIST_Y+3
+             dw   JOY_TEST_STR
+             dw   JoyTest
+             dw   0
+             FIN
+
+JOY_CAL_STR     str 'CALIBRATE'
+JOY_SENS_STR    str 'SENSITIVITY'
+JOY_OFFS_STR    str 'OFFSET'
+JOY_TEST_STR    str 'TEST'
+JOY_CENTER_STR  str 'CENTER THE STICK'
+JOY_PRESS_STR   str 'THEN PRESS A KEY'
+JOY_NONE_STR    str 'NO JOYSTICK'
+JOY_STOP_STR    str 'ANY KEY STOPS'
+JOY_X_STR       str 'X'
+JOY_Y_STR       str 'Y'
+JOY_LEFT_STR    str 'LEFT'
+JOY_RIGHT_STR   str 'RIGHT'
+JOY_UP_STR      str 'UP'
+JOY_DOWN_STR    str 'DOWN'
+JOY_MID_STR     str 'CENTER'
+
+; Two status rows under the joystick's controls (the panel is redrawn after an action, which clears them)
+JOY_STATUS_0 equ  CONFIG_PANEL_ORIGIN+{{INPUT_LIST_Y+5}*ROW_STEP}+{3*COL_STEP}
+JOY_STATUS_1 equ  JOY_STATUS_0+ROW_STEP
+JOY_MEASURE_MAX equ 64                  ; Steps (8 ms) before a timer counts as never done
+
+joyCalN     dw    0
+joyCalSumX  dw    0
+joyCalSumY  dw    0
+joyMeasT0   dw    0
+joyMeasE    dw    0
+joyMeasX    dw    0
+joyMeasY    dw    0
+joyTestPad  dw    0
+joyTestLast dw    0
+joyTestLastPad dw 0
+
+; CALIBRATE: measure the center of each axis (16 busy reads, averaged) and apply it
+            mx    %00
+JoyCalibrate
+            jsr   JoyClearStatus
+            ldx   #JOY_CENTER_STR
+            ldy   #JOY_STATUS_0
+            lda   #TEXT_NORMAL
+            jsr   ConfigDrawString
+            ldx   #JOY_PRESS_STR
+            ldy   #JOY_STATUS_1
+            lda   #TEXT_NORMAL
+            jsr   ConfigDrawString
+            jsr   _WaitForKeyUp
+
+            stz   joyCalSumX
+            stz   joyCalSumY
+            lda   #16
+            sta   joyCalN
+:loop       jsr   JoyMeasure
+            bcs   :none
+            txa
+            clc
+            adc   joyCalSumX
+            sta   joyCalSumX
+            tya
+            clc
+            adc   joyCalSumY
+            sta   joyCalSumY
+            dec   joyCalN
+            bne   :loop
+
+            lda   joyCalSumX                ; Steps x 16.  A timer is seen done up to a step after it
+            sec                             ; is (JoyMeasure), half a step later on average
+            sbc   #8
+            sta   config_joy_cx
+            lda   joyCalSumY
+            sec
+            sbc   #8
+            sta   config_joy_cy
+            jsl   JoyConfigureL
+            rts
+
+:none       jsr   JoyClearStatus
+            ldx   #JOY_NONE_STR
+            ldy   #JOY_STATUS_0
+            lda   #TEXT_NORMAL
+            jsr   ConfigDrawString
+            ldx   #JOY_PRESS_STR
+            ldy   #JOY_STATUS_1
+            lda   #TEXT_NORMAL
+            jsr   ConfigDrawString
+            jmp   _WaitForKeyUp
+
+; Drawn after CALIBRATE's title (Y = its address): each axis' center, in steps (hex)
+JoyDrawCenter
+            tya
+            clc
+            adc   #11*COL_STEP
+            pha
+            lda   config_joy_cx
+            jsr   :steps
+            tax
+            ply
+            phy
+            lda   #TEXT_NORMAL
+            jsr   ConfigDrawByte
+            pla
+            clc
+            adc   #3*COL_STEP
+            tay
+            lda   config_joy_cy
+            jsr   :steps
+            tax
+            lda   #TEXT_NORMAL
+            jmp   ConfigDrawByte
+
+:steps      bne   *+5
+            lda   #JOY_DEFAULT_CENTER*16
+            clc
+            adc   #8
+            lsr
+            lsr
+            lsr
+            lsr
+            rts
+
+; TEST: show each axis' timer (steps, hex) and direction, live, until a key is pressed.  Redrawn only
+; when they change (a redraw blanks the fields first, which would flicker).
+JoyTest
+            jsl   JoyConfigureL             ; The current sensitivity
+            jsr   JoyClearStatus
+            lda   #$FFFF
+            sta   joyTestLast               ; Draw the first reading
+            sta   joyTestLastPad
+:loop       jsr   JoyMeasure
+            phy
+            phx
+            jsl   JoyClassifyL
+            sta   joyTestPad
+            lda   1,s                       ; X and Y's times, in one word
+            xba
+            ora   3,s
+            cmp   joyTestLast
+            bne   :draw
+            lda   joyTestPad
+            cmp   joyTestLastPad
+            bne   :draw
+            plx
+            ply
+            bra   :next
+:draw       lda   1,s
+            xba
+            ora   3,s
+            sta   joyTestLast
+            lda   joyTestPad
+            sta   joyTestLastPad
+
+            ldx   #JOY_X_STR
+            ldy   #JOY_STATUS_0
+            lda   #TEXT_NORMAL
+            jsr   ConfigDrawString
+            plx
+            ldy   #JOY_STATUS_0+{2*COL_STEP}
+            lda   #TEXT_NORMAL
+            jsr   ConfigDrawByte
+            ldy   #JOY_STATUS_0+{5*COL_STEP}
+            ldx   #JOY_MID_STR
+            lda   joyTestPad
+            bit   #PAD_LEFT
+            beq   *+5
+            ldx   #JOY_LEFT_STR
+            bit   #PAD_RIGHT
+            beq   *+5
+            ldx   #JOY_RIGHT_STR
+            jsr   JoyDrawField
+
+            ldx   #JOY_Y_STR
+            ldy   #JOY_STATUS_1
+            lda   #TEXT_NORMAL
+            jsr   ConfigDrawString
+            plx
+            ldy   #JOY_STATUS_1+{2*COL_STEP}
+            lda   #TEXT_NORMAL
+            jsr   ConfigDrawByte
+            ldy   #JOY_STATUS_1+{5*COL_STEP}
+            ldx   #JOY_MID_STR
+            lda   joyTestPad
+            bit   #PAD_UP
+            beq   *+5
+            ldx   #JOY_UP_STR
+            bit   #PAD_DOWN
+            beq   *+5
+            ldx   #JOY_DOWN_STR
+            jsr   JoyDrawField
+
+:next       jsr   _ReadRawKeypress
+            bit   #PAD_KEY_DOWN
+            bne   *+5
+            brl   :loop
+            rts
+
+; X = string, Y = address: draw the string, then blank the rest of a 6-character field (a tile overwrites
+; whatever was under it, so nothing is blanked first: no flicker)
+JoyDrawField
+            phx
+            phy
+            lda   #TEXT_NORMAL
+            jsr   ConfigDrawString
+            ply
+            plx
+            lda:  0,x                       ; The string's length
+            and   #$00FF
+            sta   joyCalN
+            asl
+            asl                             ; x COL_STEP
+            sty   joyMeasE
+            clc
+            adc   joyMeasE
+            tay
+:blank      lda   joyCalN
+            cmp   #6
+            bcs   :done
+            phy
+            lda   #TILE_SPACE
+            ldx   #TEXT_NORMAL
+            jsr   _blitTileNoMask
+            pla
+            clc
+            adc   #COL_STEP
+            tay
+            inc   joyCalN
+            bra   :blank
+:done       rts
+
+; Clear the two status rows (from their first column to the panel's border)
+JOY_STATUS_WORDS equ {CONFIG_PANEL_INTERIOR_WIDTH-{2*COL_STEP}}/2
+JoyClearStatus
+            ldx   #JOY_STATUS_0
+            jsr   :row
+            ldx   #JOY_STATUS_1
+:row        lda   #8                        ; Lines
+            sta   joyCalN
+:line       phx
+            ldy   #JOY_STATUS_WORDS
+            lda   #0
+:word       stal  $010000,x                 ; (the shadow screen, and with it the display)
+            stal  $E10000,x
+            inx
+            inx
+            dey
+            bne   :word
+            pla
+            clc
+            adc   #160
+            tax
+            dec   joyCalN
+            bne   :line
+            rts
+
+; JoyMeasure
+;
+; Trigger the paddle timers and spin until both are done, with interrupts off.  Returns X / Y = the time
+; (VBL_VERT_REG steps) at which each was first seen done ($FF = not within JOY_MEASURE_MAX), carry set if
+; either was not (no joystick).  16-bit registers, DBR = this bank.
+JoyMeasure
+            php
+            sei
+            sep   #$20
+            mx    %10
+            ldx   #0                        ; Wait (a while) for a timer still running
+:idle       ldal  $E0C064
+            oral  $E0C065
+            bpl   :go
+            dex
+            bne   :idle
+            bra   :timeout
+:go         ldal  $E0C070
+            ldal  VBL_VERT_REG
+            sta   joyMeasT0
+            lda   #$FF
+            sta   joyMeasX
+            sta   joyMeasY
+:poll       ldal  VBL_VERT_REG
+            sec
+            sbc   joyMeasT0
+            bcs   *+4
+            adc   #131                      ; The counter wrapped (carry clear: adds 131)
+            sta   joyMeasE
+            cmp   #JOY_MEASURE_MAX
+            bcs   :timeout
+            ldal  $E0C064
+            bmi   :x_run
+            lda   joyMeasX
+            cmp   #$FF
+            bne   :x_run
+            lda   joyMeasE
+            sta   joyMeasX
+:x_run      ldal  $E0C065
+            bmi   :y_run
+            lda   joyMeasY
+            cmp   #$FF
+            bne   :y_run
+            lda   joyMeasE
+            sta   joyMeasY
+:y_run      lda   joyMeasX                  ; Until both are done
+            cmp   #$FF
+            beq   :poll
+            lda   joyMeasY
+            cmp   #$FF
+            beq   :poll
+            rep   #$20
+            mx    %00
+            ldx   joyMeasX
+            ldy   joyMeasY
+            plp
+            clc
+            rts
+
+            mx    %10
+:timeout    rep   #$20
+            mx    %00
+            ldx   joyMeasX
+            ldy   joyMeasY
+            plp
+            sec
+            rts
+             FIN
 
 ; Credits.  The panel is cleared down to row 18, so the text must end there.
 CREDITS_CONFIG dw CREDITS_TITLE_STR

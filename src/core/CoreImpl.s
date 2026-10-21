@@ -282,6 +282,10 @@ _InitLiteBlitter
                   tax
                   cpx       #{116*_LINE_SPAN}
                   bcc       :int_loop
+
+                  DO        JOYSTICK_SUPPORT
+                  jsl       JoyInstallProbesL    ; Hook the joystick probe rows into the exits set above
+                  FIN
                   rts
 
 ; Set the next-line target of both exits of the line at offset X in both banks
@@ -336,7 +340,13 @@ _ReadControl
                   rts
 
 :input_proc1      dw        _ReadKeyboard1,_ReadSNESMAX1
+                  DO        JOYSTICK_SUPPORT
+                  dw        _ReadJoystick1      ; INPUT_JOYSTICK
+                  FIN
 :input_proc2      dw        _ReadKeyboard2,_ReadSNESMAX2
+                  DO        JOYSTICK_SUPPORT
+                  dw        _ReadJoystick2
+                  FIN
 
 ; Reset the keypress state to clear the current keypress and set up to wait until the next key
 ; is pressed to regiter
@@ -451,6 +461,32 @@ _ReadKeyboardJ13  phx
                   ora       1,s
                   plx
                   rts
+
+; The joystick (INPUT_JOYSTICK): its directions (JoyGetPadL, core/blitter/JoyProbes.s) and buttons 0 / 1
+; ($C061 / $C062: A / B), on top of the player's keyboard map (Start, Select, and the keys still work)
+                  DO        JOYSTICK_SUPPORT
+_ReadJoystick1    jsr       _ReadKeyboard1
+                  bra       _ReadJoystick
+_ReadJoystick2    jsr       _ReadKeyboard2
+_ReadJoystick     pha
+                  jsl       JoyGetPadL
+                  ora       1,s
+                  sta       1,s
+                  sep       #$20
+                  ldal      $E0C061             ; Button 0
+                  bpl       :no_a
+                  lda       #>PAD_BUTTON_A
+                  ora       2,s
+                  sta       2,s
+:no_a             ldal      $E0C062             ; Button 1
+                  bpl       :no_b
+                  lda       #>PAD_BUTTON_B
+                  ora       2,s
+                  sta       2,s
+:no_b             rep       #$20
+                  pla
+                  rts
+                  FIN
 
 ; Called with the X-register set to the configuration block
 _ReadKeyboard     pha                           ; low byte = key code, high byte = %ABsSUDLR  S = Start, s = select
