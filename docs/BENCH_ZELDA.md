@@ -201,7 +201,8 @@ Both steps drew the same pictures (7/7 `--shots` hashes) and ended in the same g
 | 1 + 2 + 3: 8x8 patterns, 6-byte records | 236,909,279 | -3.03% |
 | 1 - 4: erase with DBR = $01 | 234,612,321 | -3.97% |
 | 1 - 5: sprite palette set by the bitmap draws only | 234,019,244 | -4.21% |
-| 1 - 6: OAM copy with 8-bit index registers | **233,566,964** | **-4.40%** |
+| 1 - 6: OAM copy with 8-bit index registers | 233,566,964 | -4.40% |
+| 1 - 7: 8x16 fast path (both halves compiled, chained through a trampoline) | **231,172,350** | **-5.38%** |
 
 The route averages about 13 8x16 sprites and 40 erased cells per dirty frame (`--gridstats`).
 
@@ -218,3 +219,12 @@ The route averages about 13 8x16 sprites and 40 erased cells per dirty frame (`-
 6. `scanOAMSprites` pass 2 (interrupts off) runs with 8-bit index registers: `plx` pulls the pushed index byte
    straight into X, instead of `sep / pla / rep / and / tax`.  About 11 cycles less per sprite:
    234,019,244 -> 233,566,964 (-0.19%), 7/7 screen hashes and the end state identical.
+7. 8x16 fast path (`:drawSprite16`): when both halves are compiled, it looks up the top half and the bottom half
+   (key ^ 4: the two tiles of a pair), pushes `sprTramp-1` and jumps to the top half.  The top half's
+   `draw_rtn2` RTS lands on `sprTramp` (`tya / clc / adc #8*160 / tay / jml bottom`), and the bottom half's RTS
+   returns to the loop.  The compiled sprites are unchanged.  The key includes the pattern table (`eor #$1004`,
+   with `sprCompTbl` = `SPR_COMP_TBL` for the whole 8x16 loop), and the horizontal flip stays in the carry
+   through both lookups.  Clipped, priority, missing and (on an odd pixel) not-yet-shifted halves take the old
+   two-half path, which sets `sprCompTbl` with `SPR16_TABLE` and puts it back.  A first version that kept the
+   old prelude saved only 0.88M.  233,566,964 -> 231,172,350 (-1.03%), 7/7 screen hashes and the end state
+   identical.

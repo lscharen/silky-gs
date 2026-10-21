@@ -265,6 +265,8 @@ drawSprites
         FIN
 
 :is_8x16
+        lda   #SPR_COMP_TBL            ; The fast path's keys include the pattern table (:drawSprite16)
+        sta   sprCompTbl
         plb
 
 :oam_loop_8x16
@@ -305,6 +307,8 @@ drawSprites
         jsr   gridMarkSprite16     ; Mark the cells that this sprite covers (nothing is saved)
         FIN
         jsr   :drawSprite16c
+        lda   #SPR_COMP_TBL            ; (SPR16_TABLE moved it)
+        sta   sprCompTbl
         bra   :next16
 :hide16
         DO    ENABLE_DIRTY_RENDERING
@@ -321,8 +325,76 @@ drawSprites
 ; Unlike 8x8 mode, the NES ignores PPUCTRL/spadr for 8x16 sprites: bit 0 of the OAM
 ; tile ID selects the pattern table, and bits 7-1 select the tile pair within it
 ; (top tile = tile_id & $FE, bottom tile = top tile + 1, both from the same table).
+;
+; Fast path: when both halves are compiled (and not clipped or behind the background), the top half is
+; called with draw_rtn2's RTS returning to sprTramp, which moves Y (the SHR address: compiled sprites
+; leave it alone) down 8 lines and jumps to the bottom half, whose own return goes back to the loop.
+; The keys include the pattern table (sprCompTbl = SPR_COMP_TBL in the 8x16 loop), and the halves are
+; the two tiles of a pair, so their keys differ only in bit 2 (tile bit 0).  On an odd pixel, a half
+; whose shifted pair is not compiled yet (page bit 0: its stub calls SprQueueShift, which takes the key
+; from sprTmp2) takes the slow path, so that the right tile is queued.
         mx    %00
 :drawSprite16
+        ldal  OAM_COPY+1,x             ; {attribute, tile_id}
+        ldy   sprTmp4                  ; Clipped on the right, or behind the background: the slow path
+        bne   :spr16_slow
+        bit   #$2000
+        bne   :spr16_slow
+        and   #$C3FF                   ; The key, as in :blitResolvedSprite
+        asl                            ; carry = vertical flip
+        adc   #0
+        asl                            ; carry = horizontal flip (kept to the second lookup: nothing
+        bit   #$0004                   ; below changes it).  Bit 2 is the tile ID's bit 0, the pattern
+        beq   *+5                      ; table: move it to bit 12
+        eor   #$1004
+        bit   #$0002                   ; Flipped vertically: the odd tile is on top
+        beq   *+5
+        eor   #$0004
+        tay
+        lda   [sprCompTbl],y           ; Top half
+        beq   :spr16_slow
+        bcc   *+5
+        ora   #SPR_FLIP_PAGE
+        DO    SPR_PIXEL_SHIFT
+        ora   sprShift
+        FIN
+        sta   sprTmp0
+        tya
+        eor   #$0004
+        tay
+        lda   [sprCompTbl],y           ; Bottom half
+        beq   :spr16_slow
+        bcc   *+5
+        ora   #SPR_FLIP_PAGE
+        DO    SPR_PIXEL_SHIFT
+        ora   sprShift
+        FIN
+        stal  sprTrampJ+2              ; (a slow path after this leaves the trampoline unused)
+        DO    SPR_PIXEL_SHIFT
+        ldy   sprShift                 ; Odd pixel: neither half may still be a stub
+        beq   :spr16_go
+        ora   sprTmp0
+        lsr
+        bcs   :spr16_slow
+:spr16_go
+        FIN
+        SPR_STAT SPR_ST_HITS
+        SPR_STAT SPR_ST_HITS
+        pea   sprTramp-1               ; draw_rtn2's RTS after the top half
+        lda   sprTmp0
+        stal  :c16+2
+        ldy   sprTmp1
+:c16    jml   $000000
+
+; Slow path: each half through :blitResolvedSprite, with sprCompTbl set to the tile's half of the table
+; (SPR16_TABLE) and put back afterwards
+:spr16_slow
+        jsr   :spr16_halves
+        lda   #SPR_COMP_TBL
+        sta   sprCompTbl
+        rts
+
+:spr16_halves
         ldal  OAM_COPY+1,x
         sta   sprTmp2                  ; {attribute, tile_id}
         SPR16_TABLE                    ; the pattern table from the tile ID's bit 0
@@ -481,6 +553,16 @@ draw_rtn2                             ; Return from compiled sprite
         plx
         FIN
         rts
+
+; The bottom half of an 8x16 sprite on the fast path (:drawSprite16): entered by draw_rtn2's RTS after the
+; top half, with Y = the top half's SHR address.  The JML is patched with the bottom half's entry.
+sprTramp
+        tya
+        clc
+        adc   #8*160
+        tay
+sprTrampJ
+        jml   $000000
 
 ; Compiled sprite cache miss.  Y = key offset without the pattern table.  Queue the sprite to be compiled
 ; after drawSprites (SprCacheService), unless this render's compile quota is already used up, and draw
