@@ -391,6 +391,32 @@ schedTask
 irqHook
             clc
             xce                           ; C = interrupted E flag; now native (firmware does the same)
+
+; While the joystick's scanline interrupts are armed (JoyScanArm, core/blitter/JoyProbes.s), take
+; them here: JoyScanService clears the interrupt, and the firmware never sees it.  The test keeps
+; C (the interrupted E flag) and V (BRK).
+            DO    JOYSTICK_SUPPORT
+            bvs   :not_scan_v             ; BRK: leave it to the firmware
+            rep   #$30
+            pha
+            ldal  joyScanArmed
+            beq   :not_scan
+            sep   #$20
+            ldal  VGC_INT_REG
+            rep   #$20
+            and   #$0020                  ; Scanline interrupt pending?
+            beq   :not_scan
+            jsl   JoyScanService
+            pla
+            bcs   :scan_emu
+            rti
+:scan_emu   sec                           ; Back to emulation mode for its 3-byte frame
+            xce
+            rti
+:not_scan   pla
+:not_scan_v
+            FIN
+
             bcs   :emu
             bvs   :chain                  ; BRK: leave the frame alone
 
