@@ -95,7 +95,7 @@ NES_StartUp
 
             jsr   LoadPrefData
             jsr   _FixPrefInputTypes
-            jsr   KbdBuildMaps            ; The BASIC keyboard driver's key maps (core/CoreImpl.s)
+            jsr   KbdBuildMaps            ; The BASIC keyboard driver's key maps (rom/rom_kbd_basic.s)
             DO    JOYSTICK_SUPPORT
             jsl   JoyConfigureL           ; The joystick settings; _InitRenderMode hooks the probe rows if used
             jsr   _InitRenderMode

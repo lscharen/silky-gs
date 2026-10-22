@@ -224,6 +224,17 @@ SET_MMC1_REG3_FAST
 :done
             rts
 
+; UxROM (mapper 2) bank select.  A holds the bank number written to $8000-$FFFF.
+; Low 3 bits select the 16KB bank at $8000 (Contra has 8).  The fixed bank stays
+; at $C000 in every IIgs bank, so this only changes the program bank.  The shadow
+; byte at $07EE is what `lda BANK_NUMBER` reads: a data read of $8000 would hit
+; bank 0, because DBR stays on ROMBase.
+;
+; This code is copied into every PRG bank at the same address.  The jml lands on
+; :uxdone in the new bank, and rts returns to the caller there.
+STA_UXROM_BANK
+            sta   $07EE
+            jmp   SET_MMC1_REG3
 
 APU_PULSE1  EXT
 ORA_4000    oral APU_PULSE1+0
@@ -258,8 +269,44 @@ STA_4000_Y
             plp
             rts
 
+STA_4000_X
+            php
+            phx
+            pea  :xrtn-1
+            pha
+            txa
+            asl
+            tax
+            pla
+            jmp  (apu_write_tbl,x)
+:xrtn       plx
+            plp
+            rts
+
 
 STA_4001    jsl  APU_PULSE1_REG2_WRITE
+            rts
+
+STX_4001    php
+            pha
+            txa
+            jsl  APU_PULSE1_REG2_WRITE
+            pla
+            plp
+            rts
+
+STA_4001_X
+            php
+            phx
+            pea  :xrtn-1
+            pha
+            txa
+            asl
+            tax
+            pla
+            jmp  (apu_write_tbl+2,x)
+:xrtn       plx
+            plp
             rts
 
 STY_4001    php
@@ -290,6 +337,20 @@ STA_4002_X
             plp
             rts
 
+STA_4002_Y
+            php
+            phx
+            pea  :yrtn-1
+            pha
+            tya
+            asl
+            tax
+            pla
+            jmp  (apu_write_tbl+4,x)
+:yrtn       plx
+            plp
+            rts
+
 STY_4002    php
             phy
             pha
@@ -314,6 +375,20 @@ STA_4003_X
             pla
             jmp  (apu_write_tbl+6,x)
 :rtn        plx
+            plp
+            rts
+
+STA_4003_Y
+            php
+            phx
+            pea  :yrtn-1
+            pha
+            tya
+            asl
+            tax
+            pla
+            jmp  (apu_write_tbl+6,x)
+:yrtn       plx
             plp
             rts
 
@@ -658,6 +733,16 @@ STX_2007
             rts
 STA_4014
             jsl  PPUDMA_WRITE
+            rts
+STY_4014
+            php
+            phy
+            pha
+            tya
+            jsl  PPUDMA_WRITE
+            pla
+            ply
+            plp
             rts
 
 LDA_4017

@@ -93,6 +93,7 @@ PREF_FILENAME strl '1/bench.prefs'
             put    ../../rom/rom_color.s        ; (also in Engine.s: for the palette code here)
             put    ../../rom/rom_helpers.s
             put    ../../rom/rom_input.s
+            put    ../../rom/rom_kbd_basic.s
             put    ../../rom/rom_kbd_j13.s
             put    ../../rom/rom_exec.s
             put    ../../rom/rom_config.s

@@ -1,0 +1,11 @@
+; title_2 -- player select, once Bill and Lance are on screen
+; (bank 6 intro_background_palette2; the sprite palettes stay from intro_sprite_palettes)
+
+BG0: $0F $10 $28 $16
+BG1: $0F $30 $10 $15
+BG2: $0F $10 $28 $38
+BG3: $0F $30 $36 $26
+SP0: $0F $30 $10 $00
+SP1: $0F $30 $38 $28
+SP2: $0F $2C $1C $0C
+SP3: $0F $00 $00 $00

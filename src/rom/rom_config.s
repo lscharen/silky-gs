@@ -8,6 +8,7 @@ BTNMAP          equ 6     ; button mapping for keyboard
 TAB             equ 7     ; tab control
 TEXT            equ 8     ; static lines of text (no value, no cursor)
 ACTION          equ 9     ; runs a routine (the value word) on space; optional extra draw routine
+KEYGRID         equ 10    ; a player's 8 direction keys in a 3 x 3 grid (value = the player's config block)
 
 CHKBOX_YES      str 'YES'
 CHKBOX_NO       str ' NO'
@@ -684,6 +685,110 @@ _DrawKeymap0
             lda  :highlight
             jmp  ConfigDrawByte
 
+;   <title> UL  U UR
+;            L     R          (the key codes in hex; 00 = none)
+;           DL  D DR
+;
+; X = control addr.  _DrawKeygrid0: A = the cell to highlight (0 - 7, KeygridVal order), else $FFFF.
+_DrawKeygrid
+            lda  #$FFFF
+
+_DrawKeygrid0
+:addr       equ  tmp15
+:highlight  equ  tmp14
+:cell       equ  tmp13
+:ctrl       equ  tmp12
+
+            sta  :highlight
+            stx  :ctrl
+            jsr  _OffsetToAddr            ; Y = the title's screen address
+            sta  :addr
+
+            lda: CTRL_TITLE,x
+            tax
+            lda  #TEXT_NORMAL
+            jsr  ConfigDrawString
+
+            lda  #7
+            sta  :cell
+:loop       lda  :cell
+            asl
+            tay
+            lda  KeygridPos,y             ; The cell's screen address
+            clc
+            adc  :addr
+            pha
+            ldx  :ctrl
+            lda: CTRL_VALUE_ADDR,x        ; The key, in the player's block
+            clc
+            adc  KeygridVal,y
+            tax
+            lda: 0,x
+            tax
+            lda  #TEXT_NORMAL
+            ldy  :cell
+            cpy  :highlight
+            bne  *+5
+            lda  #TEXT_HIGHLIGHTED
+            ply
+            jsr  ConfigDrawByte
+            dec  :cell
+            bpl  :loop
+            rts
+
+; The cells, in edit order: screen offsets from the title, and the keys' offsets in a player's block
+KEYGRID_X   equ  5*COL_STEP
+KeygridPos  dw   KEYGRID_X,KEYGRID_X+{3*COL_STEP},KEYGRID_X+{6*COL_STEP}
+            dw   KEYGRID_X+ROW_STEP,KEYGRID_X+ROW_STEP+{6*COL_STEP}
+            dw   KEYGRID_X+{2*ROW_STEP},KEYGRID_X+{2*ROW_STEP}+{3*COL_STEP},KEYGRID_X+{2*ROW_STEP}+{6*COL_STEP}
+KeygridVal  dw   PLAYER_INPUT_KEY_UL,PLAYER_INPUT_KEY_UP,PLAYER_INPUT_KEY_UR
+            dw   PLAYER_INPUT_KEY_LEFT,PLAYER_INPUT_KEY_RIGHT
+            dw   PLAYER_INPUT_KEY_DL,PLAYER_INPUT_KEY_DOWN,PLAYER_INPUT_KEY_DR
+
+; X = control addr
+;
+; Edit the grid: each cell is highlighted in turn.  A key press sets the cell's key (Delete clears it),
+; Space moves to the next cell (after the last, the editing ends), Return or Escape ends it.
+_ToggleKeygrid
+            stx  keygridCtrl
+            stz  keygridCell
+:draw       ldx  keygridCtrl
+            lda  keygridCell
+            jsr  _DrawKeygrid0
+:key        jsr  _WaitForKeyUp
+            cmp  #' '
+            beq  :next
+            cmp  #13
+            beq  :done
+            cmp  #27
+            beq  :done
+            cmp  #127                     ; Delete: no key
+            bne  *+5
+            lda  #0
+            pha
+            lda  keygridCell
+            asl
+            tay
+            ldx  keygridCtrl
+            lda: CTRL_VALUE_ADDR,x
+            clc
+            adc  KeygridVal,y
+            tax
+            pla
+            sta: 0,x
+            bra  :draw
+
+:next       lda  keygridCell
+            inc
+            cmp  #8
+            bcs  :done
+            sta  keygridCell
+            bra  :draw
+:done       rts
+
+keygridCtrl dw   0
+keygridCell dw   0
+
 ; Y = screen addr
 ; X = control addr
 ;
@@ -1292,7 +1397,10 @@ _DrawControl
 :not_text   cmp  #ACTION
             bne  :not_action
             jmp  _DrawAction
-:not_action
+:not_action cmp  #KEYGRID
+            bne  :not_keygrid
+            jmp  _DrawKeygrid
+:not_keygrid
             rts
 
 ; Y = screen addr
@@ -1357,7 +1465,10 @@ _ToggleActiveControl
             db   $7C                         ; jmp (CTRL_VALUE_ADDR,x): the action's routine (X = the
             dw   CTRL_VALUE_ADDR             ; control); see _DrawAction
 
-:not_action
+:not_action cmp  #KEYGRID
+            bne  :not_keygrid
+            jmp  _ToggleKeygrid
+:not_keygrid
             rts
 
 ; Loads the active menu address from config_active_menu

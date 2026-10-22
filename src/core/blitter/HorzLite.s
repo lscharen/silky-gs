@@ -22,7 +22,8 @@ _Apply
                     sty   :patch+1
                     sta   :virt_line
                     stx   :lines_left
-                    beq   :done
+                    cpx   #0                    ; (the stores leave the flags from the caller's last load,
+                    beq   :done                 ; e.g. Z set by lda #0 for a range at virtual line 0)
 
 :loop
                     ldy   #0                    ; Split the virtual line into a CIRAM page and physical row

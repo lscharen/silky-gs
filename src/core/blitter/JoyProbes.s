@@ -414,7 +414,7 @@ JoyHarvest
 ; The interval [lo, hi] of each axis is published after the last read (joyScanRes, joyScanReady).
 ; The interrupts are only enabled while armed: JoyScanArm on entering the dirty renderer (gridDrawDirty),
 ; JoyScanDisarm before the code field runs (_BltRangeLite: every full render), the configuration screen
-; and shut-down.  irqHook (rom/rom_exec.s) calls JoyScanService ahead of the firmware.  The service runs with
+; and shut-down.  The IRQ.SCAN handler irqScan (rom/rom_exec.s) calls JoyScanService.  The service runs with
 ; any DBR, so everything it touches is addressed long.
 
 joyScanPhase dw   0                         ; 1 = this frame's timers were triggered
@@ -431,7 +431,7 @@ joyScanReady dw   0                         ; Set when joyScanRes is updated
 
 ; JoyScanService
 ;
-; Called (jsl) by irqHook for a scanline interrupt while armed, with interrupts off, native mode, 16-bit
+; Called (jsl) by irqScan for a scanline interrupt while armed, with interrupts off, native mode, 16-bit
 ; registers, any DBR / D.  Clears the interrupt.  Preserves every register and P (C included).
             mx    %00
 JoyScanService ENT
@@ -602,7 +602,7 @@ JoyScanArm
             bne   :done
             lda   joyEnabled                ; No player uses the joystick
             beq   :done
-            DO    NO_INTERRUPTS             ; No IRQ hook to take them
+            DO    NO_INTERRUPTS             ; No IRQ.SCAN handler to take them
             ELSE
             php
             sei
