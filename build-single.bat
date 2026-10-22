@@ -27,8 +27,9 @@ if /i "%GAME%"=="dk"    set APP=.\src\games\dk\DonkeyKongGS
 if /i "%GAME%"=="mb"    set APP=.\src\games\mb\MarioBrosGS
 if /i "%GAME%"=="zelda" set APP=.\src\games\zelda\src\ZeldaGS
 if /i "%GAME%"=="bench" set APP=.\src\games\bench\BenchGS
+if /i "%GAME%"=="contra" set APP=.\src\games\contra\src\ContraGS
 if "%APP%"=="" (
-    echo build-single: unknown game "%GAME%" -- use smb, bf, lo, wump, ic, eb, dk, mb, zelda or bench
+    echo build-single: unknown game "%GAME%" -- use smb, bf, lo, wump, ic, eb, dk, mb, zelda, contra or bench
     exit /b 1
 )
 
