@@ -2,8 +2,8 @@
 ;
 ; Adapted from the J13 keyboard driver of the IIgs Wolfenstein 3D port
 ; (github.com/Webifi/iigs-wolfenstein3d, src/iigs/j13.s).  $C000 / $C010 only give the last key pressed
-; and whether any key is down, so the BASIC driver (_ReadKeyboard, core/CoreImpl.s) sees one key at a
-; time: holding Right and pressing Up drops Right.  On ROM 00 / 01 the ADB microcontroller keeps the keys that are down in its
+; and whether any key is down, so the BASIC driver (rom/rom_kbd_basic.s) sees one key at a time and can
+; only guess which are still held.  On ROM 00 / 01 the ADB microcontroller keeps the keys that are down in its
 ; RAM ($31 - $3A, one bit per key, 0 = down), and ADB command $09 (read memory) returns a byte of it.
 ;
 ; This driver keeps up to 3 held keys, as ADB key codes (J13_ADBKeys), oldest first:
@@ -23,11 +23,9 @@
 ; While a read is in flight the ADB data interrupt is off, so the firmware's interrupt handler doesn't
 ; take the reply; the interrupt enables are put back when it is done.
 
-; The keyboard driver used by the KEYBOARD input type (config_kbd_driver, DRIVERS menu).  Only one is used at
-; a time: with BASIC, J13_Poll keeps no held keys and the KEYBOARD input type reads the last key pressed
-; (_ReadKeyboard); with J13 it reads the held keys (_ReadKeyboardJ13).  The configuration screen always
-; reads the keyboard directly (_ReadRawKeypress), whichever driver is set.
-KBD_DRIVER_BASIC  equ   0
+; The keyboard driver used by the KEYBOARD input type (config_kbd_driver, DRIVERS menu; KbdDriverPad,
+; core/CoreImpl.s).  Only one is used at a time: with another driver, J13_Poll keeps no held keys.  The
+; configuration screen always reads the keyboard directly (_ReadRawKeypress), whichever driver is set.
 KBD_DRIVER_J13    equ   2
 
 ADB_DATA          equ   $E0C026       ; ADB command / data register
@@ -55,7 +53,9 @@ j13Row            dw    0             ; Microcontroller address of the row being
 j13Expect         dw    0             ; Its held keys (1 = down)
 j13Value          dw    0             ; The reply (1 = up)
 j13Pad            dw    0
-j13Ids            ds    12            ; ADB key codes of Right, Left, Down, Up, Start, Select (J13_Pad)
+j13Ids            ds    J13_IDS       ; ADB key codes of Right, Left, Down, Up, Start, Select, then the
+                                      ; diagonals UL, UR, DL, DR (J13_Pad; $FFFF = no key)
+J13_IDS           equ   20
 
 ; J13_Init
 ;
@@ -418,7 +418,8 @@ j13Reply    lda   j13Value
 ; J13_Pad
 ;
 ; X = the player's configuration block.  Returns A = the pad bits of the held keys.  Opposite directions
-; can't both be down on a pad: the newer key wins.  16-bit registers, DBR = the main bank.
+; can't both be down on a pad: the newer key wins (a diagonal key sets two directions and clears their
+; opposites).  16-bit registers, DBR = the main bank.
             mx    %00
 J13_Pad
             lda:  PLAYER_INPUT_KEY_RIGHT,x
@@ -437,6 +438,18 @@ J13_Pad
             sta   j13Ids+8
             lda   #J13_ID_TAB
             sta   j13Ids+10
+            lda:  PLAYER_INPUT_KEY_UL,x
+            jsr   j13Id
+            sta   j13Ids+12
+            lda:  PLAYER_INPUT_KEY_UR,x
+            jsr   j13Id
+            sta   j13Ids+14
+            lda:  PLAYER_INPUT_KEY_DL,x
+            jsr   j13Id
+            sta   j13Ids+16
+            lda:  PLAYER_INPUT_KEY_DR,x
+            jsr   j13Id
+            sta   j13Ids+18
 
             stz   j13Pad
             ldy   #0
@@ -454,7 +467,7 @@ J13_Pad
             pla
 :no_map     inx
             inx
-            cpx   #12
+            cpx   #J13_IDS
             bcc   :map
             iny
             iny
@@ -462,14 +475,49 @@ J13_Pad
 :done       lda   j13Pad
             rts
 
-j13Id       and   #$007F
+; KbdJ13_Pad
+;
+; The driver's pad routine (KbdDriverPad, core/CoreImpl.s): A = the key (_ReadKeypress), X = the player's
+; configuration block.  Returns A = the pad bits of the held keys (J13_Pad), and sets kbdHandled if the
+; key is one of the player's keys (j13Ids), compared as J13 does, by ADB key code.
+            mx    %00
+KbdJ13_Pad
+            pha                       ; The key
+            jsr   J13_Pad
+            pha
+            lda   3,s
+            bit   #PAD_KEY_DOWN
+            beq   :out
+            and   #PAD_KEY_MASK
+            tax
+            lda   J13_ADBKeys,x
+            and   #$00FF
+            ldx   #J13_IDS-2
+:loop       cmp   j13Ids,x
+            beq   :handled
+            dex
+            dex
+            bpl   :loop
+            bra   :out
+:handled    lda   #1
+            sta   kbdHandled
+:out        pla
+            ply                       ; (the key)
+            rts
+
+j13Id       and   #$007F              ; (0 = no key: an id no key has)
+            bne   *+6
+            lda   #$FFFF
+            rts
             tay
             lda   J13_ADBKeys,y
             and   #$00FF
             rts
 
 J13_PadBits  dw   PAD_RIGHT,PAD_LEFT,PAD_DOWN,PAD_UP,PAD_START,PAD_SELECT
+             dw   PAD_UP+PAD_LEFT,PAD_UP+PAD_RIGHT,PAD_DOWN+PAD_LEFT,PAD_DOWN+PAD_RIGHT
 J13_PadClear dw   $FFFF-PAD_LEFT,$FFFF-PAD_RIGHT,$FFFF-PAD_UP,$FFFF-PAD_DOWN,$FFFF,$FFFF
+             dw   $FFFF-PAD_DOWN-PAD_RIGHT,$FFFF-PAD_DOWN-PAD_LEFT,$FFFF-PAD_UP-PAD_RIGHT,$FFFF-PAD_UP-PAD_LEFT
 
 ; The ADB key code of each character (the low 7 bits).  Shifted characters map to their unshifted key and
 ; the control characters to their letter, except the arrows (Ctrl-H = Left, Ctrl-J = Down, Ctrl-K = Up,

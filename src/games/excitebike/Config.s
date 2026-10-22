@@ -59,7 +59,6 @@ CONFIG_DEFAULT_AUDIO equ APU_60HZ   ; default audio quality
 CONFIG_VIDEO_MENU    equ 1          ; show the VIDEO menu
 CONFIG_VIDEO_FASTBLIT equ 1         ; show the FAST BLIT option (scrolling games only)
 CONFIG_VIDEO_STATUSBAR equ 1        ; show the STATUS BAR option (separately drawn status bar)
-CONFIG_INPUT_BUTTONS equ 0          ; allow remapping the A/B buttons
 CONFIG_INPUT_2P      equ 0          ; show P1/P2 tabs on the INPUT menu
 CONFIG_GAME_MENU     equ 0          ; append a GAME_CONFIG menu defined by this file
 

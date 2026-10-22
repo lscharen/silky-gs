@@ -65,3 +65,10 @@ level_1
 [ending]
 title
 level_1
+
+; The color-cycled cells (the *reserved ones) of levels 1 - 3 in the same IIgs slots, so the palette
+; dispatch (CONTRA_PALETTE_DISPATCH, Hooks.s) writes them straight to the CLUT (PAL_SLOT_*)
+[fixed BG2:1 BG3:1 BG3:2 BG3:3]
+level_1
+level_2
+level_3

@@ -96,7 +96,8 @@ zPalDirty   EXT                             ; (the engine side's, in the other s
 ; tables.  A palette RAM write (Z_PalWrite) only marks the palette dirty; at the next render,
 ; ApplyPaletteChange (GS task) identifies the palette in palette RAM and switches to it (redrawing
 ; tiles when needed), or shows the changed colors in the current palette's layout.
-zCurPal     dw    0                         ; PAL_* id of the palette on screen (0 = none yet)
+zCurPal     ENT                             ; PAL_* id of the palette on screen (0 = none yet; read by
+            dw    0                         ; the palette dispatch, Z_PalCycle)
 
 ; Point the swizzle tables at the first palette until the game sets one.  InitPlayfield is called
 ; by NES_StartUp.
@@ -138,8 +139,11 @@ ApplyPaletteChange
             DO    SEG_ENGINE
             mx    %00
 
-; Dispatch table for palette RAM writes: every entry goes to Z_PalWrite (palette management)
+; Dispatch table for palette RAM writes: every entry goes to Z_PalWrite (palette management), except
+; the color-cycled cells (Z_PalCycle)
 PPU_PALETTE_DISPATCH equ CONTRA_PALETTE_DISPATCH
+
+zCurPal     EXT                             ; (the MAIN side's)
 
 zPalDirty   ENT                             ; palette RAM changed since the last render
             dw    0
@@ -153,11 +157,28 @@ Z_PalWrite
             sta   zPalDirty
 Z_PalNone   rts
 
+; The cells the game color-cycles in levels 1 - 3 (BG2:1, BG3:1 - 3: reserved, *$xx, in their palette
+; files, and pinned to the same IIgs slots by [fixed] in transitions.txt).  While one of those levels is
+; on screen, a write goes straight to its slot: the palette doesn't need identifying again (reserved
+; cells match any color), so the color changes at once and costs no palette detection at the next
+; render.  Otherwise (another palette, or none yet), it is an ordinary palette write.
+; A = the NES color, 16-bit registers (PPUDATA_WRITE), DBR = this bank.
+Z_PalBG2_1  ldx   #PAL_SLOT_BG2_1*2
+            bra   Z_PalCycle
+Z_PalBG3_1  ldx   #PAL_SLOT_BG3_1*2
+            bra   Z_PalCycle
+Z_PalBG3_2  ldx   #PAL_SLOT_BG3_2*2
+            bra   Z_PalCycle
+Z_PalBG3_3  ldx   #PAL_SLOT_BG3_3*2
+Z_PalCycle  jsr   NES_ColorToIIgs
+            stal  SHR_PALETTES,x
+            rts
+
 CONTRA_PALETTE_DISPATCH
         dw   ppu_3F00,Z_PalWrite,Z_PalWrite,Z_PalWrite
         dw   Z_PalNone,Z_PalWrite,Z_PalWrite,Z_PalWrite
-        dw   Z_PalNone,Z_PalWrite,Z_PalWrite,Z_PalWrite
-        dw   Z_PalNone,Z_PalWrite,Z_PalWrite,Z_PalWrite
+        dw   Z_PalNone,Z_PalBG2_1,Z_PalWrite,Z_PalWrite
+        dw   Z_PalNone,Z_PalBG3_1,Z_PalBG3_2,Z_PalBG3_3
         dw   ppu_3F10,Z_PalWrite,Z_PalWrite,Z_PalWrite
         dw   Z_PalNone,Z_PalWrite,Z_PalWrite,Z_PalWrite
         dw   Z_PalNone,Z_PalWrite,Z_PalWrite,Z_PalWrite

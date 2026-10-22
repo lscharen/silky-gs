@@ -17,8 +17,8 @@
 ; games whose reset code is their main loop, that loop up to its next yield), clears nesBusy and
 ; voluntarily switches back to the GS task.
 ;
-; With interrupts enabled, the VBL heartbeat (schedTask) is a pure scheduler.  It
-; never runs ROM code itself:
+; With interrupts enabled, the scheduler (schedTask, run by the IRQ.VBL handler irqVbl) only
+; decides which task runs.  It never runs ROM code itself:
 ;
 ;   - If the GS task is running, it starts a new NES frame (or continues a frame that
 ;     was cut short) by switching to the NES task.
@@ -27,8 +27,8 @@
 ;     updating.  The game runs slowly instead of starving the renderer.
 ;   - The 60Hz audio driver is called on every VBL, regardless of the NES state.
 ;
-; Switches requested by the scheduler are carried out by irqPost after the firmware
-; interrupt handler has completely finished, so the ROM code always runs outside of
+; A switch is made by redirecting the interrupt's return to irqResume, which runs after the
+; firmware interrupt handler has completely finished, so the ROM code always runs outside of
 ; interrupt context.
 ;
 ; With NO_INTERRUPTS (a debugging / profiling mode), there is no scheduler and the
@@ -42,8 +42,7 @@ tcbS        dw    0,0                     ; Saved stack pointer of each task
 nesActive   dw    0                       ; Non-zero once the NES task has been created
 nesBusy     dw    0                       ; Non-zero while the NES task owes a frame
 nesOverrun  dw    0                       ; Consecutive VBLs that the current NES frame has overrun
-switchPending dw  0                       ; Set by the scheduler, consumed by irqPost
-irqFrameS   dw    0                       ; Address of the hardware IRQ frame while in a native-mode IRQ, else 0
+irqFrameS   dw    0                       ; The interrupted code's S (irqHook): P at +4; 0 if not native
 renderActive ENT
              dw   0                       ; RENDER_VBL_COUNT: non-zero while the GS task is inside RenderScreen
 renderVblTicks ENT
@@ -284,14 +283,59 @@ NES_TriggerNMI
 
             DO    NO_INTERRUPTS
             ELSE
-; Scheduler
+; Interrupts
 ;
-; VBL heartbeat task.  Runs inside the firmware interrupt handler and only decides
-; which task should run; the switch itself is performed by irqPost.
+; Three handlers, installed with SetVector by InstallIrqHandlers (IntStartUp, core/CoreImpl.s):
+;
+;   irqHook  ($0004, the Interrupt Manager)  runs first for every IRQ and BRK, before the firmware has
+;            touched the stack, and only records where the interrupted code's hardware frame is
+;   irqVbl   ($000C, IRQ.VBL)                the VBL housekeeping and the scheduler (schedTask)
+;   irqScan  ($000A, IRQ.SCAN)               the joystick's scanline interrupts (JoyScanService)
+;
+; The firmware decides which interrupt it is and calls the IRQ.xxx handlers; they chain to the handlers
+; that were there before (the firmware's VBL handler clears the interrupt and runs the heartbeat tasks).
+
+; irqHook
+;
+; S is the hardware frame's address only in a native-mode interrupt: an emulation-mode one has a 3-byte
+; frame with no PBR, so the scheduler can't switch out of it, and irqFrameS = 0.  BRKs are recorded
+; too (harmless: the VBL handler doesn't run for them).  The firmware gets the registers, P and the
+; mode exactly as they were.
             mx    %11
-schedTask
+irqHook
+            php
+            clc
+            xce                           ; C = the interrupted E
+            rep   #$20
+            mx    %01
+            pha                           ; (16-bit, so that tsc doesn't lose B)
+            bcs   :emu
+            tsc
+            stal  irqFrameS               ; Hardware frame: P at +4, PC at +5, PBR at +7
+            pla
+            plp
+irqChain    jml   $000000                 ; The previous Interrupt Manager (InstallIrqHandlers)
+
+:emu        lda   #0
+            stal  irqFrameS
+            pla
+            sec
+            xce                           ; Back to emulation mode, then the original P (and C)
+            plp
+            bra   irqChain
+
+; irqVbl
+;
+; IRQ.VBL: called (jsl) by the firmware for every VBL, in either mode, with interrupts off.  Runs the
+; VBL housekeeping, then the scheduler (schedTask) if the interrupted code's frame is known (a native-mode
+; interrupt), then the previous VBL handler.
+            mx    %11
+irqVbl
             php
             rep   #$30
+            pha
+            phx
+            phy
             phb
             phd
 
@@ -303,6 +347,10 @@ schedTask
             DO    APU_STATS
             inc   apu_stat_vbl            ; APU rate check (see apu_stats in apu/apu.s)
             FIN
+
+            ldal  ppustatus               ; The PPU's VBL flag, on every VBL as on the NES (a $2002 read
+            ora   #$80                    ; clears it), so ROM code can also spin on it in the NES task
+            stal  ppustatus
 
             lda   skipInterruptHandling
             bne   :out
@@ -323,9 +371,26 @@ schedTask
             rep   #$30
 :audio_uses_interrupts
 
-            lda   nesActive
+            lda   irqFrameS               ; Only switch tasks out of a native-mode interrupt
             beq   :out
-            lda   irqFrameS               ; Only switch tasks out of a native-mode IRQ
+            jsr   schedTask
+
+:out        pld
+            plb
+            ply
+            plx
+            pla
+            plp
+vblChain    jml   $000000                 ; The previous VBL handler (InstallIrqHandlers)
+
+; schedTask
+;
+; The scheduler.  Decides which task runs after this VBL; a switch is made by redirecting the
+; interrupt's return (irqSwitch).  Called by irqVbl when irqFrameS is set, with 16-bit registers,
+; DBR = this bank, D = the runtime's direct page.
+            mx    %00
+schedTask
+            lda   nesActive
             beq   :out
 
             lda   curTask
@@ -333,11 +398,7 @@ schedTask
 
 ; The GS task is running.  Give the CPU to the NES task.
             lda   nesBusy
-            bne   :switch                 ; Continue a frame that was cut short
-
-            ldal  ppustatus               ; Set the bit that the VBL has started
-            ora   #$80
-            stal  ppustatus
+            bne   irqSwitch               ; Continue a frame that was cut short
 
 ; (The inputs are read when the game reads its controller: NES_ReadJoy, rom_input.s)
 
@@ -346,7 +407,7 @@ schedTask
 
             lda   #1
             sta   nesBusy
-            bra   :switch
+            bra   irqSwitch
 
 ; The NES task is running, so the current frame did not finish within one VBL.
 :nes_running
@@ -357,143 +418,175 @@ schedTask
             cmp   #NES_OVERRUN_LIMIT+1
             bcc   :out
 
-            ldx   irqFrameS               ; Never preempt the NES task inside the runtime (e.g. halfway
-            sep   #$20                    ; through a PPU write); try again on the next VBL
-            ldal  $000004,x               ; Interrupted PBR
-            cmp   #^schedTask
+            ldx   irqFrameS               ; Never preempt the NES task in the ENGINE segment (e.g. halfway
+            sep   #$20                    ; through a PPU write: the shims in ppu_regs.s); try again on the
+            ldal  $000007,x               ; next VBL.  Code the NES task must not be preempted in goes there.
+            cmp   #^RenderLatch           ; Interrupted PBR = the ENGINE bank?
             rep   #$20
             beq   :out
 
             stz   nesOverrun
             stz   frameReady              ; Let the renderer show the partially completed frame
-:switch
-            lda   #1
-            sta   switchPending
-:out
-            pld
-            plb
-            plp
-            rtl
+            bra   irqSwitch
+:out        rts
 
-; IRQ hook
+; irqSwitch
 ;
-; Installed at $E1/0010, ahead of the firmware interrupt handler.  Task switches only happen
-; on the VBL (schedTask is a VBL heartbeat task), so for a native-mode VBL IRQ it records the
-; location of the hardware interrupt frame and pushes a fake RTI frame so that the firmware
-; returns to irqPost instead of the interrupted code.  Every other IRQ (the DOC timer for the
-; 120/240Hz audio, keyboard, ADB, ...) goes straight to the firmware, as do BRKs (V=1) and
-; emulation-mode interrupts.
-;
-; The VBL test reads the Mega II interrupt flags at $C046 (bit 3 = VBL interrupt pending),
-; which has no side effects.  If a VBL arrives between this test and the firmware's own check,
-; schedTask sees irqFrameS = 0 and just skips the switch until the next VBL.
+; Make the interrupt return to irqResume rather than to the interrupted code: its hardware frame's P,
+; PC and PBR are saved (irqSave*) and replaced with P = native, 16-bit registers, interrupts off, and
+; irqResume.  The firmware's RTI then lands there with the interrupted task's registers restored.
             mx    %00
-irqHook
-            clc
-            xce                           ; C = interrupted E flag; now native (firmware does the same)
-
-; While the joystick's scanline interrupts are armed (JoyScanArm, core/blitter/JoyProbes.s), take
-; them here: JoyScanService clears the interrupt, and the firmware never sees it.  The test keeps
-; C (the interrupted E flag) and V (BRK).
-            DO    JOYSTICK_SUPPORT
-            bvs   :not_scan_v             ; BRK: leave it to the firmware
-            rep   #$30
-            pha
-            ldal  joyScanArmed
-            beq   :not_scan
+irqSwitch
+            ldx   irqFrameS
+            ldal  $000005,x               ; PC
+            sta   irqSavePC
             sep   #$20
-            ldal  VGC_INT_REG
-            rep   #$20
-            and   #$0020                  ; Scanline interrupt pending?
-            beq   :not_scan
-            jsl   JoyScanService
+            ldal  $000004,x               ; P
+            sta   irqSaveP
+            ldal  $000007,x               ; PBR
+            sta   irqSavePBR
+            lda   #$04                    ; P: I = 1, M = X = 0
+            stal  $000004,x
+            phk
             pla
-            bcs   :scan_emu
-            rti
-:scan_emu   sec                           ; Back to emulation mode for its 3-byte frame
-            xce
-            rti
-:not_scan   pla
-:not_scan_v
-            FIN
+            stal  $000007,x
+            rep   #$20
+            lda   #irqResume
+            stal  $000005,x
+            rts
 
-            bcs   :emu
-            bvs   :chain                  ; BRK: leave the frame alone
+irqSaveA    dw    0                       ; irqResume's saved A
+irqSavePC   dw    0                       ; The interrupted code's hardware frame (irqSwitch)
+irqSaveP    db    0
+irqSavePBR  db    0
 
-            rep   #$30                    ; The firmware switches to 16-bit registers too
+; irqResume
+;
+; Where an interrupt that switches tasks returns, after the firmware handler has completely finished
+; (interrupts off, 16-bit registers, the interrupted task's registers, D and DBR).  Puts the interrupted
+; code's hardware frame back on the stack, which is exactly the form that saveCtx expects.
+            mx    %00
+irqResume
+            stal  irqSaveA
+            sep   #$20
+            ldal  irqSavePBR
+            pha
+            rep   #$20
+            ldal  irqSavePC
             pha
             sep   #$20
-            ldal  $E0C046                 ; Mega II interrupt flags (an 8-bit read; $C047 clears them)
-            rep   #$20
-            and   #$0008                  ; VBL interrupt?
-            beq   :not_vbl
-            tsc
-            inc
-            inc
-            stal  irqFrameS               ; Hardware frame: P at +1, PC at +2, PBR at +4
-            pla
-
-            phk                           ; Fake RTI frame -> irqPost (P: I=1, 16-bit)
-            per   irqPost
-            php
-:chain      jml   irqChain
-
-:not_vbl    pla
-            jml   irqChain
-
-:emu        sec
-            xce
-            jml   irqChain
-
-irqChain    ds    4                       ; Copy of the original $E1/0010 JML
-
-; The firmware interrupt handler is completely done.  The interrupted task's registers
-; are restored and its hardware frame is on top of the stack, which is exactly
-; the form that saveCtx expects.
-            mx    %00
-irqPost
+            ldal  irqSaveP
             pha
-            lda   #0
-            stal  irqFrameS
-            ldal  switchPending
-            bne   :switch
-            pla
-            rti
-:switch
-            lda   #0
-            stal  switchPending
-            pla
+            rep   #$20
+            ldal  irqSaveA
             jmp   saveCtx
 
-; Install / remove the IRQ hook
-            mx    %00
-InstallIrqHook
+; irqScan
+;
+; IRQ.SCAN: called (jsl) by the firmware for a scanline interrupt.  While the joystick has armed them
+; (JoyScanArm, core/blitter/JoyProbes.s), JoyScanService takes it and clears it; otherwise the previous
+; handler does.
+            DO    JOYSTICK_SUPPORT
+            mx    %11
+irqScan
             php
-            sei
-            ldal  $E10010
-            stal  irqChain
-            ldal  $E10012
-            stal  irqChain+2
+            ldal  joyScanArmed
+            beq   :chain
+            rep   #$30
+            jsl   JoyScanService
+            plp
+            clc                           ; Serviced
+            rtl
+:chain      plp
+scanChain   jml   $000000                 ; The previous scanline handler (InstallIrqHandlers)
+            FIN
 
-            sep   #$20
-            lda   #$5C                    ; JML irqHook
-            stal  $E10010
-            lda   #^irqHook
-            stal  $E10013
-            rep   #$20
+; InstallIrqHandlers / RemoveIrqHandlers
+;
+; Called by IntStartUp / IntShutDown: 16-bit registers, DBR = this bank.  irqHook goes in first and comes
+; out last, so irqVbl never sees a stale irqFrameS.  InstallIrqHandlers returns C set if a toolbox call
+; failed.
+SV_INT_MGR  equ   $0004                   ; SetVector / GetVector vector numbers
+SV_IRQ_SCAN equ   $000A
+SV_IRQ_VBL  equ   $000C
+
+            mx    %00
+InstallIrqHandlers
+            stz   irqFrameS
+            ldx   #irqChain+1
+            ldy   #SV_INT_MGR
             lda   #irqHook
-            stal  $E10011
-            plp
-            rts
+            jsr   :install
+            bcs   :done
+
+            ldx   #vblChain+1
+            ldy   #SV_IRQ_VBL
+            lda   #irqVbl
+            jsr   :install
+
+            DO    JOYSTICK_SUPPORT
+            bcs   :done
+            ldx   #scanChain+1
+            ldy   #SV_IRQ_SCAN
+            lda   #irqScan
+            jsr   :install
+            FIN
+:done       rts
+
+; X = the JML operand that gets the old handler, Y = the vector, A = the new handler (in this bank)
+:install    sta   irqNewL
+            stx   irqOperand
+            sty   irqVector
+
+            pea   0                       ; The old handler
+            pea   0
+            phy
+            _GetVector
+            ldx   irqOperand
+            pla
+            sta:  0,x
+            pla
+            sep   #$20
+            sta:  2,x
+            rep   #$20
+            bcs   :error
+
+            lda   irqVector
+            pha
+            phk                           ; The new handler: this bank
+            phk
+            pla
+            and   #$00FF
+            pha
+            lda   irqNewL
+            pha
+            _SetVector
+:error      rts
 
             mx    %00
-RemoveIrqHook
-            php
-            sei
-            ldal  irqChain
-            stal  $E10010
-            ldal  irqChain+2
-            stal  $E10012
-            plp
+RemoveIrqHandlers
+            DO    JOYSTICK_SUPPORT
+            ldx   #scanChain+1
+            ldy   #SV_IRQ_SCAN
+            jsr   :restore
+            FIN
+            ldx   #vblChain+1
+            ldy   #SV_IRQ_VBL
+            jsr   :restore
+            ldx   #irqChain+1
+            ldy   #SV_INT_MGR
+
+; X = the JML operand that has the old handler, Y = the vector
+:restore    phy
+            lda:  2,x
+            and   #$00FF
+            pha
+            lda:  0,x
+            pha
+            _SetVector
             rts
+
+irqNewL     dw    0                       ; InstallIrqHandlers' scratch
+irqOperand  dw    0
+irqVector   dw    0
             FIN

@@ -17,7 +17,6 @@
 ;   CONFIG_VIDEO_FASTBLIT equ 0/1  Show the FAST BLIT option on the VIDEO menu (needs CONFIG_VIDEO_MENU).
 ;                                  Only useful for scrolling games, which do full renders.  When 0, a
 ;                                  fast blit setting in an old preferences file is ignored.
-;   CONFIG_INPUT_BUTTONS equ 0/1   Allow remapping the A/B buttons for keyboard input
 ;   CONFIG_INPUT_2P      equ 0/1   Show P1/P2 tabs on the INPUT menu (otherwise P1 only)
 ;   CONFIG_GAME_MENU     equ 0/1   Append the game's own menu.  Main.s must then define a menu
 ;                                  block labeled GAME_CONFIG whose previous menu item is
@@ -154,10 +153,25 @@ config_joy_sens        ENT                ; Its sensitivity, 1 - 7 (dead zone = 
 config_joy_offset      ENT                ; Its offset, 0 - 7: the dead zone moves this many steps earlier
                        dw  0
 
+; The diagonal keys of each player (0 = none), at the same distance from each player's block
+; (PLAYER_INPUT_KEY_UL ... DR, core/CoreImpl.s), so player 2's follow 8 bytes after player 1's
+config_input_key_ul    dw  0
+config_input_key_ur    dw  0
+config_input_key_dl    dw  0
+config_input_key_dr    dw  0
+                       ds  8
+config_input_p2_key_ul dw  0
+config_input_p2_key_ur dw  0
+config_input_p2_key_dl dw  0
+config_input_p2_key_dr dw  0
+            ERR   {config_input_p2_key_ul-config_block_p2}-{config_input_key_ul-config_block_p1}
+            ERR   {config_input_key_ul-config_block_p1}-PLAYER_INPUT_KEY_UL
+            ERR   {config_input_key_dr-config_block_p1}-PLAYER_INPUT_KEY_DR
+
 ; Room for new built-in values.  Add them here (taking from the reserve), so the size of the block, and
 ; with it the preferences file, stays the same and older files keep loading (misc/io.s checks the size).
 ; A new value must default to 0, since an older file has 0 in its place.
-config_reserved        ds  116
+config_reserved        ds  92
 config_block_end
 
 ; The game's own values (CONFIG_GAME_DEFAULTS, the game's Main.s), in a block of a fixed size, saved and
@@ -202,20 +216,15 @@ INPUT_TYPE_STR      str 'TYPE'
 INPUT_TYPE_OPT_1    str 'KEYBOARD'
 INPUT_TYPE_OPT_2    str 'JOYSTICK'
 INPUT_TYPE_OPT_3    str 'SNES MAX'
-INPUT_LEFT_MAP_STR  str 'LEFT'
-INPUT_RIGHT_MAP_STR str 'RIGHT'
-INPUT_UP_MAP_STR    str 'UP'
-INPUT_DOWN_MAP_STR  str 'DOWN'
+INPUT_KEYS_STR      str 'KEYS'
 INPUT_SNESMAX_PORT_STR str 'SLOT'
-             DO   CONFIG_INPUT_BUTTONS
 INPUT_BUTTON_A_STR  str 'A BUTTON'
 INPUT_BUTTON_B_STR  str 'B BUTTON'
-             FIN
 
 DRIVERS_TITLE_STR   str 'DRIVERS'
 DRIVERS_KBD_STR     str 'KEYBOARD'
-DRIVERS_KBD_BASIC   str 'BASIC'        ; the last key pressed (_ReadKeyboard)
-DRIVERS_KBD_J13     str 'J13'          ; several keys held at once (rom/rom_kbd_j13.s)
+DRIVERS_KBD_BASIC   str 'BASIC'        ; the last key pressed, directions held (rom/rom_kbd_basic.s)
+DRIVERS_KBD_J13     str 'J13 ROM 01'   ; several keys held at once, ROM 00 / 01 firmware only (rom/rom_kbd_j13.s; the font has no parentheses)
 
 CREDITS_TITLE_STR   str 'CREDITS'
 
@@ -368,7 +377,7 @@ INPUT_TYPE_Y   equ 2
 INPUT_LIST_Y   equ 8
 INPUT_BUTTON_Y equ 13
              FIN
-INPUT_KEY_COUNT equ 4+{2*CONFIG_INPUT_BUTTONS}
+INPUT_KEY_COUNT equ 3                    ; The grid and the A / B buttons
 
              DO   CONFIG_INPUT_2P
 TAB_ITEM_1   dw   TAB
@@ -431,49 +440,19 @@ SNESMAX_LIST  dw  NUMBER_SELECT
 KEYBOARD_LIST dw  CTRL_LIST
               dw  INPUT_KEY_COUNT
               dw  INPUT_ITEM_2
-              dw  INPUT_ITEM_3
-              dw  INPUT_ITEM_4
-              dw  INPUT_ITEM_5
-             DO   CONFIG_INPUT_BUTTONS
               dw  INPUT_ITEM_6
               dw  INPUT_ITEM_7
-             FIN
 
-INPUT_ITEM_2 dw   KEYMAP
+; The direction keys: a 3 x 3 grid around a hole (KEYGRID, rom/rom_config.s)
+INPUT_ITEM_2 dw   KEYGRID
              dw   INPUT_ITEM_1
-             dw   INPUT_ITEM_3
-             dw   3,INPUT_LIST_Y
-             dw   INPUT_LEFT_MAP_STR
-             dw   config_input_key_left
-
-INPUT_ITEM_3 dw   KEYMAP
-             dw   INPUT_ITEM_2
-             dw   INPUT_ITEM_4
-             dw   3,INPUT_LIST_Y+1
-             dw   INPUT_RIGHT_MAP_STR
-             dw   config_input_key_right
-
-INPUT_ITEM_4 dw   KEYMAP
-             dw   INPUT_ITEM_3
-             dw   INPUT_ITEM_5
-             dw   3,INPUT_LIST_Y+2
-             dw   INPUT_UP_MAP_STR
-             dw   config_input_key_up
-
-INPUT_ITEM_5 dw   KEYMAP
-             dw   INPUT_ITEM_4
-             DO   CONFIG_INPUT_BUTTONS
              dw   INPUT_ITEM_6
-             ELSE
-             dw   0
-             FIN
-             dw   3,INPUT_LIST_Y+3
-             dw   INPUT_DOWN_MAP_STR
-             dw   config_input_key_down
+             dw   3,INPUT_LIST_Y
+             dw   INPUT_KEYS_STR
+             dw   config_block_p1
 
-             DO   CONFIG_INPUT_BUTTONS
 INPUT_ITEM_6 dw   BTNMAP
-             dw   INPUT_ITEM_5
+             dw   INPUT_ITEM_2
              dw   INPUT_ITEM_7
              dw   3,INPUT_BUTTON_Y
              dw   INPUT_BUTTON_A_STR
@@ -485,7 +464,6 @@ INPUT_ITEM_7 dw   BTNMAP
              dw   3,INPUT_BUTTON_Y+1
              dw   INPUT_BUTTON_B_STR
              dw   config_input_button_b
-             FIN
 
 ; Player 2 input controls
              DO   CONFIG_INPUT_2P
@@ -524,49 +502,18 @@ SNESMAX_LIST_2 dw NUMBER_SELECT
 KEYBOARD_LIST_2 dw CTRL_LIST
               dw  INPUT_KEY_COUNT
               dw  INPUT_ITEM_8
-              dw  INPUT_ITEM_9
-              dw  INPUT_ITEM_10
-              dw  INPUT_ITEM_11
-             DO   CONFIG_INPUT_BUTTONS
               dw  INPUT_ITEM_12
               dw  INPUT_ITEM_13
-             FIN
 
-INPUT_ITEM_8 dw   KEYMAP
+INPUT_ITEM_8 dw   KEYGRID
              dw   INPUT_ITEM_P2
-             dw   INPUT_ITEM_9
-             dw   3,INPUT_LIST_Y
-             dw   INPUT_LEFT_MAP_STR
-             dw   config_input_p2_key_left
-
-INPUT_ITEM_9 dw   KEYMAP
-             dw   INPUT_ITEM_8
-             dw   INPUT_ITEM_10
-             dw   3,INPUT_LIST_Y+1
-             dw   INPUT_RIGHT_MAP_STR
-             dw   config_input_p2_key_right
-
-INPUT_ITEM_10 dw  KEYMAP
-             dw   INPUT_ITEM_9
-             dw   INPUT_ITEM_11
-             dw   3,INPUT_LIST_Y+2
-             dw   INPUT_UP_MAP_STR
-             dw   config_input_p2_key_up
-
-INPUT_ITEM_11 dw  KEYMAP
-             dw   INPUT_ITEM_10
-             DO   CONFIG_INPUT_BUTTONS
              dw   INPUT_ITEM_12
-             ELSE
-             dw   0
-             FIN
-             dw   3,INPUT_LIST_Y+3
-             dw   INPUT_DOWN_MAP_STR
-             dw   config_input_p2_key_down
+             dw   3,INPUT_LIST_Y
+             dw   INPUT_KEYS_STR
+             dw   config_block_p2
 
-             DO   CONFIG_INPUT_BUTTONS
 INPUT_ITEM_12 dw  BTNMAP
-             dw   INPUT_ITEM_11
+             dw   INPUT_ITEM_8
              dw   INPUT_ITEM_13
              dw   3,INPUT_BUTTON_Y
              dw   INPUT_BUTTON_A_STR
@@ -578,7 +525,6 @@ INPUT_ITEM_13 dw  BTNMAP
              dw   3,INPUT_BUTTON_Y+1
              dw   INPUT_BUTTON_B_STR
              dw   config_input_p2_button_b
-             FIN
              FIN
 
 ; Drivers: the keyboard driver used by the KEYBOARD input type.  The key mappings stay on the INPUT menu

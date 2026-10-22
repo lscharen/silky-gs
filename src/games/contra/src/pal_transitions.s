@@ -26,103 +26,103 @@ PAL_ENDING_SWIZZLE EXT
 ; Layouts (NES color -> [slots] per group; *reserved, ~shown as):
 ;   title
 ;     BG0 $0F $10 $28 $16 -> [0,1,2,3]
-;     BG1 $0F $30 $10 $15 -> [0,4,5,6]
-;     BG2 $0F $10 $28 $38 -> [0,1,2,7]
-;     BG3 $0F $0F $0F $0F -> [0,8,9,10]
-;     SP0 $0F $30 $10 $00 -> [0,4,1,11]
+;     BG1 $0F $30 $10 $15 -> [0,4,1,5]
+;     BG2 $0F $10 $28 $38 -> [0,8,6,7]
+;     BG3 $0F $0F $0F $0F -> [0,9,10,11]
+;     SP0 $0F $30 $10 $00 -> [0,4,1,12]
 ;     SP1 $0F $30 $38 $28 -> [0,4,7,2]
-;     SP2 $0F $2C $1C $0C -> [0,12,13,14]
-;     SP3 $0F $00 $00 $00 -> [0,11,11,11]
+;     SP2 $0F $2C $1C $0C -> [0,13,14,15]
+;     SP3 $0F $00 $00 $00 -> [0,12,12,12]
 ;   title_2
 ;     BG0 $0F $10 $28 $16 -> [0,1,2,3]
-;     BG1 $0F $30 $10 $15 -> [0,4,5,6]
-;     BG2 $0F $10 $28 $38 -> [0,1,2,7]
-;     BG3 $0F $30 $36 $26 -> [0,8,9,10]
-;     SP0 $0F $30 $10 $00 -> [0,4,1,11]
+;     BG1 $0F $30 $10 $15 -> [0,4,1,5]
+;     BG2 $0F $10 $28 $38 -> [0,8,6,7]
+;     BG3 $0F $30 $36 $26 -> [0,9,10,11]
+;     SP0 $0F $30 $10 $00 -> [0,4,1,12]
 ;     SP1 $0F $30 $38 $28 -> [0,4,7,2]
-;     SP2 $0F $2C $1C $0C -> [0,12,13,14]
-;     SP3 $0F $00 $00 $00 -> [0,11,11,11]
+;     SP2 $0F $2C $1C $0C -> [0,13,14,15]
+;     SP3 $0F $00 $00 $00 -> [0,12,12,12]
 ;   level_1
-;     BG0 $0F $19 $29 $08 -> [0,1,2,6]
-;     BG1 $0F $28 $18 $08 -> [0,4,5,6]
-;     BG2 $0F $16 $30~$20 $10 -> [0,3,10,7]
-;     BG3 $0F $11 $21 $30~$20 -> [0,8,9,10]
-;     SP0 $0F $37 $12 $0F -> [0,11,12,0]
-;     SP1 $0F $36 $16 $0F -> [0,13,3,0]
-;     SP2 $0F $20 $26 $16 -> [0,10,14,3]
-;     SP3 $0F $20 $00 $0F -> [0,10,15,0]
+;     BG0 $0F $19 $29 $08 -> [0,1,2,3]
+;     BG1 $0F $28 $18 $08 -> [0,4,5,3]
+;     BG2 $0F *$06 $30~$20 $10 -> [0,8,6,7]
+;     BG3 $0F *$11 *$21 *$30 -> [0,9,10,11]
+;     SP0 $0F $37~$28 $12 $0F -> [0,4,12,0]
+;     SP1 $0F $36 $16 $0F -> [0,13,14,0]
+;     SP2 $0F $20 $26 $16 -> [0,6,15,14]
+;     SP3 $0F $20 $00~$10 $0F -> [0,6,7,0]
 ;   level_2
-;     BG0 $0F $10 $00 $09 -> [0,7,4,3]
-;     BG1 $0F $00 $0C $20 -> [0,4,5,6]
-;     BG2 $0F $16 $30 $10 -> [0,1,2,7]
-;     BG3 $0F $36 $06 $02 -> [0,8,9,10]
-;     SP0 $0F $37 $12 $0F -> [0,11,12,0]
-;     SP1 $0F $36 $16 $0F -> [0,8,1,0]
-;     SP2 $0F $20 $26 $16 -> [0,6,13,1]
-;     SP3 $0F $20 $1B $0F -> [0,6,14,0]
-;   level_3
-;     BG0 $0F $0A~$1A $1A $00 -> [0,3,3,11]
-;     BG1 $0F $28 $18 $07 -> [0,4,5,6]
-;     BG2 $0F $16 $30~$20 $10 -> [0,1,2,7]
-;     BG3 $0F $1C $2C $0C -> [0,8,9,10]
-;     SP0 $0F $37 $12 $0F -> [0,12,13,0]
-;     SP1 $0F $36 $16 $0F -> [0,14,1,0]
-;     SP2 $0F $20 $26 $16 -> [0,2,15,1]
-;     SP3 $0F $20 $00 $0F -> [0,2,11,0]
-;   level_4
-;     BG0 $0F $10 $00 $0C -> [0,7,4,3]
-;     BG1 $0F $00 $06 $20 -> [0,4,5,6]
-;     BG2 $0F $16 $30 $10 -> [0,1,2,7]
-;     BG3 $0F $38 $09 $06 -> [0,8,9,10]
-;     SP0 $0F $37 $12 $0F -> [0,11,12,0]
-;     SP1 $0F $36 $16 $0F -> [0,13,1,0]
-;     SP2 $0F $20 $26 $16 -> [0,6,14,1]
+;     BG0 $0F $10 $00 $09 -> [0,7,1,2]
+;     BG1 $0F $00 $0C $20 -> [0,1,3,6]
+;     BG2 $0F *$06 $30~$20 $10 -> [0,8,6,7]
+;     BG3 $0F *$36 *$06 *$02 -> [0,9,10,11]
+;     SP0 $0F $37 $12 $0F -> [0,4,5,0]
+;     SP1 $0F $36 $16 $0F -> [0,12,13,0]
+;     SP2 $0F $20 $26 $16 -> [0,6,14,13]
 ;     SP3 $0F $20 $1B $0F -> [0,6,15,0]
-;   level_5
-;     BG0 $0F $20 $10 $1C -> [0,4,5,3]
-;     BG1 $0F $20 $10 $0A -> [0,4,5,6]
-;     BG2 $0F $16 $30 $10 -> [0,1,2,7]
-;     BG3 $0F $20 $22 $02 -> [0,8,9,10]
-;     SP0 $0F $37 $12 $0F -> [0,11,12,0]
-;     SP1 $0F $36 $16 $0F -> [0,13,1,0]
-;     SP2 $0F $20 $26 $16 -> [0,4,14,1]
-;     SP3 $0F $20 $00 $0F -> [0,4,15,0]
-;   level_6
-;     BG0 $0F $00 $20 $1A -> [0,6,5,3]
-;     BG1 $0F $01 $20 $00 -> [0,4,5,6]
-;     BG2 $0F $16 $30 $10 -> [0,1,2,7]
-;     BG3 $0F $20 $27 $17 -> [0,8,9,10]
-;     SP0 $0F $37 $12 $0F -> [0,11,12,0]
-;     SP1 $0F $36 $16 $0F -> [0,13,1,0]
-;     SP2 $0F $20 $26 $16 -> [0,5,14,1]
-;     SP3 $0F $20 $00 $0F -> [0,5,6,0]
-;   level_7
-;     BG0 $0F $27 $17 $06 -> [0,3,11,8]
-;     BG1 $0F $20 $10 $00 -> [0,4,5,6]
-;     BG2 $0F $16 $30 $10 -> [0,1,2,7]
-;     BG3 $0F $06 $1B $0B -> [0,8,9,10]
+;   level_3
+;     BG0 $0F $0A $1A $00 -> [0,2,3,7]
+;     BG1 $0F $28 $18 $07 -> [0,4,1,5]
+;     BG2 $0F *$06 $30~$20 $10~$00 -> [0,8,6,7]
+;     BG3 $0F *$1C *$2C *$0C -> [0,9,10,11]
 ;     SP0 $0F $37 $12 $0F -> [0,12,13,0]
-;     SP1 $0F $36 $16 $0F -> [0,14,1,0]
-;     SP2 $0F $20 $26 $16 -> [0,4,15,1]
-;     SP3 $0F $20 $00 $0F -> [0,4,6,0]
+;     SP1 $0F $36 $16 $0F -> [0,14,15,0]
+;     SP2 $0F $20 $26~$16 $16~$07 -> [0,6,15,5]
+;     SP3 $0F $20 $00 $0F -> [0,6,7,0]
+;   level_4
+;     BG0 $0F $10 $00 $0C -> [0,1,2,3]
+;     BG1 $0F $00 $06 $20 -> [0,2,11,4]
+;     BG2 $0F $16 $30 $10 -> [0,8,6,7]
+;     BG3 $0F $38 $09 $06 -> [0,9,10,11]
+;     SP0 $0F $37 $12 $0F -> [0,5,12,0]
+;     SP1 $0F $36 $16 $0F -> [0,13,8,0]
+;     SP2 $0F $20 $26 $16 -> [0,4,14,8]
+;     SP3 $0F $20 $1B $0F -> [0,4,15,0]
+;   level_5
+;     BG0 $0F $20 $10 $1C -> [0,1,2,3]
+;     BG1 $0F $20 $10 $0A -> [0,1,2,4]
+;     BG2 $0F $16 $30 $10 -> [0,8,6,7]
+;     BG3 $0F $20 $22 $02 -> [0,9,10,11]
+;     SP0 $0F $37 $12 $0F -> [0,5,12,0]
+;     SP1 $0F $36 $16 $0F -> [0,13,8,0]
+;     SP2 $0F $20 $26 $16 -> [0,1,14,8]
+;     SP3 $0F $20 $00 $0F -> [0,1,15,0]
+;   level_6
+;     BG0 $0F $00 $20 $1A -> [0,1,2,3]
+;     BG1 $0F $01 $20 $00 -> [0,4,2,1]
+;     BG2 $0F $16 $30 $10 -> [0,8,6,7]
+;     BG3 $0F $20 $27 $17 -> [0,9,10,11]
+;     SP0 $0F $37 $12 $0F -> [0,5,12,0]
+;     SP1 $0F $36 $16 $0F -> [0,13,8,0]
+;     SP2 $0F $20 $26 $16 -> [0,2,14,8]
+;     SP3 $0F $20 $00 $0F -> [0,2,1,0]
+;   level_7
+;     BG0 $0F $27 $17 $06 -> [0,1,2,3]
+;     BG1 $0F $20 $10 $00 -> [0,4,7,5]
+;     BG2 $0F $16 $30 $10 -> [0,8,6,7]
+;     BG3 $0F $06 $1B $0B -> [0,9,10,11]
+;     SP0 $0F $37 $12 $0F -> [0,12,13,0]
+;     SP1 $0F $36 $16 $0F -> [0,14,8,0]
+;     SP2 $0F $20 $26 $16 -> [0,4,15,8]
+;     SP3 $0F $20 $00 $0F -> [0,4,5,0]
 ;   level_8
 ;     BG0 $0F $10 $00 $07 -> [0,1,2,3]
-;     BG1 $0F $36 $15 $06 -> [0,4,5,6]
-;     BG2 $0F $35~$36 $15 $04 -> [0,4,5,7]
-;     BG3 $0F $18 $13~$14 $03 -> [0,8,9,10]
-;     SP0 $0F $37~$36 $12 $0F -> [0,4,11,0]
-;     SP1 $0F $36 $16 $0F -> [0,4,12,0]
+;     BG1 $0F $36 $15 $06 -> [0,8,6,4]
+;     BG2 $0F $35~$36 $15 $04 -> [0,8,6,7]
+;     BG3 $0F $18 $13~$14 $03 -> [0,9,10,11]
+;     SP0 $0F $37~$36 $12 $0F -> [0,8,5,0]
+;     SP1 $0F $36 $16 $0F -> [0,8,12,0]
 ;     SP2 $0F $30 $28 $16 -> [0,13,14,12]
-;     SP3 $0F $30 $25 $14 -> [0,13,15,9]
+;     SP3 $0F $30 $25 $14 -> [0,13,15,10]
 ;   ending
 ;     BG0 $0F $30 $10 $00 -> [0,1,2,3]
-;     BG1 $0F $18 $07 $1A -> [0,4,5,6]
-;     BG2 $0F $16 $18 $07 -> [0,7,4,5]
-;     BG3 $0F $20 $10 $11 -> [0,8,9,10]
-;     SP0 $0F $0B $1B $3B -> [0,11,12,13]
-;     SP1 $0F $16 $00 $00 -> [0,7,3,3]
-;     SP2 $0F $20 $26 $16 -> [0,8,14,7]
-;     SP3 $0F $20 $10 $00 -> [0,8,2,3]
+;     BG1 $0F $18 $07 $1A -> [0,6,7,4]
+;     BG2 $0F $16 $18 $07 -> [0,8,6,7]
+;     BG3 $0F $20 $10 $11 -> [0,9,10,11]
+;     SP0 $0F $0B $1B $3B -> [0,5,12,13]
+;     SP1 $0F $16 $00 $00 -> [0,8,3,3]
+;     SP2 $0F $20 $26 $16 -> [0,9,14,8]
+;     SP3 $0F $20 $10 $00 -> [0,9,2,3]
 
             mx    %00
 
@@ -279,13 +279,13 @@ PAL_TITLE_2_MATCH
             db    $10,$28,$16,$30,$10,$15,$10,$28,$38,$30,$36,$26   ; BG0-BG3
             db    $30,$10,$00,$30,$38,$28,$2C,$1C,$0C,$00,$00,$00   ; SP0-SP3
 PAL_LEVEL_1_MATCH
-            db    $19,$29,$08,$28,$18,$08,$16,$30,$10,$11,$21,$30   ; BG0-BG3
+            db    $19,$29,$08,$28,$18,$08,$FF,$30,$10,$FF,$FF,$FF   ; BG0-BG3
             db    $37,$12,$0F,$36,$16,$0F,$20,$26,$16,$20,$00,$0F   ; SP0-SP3
 PAL_LEVEL_2_MATCH
-            db    $10,$00,$09,$00,$0C,$20,$16,$30,$10,$36,$06,$02   ; BG0-BG3
+            db    $10,$00,$09,$00,$0C,$20,$FF,$30,$10,$FF,$FF,$FF   ; BG0-BG3
             db    $37,$12,$0F,$36,$16,$0F,$20,$26,$16,$20,$1B,$0F   ; SP0-SP3
 PAL_LEVEL_3_MATCH
-            db    $0A,$1A,$00,$28,$18,$07,$16,$30,$10,$1C,$2C,$0C   ; BG0-BG3
+            db    $0A,$1A,$00,$28,$18,$07,$FF,$30,$10,$FF,$FF,$FF   ; BG0-BG3
             db    $37,$12,$0F,$36,$16,$0F,$20,$26,$16,$20,$00,$0F   ; SP0-SP3
 PAL_LEVEL_4_MATCH
             db    $10,$00,$0C,$00,$06,$20,$16,$30,$10,$38,$09,$06   ; BG0-BG3
@@ -390,38 +390,38 @@ PAL_CELLS
             dw    PAL_LEVEL_8_CELLS
             dw    PAL_ENDING_CELLS
 PAL_TITLE_CELLS
-            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$02,$04,$0E,$FF,$10,$12,$14   ; BG0-BG3
-            db    $FF,$08,$02,$16,$FF,$08,$0E,$04,$FF,$18,$1A,$1C,$FF,$16,$16,$16   ; SP0-SP3
+            db    $FF,$02,$04,$06,$FF,$08,$02,$0A,$FF,$10,$0C,$0E,$FF,$12,$14,$16   ; BG0-BG3
+            db    $FF,$08,$02,$18,$FF,$08,$0E,$04,$FF,$1A,$1C,$1E,$FF,$18,$18,$18   ; SP0-SP3
 PAL_TITLE_2_CELLS
-            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$02,$04,$0E,$FF,$10,$12,$14   ; BG0-BG3
-            db    $FF,$08,$02,$16,$FF,$08,$0E,$04,$FF,$18,$1A,$1C,$FF,$16,$16,$16   ; SP0-SP3
+            db    $FF,$02,$04,$06,$FF,$08,$02,$0A,$FF,$10,$0C,$0E,$FF,$12,$14,$16   ; BG0-BG3
+            db    $FF,$08,$02,$18,$FF,$08,$0E,$04,$FF,$1A,$1C,$1E,$FF,$18,$18,$18   ; SP0-SP3
 PAL_LEVEL_1_CELLS
-            db    $FF,$02,$04,$0C,$FF,$08,$0A,$0C,$FF,$06,$FF,$0E,$FF,$10,$12,$FF   ; BG0-BG3
-            db    $FF,$16,$18,$FF,$FF,$1A,$06,$FF,$FF,$14,$1C,$06,$FF,$14,$1E,$FF   ; SP0-SP3
+            db    $FF,$02,$04,$06,$FF,$08,$0A,$06,$FF,$10,$FF,$0E,$FF,$12,$14,$16   ; BG0-BG3
+            db    $FF,$FF,$18,$FF,$FF,$1A,$1C,$FF,$FF,$0C,$1E,$1C,$FF,$0C,$FF,$FF   ; SP0-SP3
 PAL_LEVEL_2_CELLS
-            db    $FF,$0E,$08,$06,$FF,$08,$0A,$0C,$FF,$02,$04,$0E,$FF,$10,$12,$14   ; BG0-BG3
-            db    $FF,$16,$18,$FF,$FF,$10,$02,$FF,$FF,$0C,$1A,$02,$FF,$0C,$1C,$FF   ; SP0-SP3
+            db    $FF,$0E,$02,$04,$FF,$02,$06,$0C,$FF,$10,$FF,$0E,$FF,$12,$14,$16   ; BG0-BG3
+            db    $FF,$08,$0A,$FF,$FF,$18,$1A,$FF,$FF,$0C,$1C,$1A,$FF,$0C,$1E,$FF   ; SP0-SP3
 PAL_LEVEL_3_CELLS
-            db    $FF,$FF,$06,$16,$FF,$08,$0A,$0C,$FF,$02,$FF,$0E,$FF,$10,$12,$14   ; BG0-BG3
-            db    $FF,$18,$1A,$FF,$FF,$1C,$02,$FF,$FF,$04,$1E,$02,$FF,$04,$16,$FF   ; SP0-SP3
+            db    $FF,$04,$06,$0E,$FF,$08,$02,$0A,$FF,$10,$FF,$FF,$FF,$12,$14,$16   ; BG0-BG3
+            db    $FF,$18,$1A,$FF,$FF,$1C,$1E,$FF,$FF,$0C,$FF,$FF,$FF,$0C,$0E,$FF   ; SP0-SP3
 PAL_LEVEL_4_CELLS
-            db    $FF,$0E,$08,$06,$FF,$08,$0A,$0C,$FF,$02,$04,$0E,$FF,$10,$12,$14   ; BG0-BG3
-            db    $FF,$16,$18,$FF,$FF,$1A,$02,$FF,$FF,$0C,$1C,$02,$FF,$0C,$1E,$FF   ; SP0-SP3
+            db    $FF,$02,$04,$06,$FF,$04,$16,$08,$FF,$10,$0C,$0E,$FF,$12,$14,$16   ; BG0-BG3
+            db    $FF,$0A,$18,$FF,$FF,$1A,$10,$FF,$FF,$08,$1C,$10,$FF,$08,$1E,$FF   ; SP0-SP3
 PAL_LEVEL_5_CELLS
-            db    $FF,$08,$0A,$06,$FF,$08,$0A,$0C,$FF,$02,$04,$0E,$FF,$10,$12,$14   ; BG0-BG3
-            db    $FF,$16,$18,$FF,$FF,$1A,$02,$FF,$FF,$08,$1C,$02,$FF,$08,$1E,$FF   ; SP0-SP3
+            db    $FF,$02,$04,$06,$FF,$02,$04,$08,$FF,$10,$0C,$0E,$FF,$12,$14,$16   ; BG0-BG3
+            db    $FF,$0A,$18,$FF,$FF,$1A,$10,$FF,$FF,$02,$1C,$10,$FF,$02,$1E,$FF   ; SP0-SP3
 PAL_LEVEL_6_CELLS
-            db    $FF,$0C,$0A,$06,$FF,$08,$0A,$0C,$FF,$02,$04,$0E,$FF,$10,$12,$14   ; BG0-BG3
-            db    $FF,$16,$18,$FF,$FF,$1A,$02,$FF,$FF,$0A,$1C,$02,$FF,$0A,$0C,$FF   ; SP0-SP3
+            db    $FF,$02,$04,$06,$FF,$08,$04,$02,$FF,$10,$0C,$0E,$FF,$12,$14,$16   ; BG0-BG3
+            db    $FF,$0A,$18,$FF,$FF,$1A,$10,$FF,$FF,$04,$1C,$10,$FF,$04,$02,$FF   ; SP0-SP3
 PAL_LEVEL_7_CELLS
-            db    $FF,$06,$16,$10,$FF,$08,$0A,$0C,$FF,$02,$04,$0E,$FF,$10,$12,$14   ; BG0-BG3
-            db    $FF,$18,$1A,$FF,$FF,$1C,$02,$FF,$FF,$08,$1E,$02,$FF,$08,$0C,$FF   ; SP0-SP3
+            db    $FF,$02,$04,$06,$FF,$08,$0E,$0A,$FF,$10,$0C,$0E,$FF,$12,$14,$16   ; BG0-BG3
+            db    $FF,$18,$1A,$FF,$FF,$1C,$10,$FF,$FF,$08,$1E,$10,$FF,$08,$0A,$FF   ; SP0-SP3
 PAL_LEVEL_8_CELLS
-            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$FF,$0A,$0E,$FF,$10,$FF,$14   ; BG0-BG3
-            db    $FF,$FF,$16,$FF,$FF,$08,$18,$FF,$FF,$1A,$1C,$18,$FF,$1A,$1E,$12   ; SP0-SP3
+            db    $FF,$02,$04,$06,$FF,$10,$0C,$08,$FF,$FF,$0C,$0E,$FF,$12,$FF,$16   ; BG0-BG3
+            db    $FF,$FF,$0A,$FF,$FF,$10,$18,$FF,$FF,$1A,$1C,$18,$FF,$1A,$1E,$14   ; SP0-SP3
 PAL_ENDING_CELLS
-            db    $FF,$02,$04,$06,$FF,$08,$0A,$0C,$FF,$0E,$08,$0A,$FF,$10,$12,$14   ; BG0-BG3
-            db    $FF,$16,$18,$1A,$FF,$0E,$06,$06,$FF,$10,$1C,$0E,$FF,$10,$04,$06   ; SP0-SP3
+            db    $FF,$02,$04,$06,$FF,$0C,$0E,$08,$FF,$10,$0C,$0E,$FF,$12,$14,$16   ; BG0-BG3
+            db    $FF,$0A,$18,$1A,$FF,$10,$06,$06,$FF,$12,$1C,$10,$FF,$12,$04,$06   ; SP0-SP3
 
 ; from id -> its row of to id -> background groups to redraw (bit 0 = BG0 .. bit 3 = BG3).
 ; From no palette (0), everything is redrawn.
@@ -444,142 +444,142 @@ BG_UPDATE_MASKS_TITLE
             dw    $0000
             dw    %0000   ; to title
             dw    %0000   ; to title_2
-            dw    %0101   ; to level_1
-            dw    %0001   ; to level_2
+            dw    %0010   ; to level_1
+            dw    %0011   ; to level_2
             dw    %0001   ; to level_3
-            dw    %0001   ; to level_4
-            dw    %0001   ; to level_5
-            dw    %0001   ; to level_6
-            dw    %0001   ; to level_7
-            dw    %0100   ; to level_8
-            dw    %0100   ; to ending
+            dw    %0010   ; to level_4
+            dw    %0010   ; to level_5
+            dw    %0010   ; to level_6
+            dw    %0010   ; to level_7
+            dw    %0010   ; to level_8
+            dw    %0010   ; to ending
 BG_UPDATE_MASKS_TITLE_2
             dw    $0000
             dw    %0000   ; to title
             dw    %0000   ; to title_2
-            dw    %0101   ; to level_1
-            dw    %0001   ; to level_2
+            dw    %0010   ; to level_1
+            dw    %0011   ; to level_2
             dw    %0001   ; to level_3
-            dw    %0001   ; to level_4
-            dw    %0001   ; to level_5
-            dw    %0001   ; to level_6
-            dw    %0001   ; to level_7
-            dw    %0100   ; to level_8
-            dw    %0100   ; to ending
+            dw    %0010   ; to level_4
+            dw    %0010   ; to level_5
+            dw    %0010   ; to level_6
+            dw    %0010   ; to level_7
+            dw    %0010   ; to level_8
+            dw    %0010   ; to ending
 BG_UPDATE_MASKS_LEVEL_1
             dw    $0000
-            dw    %0101   ; to title
-            dw    %0101   ; to title_2
+            dw    %0010   ; to title
+            dw    %0010   ; to title_2
             dw    %0000   ; to level_1
-            dw    %0101   ; to level_2
-            dw    %0101   ; to level_3
-            dw    %0101   ; to level_4
-            dw    %0101   ; to level_5
-            dw    %0101   ; to level_6
-            dw    %0101   ; to level_7
-            dw    %0101   ; to level_8
-            dw    %0101   ; to ending
+            dw    %0011   ; to level_2
+            dw    %0011   ; to level_3
+            dw    %0010   ; to level_4
+            dw    %0010   ; to level_5
+            dw    %0010   ; to level_6
+            dw    %0010   ; to level_7
+            dw    %0010   ; to level_8
+            dw    %0010   ; to ending
 BG_UPDATE_MASKS_LEVEL_2
             dw    $0000
-            dw    %0001   ; to title
-            dw    %0001   ; to title_2
-            dw    %0101   ; to level_1
+            dw    %0011   ; to title
+            dw    %0011   ; to title_2
+            dw    %0011   ; to level_1
             dw    %0000   ; to level_2
-            dw    %0001   ; to level_3
-            dw    %0000   ; to level_4
-            dw    %0001   ; to level_5
-            dw    %0001   ; to level_6
-            dw    %0001   ; to level_7
-            dw    %0101   ; to level_8
-            dw    %0101   ; to ending
+            dw    %0011   ; to level_3
+            dw    %0011   ; to level_4
+            dw    %0011   ; to level_5
+            dw    %0011   ; to level_6
+            dw    %0011   ; to level_7
+            dw    %0011   ; to level_8
+            dw    %0011   ; to ending
 BG_UPDATE_MASKS_LEVEL_3
             dw    $0000
             dw    %0001   ; to title
             dw    %0001   ; to title_2
-            dw    %0101   ; to level_1
-            dw    %0001   ; to level_2
+            dw    %0011   ; to level_1
+            dw    %0011   ; to level_2
             dw    %0000   ; to level_3
-            dw    %0001   ; to level_4
-            dw    %0001   ; to level_5
-            dw    %0001   ; to level_6
-            dw    %0001   ; to level_7
-            dw    %0101   ; to level_8
-            dw    %0101   ; to ending
+            dw    %0011   ; to level_4
+            dw    %0011   ; to level_5
+            dw    %0011   ; to level_6
+            dw    %0011   ; to level_7
+            dw    %0011   ; to level_8
+            dw    %0011   ; to ending
 BG_UPDATE_MASKS_LEVEL_4
             dw    $0000
-            dw    %0001   ; to title
-            dw    %0001   ; to title_2
-            dw    %0101   ; to level_1
-            dw    %0000   ; to level_2
-            dw    %0001   ; to level_3
+            dw    %0010   ; to title
+            dw    %0010   ; to title_2
+            dw    %0010   ; to level_1
+            dw    %0011   ; to level_2
+            dw    %0011   ; to level_3
             dw    %0000   ; to level_4
-            dw    %0001   ; to level_5
-            dw    %0001   ; to level_6
-            dw    %0001   ; to level_7
-            dw    %0101   ; to level_8
-            dw    %0101   ; to ending
+            dw    %0010   ; to level_5
+            dw    %0010   ; to level_6
+            dw    %0010   ; to level_7
+            dw    %0010   ; to level_8
+            dw    %0010   ; to ending
 BG_UPDATE_MASKS_LEVEL_5
             dw    $0000
-            dw    %0001   ; to title
-            dw    %0001   ; to title_2
-            dw    %0101   ; to level_1
-            dw    %0001   ; to level_2
-            dw    %0001   ; to level_3
-            dw    %0001   ; to level_4
+            dw    %0010   ; to title
+            dw    %0010   ; to title_2
+            dw    %0010   ; to level_1
+            dw    %0011   ; to level_2
+            dw    %0011   ; to level_3
+            dw    %0010   ; to level_4
             dw    %0000   ; to level_5
-            dw    %0001   ; to level_6
-            dw    %0001   ; to level_7
-            dw    %0101   ; to level_8
-            dw    %0101   ; to ending
+            dw    %0010   ; to level_6
+            dw    %0010   ; to level_7
+            dw    %0010   ; to level_8
+            dw    %0010   ; to ending
 BG_UPDATE_MASKS_LEVEL_6
             dw    $0000
-            dw    %0001   ; to title
-            dw    %0001   ; to title_2
-            dw    %0101   ; to level_1
-            dw    %0001   ; to level_2
-            dw    %0001   ; to level_3
-            dw    %0001   ; to level_4
-            dw    %0001   ; to level_5
+            dw    %0010   ; to title
+            dw    %0010   ; to title_2
+            dw    %0010   ; to level_1
+            dw    %0011   ; to level_2
+            dw    %0011   ; to level_3
+            dw    %0010   ; to level_4
+            dw    %0010   ; to level_5
             dw    %0000   ; to level_6
-            dw    %0001   ; to level_7
-            dw    %0101   ; to level_8
-            dw    %0101   ; to ending
+            dw    %0010   ; to level_7
+            dw    %0010   ; to level_8
+            dw    %0010   ; to ending
 BG_UPDATE_MASKS_LEVEL_7
             dw    $0000
-            dw    %0001   ; to title
-            dw    %0001   ; to title_2
-            dw    %0101   ; to level_1
-            dw    %0001   ; to level_2
-            dw    %0001   ; to level_3
-            dw    %0001   ; to level_4
-            dw    %0001   ; to level_5
-            dw    %0001   ; to level_6
+            dw    %0010   ; to title
+            dw    %0010   ; to title_2
+            dw    %0010   ; to level_1
+            dw    %0011   ; to level_2
+            dw    %0011   ; to level_3
+            dw    %0010   ; to level_4
+            dw    %0010   ; to level_5
+            dw    %0010   ; to level_6
             dw    %0000   ; to level_7
-            dw    %0101   ; to level_8
-            dw    %0101   ; to ending
+            dw    %0010   ; to level_8
+            dw    %0010   ; to ending
 BG_UPDATE_MASKS_LEVEL_8
             dw    $0000
-            dw    %0100   ; to title
-            dw    %0100   ; to title_2
-            dw    %0101   ; to level_1
-            dw    %0101   ; to level_2
-            dw    %0101   ; to level_3
-            dw    %0101   ; to level_4
-            dw    %0101   ; to level_5
-            dw    %0101   ; to level_6
-            dw    %0101   ; to level_7
+            dw    %0010   ; to title
+            dw    %0010   ; to title_2
+            dw    %0010   ; to level_1
+            dw    %0011   ; to level_2
+            dw    %0011   ; to level_3
+            dw    %0010   ; to level_4
+            dw    %0010   ; to level_5
+            dw    %0010   ; to level_6
+            dw    %0010   ; to level_7
             dw    %0000   ; to level_8
-            dw    %0100   ; to ending
+            dw    %0010   ; to ending
 BG_UPDATE_MASKS_ENDING
             dw    $0000
-            dw    %0100   ; to title
-            dw    %0100   ; to title_2
-            dw    %0101   ; to level_1
-            dw    %0101   ; to level_2
-            dw    %0101   ; to level_3
-            dw    %0101   ; to level_4
-            dw    %0101   ; to level_5
-            dw    %0101   ; to level_6
-            dw    %0101   ; to level_7
-            dw    %0100   ; to level_8
+            dw    %0010   ; to title
+            dw    %0010   ; to title_2
+            dw    %0010   ; to level_1
+            dw    %0011   ; to level_2
+            dw    %0011   ; to level_3
+            dw    %0010   ; to level_4
+            dw    %0010   ; to level_5
+            dw    %0010   ; to level_6
+            dw    %0010   ; to level_7
+            dw    %0010   ; to level_8
             dw    %0000   ; to ending

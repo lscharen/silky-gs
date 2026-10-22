@@ -168,8 +168,10 @@ function makeSolver({ pals, pins = [], pinsOf = [] }) {
     // shows the same (unreserved) color in them (or doesn't use one of them)
     const slotOf = new Array(cells.length);
     const members = [];
+    const pinnedCells = [];              // canonical cells that are also pinned: they take the pinned slot
     for (let c = 0; c < cells.length; c++) {
       const { g, i } = cells[c];
+      if (pins.includes(BG_GROUPS[g] + ':' + i)) { pinnedCells.push(c); continue; }
       let ok0 = true;
       for (let p = 0; p < NP; p++) {
         if (inP(p, g) && !un(p, BG_GROUPS[g], i) && (col(p, g, i) !== univ[p] || res(p, BG_GROUPS[g], i))) { ok0 = false; break; }
@@ -192,6 +194,9 @@ function makeSolver({ pals, pins = [], pinsOf = [] }) {
     }
     // The pinned cells get the global slots after the canonical ones
     const pinSlot = c => members.length + 1 + pins.indexOf(c);
+    // A pinned background cell keeps its pinned slot in the palettes that keep its group canonical too,
+    // so that its slot is the same in every palette that pins it
+    for (const c of pinnedCells) slotOf[c] = pinSlot(BG_GROUPS[cells[c].g] + ':' + cells[c].i);
     if (members.length + pins.length > MAX_SLOTS - 1) {
       return { ok: false, overflow: 100 * (members.length + pins.length - MAX_SLOTS + 1) };
     }
