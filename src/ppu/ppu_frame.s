@@ -28,18 +28,6 @@ RenderLatch ENT
 ; this render draws, and new PPU writes go to the other buffer, so they don't interfere with the render
             jsr  PPUFreezeNametableUpdates
 
-; If there are background updates to make, force a screen refresh.  The grid renderer decides for
-; itself in gridPrepare, since it can apply a limited number of background tile updates directly.
-
-            DO   ENABLE_DIRTY_RENDERING
-            bra  :no_force
-            FIN
-            lda  at_prev_count            ; Any queued attribute group means background changes
-            beq  :no_force
-            lda  #DIRTY_BIT_BG0_REFRESH
-            tsb  DirtyBits
-:no_force
-
             DO   CUSTOM_PPU_CTRL_LOCK
             CUSTOM_PPU_CTRL_LOCK_CODE
             ELSE
@@ -82,6 +70,19 @@ RenderDraw ENT
             phb
             phk
             plb
+
+; If there are background updates to make, force a screen refresh.  Here and not in RenderLatch: the
+; game's PRE_RENDER hook runs in between and can add to the frozen queues.  The grid renderer decides
+; for itself in gridPrepare, since it can apply a limited number of background tile updates directly.
+
+            DO   ENABLE_DIRTY_RENDERING
+            bra  :no_force
+            FIN
+            lda  at_prev_count            ; Any queued attribute group means background changes
+            beq  :no_force
+            lda  #DIRTY_BIT_BG0_REFRESH
+            tsb  DirtyBits
+:no_force
 
 ; Apply all of the tile updates that were made during the previous frame(s).  The color attribute bytes are always set
 ; in the PPUDATA hook, but then the appropriate tiles are queued up.  These tiles, the tiles written to by PPUDATA in
