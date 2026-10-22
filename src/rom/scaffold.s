@@ -96,6 +96,7 @@ NES_StartUp
             jsr   LoadPrefData
             jsr   _FixPrefInputTypes
             jsr   KbdBuildMaps            ; The BASIC keyboard driver's key maps (rom/rom_kbd_basic.s)
+            jsr   KbdAdb_Apply            ; The ADB driver's keys, and put it in if it is set (rom/rom_kbd_adb.s)
             DO    JOYSTICK_SUPPORT
             jsl   JoyConfigureL           ; The joystick settings; _InitRenderMode hooks the probe rows if used
             jsr   _InitRenderMode
@@ -391,6 +392,7 @@ NES_ShutDown
             jsr   NES_StopExecution        ; First stop the VBL task from running NES frames and the 60Hz
                                            ; audio driver while the runtime is taken down
             jsr   J13_ShutDown             ; The ADB interrupt enables, if a J13 row read is in flight
+            jsr   KbdAdb_ShutDown          ; Keyboard autopolling back on, if the ADB driver is in
             DO    JOYSTICK_SUPPORT
             jsl   JoyScanDisarmL           ; The joystick's scanline interrupts, if armed
             FIN
