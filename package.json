@@ -20,7 +20,7 @@
     "cr": "%npm_package_config_crossrunner%",
     "test": "vitest run --config vitest.config.mjs",
     "run": "npm run build-image && %npm_package_config_gsport%",
-    "build:all": "npm run build:smb && npm run build:bf && npm run build:wump && npm run build:lo && npm run build:ic && npm run build:eb && npm run build:dk && npm run build:mb && npm run build:zelda",
+    "build:all": "npm run build:smb && npm run build:bf && npm run build:wump && npm run build:lo && npm run build:ic && npm run build:eb && npm run build:dk && npm run build:mb && npm run build:zelda && npm run build:contra",
     "build:smb": "node ./src/games/smb/build.js",
     "build:bf": "node ./src/games/bf/build.js",
     "build:contra": "node ./src/games/contra/build.js",
