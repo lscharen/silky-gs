@@ -41,9 +41,9 @@ EVT_LOOP_END mac
 ; Pre-render check to see if there are any background tiles queued for updates.  If so, we will do
 ; a regular rendering.  If not, use dirty rendering.
 PRE_RENDER   mac
-             jsr  ApplyMirrorMode   ; finish any mirroring-mode change requested since the last frame
+             jsr  ApplyMirrorMode    ; finish any mirroring-mode change requested since the last frame
              jsr  ApplyPaletteChange ; switch to a new palette detected since the last frame
-             jsr  HideDoorBands      ; the NES 8-sprites-per-line limit at the top and bottom doors
+             jsr  HideDoorBand       ; the NES 8-sprites-per-line limit at the top door
              <<<
 
 POST_RENDER  mac
@@ -52,11 +52,10 @@ POST_RENDER  mac
 
 ; Callback before each sprite is set up and drawn (drawSprites, ppu.s): X = OAM index, ]1 = the
 ; sprite height (8 or 16), DBR = $01 (the shadow screen), 16-bit registers.  Sets sprClipTop, the lines
-; to hide at the top of the sprite: here, the lines in the door bands (see HideDoorBands).
+; to hide at the top of the sprite: here, the lines in the top door band (see HideDoorBand).
 SPRITE_PRE_DRAW  mac
-             ldal  zDoorBands
-             beq   *+8
-             lda   #]1
+             ldal  zDoorBand
+             beq   *+5
              jsr   ZSpriteClip
              <<<
 
@@ -96,9 +95,7 @@ CUSTOM_RENDER_SCREEN equ 1
             mx    %00
 
 zPalDirty   EXT                             ; (the engine side's, in the other segment)
-zDoorBands  EXT
-zTopBand    EXT
-zBotBand    EXT
+zDoorBand   EXT
 
 ; Palette management.  The palettes the game uses are described in ../palettes/, and
 ; pal_transitions.s (generated from them) gives each one a fixed IIgs slot layout and swizzle
@@ -138,34 +135,21 @@ ApplyPaletteChange
             jmp   LoadPaletteColors
 :none       rts
 
-; Link goes under the top and bottom doors of the dungeons by the NES limit of 8 sprites per
-; scanline (see the door bands in the engine fence).  PRE_RENDER: find the bands in this frame's OAM.
+; Link goes under the top door of the dungeons by the NES limit of 8 sprites per scanline (see the
+; door band in the engine fence).  PRE_RENDER: the band is on if OAM 0 in NES RAM is one of the blank
+; sprites: Y $3D and tile $1C, one compare (the Y too: the game hides sprites by their Y alone, so the
+; tile stays in OAM 0 after a dungeon).
             mx    %00
-HideDoorBands
-            lda   #0                        ; (the band variables are on the engine side: ZSpriteClip
-            stal  zDoorBands                ; reads them for each sprite)
-            stal  zTopBand
-            stal  zBotBand
-            stal  sprClipTop                ; (ZSpriteClip sets it for each sprite while a band is on)
-            ldal  ROMBase+DIRECT_OAM_READ+0  ; OAM 0: Y $3D, tile $1C
+HideDoorBand
+            lda   #0
+            stal  sprClipTop                ; (ZSpriteClip sets it for each sprite while the band is on)
+            stal  zDoorBand
+            ldal  ROMBase+DIRECT_OAM_READ   ; OAM 0: Y, tile
             cmp   #$1C3D
-            bne   :bottom
-            ldal  ROMBase+DIRECT_OAM_READ+2  ; attributes $20, X 0
-            cmp   #$0020
-            bne   :bottom
-            lda   #$3D+1
-            stal  zTopBand
-            stal  zDoorBands
-:bottom     ldal  ROMBase+DIRECT_OAM_READ+4  ; OAM 1: Y $DD, tile $1C
-            cmp   #$1CDD
-            bne   :done
-            ldal  ROMBase+DIRECT_OAM_READ+6
-            cmp   #$0020
-            bne   :done
-            lda   #$DD+1
-            stal  zBotBand
-            stal  zDoorBands
-:done       rts
+            bne   :off
+            lda   #1
+            stal  zDoorBand
+:off        rts
 
             FIN
             mx    %00
@@ -198,56 +182,31 @@ Z_PalNone   rts
 ; scanline: WriteBlankPrioritySprites (bank 1) puts 8 transparent sprites (tile $1C, behind the
 ; background, X 0) at Y $3D and 8 at Y $DD in the first 16 OAM slots, Link's highest and lowest
 ; positions, so the NES drops every other sprite on those 16 lines.  The engine has no sprite limit,
-; so ZSpriteClip hides the sprites' lines in those bands as they are drawn (sprClipTop, ppu.s).  Tile
-; $1C is in tile_exclude, so the 16 blank sprites themselves are never drawn.
-zDoorBands  ENT                             ; non-zero if either band is active this frame
-            dw    0
-zTopBand    ENT                             ; first line of the top door band (OAM Y + 1), or 0
-            dw    0
-zBotBand    ENT                             ; first line of the bottom door band, or 0
+; so ZSpriteClip hides the sprites' lines in the top band as they are drawn (sprClipTop, ppu.s).  The
+; bottom band is left alone: it starts on the screen's last two lines.  Tile $1C is in tile_exclude,
+; so the 16 blank sprites themselves are never drawn.
+Z_TOP_BAND  equ   $3D+1                     ; the top band's first line (OAM Y + 1); 16 lines
+zDoorBand   ENT                             ; non-zero while the band is on this frame (HideDoorBand)
             dw    0
 
-; SPRITE_PRE_DRAW, while a door band is on.  X = OAM index, A = sprite height.  A sprite that starts
-; in the top band has its lines down to the end of the band hidden (Link walking up into the door);
-; one that starts in the bottom band is hidden entirely (only the band's first two lines are on the
-; IIgs screen).  Sprites never start above the top band: that is the status bar.
+; SPRITE_PRE_DRAW, while the band is on.  X = OAM index, DBR = $01.  A sprite that starts in the band
+; has its lines down to the end of the band hidden (Link walking up into the door).  Sprites never start
+; above the band: that is the status bar.
             mx    %00
 ZSpriteClip
-            phb
-            phk
-            plb
-            sta   :h
-            stz   :clip
             ldal  OAM_COPY,x                ; first line (OAM Y + 1)
             and   #$00FF
-            sta   :y
-            lda   zTopBand
-            beq   :bot
-            lda   :y
-            cmp   zTopBand
-            bcc   :bot                      ; above the band
-            lda   zTopBand
-            clc
-            adc   #16
             sec
-            sbc   :y                        ; lines from the sprite's top to the end of the band
-            beq   :bot
-            bmi   :bot                      ; below the band
-            sta   :clip
-:bot        lda   zBotBand
-            beq   :done
-            lda   :y
-            cmp   zBotBand
-            bcc   :done
-            lda   :h                        ; starts in the bottom band: hide it all
-            sta   :clip
-:done       lda   :clip
-            sta   sprClipTop
-            plb
+            sbc   #Z_TOP_BAND               ; d = lines into the band
+            cmp   #16
+            bcs   :none                     ; above or below it
+            eor   #$000F
+            inc                             ; 16 - d: down to the end of the band
+            stal  sprClipTop
             rts
-:h          dw    0
-:y          dw    0
-:clip       dw    0
+:none       lda   #0
+            stal  sprClipTop
+            rts
 
 ; Room transitions scroll the play area under a fixed status bar.  The NES does it with a sprite-0
 ; hit at the bottom of the status bar: the NMI shows the status bar at scroll (0,0), then

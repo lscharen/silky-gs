@@ -50,8 +50,8 @@ POST_RENDER  mac
              <<<
 
 ; Callback before each sprite is set up and drawn (drawSprites, ppu.s): X = OAM index, ]1 = the
-; sprite height (8 or 16), DBR = $01 (the shadow screen), 16-bit registers.  Sets sprClipTop, the lines
-; to hide at the top of the sprite: here, the lines in the door bands (see HideDoorBands).
+; sprite height (8 or 16), DBR = $01 (the shadow screen), 16-bit registers.  Can set sprClipTop, the
+; lines to hide at the top of the sprite (none here).
 SPRITE_PRE_DRAW  mac
 ;
              <<<
