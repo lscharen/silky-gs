@@ -38,10 +38,11 @@ EVT_LOOP_END mac
 ;
              <<<
 
-; Pre-render check to see if there are any background tiles queued for updates.  If so, we will do
-; a regular rendering.  If not, use dirty rendering.
+; Before each render: apply a palette change, then redraw the electric barriers if their tiles changed
+; (DrawBarriers)
 PRE_RENDER   mac
              jsr  ApplyPaletteChange ; switch to a new palette detected since the last frame
+             jsr  DrawBarriers
              <<<
 
 POST_RENDER  mac
@@ -90,6 +91,7 @@ CUSTOM_RENDER_SCREEN equ 0
             mx    %00
 
 zPalDirty   EXT                             ; (the engine side's, in the other segment)
+DrawBarriersL EXT                           ; (the engine side's)
 
 ; Palette management.  The palettes the game uses are described in ../palettes/, and
 ; pal_transitions.s (generated from them) gives each one a fixed IIgs slot layout and swizzle
@@ -128,6 +130,18 @@ ApplyPaletteChange
 :colors     ldy   zCurPal
             beq   :none
             jmp   LoadPaletteColors
+:none       rts
+
+; PRE_RENDER: the electric barriers, in levels 2 and 4 only (DrawBarriersL, in the engine fence below)
+CURRENT_LEVEL_ZP equ $30                    ; (equates.inc: CURRENT_LEVEL, 0 = level 1)
+DrawBarriers
+            ldal  DP_NES                    ; The NES zero page
+            tax
+            ldal  $000000+CURRENT_LEVEL_ZP,x
+            and   #$00FD                    ; Levels 2 and 4 (1 and 3) -> 1
+            cmp   #$0001
+            bne   :none
+            jsl   DrawBarriersL
 :none       rts
 
             FIN
@@ -183,6 +197,70 @@ CONTRA_PALETTE_DISPATCH
         dw   Z_PalNone,Z_PalWrite,Z_PalWrite,Z_PalWrite
         dw   Z_PalNone,Z_PalWrite,Z_PalWrite,Z_PalWrite
         dw   Z_PalNone,Z_PalWrite,Z_PalWrite,Z_PalWrite
+
+; The electric barriers (levels 2 and 4).  The game animates them by rewriting background tiles $FC - $FF
+; in CHR-RAM (all four, every 5 frames or so), which writes no nametable byte, so the engine never
+; redraws their cells.  When one of them changed (its ChrRamDirty background bit), recompile all four
+; (which clears their bits, also for a tile that isn't on screen) and redraw the cells that show them
+; in the barriers' two rows of CIRAM page 0, $227 - $238 and $267 - $278.
+;
+; PRE_RENDER (MAIN) calls it with JSL: 16-bit registers.
+BARRIER_TILE  equ   $FC                     ; The first of the four tiles
+            mx    %00
+DrawBarriersL ENT
+            phb
+            phk
+            plb
+            lda   bgadr_hi                  ; $8000: the background pattern table is at $1000
+            beq   *+5
+            lda   #$0100
+            tax                             ; X = the pattern table's ChrRamDirty index
+            sep   #$20
+            lda   ChrRamDirty+BARRIER_TILE,x
+            ora   ChrRamDirty+BARRIER_TILE+1,x
+            ora   ChrRamDirty+BARRIER_TILE+2,x
+            ora   ChrRamDirty+BARRIER_TILE+3,x
+            rep   #$20
+            and   #CHRRAM_BG_DIRTY
+            beq   :out
+
+]n          =     0
+            lup   4
+            lda   #{BARRIER_TILE+]n}*128    ; The tile's slot
+            ora   bgadr_hi
+            jsr   CheckBgTileDirty          ; Recompile it
+]n          =     ]n+1
+            --^
+
+            lda   stkAnyPatched             ; The PEA field must not have patched exits under the tiles
+            beq   *+5
+            jsr   _PEAFieldStable
+            sep   #$20
+            ldx   #$0227
+            jsr   :row
+            ldx   #$0267
+            jsr   :row
+            rep   #$20                      ; (_DrawPPUTile doesn't mark the dirty renderer's cells)
+            lda   #DIRTY_BIT_BG0_REFRESH
+            tsb   DirtyBits
+:out        plb
+            rtl
+
+; X = the row's first cell; 18 cells.  8-bit A, 16-bit X / Y.
+            mx    %10
+:row        ldy   #18
+:cell       ldal  PPU_MEM+TILE_SHADOW,x
+            cmp   #BARRIER_TILE
+            bcc   :next
+            phx
+            phy
+            jsr   _DrawPPUTile              ; A = the tile, X = its CIRAM address
+            ply
+            plx
+:next       inx
+            dey
+            bne   :cell
+            rts
 
             FIN
             mx    %00
