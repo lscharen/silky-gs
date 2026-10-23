@@ -65,7 +65,7 @@ IntStartUp
                   _IntSource
                   bcs       :error4
 
-                  jsr       InstallIrqHandlers  ; The scheduler (IRQ.VBL) and the joystick (IRQ.SCAN): rom_exec.s
+                  jsr       InstallIrqHandlers  ; The scheduler (IRQ.VBL) and the joystick (irqHook): rom_exec.s
                   bcs       :error5
                   bra       :done
 :error1           brk       $c1

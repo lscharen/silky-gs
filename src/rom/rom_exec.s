@@ -285,15 +285,15 @@ NES_TriggerNMI
             ELSE
 ; Interrupts
 ;
-; Three handlers, installed with SetVector by InstallIrqHandlers (IntStartUp, core/CoreImpl.s):
+; Two handlers, installed with SetVector by InstallIrqHandlers (IntStartUp, core/CoreImpl.s):
 ;
 ;   irqHook  ($0004, the Interrupt Manager)  runs first for every IRQ and BRK, before the firmware has
-;            touched the stack, and only records where the interrupted code's hardware frame is
+;            touched the stack: records where the interrupted code's hardware frame is, and takes the
+;            joystick's scanline interrupts itself
 ;   irqVbl   ($000C, IRQ.VBL)                the VBL housekeeping and the scheduler (schedTask)
-;   irqScan  ($000A, IRQ.SCAN)               the joystick's scanline interrupts (JoyScanService)
 ;
-; The firmware decides which interrupt it is and calls the IRQ.xxx handlers; they chain to the handlers
-; that were there before (the firmware's VBL handler clears the interrupt and runs the heartbeat tasks).
+; For the rest, the firmware decides which interrupt it is and calls the IRQ.xxx handlers; irqVbl chains
+; to the handler that was there before (the firmware's VBL handler clears the interrupt and runs the heartbeat tasks).
 
 ; irqHook
 ;
@@ -301,6 +301,14 @@ NES_TriggerNMI
 ; frame with no PBR, so the scheduler can't switch out of it, and irqFrameS = 0.  BRKs are recorded
 ; too (harmless: the VBL handler doesn't run for them).  The firmware gets the registers, P and the
 ; mode exactly as they were.
+;
+; The joystick's scanline interrupts are taken here, without the firmware (it would cost ~550 cycles of
+; the ~715 an interrupt takes through IRQ.SCAN): a native-mode IRQ (the firmware's stubs at $C071 / $C074 enter
+; with V set for a BRK, clear for an IRQ) while armed, with the scanline interrupt pending, goes straight
+; to JoyScanService and returns with RTI.  JoyScanService clears the scanline interrupt and touches only
+; its own bank and the I/O ports, so the firmware's state switching isn't needed; another pending source
+; (VBL) holds the IRQ line, so it comes right back through the firmware.  There is no IRQ.SCAN handler:
+; the scanline interrupts are only armed during dirty renders, which run in native mode.
             mx    %11
 irqHook
             php
@@ -312,6 +320,24 @@ irqHook
             bcs   :emu
             tsc
             stal  irqFrameS               ; Hardware frame: P at +4, PC at +5, PBR at +7
+            DO    JOYSTICK_SUPPORT
+            bvs   :chain                  ; A BRK
+            ldal  joyScanArmed
+            beq   :chain
+            sep   #$20
+            ldal  VGC_INT_REG             ; (8-bit: $C024 is the mouse data, read-sensitive)
+            rep   #$20
+            and   #$0020                  ; Scanline interrupt pending
+            beq   :chain
+            rep   #$30
+            jsl   JoyScanService
+            pla
+            plp                           ; (X's width as interrupted)
+            rti
+            mx    %01
+:chain
+            FIN
+            mx    %01
             pla
             plp
 irqChain    jml   $000000                 ; The previous Interrupt Manager (InstallIrqHandlers)
@@ -481,33 +507,12 @@ irqResume
             ldal  irqSaveA
             jmp   saveCtx
 
-; irqScan
-;
-; IRQ.SCAN: called (jsl) by the firmware for a scanline interrupt.  While the joystick has armed them
-; (JoyScanArm, core/blitter/JoyProbes.s), JoyScanService takes it and clears it; otherwise the previous
-; handler does.
-            DO    JOYSTICK_SUPPORT
-            mx    %11
-irqScan
-            php
-            ldal  joyScanArmed
-            beq   :chain
-            rep   #$30
-            jsl   JoyScanService
-            plp
-            clc                           ; Serviced
-            rtl
-:chain      plp
-scanChain   jml   $000000                 ; The previous scanline handler (InstallIrqHandlers)
-            FIN
-
 ; InstallIrqHandlers / RemoveIrqHandlers
 ;
 ; Called by IntStartUp / IntShutDown: 16-bit registers, DBR = this bank.  irqHook goes in first and comes
 ; out last, so irqVbl never sees a stale irqFrameS.  InstallIrqHandlers returns C set if a toolbox call
 ; failed.
 SV_INT_MGR  equ   $0004                   ; SetVector / GetVector vector numbers
-SV_IRQ_SCAN equ   $000A
 SV_IRQ_VBL  equ   $000C
 
             mx    %00
@@ -523,14 +528,6 @@ InstallIrqHandlers
             ldy   #SV_IRQ_VBL
             lda   #irqVbl
             jsr   :install
-
-            DO    JOYSTICK_SUPPORT
-            bcs   :done
-            ldx   #scanChain+1
-            ldy   #SV_IRQ_SCAN
-            lda   #irqScan
-            jsr   :install
-            FIN
 :done       rts
 
 ; X = the JML operand that gets the old handler, Y = the vector, A = the new handler (in this bank)
@@ -565,11 +562,6 @@ InstallIrqHandlers
 
             mx    %00
 RemoveIrqHandlers
-            DO    JOYSTICK_SUPPORT
-            ldx   #scanChain+1
-            ldy   #SV_IRQ_SCAN
-            jsr   :restore
-            FIN
             ldx   #vblChain+1
             ldy   #SV_IRQ_VBL
             jsr   :restore

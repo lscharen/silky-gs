@@ -127,10 +127,6 @@ RenderDraw ENT
             jsr   RenderScreen
             FIN
 
-            DO    JOYSTICK_SUPPORT
-            jsr   JoyHarvest              ; The joystick probe runs of this render (JoyProbes.s)
-            FIN
-
             plb
             rtl
 

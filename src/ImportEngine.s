@@ -20,6 +20,7 @@ JoyScanDisarmL          EXT
 JoyConfigureL           EXT
 JoyGetPadL              EXT
 JoyClassifyL            EXT
+JoyMeasureL             EXT
 joyScanArmed            EXT
 RefreshPPUAttributesL   EXT
 

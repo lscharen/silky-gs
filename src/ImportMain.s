@@ -17,4 +17,3 @@ config_input_p2_type    EXT
 config_joy_cx           EXT
 config_joy_cy           EXT
 config_joy_sens         EXT
-config_joy_offset       EXT

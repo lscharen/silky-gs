@@ -151,8 +151,7 @@ config_joy_cy          ENT                ; ... Y
                        dw  0
 config_joy_sens        ENT                ; Its sensitivity, 1 - 7 (dead zone = 8 - it steps; an older
                        dw  JOY_DEFAULT_SENS  ; file's 0 is made the default by _FixPrefInputTypes)
-config_joy_offset      ENT                ; Its offset, 0 - 7: the dead zone moves this many steps earlier
-                       dw  0
+                       dw  0              ; (free: was the joystick's offset; a new value must default to 0)
 
 ; The diagonal keys of each player (0 = none), at the same distance from each player's block
 ; (PLAYER_INPUT_KEY_UL ... DR, core/CoreImpl.s), so player 2's follow 8 bytes after player 1's
@@ -565,17 +564,15 @@ DRIVERS_ITEM_1 dw RADIO
 
 ; The joystick (INPUT_JOYSTICK)
 ;
-; Its settings: the calibrated center of each axis (config_joy_cx / cy), the sensitivity (the dead zone
-; around the center) and the offset (moves the dead zone earlier: where the probe rows run fast, as on
-; GSPlus, they reach less far, and a smaller, earlier window can still be reached).  JoyConfigureL (core/blitter/JoyProbes.s) turns them into thresholds.  The
-; configuration screen measures the timers itself, by busy reads (JoyMeasure): spinning is fine there.
+; Its settings: the calibrated center of each axis (config_joy_cx / cy) and the sensitivity (the dead zone
+; around the center).  JoyConfigureL (core/blitter/JoyProbes.s) turns them into thresholds.  The
+; configuration screen measures the timers itself, by busy reads (JoyMeasureL): spinning is fine there.
              DO   JOYSTICK_SUPPORT
 
 JOYSTICK_LIST dw  CTRL_LIST
-              dw  4
+              dw  3
               dw  JOY_ITEM_CAL
               dw  JOY_ITEM_SENS
-              dw  JOY_ITEM_OFFS
               dw  JOY_ITEM_TEST
 
 JOY_ITEM_CAL dw ACTION
@@ -588,36 +585,26 @@ JOY_ITEM_CAL dw ACTION
 
 JOY_ITEM_SENS dw NUMBER_SELECT
              dw   JOY_ITEM_CAL
-             dw   JOY_ITEM_OFFS
+             dw   JOY_ITEM_TEST
              dw   3,INPUT_LIST_Y+1
              dw   JOY_SENS_STR
              dw   config_joy_sens
              dw   1                     ; minimum value
              dw   7                     ; maximum value
 
-JOY_ITEM_OFFS dw NUMBER_SELECT
-             dw   JOY_ITEM_SENS
-             dw   JOY_ITEM_TEST
-             dw   3,INPUT_LIST_Y+2
-             dw   JOY_OFFS_STR
-             dw   config_joy_offset
-             dw   0
-             dw   7
-
 JOY_ITEM_TEST dw ACTION
-             dw   JOY_ITEM_OFFS
+             dw   JOY_ITEM_SENS
              dw   0
-             dw   3,INPUT_LIST_Y+3
+             dw   3,INPUT_LIST_Y+2
              dw   JOY_TEST_STR
              dw   JoyTest
              dw   0
 
              DO   CONFIG_INPUT_2P
 JOYSTICK_LIST_2 dw CTRL_LIST
-              dw  4
+              dw  3
               dw  JOY_ITEM_CAL_2
               dw  JOY_ITEM_SENS_2
-              dw  JOY_ITEM_OFFS_2
               dw  JOY_ITEM_TEST_2
 
 JOY_ITEM_CAL_2 dw ACTION
@@ -630,26 +617,17 @@ JOY_ITEM_CAL_2 dw ACTION
 
 JOY_ITEM_SENS_2 dw NUMBER_SELECT
              dw   JOY_ITEM_CAL_2
-             dw   JOY_ITEM_OFFS_2
+             dw   JOY_ITEM_TEST_2
              dw   3,INPUT_LIST_Y+1
              dw   JOY_SENS_STR
              dw   config_joy_sens
              dw   1                     ; minimum value
              dw   7                     ; maximum value
 
-JOY_ITEM_OFFS_2 dw NUMBER_SELECT
-             dw   JOY_ITEM_SENS_2
-             dw   JOY_ITEM_TEST_2
-             dw   3,INPUT_LIST_Y+2
-             dw   JOY_OFFS_STR
-             dw   config_joy_offset
-             dw   0
-             dw   7
-
 JOY_ITEM_TEST_2 dw ACTION
-             dw   JOY_ITEM_OFFS_2
+             dw   JOY_ITEM_SENS_2
              dw   0
-             dw   3,INPUT_LIST_Y+3
+             dw   3,INPUT_LIST_Y+2
              dw   JOY_TEST_STR
              dw   JoyTest
              dw   0
@@ -657,7 +635,6 @@ JOY_ITEM_TEST_2 dw ACTION
 
 JOY_CAL_STR     str 'CALIBRATE'
 JOY_SENS_STR    str 'SENSITIVITY'
-JOY_OFFS_STR    str 'OFFSET'
 JOY_TEST_STR    str 'TEST'
 JOY_CENTER_STR  str 'CENTER THE STICK'
 JOY_PRESS_STR   str 'THEN PRESS A KEY'
@@ -674,15 +651,11 @@ JOY_MID_STR     str 'CENTER'
 ; Two status rows under the joystick's controls (the panel is redrawn after an action, which clears them)
 JOY_STATUS_0 equ  CONFIG_PANEL_ORIGIN+{{INPUT_LIST_Y+5}*ROW_STEP}+{3*COL_STEP}
 JOY_STATUS_1 equ  JOY_STATUS_0+ROW_STEP
-JOY_MEASURE_MAX equ 64                  ; Steps (8 ms) before a timer counts as never done
 
 joyCalN     dw    0
 joyCalSumX  dw    0
 joyCalSumY  dw    0
-joyMeasT0   dw    0
-joyMeasE    dw    0
-joyMeasX    dw    0
-joyMeasY    dw    0
+joyTmpW     dw    0
 joyTestPad  dw    0
 joyTestLast dw    0
 joyTestLastPad dw 0
@@ -705,7 +678,7 @@ JoyCalibrate
             stz   joyCalSumY
             lda   #16
             sta   joyCalN
-:loop       jsr   JoyMeasure
+:loop       jsl   JoyMeasureL
             bcs   :none
             txa
             clc
@@ -719,7 +692,7 @@ JoyCalibrate
             bne   :loop
 
             lda   joyCalSumX                ; Steps x 16.  A timer is seen done up to a step after it
-            sec                             ; is (JoyMeasure), half a step later on average
+            sec                             ; is (JoyMeasureL), half a step later on average
             sbc   #8
             sta   config_joy_cx
             lda   joyCalSumY
@@ -781,7 +754,7 @@ JoyTest
             lda   #$FFFF
             sta   joyTestLast               ; Draw the first reading
             sta   joyTestLastPad
-:loop       jsr   JoyMeasure
+:loop       jsl   JoyMeasureL
             phy
             phx
             jsl   JoyClassifyL
@@ -862,9 +835,9 @@ JoyDrawField
             sta   joyCalN
             asl
             asl                             ; x COL_STEP
-            sty   joyMeasE
+            sty   joyTmpW
             clc
-            adc   joyMeasE
+            adc   joyTmpW
             tay
 :blank      lda   joyCalN
             cmp   #6
@@ -906,73 +879,6 @@ JoyClearStatus
             bne   :line
             rts
 
-; JoyMeasure
-;
-; Trigger the paddle timers and spin until both are done, with interrupts off.  Returns X / Y = the time
-; (VBL_VERT_REG steps) at which each was first seen done ($FF = not within JOY_MEASURE_MAX), carry set if
-; either was not (no joystick).  16-bit registers, DBR = this bank.
-JoyMeasure
-            php
-            sei
-            sep   #$20
-            mx    %10
-            ldx   #0                        ; Wait (a while) for a timer still running
-:idle       ldal  $E0C064
-            oral  $E0C065
-            bpl   :go
-            dex
-            bne   :idle
-            bra   :timeout
-:go         ldal  $E0C070
-            ldal  VBL_VERT_REG
-            sta   joyMeasT0
-            lda   #$FF
-            sta   joyMeasX
-            sta   joyMeasY
-:poll       ldal  VBL_VERT_REG
-            sec
-            sbc   joyMeasT0
-            bcs   *+4
-            adc   #131                      ; The counter wrapped (carry clear: adds 131)
-            sta   joyMeasE
-            cmp   #JOY_MEASURE_MAX
-            bcs   :timeout
-            ldal  $E0C064
-            bmi   :x_run
-            lda   joyMeasX
-            cmp   #$FF
-            bne   :x_run
-            lda   joyMeasE
-            sta   joyMeasX
-:x_run      ldal  $E0C065
-            bmi   :y_run
-            lda   joyMeasY
-            cmp   #$FF
-            bne   :y_run
-            lda   joyMeasE
-            sta   joyMeasY
-:y_run      lda   joyMeasX                  ; Until both are done
-            cmp   #$FF
-            beq   :poll
-            lda   joyMeasY
-            cmp   #$FF
-            beq   :poll
-            rep   #$20
-            mx    %00
-            ldx   joyMeasX
-            ldy   joyMeasY
-            plp
-            clc
-            rts
-
-            mx    %10
-:timeout    rep   #$20
-            mx    %00
-            ldx   joyMeasX
-            ldy   joyMeasY
-            plp
-            sec
-            rts
              FIN
 
 ; Credits.  The panel is cleared down to row 18, so the text must end there.
