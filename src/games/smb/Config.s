@@ -28,8 +28,6 @@ OAM_END_INDEX     equ 64
 ; every frame is a full render.
 ENABLE_DIRTY_RENDERING equ 0
 
-GRID_MAX_BG_TILES    equ 64
-
 ; Draw sprites on single pixels (compiled variants shifted one pixel to the right for a sprite on an
 ; odd pixel).  Off: sprites are drawn on even pixels (IIgs bytes), with the scroll's half-pixel
 ; correction, and the sprite cache uses smaller slots.
@@ -82,5 +80,5 @@ max_nes_y   equ min_nes_y+y_height
 
 x_offset    equ   16                      ; number of bytes from the left edge
 
-            nop                           ; workaround when loading into emulator memory before boot.  The ROM memory detection routine writed to the first two bytes
+            nop                           ; workaround when loading into emulator memory before boot.  The ROM memory detection routine wrote to the first two bytes
             nop

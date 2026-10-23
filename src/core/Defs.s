@@ -390,6 +390,7 @@ GQ_PREV_OAM   equ $6800               ; OAM_COPY as last drawn (256 bytes)
 GRID_CELL_SCR  equ $B000         ; SHR address of the cell
 GRID_CELL_PEA  equ $B800         ; code field address of the tile shown in the cell
 GRID_CELL_EQ   equ $C000         ; erase routine set (gridEQTbl): 0 = code field bank 1, 32 = bank 2, 64 = pad cell
+GRID_MAX_BG_TILES equ 64         ; Background tile cells in the quad grid's cell list (GQ_MAXCELLS)
 
 ; $C800-$CFFF / $E800-$EFFF: nametable shadow data buffers 0 / 1 (ppu_queues.s, NTM_SB0 / NTM_SB1)
 

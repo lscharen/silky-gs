@@ -13,6 +13,6 @@ PAL_GROUND_MUSHROOM equ 12
 PAL_CASTLE_BOWSER equ 14
 
 ; Slots of the cells pinned by [fixed] sections (the same in every palette that pins them)
-PAL_SLOT_BG3_1 equ 9
-PAL_SLOT_SP0_1 equ 12
-PAL_SLOT_SP0_3 equ 13
+PAL_SLOT_BG3_1 equ 10
+PAL_SLOT_SP0_1 equ 11
+PAL_SLOT_SP0_3 equ 12

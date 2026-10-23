@@ -28,8 +28,6 @@ OAM_END_INDEX     equ 2
 ; every frame is a full render.
 ENABLE_DIRTY_RENDERING equ 1
 
-GRID_MAX_BG_TILES    equ 64
-
 ; Draw sprites on single pixels (compiled variants shifted one pixel to the right for a sprite on an
 ; odd pixel).  Off: sprites are drawn on even pixels (IIgs bytes), with the scroll's half-pixel
 ; correction, and the sprite cache uses smaller slots.
