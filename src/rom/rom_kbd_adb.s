@@ -326,14 +326,29 @@ KbdAdb_SRQ
                   and       #$00FF
                   beq       :done               ; No data
                   ldy       #1
-                  lda       [ADB_SRQ_DP],y            ; The first event in the high byte, the second in the low byte
+                  lda       [ADB_SRQ_DP],y      ; The two events, one per byte
                   sta       adbReg
                   and       #$7F7F
                   cmp       #{ADB_RESET*256}+ADB_RESET
                   beq       :reset
 
                   lda       adbReg
-                  xba
+                  xba                           ; The same key in both, once down and once up: a tap
+                  eor       adbReg              ; (lo ^ hi = $80).  Which byte is the first event isn't
+                  and       #$00FF              ; certain (emulators differ), so it is handled as down,
+                  cmp       #$0080              ; then up, whatever the order: up first would leave the
+                  bne       :two                ; key down in adbKeys
+                  lda       adbReg
+                  and       #$007F
+                  jsr       adbEvent            ; Down
+                  lda       adbReg
+                  and       #$007F
+                  ora       #$0080
+                  jsr       adbEvent            ; Up
+                  bra       :done
+
+:two              lda       adbReg              ; Otherwise the order only matters to which of two keys
+                  xba                           ; pressed together counts as the later one
                   and       #$00FF
                   jsr       adbEvent
                   lda       adbReg
