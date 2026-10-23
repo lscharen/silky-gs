@@ -97,6 +97,7 @@ PREF_FILENAME strl '1/dk.prefs'
             put   ../../rom/rom_input.s
             put   ../../rom/rom_kbd_basic.s
             put   ../../rom/rom_kbd_j13.s
+            put   ../../rom/rom_kbd_adb.s
             put   ../../rom/rom_exec.s
             put   ../../rom/rom_config.s
             put   ../../rom/rom_config_setup.s

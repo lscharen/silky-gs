@@ -385,6 +385,7 @@ _ReadKeypress
                   bit       #$80                ; was the strobe bit set? If yes, then this is a new key
                   beq       :no_new_key
 
+                  jsr       KbdAdb_FixKey       ; (the ADB driver's shifted hotkeys, rom/rom_kbd_adb.s)
                   sta       LastKey
                   sta       1,s
                   sta       kbdNewKey           ; (for _ReadControl)
@@ -468,12 +469,28 @@ _ReadKeyboard     phx                           ; The configuration block, for t
                   tax
                   lda       InputPlayer1        ; The key (both players have it)
 :driver           jsr       $0000
+                  tax                           ; Never opposite directions (they break games): a driver
+                  and       #PAD_LEFT+PAD_RIGHT ; picks one, this is only a safety net
+                  cmp       #PAD_LEFT+PAD_RIGHT
+                  bne       :lr_ok
+                  txa
+                  and       #$FFFF-PAD_LEFT-PAD_RIGHT
+                  tax
+:lr_ok            txa
+                  and       #PAD_UP+PAD_DOWN
+                  cmp       #PAD_UP+PAD_DOWN
+                  bne       :ud_ok
+                  txa
+                  and       #$FFFF-PAD_UP-PAD_DOWN
+                  tax
+:ud_ok            txa
                   plx
                   jmp       _KbdButtons
 
 ; The keyboard drivers' pad routines, by KBD_DRIVER_* / 2
 KbdDriverPad      dw        KbdBasic_Pad        ; KBD_DRIVER_BASIC (rom/rom_kbd_basic.s)
                   dw        KbdJ13_Pad          ; KBD_DRIVER_J13 (rom/rom_kbd_j13.s)
+                  dw        KbdAdb_Pad          ; KBD_DRIVER_ADB (rom/rom_kbd_adb.s)
 KBD_DRIVER_COUNT  equ       {*-KbdDriverPad}/2
 
 ; A = the pad bits, X = the player's configuration block: returns A with the buttons of the player's

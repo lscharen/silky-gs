@@ -61,6 +61,7 @@ ApplyConfig
             FIN
             jsr   _ClearShadowScreen          ; With shadowing on, so fast blit leaves no stale lines
             jsr   KbdBuildMaps                ; The BASIC keyboard driver's key maps
+            jsr   KbdAdb_Apply                ; The ADB driver's keys, and put it in or take it out
             DO    JOYSTICK_SUPPORT
             jsl   JoyConfigureL               ; Before _InitRenderMode, which hooks the probe rows if used
             FIN
@@ -225,6 +226,7 @@ DRIVERS_TITLE_STR   str 'DRIVERS'
 DRIVERS_KBD_STR     str 'KEYBOARD'
 DRIVERS_KBD_BASIC   str 'BASIC'        ; the last key pressed, directions held (rom/rom_kbd_basic.s)
 DRIVERS_KBD_J13     str 'J13 ROM 01'   ; several keys held at once, ROM 00 / 01 firmware only (rom/rom_kbd_j13.s; the font has no parentheses)
+DRIVERS_KBD_ADB     str 'ADB'          ; every key's up / down state from the ADB keyboard, any ROM (rom/rom_kbd_adb.s)
 
 CREDITS_TITLE_STR   str 'CREDITS'
 
@@ -546,7 +548,7 @@ DRIVERS_ITEM_1 dw RADIO
              dw   3,2
              dw   DRIVERS_KBD_STR
              dw   config_kbd_driver
-             dw   2
+             dw   3
 
              dw   KBD_DRIVER_BASIC
              dw   DRIVERS_KBD_BASIC
@@ -554,6 +556,10 @@ DRIVERS_ITEM_1 dw RADIO
 
              dw   KBD_DRIVER_J13
              dw   DRIVERS_KBD_J13
+             dw   0
+
+             dw   KBD_DRIVER_ADB
+             dw   DRIVERS_KBD_ADB
              dw   0
 
 
