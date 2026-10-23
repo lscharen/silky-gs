@@ -345,9 +345,8 @@ JoyScanArm
             bne   :done
             lda   joyEnabled                ; No player uses the joystick
             beq   :done
-            DO    NO_INTERRUPTS             ; No irqHook to take them
-            ELSE
-            php
+            DO    1-NO_INTERRUPTS           ; (none without irqHook to take them; no ELSE: inside the
+            php                             ; skipped DO JOYSTICK_SUPPORT, Merlin32 assembles an ELSE branch)
             sei
             phx
             phy

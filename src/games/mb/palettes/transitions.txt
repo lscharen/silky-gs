@@ -2,6 +2,10 @@
 ; to keep the redraws on these transitions down, and DetectNESPalette tries them first.  The in-game
 ; color changes (enemy palettes) are sprite attribute changes, not palette RAM writes.
 
+; The first palette (the title screen) is current from the start: at power-on the ROM's title upload
+; (20 bytes) leaves SP1-SP3 at their start-up values, so the first title screen isn't detected, and its
+; layout is used for the colors anyway.
+
 [init]
 title_screen
 

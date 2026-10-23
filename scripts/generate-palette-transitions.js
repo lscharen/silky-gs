@@ -11,12 +11,18 @@
  * lists palettes that must keep those background groups (BGn), or single cells (group:index, e.g. a
  * sprite color), in the same slots, so they look the same on the screen through a palette change
  * without being drawn again (e.g. the tiles and sprites of a status bar that isn't redrawn then).
+ * A [direct SP0:1 ...] section lists palettes in which palette RAM writes to those cells (which must be
+ * reserved there) go straight to their IIgs slots while the palette is on screen, e.g. colors the game
+ * cycles every few frames: no palette detection, and the color changes at once.  Every other write
+ * marks the palette dirty, for ApplyPaletteChange at the next render.  "start = none" before the first
+ * section: no palette is current until the game's is detected (default: the first palette is).
  *
  * Output (Merlin32 source):
  *   palettes.s         The swizzle tables of every palette, 8 x 512 bytes (BG0-BG3, SP0-SP3) each,
  *                      for the game's PALDATA segment.
- *   pal_transitions.s  UpdatePalette / LoadPaletteColors / DetectNESPalette and their tables, for the
- *                      main segment.
+ *   pal_transitions.s  The game's palette management (SetDefaultPalette, ApplyPaletteChange: its
+ *                      PRE_RENDER hook), UpdatePalette / LoadPaletteColors / DetectNESPalette and their
+ *                      tables, for the main segment.
  *   pal_defs.s         The palette ids (PAL_*) and pinned slots (PAL_SLOT_*): constants only, put by
  *                      both of the game's segment sources.
  *
@@ -75,11 +81,20 @@ function popcount(x) { let n = 0; while (x) { n += x & 1; x >>= 1; } return n; }
 function parseTransitions(filePath) {
   const sections = [];
   let current = null;
+  let start = 'first';
   for (const rawLine of fs.readFileSync(filePath, 'utf8').split(/\r?\n/)) {
     const line = rawLine.trim();
     if (line === '' || line.startsWith(';') || line.startsWith('#')) continue;
+    const startLine = line.match(/^start\s*=\s*(first|none)$/);
+    if (startLine) {
+      if (current) fail(`${filePath}: "start =" must come before the first [section]`);
+      start = startLine[1];
+      continue;
+    }
     const fixed = line.match(/^\[fixed((?:\s+(?:BG[0-3]|(?:BG|SP)[0-3]:[1-3]))+)\]$/);
     if (fixed) { current = { fixed: fixed[1].trim().split(/\s+/), tos: [] }; sections.push(current); continue; }
+    const direct = line.match(/^\[direct((?:\s+(?:BG|SP)[0-3]:[1-3])+)\]$/);
+    if (direct) { current = { direct: direct[1].trim().split(/\s+/), tos: [] }; sections.push(current); continue; }
     const header = line.match(/^\[([A-Za-z0-9_]+)\]$/);
     if (header) { current = { from: header[1], tos: [] }; sections.push(current); continue; }
     const target = line.match(/^([A-Za-z0-9_]+)$/);
@@ -87,6 +102,7 @@ function parseTransitions(filePath) {
     if (!current) fail(`${filePath}: "${line}" appears before any [section] header`);
     current.tos.push(target[1]);
   }
+  sections.start = start;
   return sections;
 }
 
@@ -102,7 +118,7 @@ function loadGraph(transitionsFile, palettesDir, warnings) {
     if (fs.existsSync(path.join(palettesDir, n + '.txt'))) names.push(n);
     else if (isTarget && !warnings.some(w => w.includes(`"${n}"`))) warnings.push(`skipping "${n}": no palette file`);
   };
-  const transitions = sections.filter(s => !s.fixed);
+  const transitions = sections.filter(s => !s.fixed && !s.direct);
   for (const s of transitions) { consider(s.from, false); s.tos.forEach(t => consider(t, true)); }
 
   const edges = [];
@@ -133,7 +149,22 @@ function loadGraph(transitionsFile, palettesDir, warnings) {
       cells.forEach(c => pinsOf[p].add(c));
     }
   }
-  return { names, edges, succ, pals, fixed, pins, pinsOf };
+
+  // directOf[p] = the cells whose palette RAM writes go straight to their IIgs slot while palette p is
+  // on screen ([direct] sections).  They must be reserved there: a write to them doesn't mark the
+  // palette dirty, so the palette mustn't need identifying again because of it.
+  const directOf = names.map(() => new Set());
+  for (const s of sections.filter(x => x.direct)) {
+    for (const n of s.tos) {
+      const p = names.indexOf(n);
+      if (p < 0) fail(`${transitionsFile}: [direct ${s.direct.join(' ')}] lists "${n}", which is not a palette in the transitions`);
+      for (const c of s.direct) {
+        if (!pals[p].reserved.has(c)) fail(`${n}: [direct] cell ${c} must be reserved (*$xx) in the palette file`);
+        directOf[p].add(c);
+      }
+    }
+  }
+  return { names, edges, succ, pals, fixed, pins, pinsOf, directOf, start: sections.start };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -409,7 +440,9 @@ function defsSource(graph, best, source) {
 }
 
 function transitionsSource(graph, best, source, warnings) {
-  const { names, succ, pals, pins, pinsOf } = graph;
+  const { names, succ, pals, pins, pinsOf, directOf, start } = graph;
+  const anyDirect = directOf.some(d => d.size > 0);
+  const anyNone = directOf.some(d => d.size === 0);     // (then the all-dirty table, PAL_WRITES_NONE, exists)
   const T = [];
   if (warnings.length) {
     T.push('; Warnings from generation:');
@@ -424,7 +457,8 @@ function transitionsSource(graph, best, source, warnings) {
   T.push("; background groups that keep the same slots across the transitions don't need their tiles");
   T.push('; redrawn (a group whose slots change has to be recompiled with the new swizzle table).');
   T.push(';');
-  T.push('; Requires: NES_ColorToIIgs_X, NES_SetPaletteMap, RefreshPPUAttributesL, PPU_MEM, SHR_PALETTES');
+  T.push('; Requires: NES_ColorToIIgs_X, NES_SetPaletteMap, RefreshPPUAttributesL, PPU_SetPaletteWritesL,');
+  T.push(';           ppuPalDirty, _ppumask, PPU_MEM, SHR_PALETTES');
   T.push('');
   T.push(`; Swizzle tables, in the PALDATA segment (${OUT_SWIZZLE})`);
   names.forEach(n => T.push(`PAL_${U(n)}_SWIZZLE EXT`));
@@ -439,8 +473,73 @@ function transitionsSource(graph, best, source, warnings) {
     }
   });
   T.push('');
+  const first = `PAL_${U(names[0])}`;
+  const setWrites = anyDirect ? `            jsr   PalSetWrites        ; Y = palette id\n` : '';
   T.push(`            mx    %00
 
+palCurrent  dw    0                   ; PAL_* id of the palette on screen (0 = none yet)
+
+; SetDefaultPalette
+;
+; Before the game uploads a palette: the swizzle tables are ${names[0]}'s, ${start === 'none'
+    ? `but no palette is current until one\n; is detected ("start = none" in the transitions file), so no colors are loaded in the meantime.`
+    : `and so is the layout of the colors\n; shown until the game's palette is detected.`}
+; Called by the game's InitPlayfield (NES_StartUp) and at start-up.
+SetDefaultPalette
+            ldy   #${first}
+${start === 'none' ? '' : `            sty   palCurrent\n${setWrites}`}            ldx   PAL_SWIZZLE_LO,y
+            lda   PAL_SWIZZLE_HI,y
+            jmp   NES_SetPaletteMap
+
+; ApplyPaletteChange
+;
+; The game's PRE_RENDER hook (jsl), on the GS task.  If the palette RAM changed (ppuPalDirty, set by the
+; engine's palette write handler), identify the palette in it and switch to it, or show its changed
+; colors in the current palette's layout (fades, color cycling, an unknown palette).  While the
+; background is off, the game is rebuilding the screen: the old colors stay on whatever is left on it,
+; and the new ones come with the new screen.
+ApplyPaletteChange
+            ldal  ppuPalDirty
+            beq   :none
+            ldal  _ppumask
+            and   #NES_PPUMASK_BG
+            beq   :none
+            lda   #0
+            stal  ppuPalDirty         ; (first, so a write from here on is seen next time)
+            ldx   palCurrent
+            jsr   DetectNESPalette    ; A = Y = palette id, 0 if none
+            beq   :colors             ; not a known palette (e.g. a step of a fade)
+            cmp   palCurrent
+            beq   :colors
+            ldx   palCurrent
+            sty   palCurrent
+            jsr   UpdatePalette       ; X = from, Y = to
+            rtl
+:colors     ldy   palCurrent
+            beq   :none               ; no palette yet
+            jsr   LoadPaletteColors
+:none       rtl
+${anyDirect ? `
+; PalSetWrites
+;
+; Y = palette id (kept).  The palette RAM writes that go straight to their IIgs slot while it is on
+; screen (its [direct] cells); the rest mark the palette dirty.  The palettes with the same [direct]
+; slots share a table, and it is only installed when it changes.
+PalSetWrites
+            lda   PAL_WRITES,y
+            cmp   palWrites
+            beq   :same
+            sta   palWrites
+            phy
+            ldx   #^PAL_WRITES
+            jsl   PPU_SetPaletteWritesL
+            ply
+:same       rts
+
+${anyNone
+    ? 'palWrites   dw    PAL_WRITES_NONE     ; The table installed (the engine\'s starts with every write marking dirty)'
+    : 'palWrites   dw    0                   ; The table installed (0: the engine\'s, every write marking dirty)'}
+` : ''}
 ; UpdatePalette
 ;
 ; X = from palette id (PAL_*, or 0 for none), Y = to palette id
@@ -458,7 +557,7 @@ UpdatePalette
             lda   PAL_SWIZZLE_HI,y
             jsr   NES_SetPaletteMap
             ply
-
+${setWrites}
             jsr   LoadPaletteColors
             pla
             jsl   RefreshPPUAttributesL   ; (in the engine bank: ppu_entry.s)
@@ -606,6 +705,39 @@ DetectNESPalette
   T.push('            dw    0');
   names.forEach(n => T.push(`            dw    ^PAL_${U(n)}_SWIZZLE`));
   T.push('');
+
+  if (anyDirect) {
+    // One table per distinct set of [direct] cells and slots; the palettes without any share the first
+    const tables = [], tableOf = [];
+    names.forEach((n, p) => {
+      const L = best.layouts[p];
+      const words = ALL_GROUPS.flatMap(G => [0, 1, 2, 3].map(i => {
+        const c = G + ':' + i;
+        if (!directOf[p].has(c)) return '$FFFF';
+        if (!L.cellSlot[c]) fail(`${n}: [direct] cell ${c} is in slot 0`);
+        return hex2(2 * L.cellSlot[c]);
+      }));
+      const key = words.join(',');
+      let t = tables.findIndex(x => x.key === key);
+      if (t < 0) { t = tables.length; tables.push({ key, words, palettes: [] }); }
+      tables[t].palettes.push(n);
+      tableOf.push(t);
+    });
+    // The table of the palettes without [direct] cells (if any) is also the one the engine starts with
+    const none = tables.findIndex(t => t.words.every(w => w === '$FFFF'));
+    const label = i => (i === none ? 'PAL_WRITES_NONE' : `PAL_WRITES_${i}`);
+    T.push("; id -> palette RAM writes: for each entry, the IIgs slot * 2 its writes go to straight away while");
+    T.push('; the palette is on screen ([direct] cells), or $FFFF: they mark the palette dirty (PPU_SetPaletteWritesL).');
+    T.push('; One table per distinct set of [direct] slots.');
+    T.push('PAL_WRITES');
+    T.push('            dw    0');
+    names.forEach((n, p) => T.push(`            dw    ${label(tableOf[p])}   ; ${n}`));
+    tables.forEach((t, i) => {
+      T.push(`${label(i)}${t.palettes.length ? '   ; ' + t.palettes.join(', ') : ''}`);
+      for (let r = 0; r < 32; r += 8) T.push('            dw    ' + t.words.slice(r, r + 8).join(','));
+    });
+    T.push('');
+  }
 
   T.push("; id -> slot map: for each NES palette RAM entry, the IIgs slot * 2, or $FF if it isn't loaded");
   T.push('; (color 0, which the game writes straight to slot 0, colors that share slot 0 with it, and');

@@ -6,7 +6,8 @@
 ; background groups that keep the same slots across the transitions don't need their tiles
 ; redrawn (a group whose slots change has to be recompiled with the new swizzle table).
 ;
-; Requires: NES_ColorToIIgs_X, NES_SetPaletteMap, RefreshPPUAttributesL, PPU_MEM, SHR_PALETTES
+; Requires: NES_ColorToIIgs_X, NES_SetPaletteMap, RefreshPPUAttributesL, PPU_SetPaletteWritesL,
+;           ppuPalDirty, _ppumask, PPU_MEM, SHR_PALETTES
 
 ; Swizzle tables, in the PALDATA segment (palettes.s)
 PAL_TITLE_SWIZZLE EXT
@@ -126,6 +127,66 @@ PAL_ENDING_SWIZZLE EXT
 
             mx    %00
 
+palCurrent  dw    0                   ; PAL_* id of the palette on screen (0 = none yet)
+
+; SetDefaultPalette
+;
+; Before the game uploads a palette: the swizzle tables are title's, but no palette is current until one
+; is detected ("start = none" in the transitions file), so no colors are loaded in the meantime.
+; Called by the game's InitPlayfield (NES_StartUp) and at start-up.
+SetDefaultPalette
+            ldy   #PAL_TITLE
+            ldx   PAL_SWIZZLE_LO,y
+            lda   PAL_SWIZZLE_HI,y
+            jmp   NES_SetPaletteMap
+
+; ApplyPaletteChange
+;
+; The game's PRE_RENDER hook (jsl), on the GS task.  If the palette RAM changed (ppuPalDirty, set by the
+; engine's palette write handler), identify the palette in it and switch to it, or show its changed
+; colors in the current palette's layout (fades, color cycling, an unknown palette).  While the
+; background is off, the game is rebuilding the screen: the old colors stay on whatever is left on it,
+; and the new ones come with the new screen.
+ApplyPaletteChange
+            ldal  ppuPalDirty
+            beq   :none
+            ldal  _ppumask
+            and   #NES_PPUMASK_BG
+            beq   :none
+            lda   #0
+            stal  ppuPalDirty         ; (first, so a write from here on is seen next time)
+            ldx   palCurrent
+            jsr   DetectNESPalette    ; A = Y = palette id, 0 if none
+            beq   :colors             ; not a known palette (e.g. a step of a fade)
+            cmp   palCurrent
+            beq   :colors
+            ldx   palCurrent
+            sty   palCurrent
+            jsr   UpdatePalette       ; X = from, Y = to
+            rtl
+:colors     ldy   palCurrent
+            beq   :none               ; no palette yet
+            jsr   LoadPaletteColors
+:none       rtl
+
+; PalSetWrites
+;
+; Y = palette id (kept).  The palette RAM writes that go straight to their IIgs slot while it is on
+; screen (its [direct] cells); the rest mark the palette dirty.  The palettes with the same [direct]
+; slots share a table, and it is only installed when it changes.
+PalSetWrites
+            lda   PAL_WRITES,y
+            cmp   palWrites
+            beq   :same
+            sta   palWrites
+            phy
+            ldx   #^PAL_WRITES
+            jsl   PPU_SetPaletteWritesL
+            ply
+:same       rts
+
+palWrites   dw    PAL_WRITES_NONE     ; The table installed (the engine's starts with every write marking dirty)
+
 ; UpdatePalette
 ;
 ; X = from palette id (PAL_*, or 0 for none), Y = to palette id
@@ -143,6 +204,7 @@ UpdatePalette
             lda   PAL_SWIZZLE_HI,y
             jsr   NES_SetPaletteMap
             ply
+            jsr   PalSetWrites        ; Y = palette id
 
             jsr   LoadPaletteColors
             pla
@@ -372,6 +434,33 @@ PAL_SWIZZLE_HI
             dw    ^PAL_LEVEL_7_SWIZZLE
             dw    ^PAL_LEVEL_8_SWIZZLE
             dw    ^PAL_ENDING_SWIZZLE
+
+; id -> palette RAM writes: for each entry, the IIgs slot * 2 its writes go to straight away while
+; the palette is on screen ([direct] cells), or $FFFF: they mark the palette dirty (PPU_SetPaletteWritesL).
+; One table per distinct set of [direct] slots.
+PAL_WRITES
+            dw    0
+            dw    PAL_WRITES_NONE   ; title
+            dw    PAL_WRITES_NONE   ; title_2
+            dw    PAL_WRITES_1   ; level_1
+            dw    PAL_WRITES_1   ; level_2
+            dw    PAL_WRITES_1   ; level_3
+            dw    PAL_WRITES_NONE   ; level_4
+            dw    PAL_WRITES_NONE   ; level_5
+            dw    PAL_WRITES_NONE   ; level_6
+            dw    PAL_WRITES_NONE   ; level_7
+            dw    PAL_WRITES_NONE   ; level_8
+            dw    PAL_WRITES_NONE   ; ending
+PAL_WRITES_NONE   ; title, title_2, level_4, level_5, level_6, level_7, level_8, ending
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+PAL_WRITES_1   ; level_1, level_2, level_3
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+            dw    $FFFF,$10,$FFFF,$FFFF,$FFFF,$12,$14,$16
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
 
 ; id -> slot map: for each NES palette RAM entry, the IIgs slot * 2, or $FF if it isn't loaded
 ; (color 0, which the game writes straight to slot 0, colors that share slot 0 with it, and

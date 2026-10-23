@@ -70,3 +70,14 @@ underground
 water
 castle
 castle_bowser
+
+; The question block color (BG3:1, ColorRotation) and the player colors (SP0:1, SP0:3, GetPlayerColors)
+; change every few frames: their writes go straight to their slots
+[direct BG3:1 SP0:1 SP0:3]
+ground
+ground_snow
+ground_mushroom
+underground
+water
+castle
+castle_bowser

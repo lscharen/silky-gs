@@ -6,7 +6,8 @@
 ; background groups that keep the same slots across the transitions don't need their tiles
 ; redrawn (a group whose slots change has to be recompiled with the new swizzle table).
 ;
-; Requires: NES_ColorToIIgs_X, NES_SetPaletteMap, RefreshPPUAttributesL, PPU_MEM, SHR_PALETTES
+; Requires: NES_ColorToIIgs_X, NES_SetPaletteMap, RefreshPPUAttributesL, PPU_SetPaletteWritesL,
+;           ppuPalDirty, _ppumask, PPU_MEM, SHR_PALETTES
 
 ; Swizzle tables, in the PALDATA segment (palettes.s)
 PAL_TITLE_SCREEN_SWIZZLE EXT
@@ -155,6 +156,48 @@ PAL_DUNGEON9_SWIZZLE EXT
 ;     SP3 $0F *$0F *$10 *$30 -> [0,8,9,14]
 
             mx    %00
+
+palCurrent  dw    0                   ; PAL_* id of the palette on screen (0 = none yet)
+
+; SetDefaultPalette
+;
+; Before the game uploads a palette: the swizzle tables are title_screen's, but no palette is current until one
+; is detected ("start = none" in the transitions file), so no colors are loaded in the meantime.
+; Called by the game's InitPlayfield (NES_StartUp) and at start-up.
+SetDefaultPalette
+            ldy   #PAL_TITLE_SCREEN
+            ldx   PAL_SWIZZLE_LO,y
+            lda   PAL_SWIZZLE_HI,y
+            jmp   NES_SetPaletteMap
+
+; ApplyPaletteChange
+;
+; The game's PRE_RENDER hook (jsl), on the GS task.  If the palette RAM changed (ppuPalDirty, set by the
+; engine's palette write handler), identify the palette in it and switch to it, or show its changed
+; colors in the current palette's layout (fades, color cycling, an unknown palette).  While the
+; background is off, the game is rebuilding the screen: the old colors stay on whatever is left on it,
+; and the new ones come with the new screen.
+ApplyPaletteChange
+            ldal  ppuPalDirty
+            beq   :none
+            ldal  _ppumask
+            and   #NES_PPUMASK_BG
+            beq   :none
+            lda   #0
+            stal  ppuPalDirty         ; (first, so a write from here on is seen next time)
+            ldx   palCurrent
+            jsr   DetectNESPalette    ; A = Y = palette id, 0 if none
+            beq   :colors             ; not a known palette (e.g. a step of a fade)
+            cmp   palCurrent
+            beq   :colors
+            ldx   palCurrent
+            sty   palCurrent
+            jsr   UpdatePalette       ; X = from, Y = to
+            rtl
+:colors     ldy   palCurrent
+            beq   :none               ; no palette yet
+            jsr   LoadPaletteColors
+:none       rtl
 
 ; UpdatePalette
 ;

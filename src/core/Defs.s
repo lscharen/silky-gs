@@ -37,7 +37,7 @@ ScreenY1               equ   6           ; End of playfield on the physical scre
 ScreenX0               equ   8           ; 100, then ScreenY1 = 120.
 ScreenX1               equ   10
 
-; The scroll position in the form of the NES PPU registers (set by NES_SetScroll and friends)
+; The scroll position in the form of the NES PPU registers (set by _SetScroll and friends)
 ScrollX                equ   14          ; scroll_x (0 - 255)
 ScrollY                equ   16          ; scroll_y (0 - 255)
 

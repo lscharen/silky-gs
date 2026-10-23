@@ -1,0 +1,15 @@
+# The start of every game's Main.s (its "; mput .../runtime/head.txt" marker, expanded by
+# scripts/gen-includes.js at build time): the segment type, the macro libraries, and the
+# runtime's constants and the symbols it shares with the other segments.  The game puts its
+# Config.s right after this.
+asm:REL
+asm:use Locator.Macs
+asm:use Load.Macs
+asm:use Mem.Macs
+asm:use Misc.Macs
+asm:use Util.Macs
+asm:use EDS.GSOS.Macs
+asm:use GTE.Macs.s
+../Externals.s
+../core/Defs.s
+../ImportEngine.s

@@ -38,6 +38,18 @@
  *     filename.bin        — emits PUTBIN (extension-based default)
  *     putbin:filename     — emits PUTBIN regardless of extension
  *     put:filename        — emits PUT   regardless of extension
+ *     asm:directive       — emits the directive as is (e.g. asm:REL, asm:use Util.Macs)
+ *   A filename may name a file in another directory (../rom/scaffold.s): the
+ *   generated paths are relative to the file that holds the marker.
+ *
+ * List files: a target ending in .txt is a module list of its own (the same
+ *   syntax as _module.txt, its paths relative to the list's directory), for a
+ *   list of files from several directories, e.g. the runtime every game's
+ *   Main.s puts (src/runtime/head.txt, src/runtime/code.txt).
+ *
+ * Comment form: "; mput <target>" (the semicolon in column 1, one space) is
+ *   expanded the same way.  It is for the top of a file, before the macro
+ *   library that defines the mput macro is loaded (its block can load it).
  */
 
 const fs   = require('fs');
@@ -46,7 +58,7 @@ const path = require('path');
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const MPUT_RE          = /^\s*mput\s+(\S+)\s*$/;
+const MPUT_RE          = /^(?:\s*|; )mput\s+(\S+)\s*$/;
 const AUTOINC_BEGIN_RE = /^; AUTOINC:BEGIN/;
 const AUTOINC_END_RE   = /^; AUTOINC:END/;
 const PUT_LINE_RE      = /^\s*put(?:bin)?\s+(\S+)\s*$/i;
@@ -142,20 +154,22 @@ function parseArgs(argv) {
 }
 
 // ---------------------------------------------------------------------------
-// Build the ordered list of { line, absPath } for a single directory
+// Build the ordered list of { line, absPath } for a single directory, or for
+// a module list file (listFile: its paths are relative to absDir, its directory)
 // ---------------------------------------------------------------------------
-function filesForDir(absDir, relDir) {
+function filesForDir(absDir, containingDir, listFile) {
     if (!fs.existsSync(absDir)) {
         throw new Error(`mput target not found: ${absDir}`);
     }
 
     function resolve(entry) {
+        if (entry.startsWith('asm:'))    return { asm: entry.slice(4).trim() };
         if (entry.startsWith('putbin:')) return { file: entry.slice(7), directive: 'putbin' };
         if (entry.startsWith('put:'))    return { file: entry.slice(4),  directive: 'put'   };
         return { file: entry, directive: entry.endsWith('.s') ? 'put' : 'putbin' };
     }
 
-    const moduleFile = path.join(absDir, '_module.txt');
+    const moduleFile = listFile || path.join(absDir, '_module.txt');
     let entries;
     if (fs.existsSync(moduleFile)) {
         verbose(`reading order from ${moduleFile}`);
@@ -172,9 +186,13 @@ function filesForDir(absDir, relDir) {
             .map(resolve);
     }
 
-    return entries.map(({ file, directive }) => {
+    return entries.map(({ asm, file, directive }) => {
+        if (asm) {
+            const [op, ...args] = asm.split(/\s+/);
+            return { line: `            ${args.length ? op.padEnd(5) + ' ' + args.join(' ') : op}`, absPath: null };
+        }
         const pad = directive === 'putbin' ? 'putbin' : 'put   ';
-        const ref = relDir ? `${relDir}/${file}` : file;
+        const ref = path.relative(containingDir, path.join(absDir, file)).replace(/\\/g, '/');
         verbose(`  found: ${ref}`);
         return {
             line:    `            ${pad} ${ref}`,
@@ -208,16 +226,17 @@ function filesForDirRecursive(absTarget, containingDir, seen) {
 
     // Single-file case
     const stat = fs.existsSync(absTarget) ? fs.statSync(absTarget) : null;
-    if (stat && stat.isFile()) {
+    const isList = stat && stat.isFile() && absTarget.endsWith('.txt');
+    if (stat && stat.isFile() && !isList) {
         const relPath  = path.relative(containingDir, absTarget).replace(/\\/g, '/');
         const pad      = absTarget.endsWith('.s') ? 'put   ' : 'putbin';
         verbose(`mput resolved to single file: ${relPath}`);
         return [`            ${pad} ${relPath}`];
     }
 
-    verbose(`expanding directory: ${absTarget}`);
-    const relDir = path.relative(containingDir, absTarget).replace(/\\/g, '/');
-    const entries = filesForDir(absTarget, relDir);
+    verbose(`expanding ${isList ? 'module list' : 'directory'}: ${absTarget}`);
+    const entries = isList ? filesForDir(path.dirname(absTarget), containingDir, absTarget)
+                           : filesForDir(absTarget, containingDir);
 
     const result    = [];
     const seenLines = new Set();   // deduplication within this expansion
@@ -231,7 +250,7 @@ function filesForDirRecursive(absTarget, containingDir, seen) {
         }
 
         // Scan child .s files for nested mput markers without modifying them
-        if (absPath.endsWith('.s') && fs.existsSync(absPath)) {
+        if (absPath && absPath.endsWith('.s') && fs.existsSync(absPath)) {
             verbose(`  scanning child for nested mput: ${absPath}`);
             const childLines = fs.readFileSync(absPath, 'utf8').split(/\r?\n/);
             for (const childLine of childLines) {

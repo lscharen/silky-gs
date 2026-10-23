@@ -6,7 +6,8 @@
 ; background groups that keep the same slots across the transitions don't need their tiles
 ; redrawn (a group whose slots change has to be recompiled with the new swizzle table).
 ;
-; Requires: NES_ColorToIIgs_X, NES_SetPaletteMap, RefreshPPUAttributesL, PPU_MEM, SHR_PALETTES
+; Requires: NES_ColorToIIgs_X, NES_SetPaletteMap, RefreshPPUAttributesL, PPU_SetPaletteWritesL,
+;           ppuPalDirty, _ppumask, PPU_MEM, SHR_PALETTES
 
 ; Swizzle tables, in the PALDATA segment (palettes.s)
 PAL_GROUND_SWIZZLE EXT
@@ -86,6 +87,68 @@ PAL_CASTLE_BOWSER_SWIZZLE EXT
 
             mx    %00
 
+palCurrent  dw    0                   ; PAL_* id of the palette on screen (0 = none yet)
+
+; SetDefaultPalette
+;
+; Before the game uploads a palette: the swizzle tables are ground's, and so is the layout of the colors
+; shown until the game's palette is detected.
+; Called by the game's InitPlayfield (NES_StartUp) and at start-up.
+SetDefaultPalette
+            ldy   #PAL_GROUND
+            sty   palCurrent
+            jsr   PalSetWrites        ; Y = palette id
+            ldx   PAL_SWIZZLE_LO,y
+            lda   PAL_SWIZZLE_HI,y
+            jmp   NES_SetPaletteMap
+
+; ApplyPaletteChange
+;
+; The game's PRE_RENDER hook (jsl), on the GS task.  If the palette RAM changed (ppuPalDirty, set by the
+; engine's palette write handler), identify the palette in it and switch to it, or show its changed
+; colors in the current palette's layout (fades, color cycling, an unknown palette).  While the
+; background is off, the game is rebuilding the screen: the old colors stay on whatever is left on it,
+; and the new ones come with the new screen.
+ApplyPaletteChange
+            ldal  ppuPalDirty
+            beq   :none
+            ldal  _ppumask
+            and   #NES_PPUMASK_BG
+            beq   :none
+            lda   #0
+            stal  ppuPalDirty         ; (first, so a write from here on is seen next time)
+            ldx   palCurrent
+            jsr   DetectNESPalette    ; A = Y = palette id, 0 if none
+            beq   :colors             ; not a known palette (e.g. a step of a fade)
+            cmp   palCurrent
+            beq   :colors
+            ldx   palCurrent
+            sty   palCurrent
+            jsr   UpdatePalette       ; X = from, Y = to
+            rtl
+:colors     ldy   palCurrent
+            beq   :none               ; no palette yet
+            jsr   LoadPaletteColors
+:none       rtl
+
+; PalSetWrites
+;
+; Y = palette id (kept).  The palette RAM writes that go straight to their IIgs slot while it is on
+; screen (its [direct] cells); the rest mark the palette dirty.  The palettes with the same [direct]
+; slots share a table, and it is only installed when it changes.
+PalSetWrites
+            lda   PAL_WRITES,y
+            cmp   palWrites
+            beq   :same
+            sta   palWrites
+            phy
+            ldx   #^PAL_WRITES
+            jsl   PPU_SetPaletteWritesL
+            ply
+:same       rts
+
+palWrites   dw    0                   ; The table installed (0: the engine's, every write marking dirty)
+
 ; UpdatePalette
 ;
 ; X = from palette id (PAL_*, or 0 for none), Y = to palette id
@@ -103,6 +166,7 @@ UpdatePalette
             lda   PAL_SWIZZLE_HI,y
             jsr   NES_SetPaletteMap
             ply
+            jsr   PalSetWrites        ; Y = palette id
 
             jsr   LoadPaletteColors
             pla
@@ -296,6 +360,24 @@ PAL_SWIZZLE_HI
             dw    ^PAL_GROUND_SNOW_SWIZZLE
             dw    ^PAL_GROUND_MUSHROOM_SWIZZLE
             dw    ^PAL_CASTLE_BOWSER_SWIZZLE
+
+; id -> palette RAM writes: for each entry, the IIgs slot * 2 its writes go to straight away while
+; the palette is on screen ([direct] cells), or $FFFF: they mark the palette dirty (PPU_SetPaletteWritesL).
+; One table per distinct set of [direct] slots.
+PAL_WRITES
+            dw    0
+            dw    PAL_WRITES_0   ; ground
+            dw    PAL_WRITES_0   ; underground
+            dw    PAL_WRITES_0   ; water
+            dw    PAL_WRITES_0   ; castle
+            dw    PAL_WRITES_0   ; ground_snow
+            dw    PAL_WRITES_0   ; ground_mushroom
+            dw    PAL_WRITES_0   ; castle_bowser
+PAL_WRITES_0   ; ground, underground, water, castle, ground_snow, ground_mushroom, castle_bowser
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$14,$FFFF,$FFFF
+            dw    $FFFF,$16,$FFFF,$18,$FFFF,$FFFF,$FFFF,$FFFF
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
 
 ; id -> slot map: for each NES palette RAM entry, the IIgs slot * 2, or $FF if it isn't loaded
 ; (color 0, which the game writes straight to slot 0, colors that share slot 0 with it, and

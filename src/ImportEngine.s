@@ -3,6 +3,15 @@
 ; Put by every game's Main.s (the engine is in its own segment, Engine.s); the engine exports them (ppu/ppu_entry.s and ENT at their definitions).  Everything here is in another bank: call the
 ; routines with JSL, use long addressing for the data (scripts/check-xbank.js checks this).
 
+; The standard API for games (ppu/ppu_api.s)
+NES_SetScroll           EXT
+PPU_DrawScreenRange     EXT
+PPU_SetupLines          EXT
+PPU_DrawScreen          EXT
+_ppuctrl                EXT
+_ppuscroll_x            EXT
+_ppuscroll_y            EXT
+
 ; Frame render (ppu/ppu_frame.s) and the long entry points (ppu/ppu_entry.s)
 RenderLatch             EXT
 RenderDraw              EXT
@@ -23,8 +32,10 @@ JoyClassifyL            EXT
 JoyMeasureL             EXT
 joyScanArmed            EXT
 RefreshPPUAttributesL   EXT
+PPU_SetPaletteWritesL   EXT   ; ppu/ppu_palette.s: the generated palette code (pal_transitions.s)
 
 ; Data
+ppuPalDirty             EXT
 ppumask_override        EXT
 Mul160Tbl               EXT
 _ppumask                EXT

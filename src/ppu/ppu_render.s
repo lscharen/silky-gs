@@ -34,7 +34,7 @@ drawScreen
 
         jmp   exposeShadowList
 
-; Full redraw of a range of screen lines at the current scroll position (NES_SetScroll), as drawScreen
+; Full redraw of a range of screen lines at the current scroll position (_SetScroll), as drawScreen
 ; does for the whole screen.  This also sets up the code field, for these lines only.
 ; The other lines are not touched, so a custom renderer can draw each part of a split screen with
 ; its own scroll position, or leave a part of the screen as it is.

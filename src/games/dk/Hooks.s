@@ -1,21 +1,12 @@
-; Donkey Kong -- game definition: the engine callbacks
+; Donkey Kong -- the engine callbacks
 ;
-; Every callback macro the engine expands, the flags that enable them, and the code and data behind
-; them.  Every segment source that assembles engine code puts this file (after Config.s).  A macro
-; only produces code where the engine expands it.
-;
-; The code and data are in two fences, by the segment the engine calls them from:
-;
-;   DO SEG_MAIN    the event loop and frame hooks: PRE_EVT_LOOP, POST_EVT_LOOP, EVT_LOOP_BEGIN /
-;                  END, PRE_RENDER, POST_RENDER, CONFIG_APPLY_HOOK, start-up (InitPlayfield)
-;   DO SEG_ENGINE  the renderer and the PPU write shims: SPRITE_PRE_DRAW, CUSTOM_PPU_CTRL_LOCK_CODE,
-;                  CUSTOM_PPU_SCROLL_LOCK_CODE, CUSTOM_RENDER_SCREEN_ADDR, PPU_PALETTE_DISPATCH
-;
-; A segment source sets SEG_MAIN / SEG_ENGINE to 1 for the fences it assembles.  A macro calls the
-; code in its own fence with jsr; anything in the other fence is in another bank.  Each fence starts
-; and ends with an explicit mx (Merlin32 tracks sep / rep even in a skipped DO block).
-;
-; Merlin32 ignores a put inside a put file, so pal_transitions.s is put by Main.s.
+; Every callback macro the engine expands and the flags that enable them: macros and constants only.
+; Main.s and the engine segment (src/Engine.s, staged) both put this file; a macro only produces code
+; where the engine expands it.  A macro calls the game's code in Main.s with jsl, and the routine
+; returns with rtl; the data bank is the caller's, so the routine uses long addressing for the game's
+; variables or sets the bank itself.  SPRITE_PRE_DRAW, which the engine expands for every sprite, may
+; instead jsr to code in EngineExt.s, in the engine's bank.  A Main.s routine the engine calls is
+; declared here ("label EXT") and defined there ("label ENT").
 
             mx    %00
 
@@ -40,7 +31,7 @@ EVT_LOOP_END mac
 
 ; Before each render: pick up the palette changes
 PRE_RENDER   mac
-             jsr  ApplyPaletteChange ; switch to a new palette detected since the last frame
+             jsl  ApplyPaletteChange ; switch to a new palette detected since the last frame
              <<<
 
 POST_RENDER  mac
@@ -68,101 +59,19 @@ CONFIG_GAME_DEFAULTS mac
 ;
              <<<
 
+; Palette RAM writes: the engine's handlers (ppu/ppu_palette.s) mark the palette dirty for the code
+; generated from palettes/, or write a [direct] cell straight to its slot.  A game with handlers of its own
+; sets CUSTOM_PPU_PALETTE_DISPATCH equ 1 and PPU_PALETTE_DISPATCH equ its table, and defines the table
+; (and the handlers) in EngineExt.s: the PPU write shim reads it with 16-bit addresses in the engine's bank.
+CUSTOM_PPU_PALETTE_DISPATCH equ 0
 
-; Provide alternative ways of locking in the scroll and ppu control values after a frame
+; The PPU register values a render latches (RenderLatch), when they aren't simply the registers' last
+; values: CUSTOM_PPU_CTRL_LOCK / CUSTOM_PPU_SCROLL_LOCK equ 1, and CUSTOM_PPU_CTRL_LOCK_ADDR /
+; CUSTOM_PPU_SCROLL_LOCK_ADDR equ the routine in Main.s ("label EXT" here, "label ENT" there).  See
+; ppu/ppu_api.s
 CUSTOM_PPU_CTRL_LOCK equ 0
 CUSTOM_PPU_SCROLL_LOCK equ 0
-CUSTOM_PPU_CTRL_LOCK_CODE mac
-;
-                          <<<
-CUSTOM_PPU_SCROLL_LOCK_CODE mac
-;
-                          <<<
 
-; Do we have a custom routine to execute RenderScreen.  If yes, put its address here
+; The game draws (some) renders itself: CUSTOM_RENDER_SCREEN equ 1, and CUSTOM_RENDER_SCREEN_ADDR equ the
+; routine in Main.s ("label EXT" here, "label ENT" there).  See ppu/ppu_api.s
 CUSTOM_RENDER_SCREEN equ 0
-
-; ===========================================================================
-; MAIN side: called from the event loop, the frame hooks and start-up
-; ===========================================================================
-            DO    SEG_MAIN
-            mx    %00
-
-dkPalDirty  EXT                             ; (the engine side's, in the other segment)
-
-; Palette management.  The palettes the game uses (title screen and the three phases) are described in palettes/, and pal_transitions.s
-; (generated from them by build.js) gives each palette a fixed IIgs slot layout and swizzle tables.  A palette
-; RAM write (DK_PalWrite) only marks the palette dirty; at the next render, ApplyPaletteChange (GS task)
-; identifies the palette in palette RAM and switches to it (redrawing tiles when needed), or shows the
-; changed colors in the current palette's layout.
-dkCurPal    dw    0                         ; PAL_* id of the palette on screen
-
-; Start with the title screen palette.  InitPlayfield is called by NES_StartUp.
-InitPlayfield
-SetDefaultPalette
-            ldy   #PAL_TITLE_SCREEN
-            sty   dkCurPal
-            ldx   PAL_SWIZZLE_LO,y
-            lda   PAL_SWIZZLE_HI,y
-            jmp   NES_SetPaletteMap
-
-; PRE_RENDER, on the GS task: if the palette RAM changed, identify the palette in it and switch to it,
-; or show its changed colors in the current palette's layout
-ApplyPaletteChange
-            ldal  dkPalDirty
-            beq   :none
-            ldal  _ppumask                  ; While the background is off (the game is rebuilding the
-            and   #NES_PPUMASK_BG           ; screen), keep the old colors on whatever is left on the
-            beq   :none                     ; screen; the new ones come with the new screen
-            lda   #0
-            stal  dkPalDirty                ; (first, so a write from here on is seen next time)
-            ldx   dkCurPal
-            jsr   DetectNESPalette          ; A = Y = palette id, 0 if none
-            beq   :colors                   ; not a known palette (e.g. at power-on)
-            cmp   dkCurPal
-            beq   :colors
-            ldx   dkCurPal
-            sty   dkCurPal
-            jmp   UpdatePalette             ; X = from, Y = to
-:colors     ldy   dkCurPal
-            jmp   LoadPaletteColors
-:none       rts
-
-            FIN
-            mx    %00
-
-; ===========================================================================
-; ENGINE side: called from the renderer (per sprite, per render) and the PPU write shims
-; ===========================================================================
-            DO    SEG_ENGINE
-            mx    %00
-
-; Dispatch table to handle palette changes. The ppu_<addr> functions are the default
-; runtime behaviors.  Currently, only ppu_3F00 and ppu_3F10 do anything, which is to
-; set the background color.
-PPU_PALETTE_DISPATCH equ PALETTE_DISPATCH
-
-dkPalDirty  ENT                             ; palette RAM changed since the last render
-            dw    0
-
-; Palette RAM write ($3F01-$3F1F, except the color 0s), on the NES task.  The palette RAM is already
-; updated (and only changed values get here): just note that it changed.
-DK_PalWrite
-            lda   #1
-            sta   dkPalDirty
-DK_PalNone  rts
-
-; Color 0: $3F00 / $3F10 is always IIgs slot 0, so it is set straight away (ppu_palette.s); the
-; other color 0s aren't shown.  The rest go to DK_PalWrite.
-PALETTE_DISPATCH
-        dw   ppu_3F00,DK_PalWrite,DK_PalWrite,DK_PalWrite
-        dw   DK_PalNone,DK_PalWrite,DK_PalWrite,DK_PalWrite
-        dw   DK_PalNone,DK_PalWrite,DK_PalWrite,DK_PalWrite
-        dw   DK_PalNone,DK_PalWrite,DK_PalWrite,DK_PalWrite
-        dw   ppu_3F10,DK_PalWrite,DK_PalWrite,DK_PalWrite
-        dw   DK_PalNone,DK_PalWrite,DK_PalWrite,DK_PalWrite
-        dw   DK_PalNone,DK_PalWrite,DK_PalWrite,DK_PalWrite
-        dw   DK_PalNone,DK_PalWrite,DK_PalWrite,DK_PalWrite
-
-            FIN
-            mx    %00

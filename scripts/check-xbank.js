@@ -15,7 +15,8 @@
  *   - jsr / jmp to another segment (use jsl / jml, through a long entry point that ends with rtl)
  *   - any other 16-bit reference, unless the symbol is in ALLOWED below
  *   - a 16-bit reference to an ALLOWED symbol plus or minus a constant
- *   - a symbol both imported (EXT) and exported (ENT) by one segment (see below)
+ *   - a symbol both imported (EXT) and exported (ENT) by one segment, unless the ENT is the label form
+ *     at its definition (see below)
  *   - ENT / EXT in the operand form ("ENT a,b"): only "label ENT" / "label EXT" is reliable
  *
  * Only the engine segments are checked (MAIN and ENGINE): the converted NES ROM banks address each
@@ -82,18 +83,27 @@ function checkXBank(gameDir, linkFile, { segments = DEFAULT_SEGMENTS } = {}) {
     // the same source ENTs that way becomes a label of this segment: the references link locally,
     // with no error.  The listing then shows the name as both Global and External.
     // (It lists such an EXT as a Global row, named, then an unnamed External row from the same line.)
+    // A label-form "label ENT" definition of a name the segment also imports is fine: a game's
+    // Hooks.s declares its callbacks EXT for the engine segment, and Main.s, which puts Hooks.s too,
+    // defines them; its own references link locally, as they should.
+    const labelEnt = (r) => new RegExp(`^${r.label.replace(/[^\w]/g, '\\$&')}\\s+ENT\\b`, 'i').test(srcLine(r));
     rows.forEach((r, i) => {
       const next = rows[i + 1];
       const pair = next && next.type === 'External' && !next.label && next.line === r.line && next.file === r.file;
-      if (r.type === 'Global' && (ext.has(r.label) || pair)) {
+      if (r.type === 'Global' && (pair || (ext.has(r.label) && !labelEnt(r)))) {
         errors.push({ segment: seg.name, file: r.file, line: r.line, src: r.src.replace(/\s+/g, ' '),
           why: `${r.label} is imported (EXT) and exported (ENT) by this segment: an ENT operand list naming it, even in a skipped DO block, makes it local (use the label form, "${r.label} ENT", at its definition)` });
       }
     });
 
+    // Such a name is this segment's: Merlin32 marks its references external ("E 2"), but the linker
+    // resolves them to this segment
+    const local = new Set(rows.filter((r) => r.type === 'Global' && ext.has(r.label) && labelEnt(r)).map((r) => r.label));
+
     for (const r of rows) {
       if (!/^E 2$/.test(r.reloc)) continue; // (shifted parts, e.g. "E 1 >>16", are bank bytes)
       const syms = r.operand.split(/[^A-Za-z0-9_]+/).filter((t) => ext.has(t));
+      if (syms.length && syms.every((t) => local.has(t))) continue;
       const where = { segment: seg.name, file: r.file, line: r.line, src: r.src.replace(/\s+/g, ' ') };
       if (r.type === 'Code' && JUMPS.has(r.bytes[0])) {
         errors.push({ ...where, why: `16-bit ${r.op} into another segment (use jsl / jml)` });

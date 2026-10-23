@@ -2,9 +2,13 @@
 ;
 ; Any read/write to the PPU registers in the ROM is intercepted and passed here.
 ; Helper to perform the essential functions of rendering a frame
-_ppuctrl     ds  2
-_ppuscroll_y dw  0          ; Pad the top-byte with zero to allow 8- or 16-bit access
-_ppuscroll_x dw  0          ; Pad the top-byte with zero to allow 8- or 16-bit access
+; The PPU registers latched for the render (RenderLatch); a custom render screen reads them (long)
+_ppuctrl ENT
+             ds  2
+_ppuscroll_y ENT
+             dw  0          ; Pad the top-byte with zero to allow 8- or 16-bit access
+_ppuscroll_x ENT
+             dw  0          ; Pad the top-byte with zero to allow 8- or 16-bit access
 _ppumask ENT
              ds  2
 

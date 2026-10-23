@@ -88,3 +88,29 @@ RefreshPPUAttributesL ENT
             jsr   RefreshPPUAttributes
             plb
             rtl
+
+; The generated palette code (pal_transitions.s), for the palette on screen: which palette RAM writes go
+; straight to an IIgs slot (ppu_palette.s).  A = the address of its 32-word table (slot * 2, or $FFFF:
+; mark the palette dirty), X = the table's bank.  Interrupts are off while it is copied: the NES task
+; writes palette RAM.
+            mx    %00
+PPU_SetPaletteWritesL ENT
+            phb
+            phk
+            plb
+            php
+            sei
+            sta   :src+1
+            sep   #$20
+            txa
+            sta   :src+3
+            rep   #$20
+            ldx   #62
+:src        ldal  $000000,x
+            sta   ppuPalWrites,x
+            dex
+            dex
+            bpl   :src
+            plp
+            plb
+            rtl

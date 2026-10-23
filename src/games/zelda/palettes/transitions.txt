@@ -1,6 +1,9 @@
 ; Palette transitions.  Each [section] lists the palettes that can follow it.  The layouts are chosen
 ; to keep the redraws on these transitions down, and DetectNESPalette tries them first.
 
+; No palette is current until the game's first one is detected
+start = none
+
 [init]
 title_screen
 

@@ -223,29 +223,30 @@ blt_return_lite ENT
                 rts
 
 ; Set the engine scroll position from values in the form of the NES PPU registers.  The caller passes
-; the values, so a custom renderer can use different scroll positions for different parts of the screen.
-; NES_SetScrollX, NES_SetScrollY and NES_SetScrollNT change just one of the values.
+; the values, so a renderer can use different scroll positions for different parts of the screen (games:
+; NES_SetScroll, the long entry in ppu_api.s).
+; _SetScrollX, _SetScrollY and _SetScrollNT change just one of the values.
 ;
 ; A = nametable select (PPUCTRL bits 1:0)
 ; X = scroll_x (0 - 255)
 ; Y = scroll_y (0 - 255)
-NES_SetScroll
+_SetScroll
                 stx   ScrollX
                 sty   ScrollY
 
 ; A = nametable select (PPUCTRL bits 1:0)
-NES_SetScrollNT
+_SetScrollNT
                 and   #$0003
                 sta   ScrollNT
                 bra   _UpdateScrollStart
 
 ; X = scroll_x (0 - 255)
-NES_SetScrollX
+_SetScrollX
                 stx   ScrollX
                 bra   _UpdateScrollStart
 
 ; Y = scroll_y (0 - 255)
-NES_SetScrollY
+_SetScrollY
                 sty   ScrollY
 
 ; Derive the blitter values from the scroll position.  Sets StartX (the byte offset of the left edge),

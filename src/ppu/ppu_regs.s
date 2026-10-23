@@ -412,8 +412,13 @@ PPUDATA_WRITE ENT
         lda  2,s
         and  #$003F                     ; Pass in the NES color in the accumulator
 
-        phy
-        jsr  (PPU_PALETTE_DISPATCH,x)   ; Palette handlers might overwrite any register, so preserve Y
+        phy                             ; Palette handlers might overwrite any register, so preserve Y
+        DO   CUSTOM_PPU_PALETTE_DISPATCH
+        jsr  (PPU_PALETTE_DISPATCH,x)   ; The game's table (Hooks.s, EngineExt.s)
+        FIN
+        DO   1-CUSTOM_PPU_PALETTE_DISPATCH
+        jsr  (ppuPaletteDispatch,x)     ; The engine's (ppu_palette.s)
+        FIN
         ply
 
         sep  #$30

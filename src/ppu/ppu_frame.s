@@ -5,8 +5,8 @@
 ;
 ;   RenderLatch  latch the NES state the render uses (nametable queues, PPU registers, OAM) with
 ;                interrupts off
-;   RenderDraw   apply the queued tile updates and draw the screen (RenderScreen, or the game's
-;                CUSTOM_RENDER_SCREEN_ADDR)
+;   RenderDraw   apply the queued tile updates and draw the screen (the game's CUSTOM_RENDER_SCREEN_ADDR,
+;                or RenderScreen when it doesn't draw it)
 ;
 ; Both are called with JSL and set DBR to the engine bank.  RenderScreen, the debug display and the
 ; shadowing / screen rectangle helpers the renderer uses are here as well.
@@ -28,20 +28,23 @@ RenderLatch ENT
 ; this render draws, and new PPU writes go to the other buffer, so they don't interfere with the render
             jsr  PPUFreezeNametableUpdates
 
+; Cache the values that set the view port: the PPU registers' last values, or the game's (the locks
+; return C = 1 and the value in A; see ppu_api.s)
+
             DO   CUSTOM_PPU_CTRL_LOCK
-            CUSTOM_PPU_CTRL_LOCK_CODE
-            ELSE
-            lda  ppuctrl                  ;  Cache these values that are used to set the view port
+            jsl  CUSTOM_PPU_CTRL_LOCK_ADDR
+            bcs  :ctrl
             FIN
-            sta  _ppuctrl
+            lda  ppuctrl
+:ctrl       sta  _ppuctrl
             jsr  PPUCtrlDecode            ; Resolve the pattern table addresses from the last PPUCTRL write
 
             DO   CUSTOM_PPU_SCROLL_LOCK
-            CUSTOM_PPU_SCROLL_LOCK_CODE
-            ELSE
-            lda  ppuscroll
+            jsl  CUSTOM_PPU_SCROLL_LOCK_ADDR
+            bcs  :scroll
             FIN
-            sep  #$20
+            lda  ppuscroll
+:scroll     sep  #$20
             sta  _ppuscroll_y             ; 8-bit values are not contiguous in order to allow blended 8/16 access
             xba
             sta  _ppuscroll_x
@@ -121,12 +124,22 @@ RenderDraw ENT
             stal  renderActive
             FIN
 
+            jsr   _ShowDebugInfo
+
+; The game's render screen draws the renders it handles (C = 1, A = the DirtyBits to keep), and the
+; engine's renderer the rest
+
             DO    CUSTOM_RENDER_SCREEN
-            jsr   CUSTOM_RENDER_SCREEN_ADDR
-            ELSE
-            jsr   RenderScreen
+            jsl   CUSTOM_RENDER_SCREEN_ADDR
+            bcc   :render
+            sta   DirtyBits
+            plb
+            rtl
+:render
             FIN
 
+            jsr   RenderScreen
+            stz   DirtyBits
             plb
             rtl
 
@@ -170,7 +183,7 @@ EnableSprites
     trb   ControlBits
     rts
 
-; Helper that can be called by custom renderers to display the standard debug variable
+; The standard debug variables (SHOW_DEBUG_VARS), shown by RenderDraw before every render
 _ShowDebugInfo
             DO    SHOW_DEBUG_VARS
             inc   dirtyCount
@@ -225,16 +238,14 @@ _ShowDebugInfo
 
             rts
 
-; Default render screen implementation.  The user-code can override this and provide their
-; own to improve performance.
+; The engine's renderer (RenderDraw calls it, after the debug display; it clears DirtyBits after it).  A game
+; can draw some or all renders itself instead (CUSTOM_RENDER_SCREEN, see ppu_api.s).
             mx  %00
 RenderScreen
-            jsr   _ShowDebugInfo
-            
             lda   _ppuctrl                ; Set the engine to the scroll position from this frame's
             ldx   _ppuscroll_x            ; PPU register values (the nametable select bits are masked
-            ldy   _ppuscroll_y            ; by NES_SetScroll)
-            jsr   NES_SetScroll
+            ldy   _ppuscroll_y            ; by _SetScroll)
+            jsr   _SetScroll
 
 ; Dirty rendering (the grid renderer) or not
 
@@ -268,8 +279,6 @@ RenderScreen
 
             jsr   drawScreen
             FIN
-
-            stz   DirtyBits
             rts
 
 ; If dirty rendering is turned on, provide a way to override it

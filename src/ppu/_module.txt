@@ -19,3 +19,4 @@ ppu_sprites.s
 ppu_tile_blitters.s
 ppu_frame.s
 ppu_entry.s
+ppu_api.s

@@ -35,4 +35,4 @@ try {
   process.exit(1);
 }
 
-buildNromGame(__dirname, 'Master.s', { engineExtra: ['sprites.s'] });   // (the engine side's BenchAnimate reads it)
+buildNromGame(__dirname, 'Master.s');

@@ -7,9 +7,9 @@
 ;
 ; The game's own files come from game/: Merlin32 finds a put file only relative to the source that
 ; puts it, so the build (assembleGame, scripts/lib/nromBuild.js) copies the game's Config.s, Hooks.s
-; and pal_defs.s there before assembling, and Extra.s (any other file the game's engine side needs,
-; e.g. the bench's sprites.s; empty for most games).  game/ is build scratch: edit the files in the
-; game's folder, never these copies.
+; (the callback macros) and pal_defs.s there before assembling, and EngineExt.s (the game's code that
+; runs in this bank: a custom render screen, the palette write dispatch; empty for a game without
+; one).  game/ is build scratch: edit the files in the game's folder, never these copies.
 
             REL
 
@@ -25,10 +25,6 @@
             put   core/Defs.s
             put   ImportMain.s                ; The MAIN symbols the engine uses
 
-; This segment assembles the engine side of the game's Hooks.s; the main side is in its Main.s
-SEG_MAIN    equ   0
-SEG_ENGINE  equ   1
-
             put   game/Config.s
             put   game/pal_defs.s
 
@@ -37,9 +33,9 @@ SEG_ENGINE  equ   1
 
             mx    %00
 
-; The engine callbacks: the macros, and the engine side's code and data
+; The engine callbacks (the macros), and the game's code in this bank
             put   game/Hooks.s
-            put   game/Extra.s
+            put   game/EngineExt.s
 
             mput  ppu
 ; AUTOINC:BEGIN (do not edit -- managed by scripts/gen-includes.js)
@@ -62,6 +58,7 @@ SEG_ENGINE  equ   1
             put    ppu/ppu_tile_blitters.s
             put    ppu/ppu_frame.s
             put    ppu/ppu_entry.s
+            put    ppu/ppu_api.s
 ; AUTOINC:END
 
             put   rom/rom_color.s

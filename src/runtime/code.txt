@@ -1,0 +1,22 @@
+# The runtime code in the game's segment: the end of every game's Main.s (its
+# "mput .../runtime/code.txt" marker, expanded by scripts/gen-includes.js at build time),
+# after the game's own code.  The rest of the engine (the PPU, the renderers, the blitter, the
+# tile and sprite compilers) is assembled by src/Engine.s.
+../misc/App.Msg.s
+../misc/io.s
+../apu/apu.s
+../rom/scaffold.s
+../rom/rom_color.s
+../rom/rom_helpers.s
+../rom/rom_input.s
+../rom/rom_kbd_basic.s
+../rom/rom_kbd_j13.s
+../rom/rom_kbd_adb.s
+../rom/rom_exec.s
+../rom/rom_config.s
+../rom/rom_config_setup.s
+../core/ControlBits.s
+../core/CoreImpl.s
+../core/Graphics.s
+../core/Math.s
+../core/Memory.s
