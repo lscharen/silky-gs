@@ -144,7 +144,7 @@ config_input_p2_button_b  dw  MOD_REG_SHIFT_DOWN
 ; Added after the original layout, so the values above keep their offsets
 config_video_fps       dw  0  ; show the renders per second at the top-left of the screen (DrawFPS)
 config_video_nescpu    dw  0  ; border = the task that owns the CPU, a raster bar of game logic time (saveCtx)
-config_kbd_driver      dw  KBD_DRIVER_BASIC  ; keyboard driver of the KEYBOARD input type (rom/rom_kbd_j13.s)
+config_kbd_driver      dw  KBD_DRIVER_ADB    ; keyboard driver of the KEYBOARD input type (rom/rom_kbd_j13.s)
 config_joy_cx          ENT                ; The joystick's calibrated center, X (VBL_VERT_REG steps x 16;
                        dw  0              ; 0 = not calibrated)
 config_joy_cy          ENT                ; ... Y
