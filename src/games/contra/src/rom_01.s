@@ -4615,8 +4615,8 @@ draw_player_hud_sprites ENT
 :draw_p_sprite
             dec $01    ; decrement number of medals to draw
             bmi :move_to_next_player    ; if done drawing all sprites, move to next player
-            lda #$10    ; a = #$10
-            sta OAMDMA_CPU_BUFFER,x    ; set Y position of medal/game over hud sprite to #$10
+            lda #$18    ; a = #$18 (IIgs: was #$10, moved down 8 to fit the viewport)
+            sta OAMDMA_CPU_BUFFER,x    ; set Y position of medal/game over hud sprite to #$18
             jsr   _R1_014    ; load HUD sprite (either medal, or game over text)
             sta OAMDMA_CPU_BUFFER+1,x    ; write tile number to OAM
             lda $00
