@@ -88,3 +88,30 @@ PPU_DrawScreen ENT
             FIN
             plb
             rtl
+
+; The CHR-ROM (CHR_ROM, PPU $0000-$1FFF) was replaced, e.g. a CHR-ROM bank switch: convert all 512 tiles
+; into the tiledata bank again, recompile the background tiles, drop the compiled sprites and redraw the
+; whole background.  Very slow (a few seconds' worth of frames): for games that switch banks between
+; screens.  Call from PRE_RENDER, with D = the runtime's direct page.
+PPU_ReloadCHR ENT
+            phb
+            phk
+            plb
+            lda   #0                      ; the tile's tiledata address (tile * 128)
+:tile       pha
+            lsr                           ; X = its CHR address (tile * 16)
+            lsr
+            lsr
+            tax
+            lda   1,s
+            jsr   FastROMMaskedTileToLookup
+            pla
+            clc
+            adc   #128
+            bne   :tile                   ; (512 tiles fill the bank: done when the address wraps to 0)
+            jsr   ROM_CompileBackgroundTiles
+            jsr   SprRequestFlush
+            lda   #%1111                  ; every background palette's metatiles (and DIRTY_BIT_BG0_REFRESH)
+            jsr   RefreshPPUAttributes
+            plb
+            rtl

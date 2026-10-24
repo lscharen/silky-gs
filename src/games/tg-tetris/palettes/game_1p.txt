@@ -1,0 +1,16 @@
+; A one player game (initializeGameMode: updatePalette 2 and 3 = bgPalette2 + spritePalette0 in
+; rom_code.s), and the demo.  The ROM sets the colors as the game goes, from the piecePaletteIndex
+; table: BG0 is the playfield's level colors (setPlayfieldPaletteFromLevel), SP0 the falling piece and
+; SP2 the next piece (setPiecePalette).  Those take 9 slots of their own, so the right-hand panel's
+; BG1 colors (never changed in a one player game) are shown in close colors to fit 16.
+;
+; SP1 and SP3 (player 2's pieces) keep spritePalette0's colors, which tells this palette from game_2p:
+; SP1's colors take no slot, as nothing shows them.
+BG0: $0F *$20 *$10 *$00
+BG1: $0F $27~$16 $18~$16 $08~$00
+BG2: $0F $31 $21 $01
+BG3: $0F $30 $16 $00
+SP0: $0F *$16 *$0F *$00
+SP1: $0F $12~$21 $24~$21 $1B~$21
+SP2: $0F *$0F *$0F *$0F
+SP3: $0F -- -- --

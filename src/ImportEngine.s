@@ -8,7 +8,8 @@ NES_SetScroll           EXT
 PPU_DrawScreenRange     EXT
 PPU_SetupLines          EXT
 PPU_DrawScreen          EXT
-_ppuctrl                EXT
+PPU_ReloadCHR           EXT
+_ppuctrl               EXT
 _ppuscroll_x            EXT
 _ppuscroll_y            EXT
 

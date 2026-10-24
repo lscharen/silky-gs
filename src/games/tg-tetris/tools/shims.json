@@ -1,0 +1,572 @@
+[
+ {
+  "addr": "$800F",
+  "len": 4,
+  "what": "mainLoop: yield until the NMI has run"
+ },
+ {
+  "addr": "$842E",
+  "len": 3,
+  "what": "lda $7A,y -> jsr LDA_007A_Y"
+ },
+ {
+  "addr": "$8431",
+  "len": 3,
+  "what": "cmp $B2,y -> jsr CMP_00B2_Y"
+ },
+ {
+  "addr": "$8454",
+  "len": 3,
+  "what": "lda $7A,y -> jsr LDA_007A_Y"
+ },
+ {
+  "addr": "$8457",
+  "len": 3,
+  "what": "cmp $B2,y -> jsr CMP_00B2_Y"
+ },
+ {
+  "addr": "$85CA",
+  "len": 3,
+  "what": "lda player1RNGSeed,y -> jsr LDA_player1RNGSeed_Y"
+ },
+ {
+  "addr": "$85D0",
+  "len": 3,
+  "what": "lda player1RNGSeed+1,y -> jsr LDA_player1RNGSeed_p1_Y"
+ },
+ {
+  "addr": "$8642",
+  "len": 3,
+  "what": "cmp player1TetrominoY,y -> jsr CMP_player1TetrominoY_Y"
+ },
+ {
+  "addr": "$8647",
+  "len": 3,
+  "what": "lda player1FallTimer,y -> jsr LDA_player1FallTimer_Y"
+ },
+ {
+  "addr": "$864C",
+  "len": 3,
+  "what": "sta player1FallTimer,y -> jsr STA_player1FallTimer_Y"
+ },
+ {
+  "addr": "$8C1E",
+  "len": 3,
+  "what": "sbc player1TetrominoY,y -> jsr SBC_player1TetrominoY_Y"
+ },
+ {
+  "addr": "$8C33",
+  "len": 3,
+  "what": "sbc player1TetrominoX,y -> jsr SBC_player1TetrominoX_Y"
+ },
+ {
+  "addr": "$8C49",
+  "len": 3,
+  "what": "lda player1TetrominoCurrent,y -> jsr LDA_player1TetrominoCurrent_Y"
+ },
+ {
+  "addr": "$8C50",
+  "len": 3,
+  "what": "ora player1TetrominoOrientation,y -> jsr ORA_player1TetrominoOrientation_Y"
+ },
+ {
+  "addr": "$8ED0",
+  "len": 6,
+  "what": "L8ED0: yield until the NMI has sent the staged PPU writes"
+ },
+ {
+  "addr": "$8FAE",
+  "len": 3,
+  "what": "cmp $6C,y -> jsr CMP_006C_Y"
+ },
+ {
+  "addr": "$91A8",
+  "len": 3,
+  "what": "lda $6C,y -> jsr LDA_006C_Y"
+ },
+ {
+  "addr": "$935F",
+  "len": 3,
+  "what": "lda $74,y -> jsr LDA_0074_Y"
+ },
+ {
+  "addr": "$9380",
+  "len": 3,
+  "what": "lda $74,y -> jsr LDA_0074_Y"
+ },
+ {
+  "addr": "$943C",
+  "len": 3,
+  "what": "bit PPUSTATUS -> jsr BIT_2002"
+ },
+ {
+  "addr": "$9441",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$9446",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$944E",
+  "len": 3,
+  "what": "sta PPUDATA -> jsr STA_2007"
+ },
+ {
+  "addr": "$9469",
+  "len": 3,
+  "what": "sta PPUDATA -> jsr STA_2007"
+ },
+ {
+  "addr": "$9472",
+  "len": 3,
+  "what": "sta PPUDATA -> jsr STA_2007"
+ },
+ {
+  "addr": "$9493",
+  "len": 3,
+  "what": "sta PPUDATA -> jsr STA_2007"
+ },
+ {
+  "addr": "$94C8",
+  "len": 3,
+  "what": "sta PPUDATA -> jsr STA_2007"
+ },
+ {
+  "addr": "$94D4",
+  "len": 3,
+  "what": "sta PPUDATA -> jsr STA_2007"
+ },
+ {
+  "addr": "$94E0",
+  "len": 3,
+  "what": "sta PPUDATA -> jsr STA_2007"
+ },
+ {
+  "addr": "$9775",
+  "len": 3,
+  "what": "sta player1RNGSeed,y -> jsr STA_player1RNGSeed_Y"
+ },
+ {
+  "addr": "$977A",
+  "len": 3,
+  "what": "sta player1RNGSeed+1,y -> jsr STA_player1RNGSeed_p1_Y"
+ },
+ {
+  "addr": "$99BF",
+  "len": 3,
+  "what": "lda pieceStatistics,y -> jsr LDA_pieceStatistics_Y"
+ },
+ {
+  "addr": "$9EB0",
+  "len": 3,
+  "what": "setCNROMBank: record the CHR-ROM bank (ppu_bank)"
+ },
+ {
+  "addr": "$A16B",
+  "len": 3,
+  "what": "bit PPUSTATUS -> jsr BIT_2002"
+ },
+ {
+  "addr": "$A172",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$A175",
+  "len": 3,
+  "what": "stx PPUADDR -> jsr STX_2006"
+ },
+ {
+  "addr": "$A17B",
+  "len": 3,
+  "what": "sta PPUDATA -> jsr STA_2007"
+ },
+ {
+  "addr": "$A3E7",
+  "len": 3,
+  "what": "sta PPUCTRL -> jsr STA_2000"
+ },
+ {
+  "addr": "$A3EE",
+  "len": 4,
+  "what": "enableNMIAndWaitForRendering: yield until the NMI has sent the slot"
+ },
+ {
+  "addr": "$A402",
+  "len": 3,
+  "what": "sta JOY1 -> jsr STA_4016"
+ },
+ {
+  "addr": "$A407",
+  "len": 3,
+  "what": "sta JOY1 -> jsr STA_4016"
+ },
+ {
+  "addr": "$A41A",
+  "len": 23,
+  "what": "pollController: read the controllers from the runtime"
+ },
+ {
+  "addr": "$A44E",
+  "len": 10,
+  "what": "waitForNMIAndDisablePPURendering: yield until the NMI has sent every slot"
+ },
+ {
+  "addr": "$A45A",
+  "len": 3,
+  "what": "sta PPUCTRL -> jsr STA_2000"
+ },
+ {
+  "addr": "$A45F",
+  "len": 3,
+  "what": "sta PPUMASK -> jsr STA_2001"
+ },
+ {
+  "addr": "$A469",
+  "len": 10,
+  "what": "enablePPURendering: the VBlank waits"
+ },
+ {
+  "addr": "$A477",
+  "len": 3,
+  "what": "sta PPUCTRL -> jsr STA_2000"
+ },
+ {
+  "addr": "$A47D",
+  "len": 3,
+  "what": "bit PPUSTATUS -> jsr BIT_2002"
+ },
+ {
+  "addr": "$A482",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$A487",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$A49E",
+  "len": 3,
+  "what": "sta PPUDATA -> jsr STA_2007"
+ },
+ {
+  "addr": "$A7B3",
+  "len": 3,
+  "what": "sta PPUMASK -> jsr STA_2001"
+ },
+ {
+  "addr": "$A7B6",
+  "len": 3,
+  "what": "sta OAMADDR -> jsr STA_2003"
+ },
+ {
+  "addr": "$A7BB",
+  "len": 3,
+  "what": "sta OAMDMA -> jsr STA_4014"
+ },
+ {
+  "addr": "$A7C2",
+  "len": 3,
+  "what": "sta PPUCTRL -> jsr STA_2000"
+ },
+ {
+  "addr": "$A7D0",
+  "len": 30,
+  "what": "nmi: the CHR bank write (setCNROMBank_GS records the bank)"
+ },
+ {
+  "addr": "$A7EE",
+  "len": 3,
+  "what": "ldx PPUSTATUS -> jsr LDX_2002"
+ },
+ {
+  "addr": "$A7F3",
+  "len": 3,
+  "what": "sta PPUSCROLL -> jsr STA_2005"
+ },
+ {
+  "addr": "$A7F8",
+  "len": 3,
+  "what": "sta PPUSCROLL -> jsr STA_2005"
+ },
+ {
+  "addr": "$A7FD",
+  "len": 3,
+  "what": "sta PPUCTRL -> jsr STA_2000"
+ },
+ {
+  "addr": "$A802",
+  "len": 3,
+  "what": "sta PPUMASK -> jsr STA_2001"
+ },
+ {
+  "addr": "$A80D",
+  "len": 1,
+  "what": "nmi: rti -> rtl"
+ },
+ {
+  "addr": "$A822",
+  "len": 3,
+  "what": "bit PPUSTATUS -> jsr BIT_2002"
+ },
+ {
+  "addr": "$A827",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$A82C",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$A831",
+  "len": 3,
+  "what": "sta PPUDATA -> jsr STA_2007"
+ },
+ {
+  "addr": "$A843",
+  "len": 3,
+  "what": "bit PPUSTATUS -> jsr BIT_2002"
+ },
+ {
+  "addr": "$A848",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$A84D",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$A852",
+  "len": 3,
+  "what": "sta PPUDATA -> jsr STA_2007"
+ },
+ {
+  "addr": "$A864",
+  "len": 3,
+  "what": "bit PPUSTATUS -> jsr BIT_2002"
+ },
+ {
+  "addr": "$A869",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$A86E",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$A873",
+  "len": 3,
+  "what": "sta PPUDATA -> jsr STA_2007"
+ },
+ {
+  "addr": "$A885",
+  "len": 3,
+  "what": "bit PPUSTATUS -> jsr BIT_2002"
+ },
+ {
+  "addr": "$A88A",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$A88F",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$A894",
+  "len": 3,
+  "what": "sta PPUDATA -> jsr STA_2007"
+ },
+ {
+  "addr": "$A8A6",
+  "len": 3,
+  "what": "bit PPUSTATUS -> jsr BIT_2002"
+ },
+ {
+  "addr": "$A8AB",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$A8B0",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$A8B5",
+  "len": 3,
+  "what": "sta PPUDATA -> jsr STA_2007"
+ },
+ {
+  "addr": "$A8C7",
+  "len": 3,
+  "what": "bit PPUSTATUS -> jsr BIT_2002"
+ },
+ {
+  "addr": "$A8CC",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$A8D1",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$A8D6",
+  "len": 3,
+  "what": "sta PPUDATA -> jsr STA_2007"
+ },
+ {
+  "addr": "$A8E8",
+  "len": 3,
+  "what": "bit PPUSTATUS -> jsr BIT_2002"
+ },
+ {
+  "addr": "$A8ED",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$A8F2",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$A8F7",
+  "len": 3,
+  "what": "sta PPUDATA -> jsr STA_2007"
+ },
+ {
+  "addr": "$A911",
+  "len": 2,
+  "what": "reset: sei / cld (the NES task runs with interrupts enabled)"
+ },
+ {
+  "addr": "$A915",
+  "len": 3,
+  "what": "stx PPUCTRL -> jsr STX_2000"
+ },
+ {
+  "addr": "$A918",
+  "len": 3,
+  "what": "stx PPUMASK -> jsr STX_2001"
+ },
+ {
+  "addr": "$A91B",
+  "len": 5,
+  "what": "reset: VBlank wait 1 (no PPUSTATUS VBlank flag to wait on)"
+ },
+ {
+  "addr": "$A920",
+  "len": 5,
+  "what": "reset: VBlank wait 2"
+ },
+ {
+  "addr": "$A926",
+  "len": 1,
+  "what": "reset: txs (the runtime owns the stack)"
+ },
+ {
+  "addr": "$B3F0",
+  "len": 3,
+  "what": "bit PPUSTATUS -> jsr BIT_2002"
+ },
+ {
+  "addr": "$B3F5",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$B3FA",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$B404",
+  "len": 3,
+  "what": "sta PPUDATA -> jsr STA_2007"
+ },
+ {
+  "addr": "$B419",
+  "len": 3,
+  "what": "sta PPUDATA -> jsr STA_2007"
+ },
+ {
+  "addr": "$B457",
+  "len": 3,
+  "what": "bit PPUSTATUS -> jsr BIT_2002"
+ },
+ {
+  "addr": "$B45C",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$B461",
+  "len": 3,
+  "what": "sta PPUADDR -> jsr STA_2006"
+ },
+ {
+  "addr": "$B466",
+  "len": 3,
+  "what": "sta PPUDATA -> jsr STA_2007"
+ },
+ {
+  "addr": "$B590",
+  "len": 3,
+  "what": "sta player1RNGSeed,y -> jsr STA_player1RNGSeed_Y"
+ },
+ {
+  "addr": "$B596",
+  "len": 3,
+  "what": "sta player1RNGSeed+1,y -> jsr STA_player1RNGSeed_p1_Y"
+ },
+ {
+  "addr": "$CFAD",
+  "len": 3,
+  "what": "sta SND_CHN -> jsr STA_4015"
+ },
+ {
+  "addr": "$D8A5",
+  "len": 4,
+  "what": "APU slot 1 write"
+ },
+ {
+  "addr": "$D8BC",
+  "len": 3,
+  "what": "sta SND_CHN -> jsr STA_4015"
+ },
+ {
+  "addr": "$D8BF",
+  "len": 5,
+  "what": "APU slot 2 write"
+ },
+ {
+  "addr": "$D8CB",
+  "len": 5,
+  "what": "APU slot 3 write"
+ },
+ {
+  "addr": "$D8D7",
+  "len": 5,
+  "what": "APU slot 4 write"
+ },
+ {
+  "addr": "$D8EA",
+  "len": 3,
+  "what": "sta SND_CHN -> jsr STA_4015"
+ }
+]

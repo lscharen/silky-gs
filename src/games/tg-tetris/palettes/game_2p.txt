@@ -1,0 +1,12 @@
+; A two player or co-op game.  BG0 and BG1 are the two playfields' level colors, SP0 / SP1 the two
+; falling pieces, SP2 / SP3 the two next pieces (see game_1p).  25 colors do not fit 16: the falling
+; pieces and the playfields take 12 slots, the frame and the status colors (BG2, BG3) share 3, and the
+; next pieces are not shown (unused cells are drawn in slot 0, the backdrop).
+BG0: $0F *$20 *$10 *$00
+BG1: $0F *$27 *$18 *$08
+BG2: $0F $31~$30 $21 $01~$21
+BG3: $0F $30 $16 $00~$21
+SP0: $0F *$16 *$0F *$00
+SP1: $0F *$12 *$24 *$1B
+SP2: $0F -- -- --
+SP3: $0F -- -- --
