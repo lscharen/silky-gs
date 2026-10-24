@@ -1,0 +1,43 @@
+; Tengen Tetris palette transitions.  Each [section] lists the palettes that can follow it.
+;
+; The title screen goes to the menus (and the demo, a one player game); the menus start a game; a game
+; ends on the leaderboard (a high score) or the title screen, and its level-ups show the bonus
+; animation.  game_1p and game_2p are told apart by SP1 (see game_1p.txt).
+
+[init]
+title
+
+[title]
+menu
+game_1p
+game_2p
+leaderboard
+
+[menu]
+title
+game_1p
+game_2p
+
+[game_1p]
+bonus
+leaderboard
+title
+menu
+game_2p
+
+[game_2p]
+bonus
+leaderboard
+title
+menu
+game_1p
+
+[bonus]
+game_1p
+game_2p
+leaderboard
+title
+
+[leaderboard]
+title
+menu

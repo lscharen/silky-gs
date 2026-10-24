@@ -66,7 +66,7 @@ SprRequestFlushL ENT
             plb
             rtl
 
-; _SetScreenMode (Graphics.s).  Returns A.
+; _SetScreenHeight (Graphics.s).  Returns A.
 SetScreenRectL ENT
             phb
             phk

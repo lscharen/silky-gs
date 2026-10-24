@@ -1,10 +1,9 @@
 SILKY-GS: NES GAMES ON THE APPLE IIGS
 =====================================
 
-This disk holds an NES game converted to run on the Apple IIgs. The
-game runs at the NES's speed; the screen is redrawn as fast as the
-IIgs allows. This file describes the keys and settings that every
-game on these disks shares.
+Silky-GS is a library to simplify the process of porting NES games
+onto the Apple IIgs in a performant manner. This file describes the
+keys and settings provides by the runtime.
 
 Settings are saved in a .prefs file next to the application when you
 quit with Q (see below), and are loaded the next time the game starts.
@@ -105,13 +104,16 @@ INPUT
                 its first controller and player 2 its second.
 
 DRIVERS
-  KEYBOARD      BASIC or J13: how the keyboard is read.
+  KEYBOARD      BASIC, J13 or ADB: how the keyboard is read.
                 BASIC sees one key at a time: the last key pressed.
                 Holding Left and pressing Up turns to Up only.
+
                 J13 sees up to three keys held at once (Left and Up
                 together go diagonally), on a ROM 00 or ROM 01 IIgs.
                 On a ROM 3 IIgs, and on most emulators, it works like
                 BASIC.
 
-CREDITS
-  The people who helped make this possible.
+                The ADB driver directly communicated with the ADB
+                bus and is ther preferred keyboard driver.  It
+                implements the same keyboard handling method as
+                Wolfenstein 3D.

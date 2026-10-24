@@ -8,8 +8,8 @@
 ; with CTRL_EVEN_RENDER), and the wrap from the last phase back to the first moves to the next block of
 ; 8 lines and opens an interrupt window.
 ;
-; The phase constants assume the NES playfield: 128 bytes wide, starting at byte 16 of the SHR line
-; (screen mode 2 and the other 128-byte modes).  _PEISlamPatch checks this.
+; The phase constants assume the NES playfield: 128 bytes wide, starting at byte x_offset of the SHR
+; line (even, 0 to 32), as SetScreenRect always sets it.
 ;
 ; Registers inside the chunks: Y = 1280 x (absolute line / 8), the block's offset; X = lines left;
 ; carry clear (nothing here overflows 16 bits).
@@ -130,169 +130,287 @@ peiW0b      lda   #0                    ; R1W1 (patched)
             stal  STATE_REG
             rep   #$21
 
-; Phase 0: base $2010 (+ Y), one page
+; The line constants: peiBn = the first byte of line n of a block (+ Y), peiHn / peiLn = the pages of
+; its last and first words, peiSn = 1 if they differ (the line crosses a page: the direct page moves
+; once in the middle), peiNn = the words in peiHn's page.  Fully braced: Merlin32 evaluates labels
+; with precedence but ]variables left to right.  The lup counts and the operands in a DO are
+; ]variables (a skipped DO does not substitute labels; lup does not take a label count).
+peiB0       equ   {$2000+x_offset+{0*160}}
+peiH0       equ   {{{peiB0+126}/256}*256}
+peiL0       equ   {{peiB0/256}*256}
+peiS0       equ   {{peiH0-peiL0}/256}
+peiN0       equ   {{{{{peiB0+126}-peiH0}/2}+1}*peiS0}+{{1-peiS0}*64}
+peiB1       equ   {$2000+x_offset+{1*160}}
+peiH1       equ   {{{peiB1+126}/256}*256}
+peiL1       equ   {{peiB1/256}*256}
+peiS1       equ   {{peiH1-peiL1}/256}
+peiN1       equ   {{{{{peiB1+126}-peiH1}/2}+1}*peiS1}+{{1-peiS1}*64}
+peiB2       equ   {$2000+x_offset+{2*160}}
+peiH2       equ   {{{peiB2+126}/256}*256}
+peiL2       equ   {{peiB2/256}*256}
+peiS2       equ   {{peiH2-peiL2}/256}
+peiN2       equ   {{{{{peiB2+126}-peiH2}/2}+1}*peiS2}+{{1-peiS2}*64}
+peiB3       equ   {$2000+x_offset+{3*160}}
+peiH3       equ   {{{peiB3+126}/256}*256}
+peiL3       equ   {{peiB3/256}*256}
+peiS3       equ   {{peiH3-peiL3}/256}
+peiN3       equ   {{{{{peiB3+126}-peiH3}/2}+1}*peiS3}+{{1-peiS3}*64}
+peiB4       equ   {$2000+x_offset+{4*160}}
+peiH4       equ   {{{peiB4+126}/256}*256}
+peiL4       equ   {{peiB4/256}*256}
+peiS4       equ   {{peiH4-peiL4}/256}
+peiN4       equ   {{{{{peiB4+126}-peiH4}/2}+1}*peiS4}+{{1-peiS4}*64}
+peiB5       equ   {$2000+x_offset+{5*160}}
+peiH5       equ   {{{peiB5+126}/256}*256}
+peiL5       equ   {{peiB5/256}*256}
+peiS5       equ   {{peiH5-peiL5}/256}
+peiN5       equ   {{{{{peiB5+126}-peiH5}/2}+1}*peiS5}+{{1-peiS5}*64}
+peiB6       equ   {$2000+x_offset+{6*160}}
+peiH6       equ   {{{peiB6+126}/256}*256}
+peiL6       equ   {{peiB6/256}*256}
+peiS6       equ   {{peiH6-peiL6}/256}
+peiN6       equ   {{{{{peiB6+126}-peiH6}/2}+1}*peiS6}+{{1-peiS6}*64}
+peiB7       equ   {$2000+x_offset+{7*160}}
+peiH7       equ   {{{peiB7+126}/256}*256}
+peiL7       equ   {{peiB7/256}*256}
+peiS7       equ   {{peiH7-peiL7}/256}
+peiN7       equ   {{{{{peiB7+126}-peiH7}/2}+1}*peiS7}+{{1-peiS7}*64}
+
+; Phase 0
 peiC0       tya
-            adc   #$2010+127
+            adc   #{peiB0+127}
             tcs
             tya
-            adc   #$2000
+            adc   #peiH0
             tcd
-]dp         equ   $8E
-            lup   64
+]dp         equ   {{peiB0+126}-peiH0}
+]n          equ   peiN0
+            lup   ]n
             pei   ]dp
 ]dp         equ   ]dp-2
             --^
+]lp         equ   peiL0
+]n          equ   {64-peiN0}
+            DO    peiS0
+            tya
+            adc   #]lp
+            tcd
+]dp         equ   $FE
+            lup   ]n
+            pei   ]dp
+]dp         equ   ]dp-2
+            --^
+            FIN
             dex
             beq   *+5
 peiJ0       jmp   peiC1
             jmp   peiExit
 
-; Phase 1: base $20B0, 24 words in page $21, 40 in page $20
+; Phase 1
 peiC1       tya
-            adc   #$20B0+127
+            adc   #{peiB1+127}
             tcs
             tya
-            adc   #$2100
+            adc   #peiH1
             tcd
-]dp         equ   $2E
-            lup   24
+]dp         equ   {{peiB1+126}-peiH1}
+]n          equ   peiN1
+            lup   ]n
             pei   ]dp
 ]dp         equ   ]dp-2
             --^
+]lp         equ   peiL1
+]n          equ   {64-peiN1}
+            DO    peiS1
             tya
-            adc   #$2000
+            adc   #]lp
             tcd
 ]dp         equ   $FE
-            lup   40
+            lup   ]n
             pei   ]dp
 ]dp         equ   ]dp-2
             --^
+            FIN
             dex
             beq   *+5
 peiJ1       jmp   peiC2
             jmp   peiExit
 
-; Phase 2: base $2150, one page
+; Phase 2
 peiC2       tya
-            adc   #$2150+127
+            adc   #{peiB2+127}
             tcs
             tya
-            adc   #$2100
+            adc   #peiH2
             tcd
-]dp         equ   $CE
-            lup   64
+]dp         equ   {{peiB2+126}-peiH2}
+]n          equ   peiN2
+            lup   ]n
             pei   ]dp
 ]dp         equ   ]dp-2
             --^
+]lp         equ   peiL2
+]n          equ   {64-peiN2}
+            DO    peiS2
+            tya
+            adc   #]lp
+            tcd
+]dp         equ   $FE
+            lup   ]n
+            pei   ]dp
+]dp         equ   ]dp-2
+            --^
+            FIN
             dex
             beq   *+5
 peiJ2       jmp   peiC3
             jmp   peiExit
 
-; Phase 3: base $21F0, 56 words in page $22, 8 in page $21
+; Phase 3
 peiC3       tya
-            adc   #$21F0+127
+            adc   #{peiB3+127}
             tcs
             tya
-            adc   #$2200
+            adc   #peiH3
             tcd
-]dp         equ   $6E
-            lup   56
+]dp         equ   {{peiB3+126}-peiH3}
+]n          equ   peiN3
+            lup   ]n
             pei   ]dp
 ]dp         equ   ]dp-2
             --^
+]lp         equ   peiL3
+]n          equ   {64-peiN3}
+            DO    peiS3
             tya
-            adc   #$2100
+            adc   #]lp
             tcd
 ]dp         equ   $FE
-            lup   8
+            lup   ]n
             pei   ]dp
 ]dp         equ   ]dp-2
             --^
+            FIN
             dex
             beq   *+5
 peiJ3       jmp   peiC4
             jmp   peiExit
 
-; Phase 4: base $2290, 8 words in page $23, 56 in page $22
+; Phase 4
 peiC4       tya
-            adc   #$2290+127
+            adc   #{peiB4+127}
             tcs
             tya
-            adc   #$2300
+            adc   #peiH4
             tcd
-]dp         equ   $0E
-            lup   8
+]dp         equ   {{peiB4+126}-peiH4}
+]n          equ   peiN4
+            lup   ]n
             pei   ]dp
 ]dp         equ   ]dp-2
             --^
+]lp         equ   peiL4
+]n          equ   {64-peiN4}
+            DO    peiS4
             tya
-            adc   #$2200
+            adc   #]lp
             tcd
 ]dp         equ   $FE
-            lup   56
+            lup   ]n
             pei   ]dp
 ]dp         equ   ]dp-2
             --^
+            FIN
             dex
             beq   *+5
 peiJ4       jmp   peiC5
             jmp   peiExit
 
-; Phase 5: base $2330, one page
+; Phase 5
 peiC5       tya
-            adc   #$2330+127
+            adc   #{peiB5+127}
             tcs
             tya
-            adc   #$2300
+            adc   #peiH5
             tcd
-]dp         equ   $AE
-            lup   64
+]dp         equ   {{peiB5+126}-peiH5}
+]n          equ   peiN5
+            lup   ]n
             pei   ]dp
 ]dp         equ   ]dp-2
             --^
+]lp         equ   peiL5
+]n          equ   {64-peiN5}
+            DO    peiS5
+            tya
+            adc   #]lp
+            tcd
+]dp         equ   $FE
+            lup   ]n
+            pei   ]dp
+]dp         equ   ]dp-2
+            --^
+            FIN
             dex
             beq   *+5
 peiJ5       jmp   peiC6
             jmp   peiExit
 
-; Phase 6: base $23D0, 40 words in page $24, 24 in page $23
+; Phase 6
 peiC6       tya
-            adc   #$23D0+127
+            adc   #{peiB6+127}
             tcs
             tya
-            adc   #$2400
+            adc   #peiH6
             tcd
-]dp         equ   $4E
-            lup   40
+]dp         equ   {{peiB6+126}-peiH6}
+]n          equ   peiN6
+            lup   ]n
             pei   ]dp
 ]dp         equ   ]dp-2
             --^
+]lp         equ   peiL6
+]n          equ   {64-peiN6}
+            DO    peiS6
             tya
-            adc   #$2300
+            adc   #]lp
             tcd
 ]dp         equ   $FE
-            lup   24
+            lup   ]n
             pei   ]dp
 ]dp         equ   ]dp-2
             --^
+            FIN
             dex
             beq   *+5
 peiJ6       jmp   peiC7
             jmp   peiExit
 
-; Phase 7: base $2470, one page
+; Phase 7
 peiC7       tya
-            adc   #$2470+127
+            adc   #{peiB7+127}
             tcs
             tya
-            adc   #$2400
+            adc   #peiH7
             tcd
-]dp         equ   $EE
-            lup   64
+]dp         equ   {{peiB7+126}-peiH7}
+]n          equ   peiN7
+            lup   ]n
             pei   ]dp
 ]dp         equ   ]dp-2
             --^
+]lp         equ   peiL7
+]n          equ   {64-peiN7}
+            DO    peiS7
+            tya
+            adc   #]lp
+            tcd
+]dp         equ   $FE
+            lup   ]n
+            pei   ]dp
+]dp         equ   ]dp-2
+            --^
+            FIN
             dex
             beq   *+5
 peiJ7       jmp   peiWrap0
@@ -337,14 +455,6 @@ _PEISlamPatch
             plb
             sta   peiMode
 
-            lda   ScreenWidth           ; The chunks are built for the 128-byte NES playfield
-            cmp   #128
-            bne   :bad
-            lda   ScreenX0
-            cmp   #16
-            beq   :ok
-:bad        brk   $16
-:ok
             sep   #$20
             lda   STATE_REG_R0W0
             sta   peiW0a+1

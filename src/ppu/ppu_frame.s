@@ -314,9 +314,11 @@ _ShadowOff
 ; Set the physical location of the virtual screen on the physical screen. The
 ; screen size must by a multiple of 8
 ;
-; A = XXYY where XX is the left edge [0, 159] and YY is the top edge [0, 199]
-; X = width (in bytes)
+; A = the top edge [0, 199]
 ; Y = height (in lines)
+;
+; The playfield is always 128 bytes (the NES's 256 pixels) wide, from byte x_offset of each line:
+; the sprite, dirty grid and PEI slam addresses are built for it.
 ;
 ; This subroutine stores the screen positions in the direct page space and fills
 ; in the double-length ScreenAddrR table that holds the address of the right edge
@@ -329,6 +331,7 @@ _ShadowOff
 
                    mx    %00
 SetScreenRect      sty   ScreenHeight               ; Save the screen height and width
+                   ldx   #128
                    stx   ScreenWidth
 
                    jsr   _PEAFieldStable            ; RTable changes: forget the code field's
@@ -340,19 +343,14 @@ SetScreenRect      sty   ScreenHeight               ; Save the screen height and
                    stal  stkKeyCount+6
                    pla
 
-                   tax                              ; Temp save of the accumulator
-                   and   #$00FF
                    sta   ScreenY0
                    clc
                    adc   ScreenHeight
                    sta   ScreenY1
 
-                   txa                              ; Restore the accumulator
-                   xba
-                   and   #$00FF
+                   lda   #x_offset
                    sta   ScreenX0
-                   clc
-                   adc   ScreenWidth
+                   lda   #x_offset+128
                    sta   ScreenX1
 
                    lda   ScreenY0                   ; Calculate the address of the first byte

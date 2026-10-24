@@ -1,0 +1,9 @@
+; Title screen (initializeTitleScreen: updatePalette 0 and 4 = bgPalette0 + spritePalette1 in rom_code.s)
+BG0: $0F $31 $21 $11
+BG1: $0F $26 $16 $06
+BG2: $0F $37 $27 $17
+BG3: $0F $2A $1A $0A
+SP0: $0F $37 $27 $06
+SP1: $0F $31 $06 $11
+SP2: $0F $17 $21 $26
+SP3: $0F $26 $16 $06

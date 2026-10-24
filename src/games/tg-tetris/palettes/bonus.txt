@@ -1,0 +1,10 @@
+; The level-up bonus animation (the dancers): updatePalette 5 = spritePalette2 in rom_code.s, and both
+; playfields in piecePaletteIndexB ($30 $16 $0F, setPlayfieldPalette with Y = $0B)
+BG0: $0F $30 $16 $0F
+BG1: $0F $30 $16 $0F
+BG2: $0F $31 $21 $01
+BG3: $0F $30 $16 $00
+SP0: $0F $35 $16 $12
+SP1: $0F $12 $24 $1B
+SP2: $0F $35 $1A $37
+SP3: $0F $35 $18 $24

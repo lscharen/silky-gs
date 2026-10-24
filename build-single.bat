@@ -4,7 +4,8 @@ setlocal
 REM Build an 800KB ProDOS image holding one game, for distribution
 REM
 REM   %1 = path of the Cadius tool
-REM   %2 = the game: smb, bf, lo, wump, ic, eb, dk, mb, zelda or bench (the build:<game> names)
+REM   %2 = the game: smb, bf, lo, wump, ic, eb, dk, mb, zelda, contra, tetris or bench (npm run
+REM        build-image:<game>)
 REM
 REM The image is .\emu\<application>.2mg (e.g. .\emu\ZeldaGS.2mg), always created from scratch, and
 REM its volume is named after the application.  It holds the application and README.TXT (dist\README.TXT:
@@ -28,8 +29,9 @@ if /i "%GAME%"=="mb"    set APP=.\src\games\mb\MarioBrosGS
 if /i "%GAME%"=="zelda" set APP=.\src\games\zelda\src\ZeldaGS
 if /i "%GAME%"=="bench" set APP=.\src\games\bench\BenchGS
 if /i "%GAME%"=="contra" set APP=.\src\games\contra\src\ContraGS
+if /i "%GAME%"=="tetris" set APP=.\src\games\tg-tetris\TetrisGS
 if "%APP%"=="" (
-    echo build-single: unknown game "%GAME%" -- use smb, bf, lo, wump, ic, eb, dk, mb, zelda, contra or bench
+    echo build-single: unknown game "%GAME%" -- use smb, bf, lo, wump, ic, eb, dk, mb, zelda, contra, tetris or bench
     exit /b 1
 )
 

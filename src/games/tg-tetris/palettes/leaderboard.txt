@@ -1,0 +1,10 @@
+; The leaderboard (updatePalette 1 and 6 = bgPalette1 + spritePalette3 in rom_code.s).  18 colors:
+; two sprite colors are shown in a close one ($2B in $2A's slot, $3B in $31's)
+BG0: $0F $12 $0F $0F
+BG1: $0F $27 $0F $0F
+BG2: $0F $31 $21 $01
+BG3: $0F $30 $16 $00
+SP0: $0F $37 $39 $3B~$31
+SP1: $0F $2A $2B~$2A $30
+SP2: $0F $26 $21 $37
+SP3: $0F $35 $24 $13
