@@ -1710,7 +1710,7 @@ L8B84
             cpx   #$02                              ; 8B8A E0 02
             bcc   L8B93                             ; 8B8C 90 05
             ldy   nextPieceXOffsets,x               ; 8B8E BC 11 8C
-            lda   #$01                              ; 8B91 A9 01
+            lda   #$02                              ; 8B91 A9 01  IIgs: was #$01 (the next piece is one row lower, with NEXT)
 L8B93
             bit   playMode                          ; 8B93 24 2F
             bpl   L8BA1                             ; 8B95 10 0A
@@ -1746,8 +1746,9 @@ L8BB7
             sty   generalCounter3b                  ; 8BC1 84 3B
             ldy   generalCounter3d                  ; 8BC3 A4 3D
             sta   oamStaging+1,y                    ; 8BC5 99 01 05
-            lda   generalCounter3c                  ; 8BC8 A5 3C
-            ora   #$20                              ; 8BCA 09 20
+; IIgs: the next pieces' palette in a two player or co-op game (NextPieceAttr_GS, support.s)
+            jsr   NextPieceAttr_GS                  ; 8BC8 A5 3C 09 20  (was lda generalCounter3c / ora #$20)
+            nop
             sta   oamStaging+2,y                    ; 8BCC 99 02 05
             lda   generalCounter38                  ; 8BCF A5 38
             sta   oamStaging+3,y                    ; 8BD1 99 03 05
@@ -4080,9 +4081,12 @@ statsDataAddresses
             da    player2LevelTens                  ; 9BE6
             da    highScoreHundredThousands         ; 9BE8
 ; ----------------------------------------------------------------------------
+; IIgs: the high score ($2096, row 4) is written to row 2 ($2056), which the IIgs screen doesn't show:
+; it is shown beside the playfield (TT_RenderScreen, Main.s).  It is still rendered, as that clears its
+; render flag (pieceStatistics, piece 0's count).
 statsPPUAddresses
             dw    $2047,$2053,$2089,$2093           ; 9BEA
-            dw    $20CB,$20D3,$2096,$2184           ; 9BF2
+            dw    $20CB,$20D3,$2056,$2184           ; 9BF2  IIgs: was $2096
             dw    $21B8                             ; 9BFA
 ; ----------------------------------------------------------------------------
 loadComputerInputOrMoveScreen
@@ -8163,6 +8167,8 @@ menuNametable
             db    $8E,$8E,$8E,$8E,$8E,$8E,$8E,$8E   ; BC58
             db    $8E,$8E,$8E,$8E,$8E,$8E,$8F,$90   ; BC60
 
+; IIgs: NEXT (cols 2-5 and 26-29) moves down from row 2 to row 3, with the next pieces
+; (stageCurrentAndNextSprites): the IIgs screen starts at row 3.
 gameModeNametableCoop
 ; (nametables/gameModeNametableCoop.asm)
             db    $60,$61,$62,$62,$62,$62,$62,$62   ; BC68
@@ -8173,14 +8179,14 @@ gameModeNametableCoop
             db    $67,$67,$67,$67,$67,$67,$67,$67   ; BC90
             db    $67,$67,$67,$67,$67,$67,$67,$67   ; BC98
             db    $67,$67,$67,$67,$67,$67,$68,$69   ; BCA0
-            db    $6A,$6B,$91,$92,$93,$94,$6C,$00   ; BCA8
+            db    $6A,$6B,$00,$00,$00,$00,$6C,$00   ; BCA8
             db    $00,$00,$00,$00,$00,$6D,$6E,$6F   ; BCB0
             db    $70,$71,$72,$00,$00,$00,$00,$00   ; BCB8
-            db    $00,$6C,$91,$92,$93,$94,$73,$74   ; BCC0
-            db    $6A,$6B,$00,$00,$00,$00,$75,$76   ; BCC8
+            db    $00,$6C,$00,$00,$00,$00,$73,$74   ; BCC0
+            db    $6A,$6B,$91,$92,$93,$94,$75,$76   ; BCC8
             db    $76,$76,$76,$76,$76,$77,$76,$76   ; BCD0
             db    $76,$76,$78,$76,$76,$76,$76,$76   ; BCD8
-            db    $76,$79,$00,$00,$00,$00,$73,$74   ; BCE0
+            db    $76,$79,$91,$92,$93,$94,$73,$74   ; BCE0
             db    $6A,$6B,$00,$00,$00,$00,$00,$00   ; BCE8
             db    $6C,$00,$00,$00,$00,$7A,$7B,$7C   ; BCF0
             db    $7D,$7E,$7F,$00,$00,$00,$00,$6C   ; BCF8
@@ -8286,6 +8292,10 @@ gameModeNametableCoop
             db    $8E,$8E,$8E,$8E,$8E,$8E,$8F,$90   ; C018
             db    $00,$00,$00,$00,$00,$00,$00,$00   ; C020
 
+; IIgs: the top box (the score, SCORE and HIGH SCORE, row 2) is removed: the IIgs screen starts at
+; row 3 and shows the scores beside the playfield (TT_RenderScreen, Main.s).  NEXT moves down to row 3
+; (cols 2-5), with the next piece (stageCurrentAndNextSprites), and the row 3 junctions that joined the
+; top box ($75 $76 at cols 6-7, $77 at col 13, $78 at col 18) are blank or plain line ($76).
 gameModeNametable1P
 ; (nametables/gameModeNametable1P.asm)
             db    $60,$61,$62,$62,$62,$62,$62,$62   ; C028
@@ -8296,13 +8306,13 @@ gameModeNametable1P
             db    $67,$67,$67,$67,$67,$67,$67,$67   ; C050
             db    $67,$67,$67,$67,$67,$67,$67,$67   ; C058
             db    $67,$67,$67,$67,$67,$67,$9F,$69   ; C060
-            db    $6A,$6B,$91,$92,$93,$94,$6C,$00   ; C068
-            db    $00,$00,$00,$00,$00,$6D,$6E,$6F   ; C070
-            db    $70,$71,$72,$00,$48,$49,$47,$48   ; C078
-            db    $00,$53,$43,$4F,$52,$45,$73,$74   ; C080
-            db    $6A,$6B,$00,$00,$00,$00,$75,$76   ; C088
-            db    $76,$76,$76,$76,$76,$77,$76,$76   ; C090
-            db    $76,$76,$78,$76,$76,$76,$76,$76   ; C098
+            db    $6A,$6B,$00,$00,$00,$00,$00,$00   ; C068
+            db    $00,$00,$00,$00,$00,$00,$00,$00   ; C070
+            db    $00,$00,$00,$00,$00,$00,$00,$00   ; C078
+            db    $00,$00,$00,$00,$00,$00,$73,$74   ; C080
+            db    $6A,$6B,$91,$92,$93,$94,$00,$00   ; C088
+            db    $76,$76,$76,$76,$76,$76,$76,$76   ; C090
+            db    $76,$76,$76,$76,$76,$76,$76,$76   ; C098
             db    $76,$76,$76,$76,$76,$76,$73,$74   ; C0A0
             db    $6A,$6B,$00,$00,$00,$00,$00,$00   ; C0A8
             db    $6C,$00,$00,$00,$00,$7A,$7B,$7C   ; C0B0
@@ -8409,6 +8419,8 @@ gameModeNametable1P
             db    $CF,$CF,$D0,$8D,$8E,$8E,$8E,$8E   ; C3D8
             db    $8E,$8E,$8E,$8E,$8E,$8E,$8F,$D1   ; C3E0
 
+; IIgs: NEXT (cols 2-5 and 26-29) moves down from row 2 to row 3, with the next pieces
+; (stageCurrentAndNextSprites): the IIgs screen starts at row 3.
 gameModeNametable2P
 ; (nametables/gameModeNametable2P.asm)
             db    $60,$61,$62,$62,$62,$62,$62,$62   ; C3E8
@@ -8419,14 +8431,14 @@ gameModeNametable2P
             db    $67,$67,$67,$67,$67,$67,$67,$67   ; C410
             db    $67,$67,$67,$67,$67,$67,$67,$67   ; C418
             db    $67,$67,$67,$67,$67,$67,$68,$69   ; C420
-            db    $6A,$6B,$91,$92,$93,$94,$6C,$00   ; C428
+            db    $6A,$6B,$00,$00,$00,$00,$6C,$00   ; C428
             db    $00,$00,$00,$00,$00,$6D,$6E,$6F   ; C430
             db    $70,$71,$72,$00,$00,$00,$00,$00   ; C438
-            db    $00,$6C,$91,$92,$93,$94,$73,$74   ; C440
-            db    $6A,$6B,$00,$00,$00,$00,$75,$76   ; C448
+            db    $00,$6C,$00,$00,$00,$00,$73,$74   ; C440
+            db    $6A,$6B,$91,$92,$93,$94,$75,$76   ; C448
             db    $76,$76,$76,$76,$76,$77,$76,$76   ; C450
             db    $76,$76,$78,$76,$76,$76,$76,$76   ; C458
-            db    $76,$79,$00,$00,$00,$00,$73,$74   ; C460
+            db    $76,$79,$91,$92,$93,$94,$73,$74   ; C460
             db    $6A,$6B,$00,$00,$00,$00,$00,$00   ; C468
             db    $6C,$00,$00,$00,$00,$7A,$7B,$7C   ; C470
             db    $7D,$7E,$7F,$00,$00,$00,$00,$6C   ; C478

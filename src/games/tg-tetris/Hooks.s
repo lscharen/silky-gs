@@ -71,8 +71,13 @@ CUSTOM_PPU_PALETTE_DISPATCH equ 0
 ; CUSTOM_PPU_SCROLL_LOCK_ADDR equ the routine in Main.s ("label EXT" here, "label ENT" there).  See
 ; ppu/ppu_api.s
 CUSTOM_PPU_CTRL_LOCK equ 0
-CUSTOM_PPU_SCROLL_LOCK equ 0
+CUSTOM_PPU_SCROLL_LOCK equ 1               ; latches the scores for TT_RenderScreen (the scroll is the register's)
+TT_LatchScores EXT                         ; (Main.s)
+CUSTOM_PPU_SCROLL_LOCK_ADDR equ TT_LatchScores
 
 ; The game draws (some) renders itself: CUSTOM_RENDER_SCREEN equ 1, and CUSTOM_RENDER_SCREEN_ADDR equ the
-; routine in Main.s ("label EXT" here, "label ENT" there).  See ppu/ppu_api.s
-CUSTOM_RENDER_SCREEN equ 0
+; routine in Main.s ("label EXT" here, "label ENT" there).  See ppu/ppu_api.s.  Tetris draws the high
+; score and the score in the screen's right-hand gutter, beside the playfield; the engine draws the rest.
+CUSTOM_RENDER_SCREEN equ 1
+TT_RenderScreen EXT                        ; (Main.s)
+CUSTOM_RENDER_SCREEN_ADDR equ TT_RenderScreen

@@ -26,10 +26,11 @@ set GAMES=.\src\games\smb\SuperMarioGS ^
           .\src\games\dk\DonkeyKongGS ^
           .\src\games\mb\MarioBrosGS ^
           .\src\games\zelda\src\ZeldaGS ^
-          .\src\games\contra\src\ContraGS
+          .\src\games\contra\src\ContraGS ^
+          .\src\games\tg-tetris\TetrisGS
 
 REM Cadius reports ADDFILE errors but always exits 0, so check the inputs up front
-for %%F in (%GAMES% .\emu\Classics .\emu\Finder.Data .\dist\README.TXT) do if not exist "%%~F" (
+for %%F in (%GAMES% .\emu\Classics .\dist\README.TXT) do if not exist "%%~F" (
     echo build-image: missing %%~F -- build the games first ^(npm run build:all^)
     exit /b 1
 )
@@ -53,7 +54,8 @@ if %REUSE%==1 (
     echo build-image: updating existing image %IMAGE%
     REM Cadius ADDFILE will not replace a file, so remove the old copies first.  The first delete
     REM removes an application left at the top level by an older version of this script, so its
-    REM folder can be created; it fails harmlessly once the name is a folder.
+    REM folder can be created; it fails harmlessly once the name is a folder.  Finder.Data is no longer
+    REM copied (its folder entries set the icon positions and colors); an older one is still removed.
     for %%G in (%GAMES%) do (
         %CADIUS% DELETEFILE %IMAGE% %FOLDER%%%~nG >nul
         %CADIUS% DELETEFILE %IMAGE% %FOLDER%%%~nG/%%~nG >nul
@@ -80,5 +82,4 @@ for %%G in (%GAMES%) do (
 
 %CADIUS% CREATEFOLDER %IMAGE% %FOLDER%Icons
 %CADIUS% ADDFILE %IMAGE% %FOLDER%Icons .\emu\Classics
-%CADIUS% ADDFILE %IMAGE% %FOLDER% .\emu\Finder.Data
 %CADIUS% ADDFILE %IMAGE% %FOLDER% .\build\dist\README.TXT

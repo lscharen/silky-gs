@@ -114,6 +114,22 @@ SetCNROMBank_GS
             inx
             rts
 
+; stageCurrentAndNextSprites ($8BC8): lda generalCounter3c / ora #$20, a piece's sprite attribute: the
+; palette is the piece's index (0 / 1 = the falling pieces, 2 / 3 = the next pieces), behind the
+; background.  The two player palette (palettes/game_2p.txt) has no slots left for SP2 / SP3, so in a
+; two player or co-op game each next piece is drawn in its player's falling piece palette (SP0 / SP1).
+; Only A changes (X and Y are the caller's loop counter and OAM offset).
+NextPieceAttr_GS
+            lda   playMode
+            beq   :onePlayer
+            lda   generalCounter3c
+            and   #$01
+            ora   #$20
+            rts
+:onePlayer  lda   generalCounter3c
+            ora   #$20
+            rts
+
 ; The APU writes through the (apuRegister) pointer ($D8A5-$D8DA): sta (apuRegister),y goes to the
 ; register's hook (rom_inject.s, apu_write_tbl).  apuRegister points at $4000 / $4004 / $4008 / $400C
 ; and Y is 0-3.  A, X, Y and the flags are preserved, like the store.

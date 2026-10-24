@@ -71,7 +71,7 @@ RENDER_VBL_COUNT equ 0
 NO_TILE_EXCLUDE equ 1
 
 ; Define the area of PPU nametable space that will be shown in the IIgs SHR screen
-y_offset_rows equ 2
+y_offset_rows equ 3
 y_height_rows equ 25
 
 y_offset      equ {y_offset_rows*8}
@@ -79,4 +79,4 @@ y_height      equ {y_height_rows*8}
 min_nes_y     equ y_offset
 max_nes_y     equ min_nes_y+y_height
 
-x_offset      equ 16                      ; number of bytes from the left edge
+x_offset      equ 0                      ; number of bytes from the left edge

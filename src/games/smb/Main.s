@@ -135,9 +135,8 @@ InitPlayfield
 
 ; Initialize the graphics screen playfield
 
-            ldx   #128
             ldy   ScreenHeight
-            jsr   _SetScreenMode                 ; This is also called in the Init
+            jsr   _SetScreenHeight               ; This is also called in the Init
 
 ; Start with the title screen's (ground) palette
 

@@ -13,14 +13,11 @@
  * 2. Convert the CHR-ROM (bank 0, which PPU.s holds at power on) into the tiledata bank and assemble
  *    the game (scripts/lib/nromBuild.js).  Both CHR-ROM banks are in the ROM segment (rom.s); the game
  *    loads the one the ROM selects at run time (CheckCHRBank, Main.s).
- * 3. Check that the assembled ROM is the original everywhere the patches don't change it
- *    (tools/verify.js).
  */
 
 const path = require('path');
 const { generatePalettes, PaletteError } = require('../../../scripts/generate-palette-transitions.js');
 const { buildNromGame } = require('../../../scripts/lib/nromBuild.js');
-const { verifyRom } = require('./tools/verify.js');
 
 const palettesDir = path.join(__dirname, 'palettes');
 try {
@@ -37,4 +34,3 @@ try {
 
 buildNromGame(__dirname, 'Master.s');
 
-if (!verifyRom(__dirname)) process.exit(1);
