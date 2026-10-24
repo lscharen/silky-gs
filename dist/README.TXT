@@ -113,7 +113,7 @@ DRIVERS
                 On a ROM 3 IIgs, and on most emulators, it works like
                 BASIC.
 
-                The ADB driver directly communicated with the ADB
-                bus and is ther preferred keyboard driver.  It
+                ADB (the default) talks directly to the ADB bus and
+                is the preferred keyboard driver.  It
                 implements the same keyboard handling method as
                 Wolfenstein 3D.

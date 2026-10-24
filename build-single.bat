@@ -5,7 +5,7 @@ REM Build an 800KB ProDOS image holding one game, for distribution
 REM
 REM   %1 = path of the Cadius tool
 REM   %2 = the game: smb, bf, lo, wump, ic, eb, dk, mb, zelda, contra, tetris or bench (npm run
-REM        build-image:<game>)
+REM        build-image:<game>); with no game, every game but bench (npm run build:dist)
 REM
 REM The image is .\emu\<application>.2mg (e.g. .\emu\ZeldaGS.2mg), always created from scratch, and
 REM its volume is named after the application.  It holds the application and README.TXT (dist\README.TXT:
@@ -16,6 +16,14 @@ REM fits on an 800KB disk.
 
 set CADIUS="%~1"
 set GAME=%~2
+
+if "%GAME%"=="" (
+    for %%G in (smb bf lo wump ic eb dk mb zelda contra tetris) do (
+        call "%~f0" %1 %%G
+        if errorlevel 1 exit /b 1
+    )
+    exit /b 0
+)
 
 set APP=
 if /i "%GAME%"=="smb"   set APP=.\src\games\smb\SuperMarioGS

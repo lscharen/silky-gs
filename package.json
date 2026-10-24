@@ -56,7 +56,7 @@
     "build-image:contra": ".\\build-single.bat %npm_package_config_cadius% contra",
     "build-image:tetris": ".\\build-single.bat %npm_package_config_cadius% tetris",
     "build-image:bench": ".\\build-single.bat %npm_package_config_cadius% bench",
-    "build:dist": ".\\build-single.bat %npm_package_config_cadius% smb && .\\build-single.bat %npm_package_config_cadius% bf && .\\build-single.bat %npm_package_config_cadius% lo && .\\build-single.bat %npm_package_config_cadius% wump && .\\build-single.bat %npm_package_config_cadius% ic && .\\build-single.bat %npm_package_config_cadius% eb && .\\build-single.bat %npm_package_config_cadius% dk && .\\build-single.bat %npm_package_config_cadius% mb && .\\build-single.bat %npm_package_config_cadius% zelda && .\\build-single.bat %npm_package_config_cadius% contra && .\\build-single.bat %npm_package_config_cadius% tetris",
+    "build:dist": ".\\build-single.bat %npm_package_config_cadius%",
     "gen-includes": "node scripts/gen-includes.js",
     "bench": "node scripts/run-bench.js",
     "test:unit": "vitest run --config vitest.config.mjs",
