@@ -67,13 +67,13 @@ PAL_BONUS_SWIZZLE EXT
 ;     SP3 $0F $35 $24 $13 -> [0,13,14,15]
 ;   bonus
 ;     BG0 $0F $30 $16 $0F -> [0,10,11,0]
-;     BG1 $0F $30 $16 $0F -> [0,10,11,0]
+;     BG1 $0F *$30 *$16 *$0F -> [0,4,5,6]
 ;     BG2 $0F $31 $21 $01 -> [0,7,8,9]
 ;     BG3 $0F $30 $16 $00 -> [0,10,11,12]
 ;     SP0 $0F $35 $16 $12 -> [0,1,11,2]
-;     SP1 $0F $12 $24 $1B -> [0,2,3,4]
-;     SP2 $0F $35 $1A $37 -> [0,1,5,6]
-;     SP3 $0F $35 $18 $24 -> [0,1,13,3]
+;     SP1 $0F -- -- -- -> [0,0,0,0]
+;     SP2 $0F $35 $1A $37 -> [0,1,3,13]
+;     SP3 $0F $35 $18 $24 -> [0,1,14,15]
 
             mx    %00
 
@@ -277,8 +277,8 @@ PAL_LEADERBOARD_MATCH
             db    $12,$0F,$0F,$27,$0F,$0F,$31,$21,$01,$30,$16,$00   ; BG0-BG3
             db    $37,$39,$3B,$2A,$2B,$30,$26,$21,$37,$35,$24,$13   ; SP0-SP3
 PAL_BONUS_MATCH
-            db    $30,$16,$0F,$30,$16,$0F,$31,$21,$01,$30,$16,$00   ; BG0-BG3
-            db    $35,$16,$12,$12,$24,$1B,$35,$1A,$37,$35,$18,$24   ; SP0-SP3
+            db    $30,$16,$0F,$FF,$FF,$FF,$31,$21,$01,$30,$16,$00   ; BG0-BG3
+            db    $35,$16,$12,$FF,$FF,$FF,$35,$1A,$37,$35,$18,$24   ; SP0-SP3
 
 ; id -> the ids of the palettes that can follow it (transitions), 0-terminated
 PAL_SUCC
@@ -349,8 +349,8 @@ PAL_LEADERBOARD_CELLS
             db    $FF,$02,$FF,$FF,$FF,$04,$FF,$FF,$FF,$0E,$10,$12,$FF,$14,$16,$18   ; BG0-BG3
             db    $FF,$06,$08,$FF,$FF,$0A,$FF,$14,$FF,$0C,$10,$06,$FF,$1A,$1C,$1E   ; SP0-SP3
 PAL_BONUS_CELLS
-            db    $FF,$14,$16,$FF,$FF,$14,$16,$FF,$FF,$0E,$10,$12,$FF,$14,$16,$18   ; BG0-BG3
-            db    $FF,$02,$16,$04,$FF,$04,$06,$08,$FF,$02,$0A,$0C,$FF,$02,$1A,$06   ; SP0-SP3
+            db    $FF,$14,$16,$FF,$FF,$08,$0A,$0C,$FF,$0E,$10,$12,$FF,$14,$16,$18   ; BG0-BG3
+            db    $FF,$02,$16,$04,$FF,$FF,$FF,$FF,$FF,$02,$06,$1A,$FF,$02,$1C,$1E   ; SP0-SP3
 
 ; from id -> its row of to id -> background groups to redraw (bit 0 = BG0 .. bit 3 = BG3).
 ; From no palette (0), everything is redrawn.
@@ -371,7 +371,7 @@ BG_UPDATE_MASKS_TITLE
             dw    %0010   ; to game_1p
             dw    %0100   ; to game_2p
             dw    %0011   ; to leaderboard
-            dw    %0011   ; to bonus
+            dw    %0001   ; to bonus
 BG_UPDATE_MASKS_MENU
             dw    $0000
             dw    %0000   ; to title
@@ -379,7 +379,7 @@ BG_UPDATE_MASKS_MENU
             dw    %0010   ; to game_1p
             dw    %0100   ; to game_2p
             dw    %0011   ; to leaderboard
-            dw    %0011   ; to bonus
+            dw    %0001   ; to bonus
 BG_UPDATE_MASKS_GAME_1P
             dw    $0000
             dw    %0010   ; to title
@@ -395,7 +395,7 @@ BG_UPDATE_MASKS_GAME_2P
             dw    %0110   ; to game_1p
             dw    %0000   ; to game_2p
             dw    %0111   ; to leaderboard
-            dw    %0111   ; to bonus
+            dw    %0101   ; to bonus
 BG_UPDATE_MASKS_LEADERBOARD
             dw    $0000
             dw    %0011   ; to title
@@ -406,9 +406,9 @@ BG_UPDATE_MASKS_LEADERBOARD
             dw    %0011   ; to bonus
 BG_UPDATE_MASKS_BONUS
             dw    $0000
-            dw    %0011   ; to title
-            dw    %0011   ; to menu
+            dw    %0001   ; to title
+            dw    %0001   ; to menu
             dw    %0011   ; to game_1p
-            dw    %0111   ; to game_2p
+            dw    %0101   ; to game_2p
             dw    %0011   ; to leaderboard
             dw    %0000   ; to bonus
