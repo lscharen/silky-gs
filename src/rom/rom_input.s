@@ -7,7 +7,7 @@ native_joy  ENT
             db   0,0
 
 ; The last new key press (key code | $80, and the modifiers ($C025) in the high byte), for the event loop
-; (NES_TakeKey).  Set by _ReadKeypress when the keyboard strobe is set, so each press, and each
+; (NES_TakeKey).  Set by _KbdPoll (rom/rom_kbd_basic.s) when the keyboard strobe is set, so each press, and each
 ; auto-repeat, is one event; taking it clears it.
 KeyEvent    dw   0
 

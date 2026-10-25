@@ -276,21 +276,6 @@ _InitLiteBlitter
                   stal      lite_start_page_2+_O_JMP_OFFSET+1,x
                   rts
 
-                mx %00
-WaitForKey        sep       #$20
-                  stal      KBD_STROBE_REG      ; clear the strobe
-:WFK              ldal      KBD_REG
-                  bpl       :WFK
-                  rep       #$20
-                  and       #$007F
-                  rts
-
-                mx %00
-ClearKbdStrobe    sep       #$20
-                  stal      KBD_STROBE_REG
-                  rep       #$20
-                  rts
-
 ; Input routines.
 ;
 ; These are a bit tricky because we will always poll the keyboard in order to pass non-controller keystrokes
@@ -305,12 +290,14 @@ ClearKbdStrobe    sep       #$20
 ; reachable whatever the keys are set to).
                 mx %00
 _ReadControl
-                  stz       kbdNewKey
                   stz       kbdHandled
-                  jsr       _ReadKeypress        ; Always poll for a keystroke
+                  jsr       _KbdPoll             ; The keyboard layer: new key presses for the event loop (rom/rom_kbd_basic.s)
+                  sta       LastKey              ; The most recent key, for the engine
                   sta       InputPlayer1
                   sta       InputPlayer2         ; Replicate the raw keyboard info into both players' input values
+                  DO        KBD_J13
                   jsr       J13_Poll             ; The held keys, if the J13 keyboard driver is set (rom/rom_kbd_j13.s)
+                  FIN
 
 ; Now read the specific input device for each player
 
@@ -335,7 +322,6 @@ _ReadControl
 :out              lda       InputPlayer1
                   rts
 
-kbdNewKey         dw        0                   ; Non-zero if this poll saw a new key press (_ReadKeypress)
 kbdHandled        dw        0                   ; Non-zero if a player's keyboard map uses this poll's key
 
 :input_proc1      dw        _ReadKeyboard1,_ReadSNESMAX1
@@ -346,83 +332,6 @@ kbdHandled        dw        0                   ; Non-zero if a player's keyboar
                   DO        JOYSTICK_SUPPORT
                   dw        _ReadJoystick2
                   FIN
-
-; Reset the keypress state to clear the current keypress and set up to wait until the next key
-; is pressed to regiter
-                mx %00
-_ClearKeypress
-                  stz       LastKey
-                  rts
-
-                mx %00
-_ReadRawKeypress
-                  pea       $0000               ; temporary space
-                  sep       #$20
-
-                  ldal      KBD_REG             ; read the keyboard
-                  bit       #$80                ; was the strobe bit set? If yes, then this is a new key
-                  beq       :done
-
-                  stal      KBD_STROBE_REG      ; reset the strobe
-                  and       #$7F                ; isolate the key code
-                  sta       LastKey
-                  ora       #PAD_KEY_DOWN       ; set the keydown flag
-                  sta       1,s
-
-:done
-                  rep       #$20
-                  pla
-                  rts
-
-; Poll the keyboard and return the current keypress in the lower 7 bits and the KEY_DOWN
-; status in the high bit. This routine does apply debounce logic.
-                mx %00
-_ReadKeypress
-                  pea       $0000               ; temporary space
-                  sep       #$20
-
-                  ldal      KBD_REG             ; read the keyboard
-                  bit       #$80                ; was the strobe bit set? If yes, then this is a new key
-                  beq       :no_new_key
-
-                  jsr       KbdAdb_FixKey       ; (the ADB driver's shifted hotkeys, rom/rom_kbd_adb.s)
-                  sta       LastKey
-                  sta       1,s
-                  sta       kbdNewKey           ; (for _ReadControl)
-                  stal      KeyEvent            ; a new press, for the event loop (NES_TakeKey)
-                  stal      j13New              ; and for the J13 keyboard driver (J13_Poll)
-                  ldal      MOD_REG             ; with the modifiers of the key (read before the strobe is
-                  stal      KeyEvent+1          ; reset, while they still belong to it)
-                  stal      KBD_STROBE_REG      ; reset the strobe
-                  bra       :done               ; return the key value
-
-:no_new_key
-                  ldal      KBD_STROBE_REG      ; see if the key is being held
-                  bit       #$80
-                  beq       :no_key_down
-
-; The held key is the last one pressed.  Its code stays in $C000 bits 0-6 after the strobe is cleared,
-; so take it from there rather than from LastKey: if something else cleared the strobe first (e.g. a
-; keyboard interrupt handler left installed by an INIT or CDA), LastKey never saw the key.
-                  ldal      KBD_REG
-                  ora       #$80                ; same value as when the key was new (LastKey keeps bit 7)
-                  sta       LastKey
-                  sta       1,s
-                  bra       :done
-
-:no_key_down
-                  stz       LastKey             ; If no key is currently pressed, set the 'active' key to 0
-
-:done
-                  rep       #$20
-
-;                  lda   1,s
-;                  ldx   #32*160
-;                  ldy   #$FFFF
-;                  jsr   DrawWord
-
-                  pla
-                  rts
 
 ; Player Input Configuration offsets
 PLAYER_INPUT_TYPE      equ 0
@@ -438,15 +347,14 @@ PLAYER_INPUT_KEY_UR    equ 48         ; rom/rom_config_setup.s checks the offset
 PLAYER_INPUT_KEY_DL    equ 50
 PLAYER_INPUT_KEY_DR    equ 52
 
-; The KEYBOARD input type: the directions, Start and Select from the keyboard driver set on the DRIVERS menu
-; (config_kbd_driver), the buttons from the command and option keys (_KbdButtons).
+; The KEYBOARD input type: the full pad, from the keyboard driver set on the DRIVERS menu
+; (config_kbd_driver).
 ;
 ; A keyboard driver's pad routine (KbdDriverPad) is called once per player on every poll, with
-;   A = the key (_ReadKeypress: bit 7 set if a key was just pressed or one is down, the last key pressed
-;       in bits 0 - 6; every player gets the same key)
 ;   X = the player's configuration block (PLAYER_INPUT_*)
 ;   Y = the player: 0 / 1
-; and returns A = the pad bits (the high byte: PAD_UP, ..., PAD_START, PAD_SELECT; no buttons).  It sets
+; Nothing is passed in from the keyboard: each driver reads the keyboard hardware itself.
+; and returns A = the full pad (the high byte: PAD_BUTTON_A / B, PAD_START, ..., PAD_RIGHT).  It sets
 ; kbdHandled if the key is one of the player's keys (a control, not a built-in key: _ReadControl).
 ; 16-bit registers, DBR = the main bank; X and Y need not be preserved.
                 mx %00
@@ -457,7 +365,7 @@ _ReadKeyboard1    ldx       #config_block_p1
 _ReadKeyboard2    ldx       #config_block_p2
                   ldy       #1
 
-_ReadKeyboard     phx                           ; The configuration block, for the buttons
+_ReadKeyboard     phx                           ; The configuration block
                   lda       config_kbd_driver
                   cmp       #KBD_DRIVER_COUNT*2
                   bcc       *+5
@@ -467,7 +375,6 @@ _ReadKeyboard     phx                           ; The configuration block, for t
                   sta       :driver+1
                   lda       1,s
                   tax
-                  lda       InputPlayer1        ; The key (both players have it)
 :driver           jsr       $0000
                   tax                           ; Never opposite directions (they break games): a driver
                   and       #PAD_LEFT+PAD_RIGHT ; picks one, this is only a safety net
@@ -485,63 +392,38 @@ _ReadKeyboard     phx                           ; The configuration block, for t
                   tax
 :ud_ok            txa
                   plx
-                  jmp       _KbdButtons
-
-; The keyboard drivers' pad routines, by KBD_DRIVER_* / 2
-KbdDriverPad      dw        KbdBasic_Pad        ; KBD_DRIVER_BASIC (rom/rom_kbd_basic.s)
-                  dw        KbdJ13_Pad          ; KBD_DRIVER_J13 (rom/rom_kbd_j13.s)
-                  dw        KbdAdb_Pad          ; KBD_DRIVER_ADB (rom/rom_kbd_adb.s)
-KBD_DRIVER_COUNT  equ       {*-KbdDriverPad}/2
-
-; A = the pad bits, X = the player's configuration block: returns A with the buttons of the player's
-; command / option keys added
-_KbdButtons       pha
-                  sep       #$20
-
-                  ldal      MOD_REG             ; Load all of the modifiers
-                  bit:      PLAYER_INPUT_BUTTON_A,x
-                  beq       :a_is_not_pressed
-                  bit:      PLAYER_INPUT_BUTTON_B,x
-                  beq       :b_is_not_pressed 
-                  lda       #>{PAD_BUTTON_B+PAD_BUTTON_A}
-                  bra       :apply_opt
-:b_is_not_pressed
-                  lda       #>{PAD_BUTTON_A}
-                  bra       :apply_opt
-:a_is_not_pressed
-                  bit:      PLAYER_INPUT_BUTTON_B,x
-                  beq       :no_buttons
-                  lda       #>{PAD_BUTTON_B}
-
-:apply_opt        ora       2,s
-                  sta       2,s
-
-:no_buttons       rep       #$20
-                  pla
                   rts
 
-; The joystick (INPUT_JOYSTICK): its directions (JoyGetPadL, core/blitter/JoyProbes.s) and buttons 0 / 1
-; ($C061 / $C062: A / B), on top of the player's keyboard map (Start, Select, and the keys still work)
+; The keyboard drivers' pad routines, by KBD_DRIVER_* / 2 (a driver that isn't built: BASIC's)
+KbdDriverPad      dw        KbdBasic_Pad        ; KBD_DRIVER_BASIC (rom/rom_kbd_basic.s)
+                  DO        KBD_J13
+                  dw        KbdJ13_Pad          ; KBD_DRIVER_J13 (rom/rom_kbd_j13.s)
+                  FIN
+                  DO        1-KBD_J13
+                  dw        KbdBasic_Pad
+                  FIN
+                  DO        KBD_ADB
+                  dw        KbdAdb_Pad          ; KBD_DRIVER_ADB (rom/rom_kbd_adb.s)
+                  FIN
+                  DO        1-KBD_ADB
+                  dw        KbdBasic_Pad
+                  FIN
+KBD_DRIVER_COUNT  equ       {*-KbdDriverPad}/2
+
+; The joystick (INPUT_JOYSTICK): its directions (JoyGetPadL, core/blitter/JoyProbes.s), on top of the
+; player's keyboard map (Start, Select, and the keys still work), and its buttons: the push button
+; switches, mapped as the player's A / B (PAD_PUSH_BUTTONS, rom/rom_kbd_macs.s)
                   DO        JOYSTICK_SUPPORT
 _ReadJoystick1    jsr       _ReadKeyboard1
+                  ldx       #config_block_p1
                   bra       _ReadJoystick
 _ReadJoystick2    jsr       _ReadKeyboard2
-_ReadJoystick     pha
+                  ldx       #config_block_p2
+_ReadJoystick     PAD_PUSH_BUTTONS
+                  pha
                   jsl       JoyGetPadL
                   ora       1,s
                   sta       1,s
-                  sep       #$20
-                  ldal      $E0C061             ; Button 0
-                  bpl       :no_a
-                  lda       #>PAD_BUTTON_A
-                  ora       2,s
-                  sta       2,s
-:no_a             ldal      $E0C062             ; Button 1
-                  bpl       :no_b
-                  lda       #>PAD_BUTTON_B
-                  ora       2,s
-                  sta       2,s
-:no_b             rep       #$20
                   pla
                   rts
                   FIN

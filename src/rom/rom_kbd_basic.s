@@ -1,28 +1,59 @@
-; BASIC keyboard driver: the keyboard through $C000 / $C010 only
+; BASIC keyboard driver, and the keyboard layer every driver and the configuration screen use
 ;
-; $C000 gives the last key pressed and $C010 whether any key is down, so this driver sees one key at a
-; time.  To allow diagonals, the directions are held (kbdHeld): a left / right key replaces the held
+; This file and the optional drivers (rom_kbd_j13.s, rom_kbd_adb.s) are the only code that touches the
+; keyboard hardware ($C000, $C010, $C025, and the Command / Option push buttons $C061 / $C062).  The rest
+; of the runtime goes through the _Kbd* routines at the end of this file.
+;
+; The pad: $C010 gives whether any key is down (AKD, bit 7) and the last key pressed (bits 0 - 6), so
+; this driver sees one key at a time.  It doesn't use the $C000 strobe (the latch of a new key press):
+; that is _KbdPoll's, for the event loop's keys, and _KbdReadRaw's, for the configuration screen.
+;
+; Latching (config_kbd_latch, the DRIVERS menu's LATCH DIRS; off by default): off, the pad is the key
+; that is down, and the diagonals come from the diagonal keys.  On, to allow diagonals from two keys, the
+; directions are held (kbdHeld): a left / right key replaces the held
 ; left / right and keeps the held up / down, and the other way round, so holding left and pressing up
 ; gives up + left.  The held directions stay while any key is down (a key that is not one of the
 ; player's directions changes nothing) and are dropped when no key is down.  So releasing one of two
 ; held directions doesn't show until every key is up or the opposite direction is pressed.  A key
-; pressed and released between two polls still counts once.
+; pressed and released between two polls is not seen.
 ;
 ; A diagonal key (PLAYER_INPUT_KEY_UL ... DR) is not held: while it is the last key pressed, it gives
 ; its two directions, and the held directions are left as they are for the keys after it.
 ;
 ; The keys go through kbdMaps (KbdBuildMaps), so that a key reads the same whatever modifiers were held
-; when it was pressed.  The buttons are read by the KEYBOARD input type (_KbdButtons, core/CoreImpl.s).
+; when it was pressed.  The buttons come from the push buttons $C061 / $C062 (PAD_PUSH_BUTTONS,
+; rom/rom_kbd_macs.s).
 
-KBD_DRIVER_BASIC  equ   0             ; config_kbd_driver (KbdDriverPad, core/CoreImpl.s)
+; (KBD_DRIVER_BASIC: core/Defs.s)
+
+; The keyboard hardware this file uses
+BASIC_KBD_REG     equ   $E0C000       ; Bits 0 - 6: the last key pressed; bit 7: the strobe (a new press)
+BASIC_KBD_STROBE_REG equ $E0C010      ; Bit 7: a key is down (AKD), bits 0 - 6 as $C000; reading or
+                                      ; writing it clears the strobe
+BASIC_MOD_REG     equ   $E0C025       ; The modifiers (only written with a key press: docs/adb)
+BASIC_BUTTON0_REG equ   $E0C061       ; Bit 7: push button 0 (Command) down
+BASIC_BUTTON1_REG equ   $E0C062       ; Bit 7: push button 1 (Option) down
 
 ; KbdBasic_Pad
 ;
-; The driver's pad routine (KbdDriverPad, core/CoreImpl.s): A = the key (_ReadKeypress), Y = the player
-; (0 / 1).  Returns A = the pad bits of the key and the held directions, and sets kbdHandled if the key
-; is one of the player's.  16-bit registers, DBR = the main bank.
+; The driver's pad routine (KbdDriverPad, core/CoreImpl.s): X = the player's configuration block, Y = the
+; player (0 / 1).  Returns A = the full pad: the directions, Start and Select of the key that is down
+; ($C010) and the held directions, and the buttons.  Sets kbdHandled if the key is one of the player's.
+; 16-bit registers, DBR = the main bank.
                 mx %00
-KbdBasic_Pad      sty       kbdHeldX
+KbdBasic_Pad      phx                           ; The configuration block, for the buttons
+                  jsr       kbdBasicDirs
+                  plx
+                  PAD_PUSH_BUTTONS
+                  rts
+
+; Y = the player: returns A = the pad bits of the key that is down and, if latching, the held directions
+; (kbdHeld stays 0 while latching is off)
+kbdBasicDirs      sty       kbdHeldX
+                  sep       #$20
+                  ldal      BASIC_KBD_STROBE_REG ; Bit 7: a key is down (AKD); bits 0 - 6: the last key pressed
+                  rep       #$20
+                  and       #$00FF
                   bit       #PAD_KEY_DOWN
                   beq       :release            ; No key down: no direction is held
                   and       #PAD_KEY_MASK
@@ -34,6 +65,8 @@ KbdBasic_Pad      sty       kbdHeldX
                   lda       kbdMaps,x
                   beq       :held               ; Not the player's: the held directions stay
                   sta       kbdHandled          ; (non-zero: a control, not a built-in key)
+                  ldx       config_kbd_latch
+                  beq       :out                ; Not latching: just this key's pad bits
                   ldx       kbdHeldX
                   bit       #>{PAD_LEFT+PAD_RIGHT}
                   beq       :no_lr
@@ -201,3 +234,127 @@ KbdBuildMaps
                   sta       kbdMaps,x
 :taken            rep       #$20
 :none             rts
+
+; --- The keyboard layer ----------------------------------------------------------------------------------
+;
+; The low-level keyboard routines.  Everything outside the keyboard driver files reads the keyboard
+; through these, so only one place owns the $C000 strobe.  They keep no engine state: the caller keeps
+; what it needs (_ReadControl puts the poll's key in LastKey).  16-bit registers unless noted, DBR = the
+; main bank.
+
+kbdNewKey         dw        0                   ; Non-zero if this poll saw a new key press (_KbdPoll)
+
+; _KbdPoll
+;
+; The game poll's key (_ReadControl): a new key press ($C000 strobe) goes to KeyEvent with its modifiers,
+; for the event loop (NES_TakeKey), and sets kbdNewKey.  Returns A = the last key pressed | PAD_KEY_DOWN
+; if a key was just pressed or is held, 0 if no key is down.
+                mx %00
+_KbdPoll
+                  stz       kbdNewKey
+                  pea       $0000               ; temporary space
+                  sep       #$20
+
+                  ldal      BASIC_KBD_REG       ; read the keyboard
+                  bit       #$80                ; was the strobe bit set? If yes, then this is a new key
+                  beq       :no_new_key
+
+                  DO        KBD_ADB
+                  jsr       KbdAdb_FixKey       ; (the ADB driver's shifted hotkeys, rom/rom_kbd_adb.s)
+                  FIN
+                  sta       1,s
+                  sta       kbdNewKey           ; (for _ReadControl)
+                  stal      KeyEvent            ; a new press, for the event loop (NES_TakeKey)
+                  DO        KBD_J13
+                  stal      j13New              ; and for the J13 keyboard driver (J13_Poll)
+                  FIN
+                  ldal      BASIC_MOD_REG       ; with the modifiers of the key (read before the strobe is
+                  stal      KeyEvent+1          ; reset, while they still belong to it)
+                  stal      BASIC_KBD_STROBE_REG ; reset the strobe
+                  bra       :done               ; return the key value
+
+:no_new_key
+                  ldal      BASIC_KBD_STROBE_REG ; see if the key is being held
+                  bit       #$80
+                  beq       :done               ; No key down: 0
+
+; The held key is the last one pressed.  Its code stays in $C000 bits 0-6 after the strobe is cleared,
+; so take it from there: if something else cleared the strobe first (e.g. a keyboard interrupt handler
+; left installed by an INIT or CDA), this poll never saw the key as new.
+                  ldal      BASIC_KBD_REG
+                  ora       #$80                ; same value as when the key was new
+                  sta       1,s
+
+:done
+                  rep       #$20
+                  pla
+                  rts
+
+; _KbdReadRaw
+;
+; For the configuration screen: A = the key code | PAD_KEY_DOWN if a key was just pressed ($C000 strobe,
+; which is then cleared), 0 if not.  Held keys don't count.
+                mx %00
+_KbdReadRaw
+                  pea       $0000               ; temporary space
+                  sep       #$20
+
+                  ldal      BASIC_KBD_REG       ; read the keyboard
+                  bit       #$80                ; was the strobe bit set? If yes, then this is a new key
+                  beq       :done
+
+                  stal      BASIC_KBD_STROBE_REG ; reset the strobe
+                  and       #$7F                ; isolate the key code
+                  ora       #PAD_KEY_DOWN       ; set the keydown flag
+                  sta       1,s
+
+:done
+                  rep       #$20
+                  pla
+                  rts
+
+; _KbdWaitKey
+;
+; Clear the strobe, then wait for a new key press: returns A = its key code.
+                mx %00
+_KbdWaitKey       sep       #$20
+                  stal      BASIC_KBD_STROBE_REG ; clear the strobe
+:WFK              ldal      BASIC_KBD_REG
+                  bpl       :WFK
+                  rep       #$20
+                  and       #$007F
+                  rts
+
+; _KbdClearStrobe
+;
+; Drop a key press that is waiting ($C000 strobe).
+                mx %00
+_KbdClearStrobe   sep       #$20
+                  stal      BASIC_KBD_STROBE_REG
+                  rep       #$20
+                  rts
+
+; _KbdWaitAllUp
+;
+; Wait until no key is down ($C010 AKD), then drop any key press waiting (the $C010 read clears the
+; strobe), so the key that closed a screen doesn't reach the game.
+                mx %00
+_KbdWaitAllUp     sep       #$20
+:held             ldal      BASIC_KBD_STROBE_REG ; Bit 7: a key is down (the read also clears the strobe)
+                  bmi       :held
+                  rep       #$20
+                  rts
+
+; _KbdReadButton
+;
+; For the configuration screen: A = a BUTTON_SWITCH_* (core/Defs.s): returns the push button's soft switch
+; ($C061 / $C062), N = 1 if the button (Command / Option, or a joystick's) is down.  8-bit A, 16-bit X / Y
+; (kept).
+                mx %10
+_KbdReadButton    cmp       #BUTTON_SWITCH_C062
+                  beq       :c062
+                  ldal      BASIC_BUTTON0_REG
+                  rts
+:c062             ldal      BASIC_BUTTON1_REG
+                  rts
+                mx %00
