@@ -14,7 +14,9 @@ PAL_LEVEL_5 equ 14
 PAL_LEVEL_6 equ 16
 PAL_LEVEL_7 equ 18
 PAL_LEVEL_8 equ 20
-PAL_ENDING equ 22
+PAL_LEVEL_2_BOSS equ 22
+PAL_LEVEL_4_BOSS equ 24
+PAL_ENDING equ 26
 
 ; Slots of the cells pinned by [fixed] sections (the same in every palette that pins them)
 PAL_SLOT_BG2_1 equ 8

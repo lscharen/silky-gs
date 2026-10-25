@@ -2,6 +2,10 @@
 ;
 ; title is the intro scroll and also the level name / high score screen shown before every level and
 ; at game over; title_2 is the player select screen, which runs the demo levels 1-3.
+;
+; The attract mode (game_routine_02): title_2 -> level_1 / 2 / 3 directly (no level name screen in demo
+; mode); at the end of a demo, back to the intro scroll (title), or to the player select (title_2) when
+; Start / Select stops it (stop_demo_load_player_select_UI).
 
 ; No palette is current until the game's first one is detected
 start = none
@@ -28,19 +32,36 @@ level_3
 
 [level_1]
 title
+title_2
 level_2
 
 [level_2]
+title
+title_2
+level_3
+level_1
+level_2_boss
+
+; The base 1 boss screen (load_alternate_graphics)
+[level_2_boss]
 title
 level_3
 level_1
 
 [level_3]
 title
+title_2
 level_4
 level_1
 
 [level_4]
+title
+level_5
+level_1
+level_4_boss
+
+; The base 2 boss screen (load_alternate_graphics)
+[level_4_boss]
 title
 level_5
 level_1
@@ -80,3 +101,22 @@ level_3
 level_1
 level_2
 level_3
+
+; The color-cycled cells of the other levels (load_palette_indexes: BG2:1 flashes in levels 1 - 7, BG3 cycles
+; in every level), straight to their slots
+[direct BG2:1 BG3:3]
+level_2_boss
+level_4
+level_4_boss
+
+[direct BG2:1 BG3:1 BG3:2]
+level_5
+
+[direct BG2:1 BG3:2 BG3:3]
+level_6
+
+[direct BG2:1 BG3:1]
+level_7
+
+[direct BG3:1]
+level_8
