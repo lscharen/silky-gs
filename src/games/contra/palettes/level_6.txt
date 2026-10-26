@@ -1,9 +1,11 @@
 ; level_6
+; Color cycling (load_palette_indexes, every 8 frames): BG2:1 flashes $16/$06/$26 (level_palette_2_index); BG3:2-3 cycle $27/$26, $17/$07/$16/$06.  Those cells are
+; reserved (*) and written straight to their slots ([direct], transitions.txt).
 
 BG0: $0F $00 $20 $1a
 BG1: $0F $01 $20 $00
-BG2: $0F $16 $30 $10
-BG3: $0F $20 $27 $17
+BG2: $0F *$16 $30 $10
+BG3: $0F $20 *$27 *$17
 SP0: $0F $37 $12 $0f
 SP1: $0F $36 $16 $0f
 SP2: $0F $20 $26 $16

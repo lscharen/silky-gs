@@ -8,7 +8,7 @@
 ;
 ; This driver keeps up to 3 held keys, as ADB key codes (J13_ADBKeys), oldest first:
 ;
-;   - a new key ($C000 strobe, seen by _ReadKeypress) is added to them
+;   - a new key ($C000 strobe, seen by _KbdPoll, rom/rom_kbd_basic.s) is added to them
 ;   - no key down ($C010 bit 7 = 0) releases them all
 ;   - with 2 or 3 held keys, their rows are read one at a time and the keys that are up are released
 ;
@@ -25,8 +25,12 @@
 
 ; The keyboard driver used by the KEYBOARD input type (config_kbd_driver, DRIVERS menu; KbdDriverPad,
 ; core/CoreImpl.s).  Only one is used at a time: with another driver, J13_Poll keeps no held keys.  The
-; configuration screen always reads the keyboard directly (_ReadRawKeypress), whichever driver is set.
-KBD_DRIVER_J13    equ   2
+; configuration screen always reads the keyboard directly (_KbdReadRaw), whichever driver is set.
+; (KBD_DRIVER_J13, and the KBD_J13 flag that builds the driver's hooks: core/Defs.s)
+
+; The keyboard hardware this file uses (and the ADB GLU's, below)
+J13_KBD_STROBE_REG equ  $E0C010       ; Bit 7: a key is down (AKD); bits 0 - 6: the last key pressed
+J13_MOD_REG       equ   $E0C025       ; The modifiers of the last key press
 
 ADB_DATA          equ   $E0C026       ; ADB command / data register
 ADB_STATUS        equ   $E0C027       ; Keyboard / mouse status and interrupt enables
@@ -42,7 +46,7 @@ j13Matrix         dw    0             ; Non-zero if the rows can be read (J13_In
 j13Keys           ds    8             ; The held keys (ADB key codes, words), oldest first; 1 word of padding
 j13Count          dw    0             ; Number of held keys * 2
 j13Gen            dw    0             ; Changes with the held keys, so a reply older than a change is ignored
-j13New            dw    0             ; The new key (key code | $80), set by _ReadKeypress, taken by J13_Poll
+j13New            dw    0             ; The new key (key code | $80), set by _KbdPoll, taken by J13_Poll
 j13Down           dw    0
 j13State          dw    0             ; 0 = idle, 1 / 2 = send the address low / high byte, 3 = wait for the reply
 j13Polls          dw    0
@@ -164,11 +168,15 @@ J13_ShutDown
 
 ; J13_Poll
 ;
-; Called by _ReadControl on every poll, with interrupts off.  A = the _ReadKeypress value (bit 7 set if
-; a key is down).  Updates the held keys if the J13 driver is set, and advances a row read.
-; 16-bit registers, DBR = the main bank.
+; Called by _ReadControl on every poll, after _KbdPoll, with interrupts off.  Updates the held keys if
+; the J13 driver is set, and advances a row read.  16-bit registers, DBR = the main bank, D = the
+; runtime's direct page.
             mx    %00
 J13_Poll
+            sep   #$20
+            ldal  J13_KBD_STROBE_REG  ; Bit 7: a key is down (AKD)
+            rep   #$20
+            and   #$00FF
             sta   j13Down
             lda   config_kbd_driver
             cmp   #KBD_DRIVER_J13
@@ -214,7 +222,7 @@ j13Press    and   #$007F
             bra   :find
 
 :not_held   sep   #$20
-            ldal  MOD_REG
+            ldal  J13_MOD_REG
             rep   #$20
             and   #$0008              ; An auto-repeat is not a new press: it only adds a key if none is held
             beq   :fresh
@@ -477,12 +485,23 @@ J13_Pad
 
 ; KbdJ13_Pad
 ;
-; The driver's pad routine (KbdDriverPad, core/CoreImpl.s): A = the key (_ReadKeypress), X = the player's
-; configuration block.  Returns A = the pad bits of the held keys (J13_Pad), and sets kbdHandled if the
-; key is one of the player's keys (j13Ids), compared as J13 does, by ADB key code.
+; The driver's pad routine (KbdDriverPad, core/CoreImpl.s): X = the player's configuration block.
+; Returns A = the full pad: the held keys (J13_Pad) and the buttons (the push buttons, PAD_PUSH_BUTTONS).
+; Sets kbdHandled if the last key pressed is one of the player's keys (j13Ids), compared as J13 does, by
+; ADB key code.
             mx    %00
 KbdJ13_Pad
-            pha                       ; The key
+            phx                       ; The configuration block, for the buttons
+            jsr   kbdJ13Dirs
+            plx
+            PAD_PUSH_BUTTONS
+            rts
+
+kbdJ13Dirs  sep   #$20
+            ldal  J13_KBD_STROBE_REG  ; Bit 7: a key is down (AKD); bits 0 - 6: the last key pressed
+            rep   #$20
+            and   #$00FF
+            pha
             jsr   J13_Pad
             pha
             lda   3,s

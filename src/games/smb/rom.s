@@ -10474,6 +10474,7 @@ CopyFToR  tya                      ;move bowser's rear object position value to 
           jsr STA_Enemy_Y_Position_Y
           lda Enemy_State,x
 ;          sta Enemy_State,y        ;copy enemy state directly from front to rear
+          jsr STA_Enemy_State_Y
           lda Enemy_MovingDir,x
 ;          sta Enemy_MovingDir,y    ;copy moving direction also
           jsr STA_Enemy_MovingDir_Y

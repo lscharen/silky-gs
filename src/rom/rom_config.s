@@ -4,7 +4,7 @@ CHKBOX          equ 2     ; checkbox (boolean)
 KEYMAP          equ 3     ; keymap (reads input character; tab to enter/exit)
 CTRL_LIST       equ 4     ; list of other controls (no UI)
 NUMBER_SELECT   equ 5     ; select from a range of single-digit numbers
-BTNMAP          equ 6     ; button mapping for keyboard
+BTNMAP          equ 6     ; button mapping: the soft switch ($C061 / $C062) a button reads; space, then the button
 TAB             equ 7     ; tab control
 TEXT            equ 8     ; static lines of text (no value, no cursor)
 ACTION          equ 9     ; runs a routine (the value word) on space; optional extra draw routine
@@ -15,10 +15,8 @@ CHKBOX_NO       str ' NO'
 CHKBOX_ON       str ' ON'
 CHKBOX_OFF      str 'OFF'
 
-BTNMAP_COMMAND  str 'CMD '
-BTNMAP_OPTION   str 'OPT '
-BTNMAP_CONTROL  str 'CNTL'
-BTNMAP_SHIFT    str 'SHFT'
+BTNMAP_C061     str 'BTN1'          ; $C061 (button 0: Command)
+BTNMAP_C062     str 'BTN2'          ; $C062 (button 1: Option)
 
 ; Control offsets from their base address
 MENU_TITLE      equ  0 
@@ -152,15 +150,11 @@ _ConfigExit
             bpl  :loop
 
 ; Flush the input before the game runs again.  The key that closed the screen (Return, the same key
-; as the Start button) is still held, and a held key keeps reading as pressed (_ReadKeypress), so
+; as the Start button) is still held, and a held key keeps reading as pressed (_KbdPoll), so
 ; wait for it to be released, then clear the strobe and every input value the game could see.
 
-            sep  #$20
-:held       ldal KBD_STROBE_REG           ; Bit 7: a key is down (the read also clears the strobe)
-            bmi  :held
-            rep  #$20
-
-            jsr  _ClearKeypress
+            jsr  _KbdWaitAllUp            ; (rom/rom_kbd_basic.s)
+            stz  LastKey
             stz  LastRead
             stz  InputPlayer1
             stz  InputPlayer2
@@ -604,41 +598,15 @@ _DrawBtnmap0
             plx
 
             ldy: CTRL_VALUE_ADDR,x      ; load the variable address
-            ldx: 0,y                    ; load the variable value; 0 = command, 1 = option, 2 = control, 3 = shift
+            lda: 0,y                    ; load the variable value: BUTTON_SWITCH_C061 / C062
 
-            cpx  #MOD_REG_COMMAND_DOWN
-            bne  :not_cmd
-            ldx  #BTNMAP_COMMAND
+            ldx  #BTNMAP_C061
+            cmp  #BUTTON_SWITCH_C062
+            bne  *+5
+            ldx  #BTNMAP_C062
             ldy  :addr
             lda  :highlight
             jmp  ConfigDrawString
-
-:not_cmd
-            cpx  #MOD_REG_OPTION_DOWN
-            bne  :not_opt
-            ldx  #BTNMAP_OPTION
-            ldy  :addr
-            lda  :highlight
-            jmp  ConfigDrawString
-
-:not_opt
-            cpx  #MOD_REG_CONTROL_DOWN
-            bne  :not_cntl
-            ldx  #BTNMAP_CONTROL
-            ldy  :addr
-            lda  :highlight
-            jmp  ConfigDrawString
-
-:not_cntl
-            cpx  #MOD_REG_SHIFT_DOWN
-            bne  :not_shft
-            ldx  #BTNMAP_SHIFT
-            ldy  :addr
-            lda  :highlight
-            jmp  ConfigDrawString
-
-:not_shft
-            rts
 
 ; Y = screen addr
 ; X = control addr
@@ -891,46 +859,46 @@ _ToggleNumber
 
             rts
 
-; Wait for one of the valid buttons to be pressed
-_WaitForBtnUp
-            lda       #0                  ; clear high byte
+; Wait for button 0 or 1 ($C061 / $C062) to be pressed: returns C = 0 and A = its BUTTON_SWITCH_*, or
+; C = 1 if Esc is pressed instead.  Both buttons must be up first, so one that is already held doesn't
+; count.
+            mx        %00
+_WaitForButton
             sep       #$20
-:waitloop1
-            ldal      MOD_REG
-            bit       #MOD_REG_SHIFT_DOWN
-            beq       :no_shift
-            lda       #MOD_REG_SHIFT_DOWN
-            bra       :done
-
-:no_shift
-            bit       #MOD_REG_CONTROL_DOWN
-            beq       :no_ctrl
-            lda       #MOD_REG_CONTROL_DOWN
-            bra       :done
-
-:no_ctrl
-            bit       #MOD_REG_OPTION_DOWN
-            beq       :no_opt
-            lda       #MOD_REG_OPTION_DOWN
-            bra       :done
-
-:no_opt
-            bit       #MOD_REG_COMMAND_DOWN
-            beq       :no_cmd
-            lda       #MOD_REG_COMMAND_DOWN
-            bra       :done
-
-:no_cmd
-            bra       :waitloop1
-
-:done
+:up         lda       #BUTTON_SWITCH_C061 ; (_KbdReadButton: rom/rom_kbd_basic.s)
+            jsr       _KbdReadButton
+            bmi       :up
+            lda       #BUTTON_SWITCH_C062
+            jsr       _KbdReadButton
+            bmi       :up
+:down       lda       #BUTTON_SWITCH_C061
+            jsr       _KbdReadButton
+            bmi       :c061
+            lda       #BUTTON_SWITCH_C062
+            jsr       _KbdReadButton
+            bmi       :c062
             rep       #$20
+            jsr       _KbdReadRaw
+            cmp       #PAD_KEY_DOWN+27    ; Esc
+            beq       :cancel
+            sep       #$20
+            bra       :down
+
+:c061       rep       #$20
+            lda       #BUTTON_SWITCH_C061
+            clc
+            rts
+:c062       rep       #$20
+            lda       #BUTTON_SWITCH_C062
+            clc
+            rts
+:cancel     sec
             rts
 
 ; Wait for a new key press
 _WaitForKeyUp
 :waitloop1
-            jsr  _ReadRawKeypress                       ; Read keyboard directly, and only for raw keystrokes
+            jsr  _KbdReadRaw                            ; Read keyboard directly, and only for raw keystrokes
             bit  #PAD_KEY_DOWN
             beq  :waitloop1
             and  #$7F
@@ -938,7 +906,8 @@ _WaitForKeyUp
 
 ; X = control addr
 ;
-; Wait for the user to press a key
+; Set mode (space): the control is highlighted until button 0 or 1 is pressed, and the button's soft switch
+; becomes the mapping (Esc leaves it as it was)
 _ToggleBtnmap
 :addr       equ  tmp15
 
@@ -950,10 +919,10 @@ _ToggleBtnmap
             lda: CTRL_VALUE_ADDR,x
             sta  :addr   ; address of the value
 
-            jsr  _WaitForBtnUp
+            jsr  _WaitForButton
+            bcs  :cancel
             sta  (:addr)
-
-            rts
+:cancel     rts
 
 ; X = control addr
 ;

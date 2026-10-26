@@ -33,6 +33,7 @@
     "build:mb": "node ./src/games/mb/build.js",
     "build:zelda": "node ./src/games/zelda/build.js",
     "build:bench": "node ./src/games/bench/build.js",
+    "build:kbdtest": "node ./src/games/KbdTest/build.js",
     "debug:smb": "cd src/games/smb && %npm_package_config_crossrunner% SuperMarioGS -source SuperMarioGS_S02__Output.txt -map SMB.s -Debug -CompatibilityLayer",
     "debug:bf": "cd src/games/bf && %npm_package_config_crossrunner% BalloonFgtGS -source BalloonFgtGS_S02__Output.txt -map BF.s -Debug -CompatibilityLayer",
     "debug:lo": "cd src/games/lightsout && %npm_package_config_crossrunner% LightsOutGS -source LightsOutGS_S02__Output.txt LightsOutGS_S03__Output.txt LightsOutGS_S04__Output.txt LightsOutGS_S05__Output.txt LightsOutGS_S06__Output.txt -map Master.s -Debug -CompatibilityLayer",

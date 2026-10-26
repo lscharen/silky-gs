@@ -12,4 +12,5 @@ asm:use EDS.GSOS.Macs
 asm:use GTE.Macs.s
 ../Externals.s
 ../core/Defs.s
+../rom/rom_kbd_macs.s
 ../ImportEngine.s

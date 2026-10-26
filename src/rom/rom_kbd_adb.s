@@ -8,19 +8,38 @@
 ; so adbKeys always holds which keys are down, however many.
 ;
 ; Each event is then passed to the microcontroller (SendInfo keyCode), which handles it as if it had polled
-; the keyboard itself: $C000 / $C010 / $C025, the auto-repeat, the configuration screen, the hotkeys and the
-; buttons (_KbdButtons, core/CoreImpl.s) work as with the other drivers.
+; the keyboard itself: $C000 / $C010 / $C025, the auto-repeat, the configuration screen and the hotkeys
+; work as with the other drivers.  The pad's buttons come from the driver's own key table (adbButtons).
 ;
 ; Works on every ROM, unlike J13 (rom/rom_kbd_j13.s), whose tables and key code map (J13_ADBKeys) it uses.
 ;
 ; A pad can't have opposite directions down: of the player's left / right keys that are down, the one
 ; pressed last wins, and the same for up / down (a diagonal key counts for both of its directions).
 ;
-; Known limits: the Control Panel's ToBRAMSetup turns the SRQ completion routine off (until ApplyConfig
-; puts it back, when leaving the configuration screen), and Control-Reset alone does nothing while the
-; driver is in (Control-Command-Reset restarts the machine).
+; The reset key and Control-Command-Esc: with autopolling off the microcontroller doesn't see the keyboard,
+; so the driver does what the firmware would.  Each first turns autopolling back on, so the firmware has the
+; keyboard again (after a reset, and in the CDA menu, which can't count on the SRQ routine), and suspends
+; the driver (adbSuspended) until KbdAdb_Resume puts it back:
+;
+;   - Control-Reset: a reset (SendInfo resetSys)
+;   - Control-Command-Reset: the power-up byte made invalid, then a reset, so it is always a cold start
+;     (a restart), whatever the microcontroller thinks the modifiers are
+;   - Control-Command-Esc: the Esc is passed on as usual, now with autopolling on (the CDA menu)
+;
+; If the reset doesn't happen, the keyboard is the firmware's (autopolling on), so pressing it again works
+; without the driver.
+;
+; Known limit: the Control Panel's ToBRAMSetup turns the SRQ completion routine off (until ApplyConfig
+; puts it back, when leaving the configuration screen).
 
-KBD_DRIVER_ADB    equ   4             ; config_kbd_driver (KbdDriverPad, core/CoreImpl.s)
+; (KBD_DRIVER_ADB, and the KBD_ADB flag that builds the driver's hooks: core/Defs.s)
+
+; The keyboard hardware this file reads (the rest goes through the ADB Tool Set)
+ADB_KBD_STROBE_REG equ  $E0C010       ; Bit 7: a key is down (AKD); bits 0 - 6: the last key pressed
+ADB_MOD_REG       equ   $E0C025       ; The firmware's modifiers (while autopolling is on)
+ADB_MOD_CONTROL   equ   $02           ; ... their bits
+ADB_MOD_COMMAND   equ   $80
+ADB_BUTTON0_REG   equ   $E0C061       ; Bit 7: push button 0 (Command) down
 
 ADB_SET_MODES     equ   $04           ; SendInfo commands
 ADB_CLEAR_MODES   equ   $05
@@ -35,15 +54,23 @@ ADB_SRQ_PTR       equ   7             ; The data pointer's offset from S when Kb
                                       ; pulls it.  (Measured on ROM 3.)
 ADB_SRQ_DP        equ   ADB_SRQ_PTR+3 ; ... in KbdAdb_SRQ's direct page (D = S after B and D are pushed)
 ADB_RESET         equ   $7F           ; The reset key's code (both bytes of register 0)
+ADB_KEY_ESC       equ   $35
 ADB_KEY_CONTROL   equ   $36
 ADB_KEY_COMMAND   equ   $37
 ADB_KEY_MODS      equ   $36           ; Control, Command, Shift, Caps Lock, Option: $36 - $3A
 ADB_KEY_SHIFT     equ   $38
 ADB_KEY_RSHIFT    equ   $7B           ; (only reported apart from Shift if the keyboard is asked to)
+ADB_KEY_RCONTROL  equ   $7D
+ADB_KEY_OPTION    equ   $3A
+ADB_KEY_ROPTION   equ   $7C
+PWRUP_CHECK       equ   $0003F3       ; The reset vector's high byte: the power-up byte must be it EOR $A5
+PWRUP_BYTE        equ   $0003F4       ; ... or the reset is a cold start
 
 ADB_IDS           equ   20            ; One player's key ids (adbIds)
 
 adbInstalled      dw    0             ; Non-zero while the SRQ routine is in and autopolling is off
+adbSuspended      dw    0             ; Non-zero while autopolling is back on for a reset or the CDA menu
+                                      ; (KbdAdb_Resume)
 adbKeys           ds    256           ; Each key code's word: 0 = up, otherwise when it went down (adbStamp)
 adbStamp          dw    0             ; Counts the key presses (never 0)
 adbIds            ds    ADB_IDS*2     ; Each player's keys (KbdAdbIds, the J13_PadBits order), as adbKeys
@@ -53,13 +80,23 @@ adbKeyByte        db    0
 
 ; KbdAdb_Pad
 ;
-; The driver's pad routine (KbdDriverPad, core/CoreImpl.s): A = the key (_ReadKeypress), Y = the player
-; (0 / 1).  Returns A = the pad bits of the player's keys that are down, and sets kbdHandled if the key is
-; one of the player's keys.  Called with interrupts off, so adbKeys doesn't change meanwhile.  16-bit
-; registers, DBR = the main bank.
+; The driver's pad routine (KbdDriverPad, core/CoreImpl.s): X = the player's configuration block, Y = the
+; player (0 / 1).  Returns A = the full pad: the player's keys that are down, and the buttons from the
+; driver's own key table (adbButtons).  Sets kbdHandled if the last key pressed is one of the player's
+; keys.  Called with interrupts off, so adbKeys doesn't change meanwhile.  16-bit registers, DBR = the
+; main bank.
                 mx %00
 KbdAdb_Pad
-                  pha                           ; The key
+                  phx                           ; The configuration block, for the buttons
+                  jsr       kbdAdbDirs
+                  plx
+                  jmp       adbButtons
+
+kbdAdbDirs        sep       #$20
+                  ldal      ADB_KBD_STROBE_REG  ; Bit 7: a key is down (AKD); bits 0 - 6: the last key pressed
+                  rep       #$20
+                  and       #$00FF
+                  pha
                   lda       #0
                   cpy       #0
                   beq       *+5
@@ -152,6 +189,35 @@ KbdAdb_Pad
                   ora       adbOther
                   rts
 
+; A = the pad bits, X = the player's configuration block: returns A with the player's A / B buttons added,
+; from the driver's own key table rather than the push buttons: BUTTON_SWITCH_C061 is Command, C062
+; Option (either side)
+                mx %00
+adbButtons        pha
+                  lda:      PLAYER_INPUT_BUTTON_A,x
+                  jsr       :down
+                  beq       :no_a
+                  lda       #PAD_BUTTON_A
+                  ora       1,s
+                  sta       1,s
+:no_a             lda:      PLAYER_INPUT_BUTTON_B,x
+                  jsr       :down
+                  beq       :no_b
+                  lda       #PAD_BUTTON_B
+                  ora       1,s
+                  sta       1,s
+:no_b             pla
+                  rts
+
+; A = a BUTTON_SWITCH_*: Z clear if its key is down
+:down             cmp       #BUTTON_SWITCH_C062
+                  beq       :option
+                  lda       adbKeys+{ADB_KEY_COMMAND*2}
+                  rts
+:option           lda       adbKeys+{ADB_KEY_OPTION*2}
+                  ora       adbKeys+{ADB_KEY_ROPTION*2}
+                  rts
+
 adbBase           dw    0             ; KbdAdb_Pad: the player's offset in adbIds
 adbT              dw    0             ; ... the key's adbKeys value
 adbBits           dw    0             ; ... its direction bits on one axis
@@ -165,7 +231,7 @@ adbOther          dw    0             ; ... Start and Select
 ;
 ; TEMPORARY WORKAROUND for GSSquared: its microcontroller types a key passed back to it (SendInfo keyCode)
 ; without the modifiers, so Shift-/ reaches $C000 as '/', and the '?' hotkey (the configuration screen)
-; can't be typed while this driver is in.  Called by _ReadKeypress (core/CoreImpl.s) for a new key: if the
+; can't be typed while this driver is in.  Called by _KbdPoll (rom/rom_kbd_basic.s) for a new key: if the
 ; driver is in and Shift is down (adbKeys), the unshifted keys of the hotkeys ? ! @ # become the hotkeys.
 ; Remove once GSSquared applies the modifiers (real hardware is expected to; not yet tested).
 ; A = the key from $C000 (bit 7 set), 8-bit A, 16-bit X / Y, DBR = the main bank.  Returns A; keeps Y.
@@ -262,6 +328,7 @@ adbInstall
                   dex
                   bpl       :clear
                   stz       adbStamp
+                  stz       adbSuspended
 
                   pea       1
                   PushLong  #adbModeByte
@@ -292,6 +359,7 @@ KbdAdb_ShutDown
                   lda       adbInstalled
                   beq       :done
                   stz       adbInstalled
+                  stz       adbSuspended
                   pea       ADB_KBD
                   Tool      $1509               ; SRQRemove
                   jmp       adbPollOn
@@ -302,6 +370,35 @@ adbPollOn         pea       1
                   pea       ADB_CLEAR_MODES
                   Tool      $909                ; SendInfo
                   rts
+
+; KbdAdb_Resume
+;
+; Called by the event loop (NES_EvtLoop, rom/scaffold.s): puts the driver back in after a reset key or
+; Control-Command-Esc suspended it (the CDA menu has been left, or the reset didn't happen), once Control
+; and Command are up, so they don't count as held.  16-bit registers, DBR = the main bank.
+                mx %00
+KbdAdb_Resume
+                  lda       adbSuspended
+                  beq       :out
+                  sep       #$20
+                  ldal      ADB_BUTTON0_REG     ; Command (live)
+                  bmi       :held
+                  ldal      ADB_MOD_REG         ; Control (autopolling is on: $C025 is the firmware's)
+                  and       #ADB_MOD_CONTROL+ADB_MOD_COMMAND
+                  bne       :held
+                  rep       #$20
+                  jsr       KbdAdb_ShutDown
+                  jmp       adbInstall
+:held             rep       #$20
+:out              rts
+
+; Z clear if Control (either) and Command are down by adbKeys
+                mx %00
+adbCtrlCmd        lda       adbKeys+{ADB_KEY_CONTROL*2}
+                  ora       adbKeys+{ADB_KEY_RCONTROL*2}
+                  beq       :out
+                  lda       adbKeys+{ADB_KEY_COMMAND*2}
+:out              rts
 
 ; KbdAdb_SRQ
 ;
@@ -362,17 +459,26 @@ KbdAdb_SRQ
                   rtl
 
                 mx %00
-:reset            lda       adbReg              ; Control-Command-Reset (down): restart the machine
+:reset            lda       adbReg              ; The reset key going down ($FFFF: going up)
                   cmp       #{ADB_RESET*256}+ADB_RESET
                   bne       :done
                   lda       adbKeys+{ADB_KEY_CONTROL*2}
-                  beq       :done
+                  ora       adbKeys+{ADB_KEY_RCONTROL*2}
+                  beq       :done               ; Reset alone does nothing, as without the driver
+                  jsr       adbPollOn           ; The firmware has the keyboard again (after the reset, or
+                  lda       #1                  ; if it doesn't happen: KbdAdb_Resume)
+                  sta       adbSuspended
                   lda       adbKeys+{ADB_KEY_COMMAND*2}
-                  beq       :done
-                  pea       0
+                  beq       :warm
+                  sep       #$20                ; Control-Command-Reset: the power-up byte made invalid, so
+                  ldal      PWRUP_CHECK         ; the reset is a cold start
+                  eor       #$5A                ; (not $A5)
+                  stal      PWRUP_BYTE
+                  rep       #$20
+:warm             pea       0
                   PushLong  #adbKeyByte
                   pea       ADB_RESET_SYS
-                  Tool      $909                ; SendInfo
+                  Tool      $909                ; SendInfo: pulls the system reset line
                   bra       :done
 
 adbReg            dw    0
@@ -390,37 +496,33 @@ adbEvent
                   bit       #$0080
                   bne       :up
                   lda       adbKeys,x
-                  bne       :pass               ; Already down
+                  bne       :drop               ; Already down: nothing changed, nothing to pass
                   inc       adbStamp
                   bne       *+5
                   inc       adbStamp            ; (never 0)
                   lda       adbStamp
                   sta       adbKeys,x
+                  lda       1,s                 ; Control-Command-Esc: autopolling back on before the Esc
+                  cmp       #ADB_KEY_ESC        ; goes to the firmware, so the CDA menu has the keyboard
+                  bne       :pass
+                  jsr       adbCtrlCmd
+                  beq       :pass
+                  jsr       adbPollOn
+                  lda       #1
+                  sta       adbSuspended
                   bra       :pass
 :up               stz       adbKeys,x
 
-:pass             pla
-                  cmp       #ADB_KEY_MODS
-                  bcc       :send
-                  cmp       #ADB_KEY_MODS+5
-                  bcs       :send
-                  tax                           ; A modifier going down: not passed if $C025 has it down
-                  sep       #$20                ; already (the slides' PassADBKeyIfOK)
-                  ldal      MOD_REG
-                  and       AdbModBits-ADB_KEY_MODS,x
+:pass             pla                           ; Every change is passed, modifiers included: the
+                  cmp       #$00E0              ; microcontroller's PROCESS_ADB_KEY sets / clears them in
+                  bcs       :out                ; MODKEYS, which drives $C061 / $C062 (docs/adb).  ($C025
+                  sep       #$20                ; can't tell whether one is already down: it is only
+                  sta       adbKeyByte          ; written with a key press.)  Not the $E0 - $FE prefix codes.
                   rep       #$20
-                  bne       :out
-                  txa
-:send             cmp       #$00E0              ; (not the $E0 - $FE prefix codes)
-                  bcs       :out
-                  sep       #$20
-                  sta       adbKeyByte
-                  rep       #$20
-                  pea       1
-                  PushLong  #adbKeyByte
+                  pea       1                   ; keyCode ($11) reads exactly one byte: any more would be
+                  PushLong  #adbKeyByte         ; taken as the next command (docs/adb, $F2CC)
                   pea       ADB_KEY_CODE
                   Tool      $909                ; SendInfo
 :out              rts
-
-; The $C025 bit of each modifier key: Control, Command, Shift, Caps Lock, Option
-AdbModBits        db    $02,$80,$01,$04,$40
+:drop             pla
+                  rts

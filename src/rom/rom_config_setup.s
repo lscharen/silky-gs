@@ -61,7 +61,9 @@ ApplyConfig
             FIN
             jsr   _ClearShadowScreen          ; With shadowing on, so fast blit leaves no stale lines
             jsr   KbdBuildMaps                ; The BASIC keyboard driver's key maps
+            DO    KBD_ADB
             jsr   KbdAdb_Apply                ; The ADB driver's keys, and put it in or take it out
+            FIN
             DO    JOYSTICK_SUPPORT
             jsl   JoyConfigureL               ; Before _InitRenderMode, which hooks the probe rows if used
             FIN
@@ -79,10 +81,35 @@ ApplyConfig
 
 ; _FixPrefInputTypes
 ;
-; After LoadPrefData: an input type with no reader in _ReadControl becomes KEYBOARD, and an older file's
-; joystick sensitivity (0) the default.
+; After LoadPrefData: an input type with no reader in _ReadControl becomes KEYBOARD, a keyboard driver
+; that isn't built BASIC, an older file's joystick sensitivity (0) the default, and an older file's button
+; mappings ($C025 bits) the defaults.
             mx    %00
 _FixPrefInputTypes
+            lda   config_kbd_driver
+            beq   :drv_ok                     ; BASIC
+            DO    KBD_J13
+            cmp   #KBD_DRIVER_J13
+            beq   :drv_ok
+            FIN
+            DO    KBD_ADB
+            cmp   #KBD_DRIVER_ADB
+            beq   :drv_ok
+            FIN
+            stz   config_kbd_driver
+:drv_ok
+            ldx   #config_input_button_a
+            lda   #BUTTON_SWITCH_C061
+            jsr   :button
+            ldx   #config_input_button_b
+            lda   #BUTTON_SWITCH_C062
+            jsr   :button
+            ldx   #config_input_p2_button_a
+            lda   #BUTTON_SWITCH_C061
+            jsr   :button
+            ldx   #config_input_p2_button_b
+            lda   #BUTTON_SWITCH_C062
+            jsr   :button
             lda   config_joy_sens
             bne   *+8
             lda   #JOY_DEFAULT_SENS
@@ -100,6 +127,19 @@ _FixPrefInputTypes
             FIN
             stz:  0,x
 :ok         rts
+
+; X = a button mapping, A = its default: the default unless it is a BUTTON_SWITCH_*
+:button     pha
+            lda:  0,x
+            cmp   #BUTTON_SWITCH_C061
+            beq   :keep
+            cmp   #BUTTON_SWITCH_C062
+            beq   :keep
+            pla
+            sta:  0,x
+            rts
+:keep       pla
+            rts
 
 ; Configuration screen and variables
 ;
@@ -126,8 +166,8 @@ config_input_key_right dw  RIGHT_ARROW
 config_input_key_up    dw  UP_ARROW
 config_input_key_down  dw  DOWN_ARROW
 config_input_snesmax_port dw 4
-config_input_button_a  dw  MOD_REG_COMMAND_DOWN
-config_input_button_b  dw  MOD_REG_OPTION_DOWN
+config_input_button_a  dw  BUTTON_SWITCH_C061  ; the soft switch each button reads (PAD_PUSH_BUTTONS)
+config_input_button_b  dw  BUTTON_SWITCH_C062
 
 ; player 2 config block
 config_block_p2
@@ -138,20 +178,22 @@ config_input_p2_key_right dw  'd'
 config_input_p2_key_up    dw  'w'
 config_input_p2_key_down  dw  's'
 config_input_p2_snesmax_port dw 4
-config_input_p2_button_a  dw  MOD_REG_CONTROL_DOWN
-config_input_p2_button_b  dw  MOD_REG_SHIFT_DOWN
+config_input_p2_button_a  dw  BUTTON_SWITCH_C061
+config_input_p2_button_b  dw  BUTTON_SWITCH_C062
 
 ; Added after the original layout, so the values above keep their offsets
 config_video_fps       dw  0  ; show the renders per second at the top-left of the screen (DrawFPS)
 config_video_nescpu    dw  0  ; border = the task that owns the CPU, a raster bar of game logic time (saveCtx)
-config_kbd_driver      dw  KBD_DRIVER_ADB    ; keyboard driver of the KEYBOARD input type (rom/rom_kbd_j13.s)
+config_kbd_driver      dw  KBD_DRIVER_BASIC  ; keyboard driver of the KEYBOARD input type (rom/rom_kbd_j13.s)
 config_joy_cx          ENT                ; The joystick's calibrated center, X (VBL_VERT_REG steps x 16;
                        dw  0              ; 0 = not calibrated)
 config_joy_cy          ENT                ; ... Y
                        dw  0
 config_joy_sens        ENT                ; Its sensitivity, 1 - 7 (dead zone = 8 - it steps; an older
                        dw  JOY_DEFAULT_SENS  ; file's 0 is made the default by _FixPrefInputTypes)
-                       dw  0              ; (free: was the joystick's offset; a new value must default to 0)
+config_kbd_latch       dw  0              ; BASIC keyboard driver: hold the directions while any key is down
+                                          ; (kbdHeld); 0 = only the key that is down.  (Was the joystick's
+                                          ; offset, so an older file has 0 here)
 
 ; The diagonal keys of each player (0 = none), at the same distance from each player's block
 ; (PLAYER_INPUT_KEY_UL ... DR, core/CoreImpl.s), so player 2's follow 8 bytes after player 1's
@@ -223,6 +265,7 @@ INPUT_BUTTON_B_STR  str 'B BUTTON'
 
 DRIVERS_TITLE_STR   str 'DRIVERS'
 DRIVERS_KBD_STR     str 'KEYBOARD'
+DRIVERS_LATCH_STR   str 'LATCH DIRS'  ; the BASIC driver's held directions (config_kbd_latch)
 DRIVERS_KBD_BASIC   str 'BASIC'        ; the last key pressed, directions held (rom/rom_kbd_basic.s)
 DRIVERS_KBD_J13     str 'J13 ROM 01'   ; several keys held at once, ROM 00 / 01 firmware only (rom/rom_kbd_j13.s; the font has no parentheses)
 DRIVERS_KBD_ADB     str 'ADB'          ; every key's up / down state from the ADB keyboard, any ROM (rom/rom_kbd_adb.s)
@@ -547,19 +590,32 @@ DRIVERS_ITEM_1 dw RADIO
              dw   3,2
              dw   DRIVERS_KBD_STR
              dw   config_kbd_driver
-             dw   3
+             dw   1+KBD_J13+KBD_ADB     ; the drivers that are built (core/Defs.s)
 
              dw   KBD_DRIVER_BASIC
              dw   DRIVERS_KBD_BASIC
-             dw   0
+             dw   DRIVERS_ITEM_LATCH    ; shown while BASIC is selected
 
+             DO   KBD_J13
              dw   KBD_DRIVER_J13
              dw   DRIVERS_KBD_J13
              dw   0
+             FIN
 
+             DO   KBD_ADB
              dw   KBD_DRIVER_ADB
              dw   DRIVERS_KBD_ADB
              dw   0
+             FIN
+
+; The BASIC driver's option: hold the directions (on: holding left and pressing up gives up + left, until
+; every key is up; off: only the key that is down, the diagonal keys for diagonals)
+DRIVERS_ITEM_LATCH dw CHKBOX
+             dw   DRIVERS_ITEM_1        ; previous control
+             dw   0                     ; next control
+             dw   3,6+KBD_J13+KBD_ADB   ; below the driver list
+             dw   DRIVERS_LATCH_STR
+             dw   config_kbd_latch
 
 
 ; The joystick (INPUT_JOYSTICK)
@@ -815,7 +871,7 @@ JoyTest
             ldx   #JOY_DOWN_STR
             jsr   JoyDrawField
 
-:next       jsr   _ReadRawKeypress
+:next       jsr   _KbdReadRaw
             bit   #PAD_KEY_DOWN
             bne   *+5
             brl   :loop

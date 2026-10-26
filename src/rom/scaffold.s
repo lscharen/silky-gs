@@ -96,7 +96,9 @@ NES_StartUp
             jsr   LoadPrefData
             jsr   _FixPrefInputTypes
             jsr   KbdBuildMaps            ; The BASIC keyboard driver's key maps (rom/rom_kbd_basic.s)
+            DO    KBD_ADB
             jsr   KbdAdb_Apply            ; The ADB driver's keys, and put it in if it is set (rom/rom_kbd_adb.s)
+            FIN
             DO    JOYSTICK_SUPPORT
             jsl   JoyConfigureL           ; The joystick settings; _InitRenderMode hooks the probe rows if used
             jsr   _InitRenderMode
@@ -117,7 +119,9 @@ NES_StartUp
 ; Check whether the J13 keyboard driver can read the held keys from the ADB microcontroller (with interrupts off, so
 ; before the audio interrupts start)
 
+            DO    KBD_J13
             jsr   J13_Init
+            FIN
 
 ; Initialize the sound hardware for APU emulation
 
@@ -242,6 +246,9 @@ NES_EvtLoop
 ; Take the last new key press (each press, or auto-repeat, is one event).  If there is none,
 ; then nothing else to do here
 
+            DO    KBD_ADB
+            jsr   KbdAdb_Resume          ; The ADB driver back in after a reset key or the CDA menu
+            FIN
             jsr   NES_TakeKey            ; (Z set if there is none)
             bne   *+5
             brl   NES_EvtLoop
@@ -391,8 +398,12 @@ NES_Resume
 NES_ShutDown
             jsr   NES_StopExecution        ; First stop the VBL task from running NES frames and the 60Hz
                                            ; audio driver while the runtime is taken down
+            DO    KBD_J13
             jsr   J13_ShutDown             ; The ADB interrupt enables, if a J13 row read is in flight
+            FIN
+            DO    KBD_ADB
             jsr   KbdAdb_ShutDown          ; Keyboard autopolling back on, if the ADB driver is in
+            FIN
             DO    JOYSTICK_SUPPORT
             jsl   JoyScanDisarmL           ; The joystick's scanline interrupts, if armed
             FIN
@@ -405,6 +416,8 @@ NES_ShutDown
             FIN
             jsr   ShutDown
 
+            lda   #0                       ; The engine gives up the display (irqVbl's suspension test)
+            stal  engineVideoOn
             sep   #$20                     ; The shadowing and video modes the game started with
             lda   SavedShadow
             stal  SHADOW_REG
@@ -459,6 +472,11 @@ ToggleAPUChannel
 ; after.
             mx  %00
 NES_RenderFrame
+            DO    APU_STATS
+            ldal  apu_stat_render         ; (apu/apu.s)
+            inc
+            stal  apu_stat_render
+            FIN
             jsl   RenderLatch            ; Freeze the queues, latch the PPU registers and the OAM
 
 ; Allow the user code to introspect and intervene at this point

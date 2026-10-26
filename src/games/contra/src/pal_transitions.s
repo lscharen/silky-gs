@@ -20,6 +20,8 @@ PAL_LEVEL_5_SWIZZLE EXT
 PAL_LEVEL_6_SWIZZLE EXT
 PAL_LEVEL_7_SWIZZLE EXT
 PAL_LEVEL_8_SWIZZLE EXT
+PAL_LEVEL_2_BOSS_SWIZZLE EXT
+PAL_LEVEL_4_BOSS_SWIZZLE EXT
 PAL_ENDING_SWIZZLE EXT
 
 ; The palette ids (PAL_*) and pinned slots (PAL_SLOT_*) are in pal_defs.s.
@@ -71,50 +73,68 @@ PAL_ENDING_SWIZZLE EXT
 ;     SP2 $0F $20 $26~$16 $16~$07 -> [0,6,15,5]
 ;     SP3 $0F $20 $00 $0F -> [0,6,7,0]
 ;   level_4
-;     BG0 $0F $10 $00 $0C -> [0,1,2,3]
-;     BG1 $0F $00 $06 $20 -> [0,2,11,4]
-;     BG2 $0F $16 $30 $10 -> [0,8,6,7]
-;     BG3 $0F $38 $09 $06 -> [0,9,10,11]
-;     SP0 $0F $37 $12 $0F -> [0,5,12,0]
-;     SP1 $0F $36 $16 $0F -> [0,13,8,0]
-;     SP2 $0F $20 $26 $16 -> [0,4,14,8]
-;     SP3 $0F $20 $1B $0F -> [0,4,15,0]
+;     BG0 $0F $10 $00 $0C -> [0,7,1,2]
+;     BG1 $0F $00 $06 $20 -> [0,1,3,6]
+;     BG2 $0F *$16 $30~$20 $10 -> [0,8,6,7]
+;     BG3 $0F $38 $09 *$06 -> [0,9,10,11]
+;     SP0 $0F $37 $12 $0F -> [0,4,5,0]
+;     SP1 $0F $36 $16 $0F -> [0,12,13,0]
+;     SP2 $0F $20 $26 $16 -> [0,6,14,13]
+;     SP3 $0F $20 $1B $0F -> [0,6,15,0]
 ;   level_5
-;     BG0 $0F $20 $10 $1C -> [0,1,2,3]
-;     BG1 $0F $20 $10 $0A -> [0,1,2,4]
-;     BG2 $0F $16 $30 $10 -> [0,8,6,7]
-;     BG3 $0F $20 $22 $02 -> [0,9,10,11]
-;     SP0 $0F $37 $12 $0F -> [0,5,12,0]
-;     SP1 $0F $36 $16 $0F -> [0,13,8,0]
-;     SP2 $0F $20 $26 $16 -> [0,1,14,8]
+;     BG0 $0F $20 $10 $1C -> [0,1,7,2]
+;     BG1 $0F $20 $10 $0A -> [0,1,7,3]
+;     BG2 $0F *$16 $30 $10 -> [0,8,6,7]
+;     BG3 $0F *$20 *$22 $02 -> [0,9,10,11]
+;     SP0 $0F $37 $12 $0F -> [0,4,5,0]
+;     SP1 $0F $36 $16 $0F -> [0,12,13,0]
+;     SP2 $0F $20 $26 $16 -> [0,1,14,13]
 ;     SP3 $0F $20 $00 $0F -> [0,1,15,0]
 ;   level_6
 ;     BG0 $0F $00 $20 $1A -> [0,1,2,3]
 ;     BG1 $0F $01 $20 $00 -> [0,4,2,1]
-;     BG2 $0F $16 $30 $10 -> [0,8,6,7]
-;     BG3 $0F $20 $27 $17 -> [0,9,10,11]
+;     BG2 $0F *$16 $30 $10 -> [0,8,6,7]
+;     BG3 $0F $20 *$27 *$17 -> [0,9,10,11]
 ;     SP0 $0F $37 $12 $0F -> [0,5,12,0]
-;     SP1 $0F $36 $16 $0F -> [0,13,8,0]
-;     SP2 $0F $20 $26 $16 -> [0,2,14,8]
+;     SP1 $0F $36 $16 $0F -> [0,13,14,0]
+;     SP2 $0F $20 $26 $16 -> [0,2,15,14]
 ;     SP3 $0F $20 $00 $0F -> [0,2,1,0]
 ;   level_7
 ;     BG0 $0F $27 $17 $06 -> [0,1,2,3]
-;     BG1 $0F $20 $10 $00 -> [0,4,7,5]
-;     BG2 $0F $16 $30 $10 -> [0,8,6,7]
-;     BG3 $0F $06 $1B $0B -> [0,9,10,11]
-;     SP0 $0F $37 $12 $0F -> [0,12,13,0]
-;     SP1 $0F $36 $16 $0F -> [0,14,8,0]
-;     SP2 $0F $20 $26 $16 -> [0,4,15,8]
-;     SP3 $0F $20 $00 $0F -> [0,4,5,0]
+;     BG1 $0F $20 $10 $00 -> [0,6,7,4]
+;     BG2 $0F *$16 $30~$20 $10 -> [0,8,6,7]
+;     BG3 $0F *$06 $1B $0B -> [0,9,10,11]
+;     SP0 $0F $37 $12 $0F -> [0,5,12,0]
+;     SP1 $0F $36 $16 $0F -> [0,13,14,0]
+;     SP2 $0F $20 $26 $16 -> [0,6,15,14]
+;     SP3 $0F $20 $00 $0F -> [0,6,4,0]
 ;   level_8
 ;     BG0 $0F $10 $00 $07 -> [0,1,2,3]
 ;     BG1 $0F $36 $15 $06 -> [0,8,6,4]
 ;     BG2 $0F $35~$36 $15 $04 -> [0,8,6,7]
-;     BG3 $0F $18 $13~$14 $03 -> [0,9,10,11]
+;     BG3 $0F *$18 $13~$14 $03 -> [0,9,10,11]
 ;     SP0 $0F $37~$36 $12 $0F -> [0,8,5,0]
 ;     SP1 $0F $36 $16 $0F -> [0,8,12,0]
 ;     SP2 $0F $30 $28 $16 -> [0,13,14,12]
 ;     SP3 $0F $30 $25 $14 -> [0,13,15,10]
+;   level_2_boss
+;     BG0 $0F $06 $00 $08 -> [0,1,6,7]
+;     BG1 $0F $20 $00 $08 -> [0,9,6,7]
+;     BG2 $0F *$06 $00 $08 -> [0,8,6,7]
+;     BG3 $0F $20 $00 *$06 -> [0,9,10,11]
+;     SP0 $0F $37 $12 $0F -> [0,2,3,0]
+;     SP1 $0F $36 $16 $0F -> [0,4,5,0]
+;     SP2 $0F $20 $26 $16 -> [0,9,12,5]
+;     SP3 $0F $20 $22 $02 -> [0,9,13,14]
+;   level_4_boss
+;     BG0 $0F $0C $18 $09 -> [0,1,6,7]
+;     BG1 $0F $20 $18 $09 -> [0,9,6,7]
+;     BG2 $0F *$16 $18 $09 -> [0,8,6,7]
+;     BG3 $0F $20 $18 *$06 -> [0,9,10,11]
+;     SP0 $0F $37 $12 $0F -> [0,2,3,0]
+;     SP1 $0F $36 $16 $0F -> [0,4,5,0]
+;     SP2 $0F $20 $26 $16 -> [0,9,12,5]
+;     SP3 $0F $20 $22 $1C -> [0,9,13,14]
 ;   ending
 ;     BG0 $0F $30 $10 $00 -> [0,1,2,3]
 ;     BG1 $0F $18 $07 $1A -> [0,6,7,4]
@@ -267,7 +287,7 @@ DetectNESPalette
             bcs   :found
             inx
             inx
-            cpx   #24
+            cpx   #28
             bcc   :anext
             ldx   #0
 :found      txy
@@ -333,6 +353,8 @@ PAL_MATCH
             dw    PAL_LEVEL_6_MATCH
             dw    PAL_LEVEL_7_MATCH
             dw    PAL_LEVEL_8_MATCH
+            dw    PAL_LEVEL_2_BOSS_MATCH
+            dw    PAL_LEVEL_4_BOSS_MATCH
             dw    PAL_ENDING_MATCH
 PAL_TITLE_MATCH
             db    $10,$28,$16,$30,$10,$15,$10,$28,$38,$0F,$0F,$0F   ; BG0-BG3
@@ -350,20 +372,26 @@ PAL_LEVEL_3_MATCH
             db    $0A,$1A,$00,$28,$18,$07,$FF,$30,$10,$FF,$FF,$FF   ; BG0-BG3
             db    $37,$12,$0F,$36,$16,$0F,$20,$26,$16,$20,$00,$0F   ; SP0-SP3
 PAL_LEVEL_4_MATCH
-            db    $10,$00,$0C,$00,$06,$20,$16,$30,$10,$38,$09,$06   ; BG0-BG3
+            db    $10,$00,$0C,$00,$06,$20,$FF,$30,$10,$38,$09,$FF   ; BG0-BG3
             db    $37,$12,$0F,$36,$16,$0F,$20,$26,$16,$20,$1B,$0F   ; SP0-SP3
 PAL_LEVEL_5_MATCH
-            db    $20,$10,$1C,$20,$10,$0A,$16,$30,$10,$20,$22,$02   ; BG0-BG3
+            db    $20,$10,$1C,$20,$10,$0A,$FF,$30,$10,$FF,$FF,$02   ; BG0-BG3
             db    $37,$12,$0F,$36,$16,$0F,$20,$26,$16,$20,$00,$0F   ; SP0-SP3
 PAL_LEVEL_6_MATCH
-            db    $00,$20,$1A,$01,$20,$00,$16,$30,$10,$20,$27,$17   ; BG0-BG3
+            db    $00,$20,$1A,$01,$20,$00,$FF,$30,$10,$20,$FF,$FF   ; BG0-BG3
             db    $37,$12,$0F,$36,$16,$0F,$20,$26,$16,$20,$00,$0F   ; SP0-SP3
 PAL_LEVEL_7_MATCH
-            db    $27,$17,$06,$20,$10,$00,$16,$30,$10,$06,$1B,$0B   ; BG0-BG3
+            db    $27,$17,$06,$20,$10,$00,$FF,$30,$10,$FF,$1B,$0B   ; BG0-BG3
             db    $37,$12,$0F,$36,$16,$0F,$20,$26,$16,$20,$00,$0F   ; SP0-SP3
 PAL_LEVEL_8_MATCH
-            db    $10,$00,$07,$36,$15,$06,$35,$15,$04,$18,$13,$03   ; BG0-BG3
+            db    $10,$00,$07,$36,$15,$06,$35,$15,$04,$FF,$13,$03   ; BG0-BG3
             db    $37,$12,$0F,$36,$16,$0F,$30,$28,$16,$30,$25,$14   ; SP0-SP3
+PAL_LEVEL_2_BOSS_MATCH
+            db    $06,$00,$08,$20,$00,$08,$FF,$00,$08,$20,$00,$FF   ; BG0-BG3
+            db    $37,$12,$0F,$36,$16,$0F,$20,$26,$16,$20,$22,$02   ; SP0-SP3
+PAL_LEVEL_4_BOSS_MATCH
+            db    $0C,$18,$09,$20,$18,$09,$FF,$18,$09,$20,$18,$FF   ; BG0-BG3
+            db    $37,$12,$0F,$36,$16,$0F,$20,$26,$16,$20,$22,$1C   ; SP0-SP3
 PAL_ENDING_MATCH
             db    $30,$10,$00,$18,$07,$1A,$16,$18,$07,$20,$10,$11   ; BG0-BG3
             db    $0B,$1B,$3B,$16,$00,$00,$20,$26,$16,$20,$10,$00   ; SP0-SP3
@@ -381,6 +409,8 @@ PAL_SUCC
             dw    PAL_LEVEL_6_SUCC
             dw    PAL_LEVEL_7_SUCC
             dw    PAL_LEVEL_8_SUCC
+            dw    PAL_LEVEL_2_BOSS_SUCC
+            dw    PAL_LEVEL_4_BOSS_SUCC
             dw    PAL_ENDING_SUCC
 PAL_NONE_SUCC
             dw    0
@@ -389,13 +419,13 @@ PAL_TITLE_SUCC
 PAL_TITLE_2_SUCC
             dw    PAL_TITLE,PAL_LEVEL_1,PAL_LEVEL_2,PAL_LEVEL_3,0
 PAL_LEVEL_1_SUCC
-            dw    PAL_TITLE,PAL_LEVEL_2,0
+            dw    PAL_TITLE,PAL_TITLE_2,PAL_LEVEL_2,0
 PAL_LEVEL_2_SUCC
-            dw    PAL_TITLE,PAL_LEVEL_3,PAL_LEVEL_1,0
+            dw    PAL_TITLE,PAL_TITLE_2,PAL_LEVEL_3,PAL_LEVEL_1,PAL_LEVEL_2_BOSS,0
 PAL_LEVEL_3_SUCC
-            dw    PAL_TITLE,PAL_LEVEL_4,PAL_LEVEL_1,0
+            dw    PAL_TITLE,PAL_TITLE_2,PAL_LEVEL_4,PAL_LEVEL_1,0
 PAL_LEVEL_4_SUCC
-            dw    PAL_TITLE,PAL_LEVEL_5,PAL_LEVEL_1,0
+            dw    PAL_TITLE,PAL_LEVEL_5,PAL_LEVEL_1,PAL_LEVEL_4_BOSS,0
 PAL_LEVEL_5_SUCC
             dw    PAL_TITLE,PAL_LEVEL_6,PAL_LEVEL_1,0
 PAL_LEVEL_6_SUCC
@@ -404,6 +434,10 @@ PAL_LEVEL_7_SUCC
             dw    PAL_TITLE,PAL_LEVEL_8,PAL_LEVEL_1,0
 PAL_LEVEL_8_SUCC
             dw    PAL_TITLE,PAL_ENDING,PAL_LEVEL_1,0
+PAL_LEVEL_2_BOSS_SUCC
+            dw    PAL_TITLE,PAL_LEVEL_3,PAL_LEVEL_1,0
+PAL_LEVEL_4_BOSS_SUCC
+            dw    PAL_TITLE,PAL_LEVEL_5,PAL_LEVEL_1,0
 PAL_ENDING_SUCC
             dw    PAL_TITLE,PAL_LEVEL_1,0
 
@@ -420,6 +454,8 @@ PAL_SWIZZLE_LO
             dw    PAL_LEVEL_6_SWIZZLE
             dw    PAL_LEVEL_7_SWIZZLE
             dw    PAL_LEVEL_8_SWIZZLE
+            dw    PAL_LEVEL_2_BOSS_SWIZZLE
+            dw    PAL_LEVEL_4_BOSS_SWIZZLE
             dw    PAL_ENDING_SWIZZLE
 PAL_SWIZZLE_HI
             dw    0
@@ -433,6 +469,8 @@ PAL_SWIZZLE_HI
             dw    ^PAL_LEVEL_6_SWIZZLE
             dw    ^PAL_LEVEL_7_SWIZZLE
             dw    ^PAL_LEVEL_8_SWIZZLE
+            dw    ^PAL_LEVEL_2_BOSS_SWIZZLE
+            dw    ^PAL_LEVEL_4_BOSS_SWIZZLE
             dw    ^PAL_ENDING_SWIZZLE
 
 ; id -> palette RAM writes: for each entry, the IIgs slot * 2 its writes go to straight away while
@@ -445,13 +483,15 @@ PAL_WRITES
             dw    PAL_WRITES_1   ; level_1
             dw    PAL_WRITES_1   ; level_2
             dw    PAL_WRITES_1   ; level_3
-            dw    PAL_WRITES_NONE   ; level_4
-            dw    PAL_WRITES_NONE   ; level_5
-            dw    PAL_WRITES_NONE   ; level_6
-            dw    PAL_WRITES_NONE   ; level_7
-            dw    PAL_WRITES_NONE   ; level_8
+            dw    PAL_WRITES_2   ; level_4
+            dw    PAL_WRITES_3   ; level_5
+            dw    PAL_WRITES_4   ; level_6
+            dw    PAL_WRITES_5   ; level_7
+            dw    PAL_WRITES_6   ; level_8
+            dw    PAL_WRITES_2   ; level_2_boss
+            dw    PAL_WRITES_2   ; level_4_boss
             dw    PAL_WRITES_NONE   ; ending
-PAL_WRITES_NONE   ; title, title_2, level_4, level_5, level_6, level_7, level_8, ending
+PAL_WRITES_NONE   ; title, title_2, ending
             dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
             dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
             dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
@@ -459,6 +499,31 @@ PAL_WRITES_NONE   ; title, title_2, level_4, level_5, level_6, level_7, level_8,
 PAL_WRITES_1   ; level_1, level_2, level_3
             dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
             dw    $FFFF,$10,$FFFF,$FFFF,$FFFF,$12,$14,$16
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+PAL_WRITES_2   ; level_4, level_2_boss, level_4_boss
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+            dw    $FFFF,$10,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$16
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+PAL_WRITES_3   ; level_5
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+            dw    $FFFF,$10,$FFFF,$FFFF,$FFFF,$12,$14,$FFFF
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+PAL_WRITES_4   ; level_6
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+            dw    $FFFF,$10,$FFFF,$FFFF,$FFFF,$FFFF,$14,$16
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+PAL_WRITES_5   ; level_7
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+            dw    $FFFF,$10,$FFFF,$FFFF,$FFFF,$12,$FFFF,$FFFF
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+PAL_WRITES_6   ; level_8
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
+            dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$12,$FFFF,$FFFF
             dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
             dw    $FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF,$FFFF
 
@@ -477,6 +542,8 @@ PAL_CELLS
             dw    PAL_LEVEL_6_CELLS
             dw    PAL_LEVEL_7_CELLS
             dw    PAL_LEVEL_8_CELLS
+            dw    PAL_LEVEL_2_BOSS_CELLS
+            dw    PAL_LEVEL_4_BOSS_CELLS
             dw    PAL_ENDING_CELLS
 PAL_TITLE_CELLS
             db    $FF,$02,$04,$06,$FF,$08,$02,$0A,$FF,$10,$0C,$0E,$FF,$12,$14,$16   ; BG0-BG3
@@ -494,20 +561,26 @@ PAL_LEVEL_3_CELLS
             db    $FF,$04,$06,$0E,$FF,$08,$02,$0A,$FF,$10,$FF,$FF,$FF,$12,$14,$16   ; BG0-BG3
             db    $FF,$18,$1A,$FF,$FF,$1C,$1E,$FF,$FF,$0C,$FF,$FF,$FF,$0C,$0E,$FF   ; SP0-SP3
 PAL_LEVEL_4_CELLS
-            db    $FF,$02,$04,$06,$FF,$04,$16,$08,$FF,$10,$0C,$0E,$FF,$12,$14,$16   ; BG0-BG3
-            db    $FF,$0A,$18,$FF,$FF,$1A,$10,$FF,$FF,$08,$1C,$10,$FF,$08,$1E,$FF   ; SP0-SP3
+            db    $FF,$0E,$02,$04,$FF,$02,$06,$0C,$FF,$10,$FF,$0E,$FF,$12,$14,$16   ; BG0-BG3
+            db    $FF,$08,$0A,$FF,$FF,$18,$1A,$FF,$FF,$0C,$1C,$1A,$FF,$0C,$1E,$FF   ; SP0-SP3
 PAL_LEVEL_5_CELLS
-            db    $FF,$02,$04,$06,$FF,$02,$04,$08,$FF,$10,$0C,$0E,$FF,$12,$14,$16   ; BG0-BG3
-            db    $FF,$0A,$18,$FF,$FF,$1A,$10,$FF,$FF,$02,$1C,$10,$FF,$02,$1E,$FF   ; SP0-SP3
+            db    $FF,$02,$0E,$04,$FF,$02,$0E,$06,$FF,$10,$0C,$0E,$FF,$12,$14,$16   ; BG0-BG3
+            db    $FF,$08,$0A,$FF,$FF,$18,$1A,$FF,$FF,$02,$1C,$1A,$FF,$02,$1E,$FF   ; SP0-SP3
 PAL_LEVEL_6_CELLS
             db    $FF,$02,$04,$06,$FF,$08,$04,$02,$FF,$10,$0C,$0E,$FF,$12,$14,$16   ; BG0-BG3
-            db    $FF,$0A,$18,$FF,$FF,$1A,$10,$FF,$FF,$04,$1C,$10,$FF,$04,$02,$FF   ; SP0-SP3
+            db    $FF,$0A,$18,$FF,$FF,$1A,$1C,$FF,$FF,$04,$1E,$1C,$FF,$04,$02,$FF   ; SP0-SP3
 PAL_LEVEL_7_CELLS
-            db    $FF,$02,$04,$06,$FF,$08,$0E,$0A,$FF,$10,$0C,$0E,$FF,$12,$14,$16   ; BG0-BG3
-            db    $FF,$18,$1A,$FF,$FF,$1C,$10,$FF,$FF,$08,$1E,$10,$FF,$08,$0A,$FF   ; SP0-SP3
+            db    $FF,$02,$04,$06,$FF,$0C,$0E,$08,$FF,$10,$FF,$0E,$FF,$12,$14,$16   ; BG0-BG3
+            db    $FF,$0A,$18,$FF,$FF,$1A,$1C,$FF,$FF,$0C,$1E,$1C,$FF,$0C,$08,$FF   ; SP0-SP3
 PAL_LEVEL_8_CELLS
             db    $FF,$02,$04,$06,$FF,$10,$0C,$08,$FF,$FF,$0C,$0E,$FF,$12,$FF,$16   ; BG0-BG3
             db    $FF,$FF,$0A,$FF,$FF,$10,$18,$FF,$FF,$1A,$1C,$18,$FF,$1A,$1E,$14   ; SP0-SP3
+PAL_LEVEL_2_BOSS_CELLS
+            db    $FF,$02,$0C,$0E,$FF,$12,$0C,$0E,$FF,$10,$0C,$0E,$FF,$12,$14,$16   ; BG0-BG3
+            db    $FF,$04,$06,$FF,$FF,$08,$0A,$FF,$FF,$12,$18,$0A,$FF,$12,$1A,$1C   ; SP0-SP3
+PAL_LEVEL_4_BOSS_CELLS
+            db    $FF,$02,$0C,$0E,$FF,$12,$0C,$0E,$FF,$10,$0C,$0E,$FF,$12,$14,$16   ; BG0-BG3
+            db    $FF,$04,$06,$FF,$FF,$08,$0A,$FF,$FF,$12,$18,$0A,$FF,$12,$1A,$1C   ; SP0-SP3
 PAL_ENDING_CELLS
             db    $FF,$02,$04,$06,$FF,$0C,$0E,$08,$FF,$10,$0C,$0E,$FF,$12,$14,$16   ; BG0-BG3
             db    $FF,$0A,$18,$1A,$FF,$10,$06,$06,$FF,$12,$1C,$10,$FF,$12,$04,$06   ; SP0-SP3
@@ -526,9 +599,11 @@ BG_UPDATE_MASKS
             dw    BG_UPDATE_MASKS_LEVEL_6
             dw    BG_UPDATE_MASKS_LEVEL_7
             dw    BG_UPDATE_MASKS_LEVEL_8
+            dw    BG_UPDATE_MASKS_LEVEL_2_BOSS
+            dw    BG_UPDATE_MASKS_LEVEL_4_BOSS
             dw    BG_UPDATE_MASKS_ENDING
 BG_UPDATE_MASKS_NONE
-            dw    $0000,%1111,%1111,%1111,%1111,%1111,%1111,%1111,%1111,%1111,%1111,%1111
+            dw    $0000,%1111,%1111,%1111,%1111,%1111,%1111,%1111,%1111,%1111,%1111,%1111,%1111,%1111
 BG_UPDATE_MASKS_TITLE
             dw    $0000
             dw    %0000   ; to title
@@ -536,11 +611,13 @@ BG_UPDATE_MASKS_TITLE
             dw    %0010   ; to level_1
             dw    %0011   ; to level_2
             dw    %0001   ; to level_3
-            dw    %0010   ; to level_4
-            dw    %0010   ; to level_5
+            dw    %0011   ; to level_4
+            dw    %0011   ; to level_5
             dw    %0010   ; to level_6
             dw    %0010   ; to level_7
             dw    %0010   ; to level_8
+            dw    %0011   ; to level_2_boss
+            dw    %0011   ; to level_4_boss
             dw    %0010   ; to ending
 BG_UPDATE_MASKS_TITLE_2
             dw    $0000
@@ -549,11 +626,13 @@ BG_UPDATE_MASKS_TITLE_2
             dw    %0010   ; to level_1
             dw    %0011   ; to level_2
             dw    %0001   ; to level_3
-            dw    %0010   ; to level_4
-            dw    %0010   ; to level_5
+            dw    %0011   ; to level_4
+            dw    %0011   ; to level_5
             dw    %0010   ; to level_6
             dw    %0010   ; to level_7
             dw    %0010   ; to level_8
+            dw    %0011   ; to level_2_boss
+            dw    %0011   ; to level_4_boss
             dw    %0010   ; to ending
 BG_UPDATE_MASKS_LEVEL_1
             dw    $0000
@@ -562,11 +641,13 @@ BG_UPDATE_MASKS_LEVEL_1
             dw    %0000   ; to level_1
             dw    %0011   ; to level_2
             dw    %0011   ; to level_3
-            dw    %0010   ; to level_4
-            dw    %0010   ; to level_5
+            dw    %0011   ; to level_4
+            dw    %0011   ; to level_5
             dw    %0010   ; to level_6
             dw    %0010   ; to level_7
             dw    %0010   ; to level_8
+            dw    %0011   ; to level_2_boss
+            dw    %0011   ; to level_4_boss
             dw    %0010   ; to ending
 BG_UPDATE_MASKS_LEVEL_2
             dw    $0000
@@ -575,11 +656,13 @@ BG_UPDATE_MASKS_LEVEL_2
             dw    %0011   ; to level_1
             dw    %0000   ; to level_2
             dw    %0011   ; to level_3
-            dw    %0011   ; to level_4
+            dw    %0000   ; to level_4
             dw    %0011   ; to level_5
             dw    %0011   ; to level_6
             dw    %0011   ; to level_7
             dw    %0011   ; to level_8
+            dw    %0011   ; to level_2_boss
+            dw    %0011   ; to level_4_boss
             dw    %0011   ; to ending
 BG_UPDATE_MASKS_LEVEL_3
             dw    $0000
@@ -593,33 +676,39 @@ BG_UPDATE_MASKS_LEVEL_3
             dw    %0011   ; to level_6
             dw    %0011   ; to level_7
             dw    %0011   ; to level_8
+            dw    %0011   ; to level_2_boss
+            dw    %0011   ; to level_4_boss
             dw    %0011   ; to ending
 BG_UPDATE_MASKS_LEVEL_4
             dw    $0000
-            dw    %0010   ; to title
-            dw    %0010   ; to title_2
-            dw    %0010   ; to level_1
-            dw    %0011   ; to level_2
+            dw    %0011   ; to title
+            dw    %0011   ; to title_2
+            dw    %0011   ; to level_1
+            dw    %0000   ; to level_2
             dw    %0011   ; to level_3
             dw    %0000   ; to level_4
-            dw    %0010   ; to level_5
-            dw    %0010   ; to level_6
-            dw    %0010   ; to level_7
-            dw    %0010   ; to level_8
-            dw    %0010   ; to ending
+            dw    %0011   ; to level_5
+            dw    %0011   ; to level_6
+            dw    %0011   ; to level_7
+            dw    %0011   ; to level_8
+            dw    %0011   ; to level_2_boss
+            dw    %0011   ; to level_4_boss
+            dw    %0011   ; to ending
 BG_UPDATE_MASKS_LEVEL_5
             dw    $0000
-            dw    %0010   ; to title
-            dw    %0010   ; to title_2
-            dw    %0010   ; to level_1
+            dw    %0011   ; to title
+            dw    %0011   ; to title_2
+            dw    %0011   ; to level_1
             dw    %0011   ; to level_2
             dw    %0011   ; to level_3
-            dw    %0010   ; to level_4
+            dw    %0011   ; to level_4
             dw    %0000   ; to level_5
-            dw    %0010   ; to level_6
-            dw    %0010   ; to level_7
-            dw    %0010   ; to level_8
-            dw    %0010   ; to ending
+            dw    %0011   ; to level_6
+            dw    %0011   ; to level_7
+            dw    %0011   ; to level_8
+            dw    %0011   ; to level_2_boss
+            dw    %0011   ; to level_4_boss
+            dw    %0011   ; to ending
 BG_UPDATE_MASKS_LEVEL_6
             dw    $0000
             dw    %0010   ; to title
@@ -627,11 +716,13 @@ BG_UPDATE_MASKS_LEVEL_6
             dw    %0010   ; to level_1
             dw    %0011   ; to level_2
             dw    %0011   ; to level_3
-            dw    %0010   ; to level_4
-            dw    %0010   ; to level_5
+            dw    %0011   ; to level_4
+            dw    %0011   ; to level_5
             dw    %0000   ; to level_6
             dw    %0010   ; to level_7
             dw    %0010   ; to level_8
+            dw    %0011   ; to level_2_boss
+            dw    %0011   ; to level_4_boss
             dw    %0010   ; to ending
 BG_UPDATE_MASKS_LEVEL_7
             dw    $0000
@@ -640,12 +731,14 @@ BG_UPDATE_MASKS_LEVEL_7
             dw    %0010   ; to level_1
             dw    %0011   ; to level_2
             dw    %0011   ; to level_3
-            dw    %0010   ; to level_4
-            dw    %0010   ; to level_5
+            dw    %0011   ; to level_4
+            dw    %0011   ; to level_5
             dw    %0010   ; to level_6
             dw    %0000   ; to level_7
             dw    %0010   ; to level_8
-            dw    %0010   ; to ending
+            dw    %0011   ; to level_2_boss
+            dw    %0011   ; to level_4_boss
+            dw    %0000   ; to ending
 BG_UPDATE_MASKS_LEVEL_8
             dw    $0000
             dw    %0010   ; to title
@@ -653,12 +746,44 @@ BG_UPDATE_MASKS_LEVEL_8
             dw    %0010   ; to level_1
             dw    %0011   ; to level_2
             dw    %0011   ; to level_3
-            dw    %0010   ; to level_4
-            dw    %0010   ; to level_5
+            dw    %0011   ; to level_4
+            dw    %0011   ; to level_5
             dw    %0010   ; to level_6
             dw    %0010   ; to level_7
             dw    %0000   ; to level_8
+            dw    %0011   ; to level_2_boss
+            dw    %0011   ; to level_4_boss
             dw    %0010   ; to ending
+BG_UPDATE_MASKS_LEVEL_2_BOSS
+            dw    $0000
+            dw    %0011   ; to title
+            dw    %0011   ; to title_2
+            dw    %0011   ; to level_1
+            dw    %0011   ; to level_2
+            dw    %0011   ; to level_3
+            dw    %0011   ; to level_4
+            dw    %0011   ; to level_5
+            dw    %0011   ; to level_6
+            dw    %0011   ; to level_7
+            dw    %0011   ; to level_8
+            dw    %0000   ; to level_2_boss
+            dw    %0000   ; to level_4_boss
+            dw    %0011   ; to ending
+BG_UPDATE_MASKS_LEVEL_4_BOSS
+            dw    $0000
+            dw    %0011   ; to title
+            dw    %0011   ; to title_2
+            dw    %0011   ; to level_1
+            dw    %0011   ; to level_2
+            dw    %0011   ; to level_3
+            dw    %0011   ; to level_4
+            dw    %0011   ; to level_5
+            dw    %0011   ; to level_6
+            dw    %0011   ; to level_7
+            dw    %0011   ; to level_8
+            dw    %0000   ; to level_2_boss
+            dw    %0000   ; to level_4_boss
+            dw    %0011   ; to ending
 BG_UPDATE_MASKS_ENDING
             dw    $0000
             dw    %0010   ; to title
@@ -666,9 +791,11 @@ BG_UPDATE_MASKS_ENDING
             dw    %0010   ; to level_1
             dw    %0011   ; to level_2
             dw    %0011   ; to level_3
-            dw    %0010   ; to level_4
-            dw    %0010   ; to level_5
+            dw    %0011   ; to level_4
+            dw    %0011   ; to level_5
             dw    %0010   ; to level_6
-            dw    %0010   ; to level_7
+            dw    %0000   ; to level_7
             dw    %0010   ; to level_8
+            dw    %0011   ; to level_2_boss
+            dw    %0011   ; to level_4_boss
             dw    %0000   ; to ending

@@ -12,6 +12,10 @@
 LoadROMData
             ldy        #svCreateRec
 LoadROMFile
+            jsr        IrqSystemEnter          ; GS/OS gets the system's interrupt handling (rom/rom_exec.s)
+            jsr        ioLoadROMFile
+            jmp        IrqSystemLeave          ; (keeps C)
+ioLoadROMFile
             sta        readRec+8               ; Number of bytes to read
             stz        readRec+10
 
@@ -46,6 +50,10 @@ PREF_FILE_SIZE equ config_game_end-config_block_start
 
             mx    %00
 LoadPrefData
+            jsr        IrqSystemEnter
+            jsr        ioLoadPrefData
+            jmp        IrqSystemLeave
+ioLoadPrefData
             lda        #PREF_FILE_SIZE
             sta        readRec+8               ; Number of bytes to read
             stz        readRec+10
@@ -101,6 +109,10 @@ LoadPrefData
 SaveROMData
             ldy        #svCreateRec
 SaveROMFile
+            jsr        IrqSystemEnter
+            jsr        ioSaveROMFile
+            jmp        IrqSystemLeave
+ioSaveROMFile
             sta        writeRec+8              ; Number of bytes to write
             stz        writeRec+10
 
@@ -141,6 +153,10 @@ SaveROMFile
 ; Returns C = 0 if the file was written, C = 1 if it could not be (e.g. a write-protected disk)
             mx    %00
 SavePrefData
+            jsr        IrqSystemEnter
+            jsr        ioSavePrefData
+            jmp        IrqSystemLeave
+ioSavePrefData
             lda        #PREF_FILE_SIZE
             sta        writeRec+8              ; Number of bytes to write
             stz        writeRec+10

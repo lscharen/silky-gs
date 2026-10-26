@@ -601,6 +601,8 @@ dmc_sound_settings_r    =     *
 
 backup_interrupt_ptr    ds  4
 apu_mode                ds  2
+apu_suspended           dw  0     ; Non-zero while the engine is suspended (the CDA menu: irqVbl in rom/rom_exec.s):
+                                  ; the ticks only keep the NES channels' oscillators silent (apu_mute)
 
 ; APU_STATS (core/Defs.s): call counters for checking the APU clock rates against the VBL rate
 ; (apu_stat_vbl is counted by schedTask in rom/rom_exec.s).  16-bit, wrapping; compare the change over a period of time.  Per VBL
@@ -613,6 +615,7 @@ apu_mode                ds  2
 ;   half clocks        2      2       2
 ;   DOC updates        1      2       4
                         DO  APU_STATS
+                        asc 'APUSTATS'    ; (marker, to find the block in a debugger's memory search)
 apu_stats
 apu_stat_vbl            dw  0     ; VBL heartbeats
 apu_stat_irq            dw  0     ; DOC interrupts seen by interrupt_handler
@@ -621,6 +624,9 @@ apu_stat_qsd            dw  0     ; APU_quarter_speed_driver calls (60Hz mode)
 apu_stat_quarter        dw  0     ; quarter_frame_clock calls
 apu_stat_half           dw  0     ; half_frame_clock calls
 apu_stat_update         dw  0     ; update_doc_registers runs
+apu_stat_nmi            dw  0     ; NES frames run (nesRunNMI): the game's frame rate against apu_stat_vbl
+apu_stat_render         dw  0     ; renders (NES_RenderFrame)
+apu_stat_chain          dw  0     ; native-mode interrupts irqHook left to the firmware (rom/rom_exec.s)
                         FIN
 
 ; Count one call in a 16-bit counter, with an 8-bit accumulator and DBR = K.  Nothing without APU_STATS.
@@ -636,7 +642,14 @@ APU_COUNT               mac
 ; APU internals
 ;-----------------------------------------------------------------------------------------
                         mx  %11
+; ]3 = the channel's _LENGTH_LOADED flag: a length counter loaded since the last DOC update is not clocked
+; until that update has shown it.  The driver clocks a whole tick's worth of the frame sequence before it
+; updates the DOC (2 half-frame clocks at 60Hz), and without this a note loaded during the tick would be
+; clocked for the part of the tick before it was written: a length of 2 (e.g. SMB's brick shatter and
+; short drum beats) would be silenced before it ever sounded.  Notes already playing are clocked as usual.
 clock_length_counter    mac
+                        lda   ]3
+                        bne   no_count
                         lda   ]1+{APU_PULSE1_REG1-APU_PULSE1}
                         bit   ]2
                         bne   no_count
@@ -764,10 +777,10 @@ envelope_out            <<<
 half_frame_clock
                         APU_COUNT apu_stat_half
 ; clock the length counters
-                        clock_length_counter APU_PULSE1;#PULSE_HALT_FLAG
-                        clock_length_counter APU_PULSE2;#PULSE_HALT_FLAG
-                        clock_length_counter APU_TRIANGLE;#TRIANGLE_HALT_FLAG
-                        clock_length_counter APU_NOISE;#NOISE_HALT_FLAG
+                        clock_length_counter APU_PULSE1;#PULSE_HALT_FLAG;APU_PULSE1_LENGTH_LOADED
+                        clock_length_counter APU_PULSE2;#PULSE_HALT_FLAG;APU_PULSE2_LENGTH_LOADED
+                        clock_length_counter APU_TRIANGLE;#TRIANGLE_HALT_FLAG;APU_TRIANGLE_LENGTH_LOADED
+                        clock_length_counter APU_NOISE;#NOISE_HALT_FLAG;APU_NOISE_LENGTH_LOADED
 
 ; clock the sweep units
                         clock_sweep  APU_PULSE1;0
@@ -812,6 +825,12 @@ APU_quarter_speed_driver    = *
                         pea  $c000
                         pld
 
+                        lda   apu_suspended             ; Suspended (the CDA menu): silent, nothing clocked
+                        beq   :qsd_run
+                        jsr   apu_mute
+                        brl   no_frame
+:qsd_run
+
 ; Quarter-speed driver (60Hz) -- one call covers a whole 4-step sequence: 2 half-frame and
 ; 4 quarter-frame clocks
                         jsr   half_frame_clock
@@ -853,7 +872,16 @@ interrupt_handler       = *
                         and   #%00111110
                         cmp   #2*interrupt_oscillator
                         beq   *+5
-                        brl   :not_timer                ; Only service timer interrupts
+                        brl   no_frame                  ; Only service timer interrupts
+
+; The timer tick.  Also entered by APU_timer_tick (irqHook's fast path), with B = K and D = $C000 pushed
+; and set, 8-bit registers, native mode.
+apu_timer_dispatch
+                        lda   apu_suspended             ; Suspended (the CDA menu): silent, nothing clocked
+                        beq   :tick_run
+                        jsr   apu_mute
+                        brl   no_frame
+:tick_run
                         APU_COUNT apu_stat_timer
 
 ; Update the frame counter and leave the doubled countin x-register for dispatch
@@ -889,6 +917,10 @@ interrupt_handler       = *
 ; Apply any changes to the DOC registers
 update_doc_registers
                         APU_COUNT apu_stat_update
+                        stz   APU_PULSE1_LENGTH_LOADED      ; the lengths loaded since the last update are
+                        stz   APU_PULSE2_LENGTH_LOADED      ; shown now: clocked from the next tick on
+                        stz   APU_TRIANGLE_LENGTH_LOADED    ; (clock_length_counter)
+                        stz   APU_NOISE_LENGTH_LOADED
 
                         jsr   access_doc_registers
 
@@ -1132,6 +1164,35 @@ no_frame
                         plb
                         clc
                         rtl
+
+; APU_timer_tick
+;
+; The DOC timer tick for irqHook (rom/rom_exec.s), which takes the timer interrupt without the firmware
+; (it has read the DOC's oscillator interrupt register, so the interrupt is acknowledged, and it saves and
+; restores the sound GLU's registers).  jsl, native mode, 8-bit registers; A, X and Y are not kept.
+                        mx    %11
+APU_timer_tick
+                        phb
+                        phd
+                        phk
+                        plb
+                        pea   $c000
+                        pld
+                        brl   apu_timer_dispatch        ; (returns with rtl through no_frame)
+
+; apu_mute: volume 0 on the NES channels' 10 oscillators (stop_playing).  update_doc_registers sets the
+; volumes again on every tick, so the sound comes back when the engine resumes.  D = $C000, 8-bit
+; registers.
+                        mx    %11
+apu_mute
+                        jsr   access_doc_registers
+                        ldx   #$40
+:mute                   stx   sound_address
+                        stz   sound_data
+                        inx
+                        cpx   #$40+10
+                        bcc   :mute
+                        rts
 
 ; X = addr
 ; A = data
@@ -1420,6 +1481,12 @@ _apu_noise_last_mode     dfb $00   ; $400E bit 7 of the wave the noise oscillato
 
 APU_STATUS      ds 1
 
+; Non-zero when the channel's length counter was loaded since the last DOC update (clock_length_counter)
+APU_PULSE1_LENGTH_LOADED    dfb 0
+APU_PULSE2_LENGTH_LOADED    dfb 0
+APU_TRIANGLE_LENGTH_LOADED  dfb 0
+APU_NOISE_LENGTH_LOADED     dfb 0
+
     mx %11
 APU_PULSE1_REG1_WRITE ENT
     stal  APU_PULSE1_REG1
@@ -1464,6 +1531,7 @@ APU_PULSE1_REG4_WRITE ENT
     stal  APU_PULSE1_LENGTH_COUNTER  ; Immediately start the counter
     lda   #1
     stal  APU_PULSE1_START_FLAG
+    stal  APU_PULSE1_LENGTH_LOADED   ; (not clocked until the next DOC update: clock_length_counter)
 
 :no_reload
     pla
@@ -1518,6 +1586,7 @@ APU_PULSE2_REG4_WRITE ENT
     stal  APU_PULSE2_LENGTH_COUNTER  ; Immediately start the counter
     lda   #1
     stal  APU_PULSE2_START_FLAG
+    stal  APU_PULSE2_LENGTH_LOADED   ; (not clocked until the next DOC update: clock_length_counter)
 
 :no_reload
     pla
@@ -1565,6 +1634,8 @@ APU_TRIANGLE_REG4_WRITE ENT
     tax
     ldal  LengthTable,x
     stal  APU_TRIANGLE_LENGTH_COUNTER  ; Immediately start the counter
+    lda   #1
+    stal  APU_TRIANGLE_LENGTH_LOADED   ; (not clocked until the next DOC update: clock_length_counter)
 
 :no_reload
     pla
@@ -1625,6 +1696,7 @@ APU_NOISE_REG4_WRITE ENT
     stal  APU_NOISE_LENGTH_COUNTER  ; Immediately start the counter
     lda   #1
     stal  APU_NOISE_START_FLAG
+    stal  APU_NOISE_LENGTH_LOADED   ; (not clocked until the next DOC update: clock_length_counter)
 
 :no_reload
     pla

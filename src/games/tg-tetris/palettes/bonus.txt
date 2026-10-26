@@ -1,10 +1,19 @@
-; The level-up bonus animation (the dancers): updatePalette 5 = spritePalette2 in rom_code.s, and both
-; playfields in piecePaletteIndexB ($30 $16 $0F, setPlayfieldPalette with Y = $0B)
+; The level-up bonus animation (the dancers): updatePalette 5 = spritePalette2 in rom_code.s, and the
+; playfields in piecePaletteIndexB ($30 $16 $0F, setPlayfieldPalette with Y = $0B; checkLevelUp).
+;
+; Only BG0 is set in a one player or co-op game, and in a two player game only the playfields of the
+; players still in, so BG1 keeps the game's colors in a one player game ($27 $18 $08) and the level's
+; colors when player 2 is out: BG1 is reserved, so the palette is detected in every mode (otherwise the
+; game's layout stays, and a dancer in SP3, unloaded there, isn't shown).  BG0 is set whenever player 1
+; is in.
+;
+; The dancers use SP0, SP2 and SP3 (L8E78).  showLevelBonus moves the pieces' sprites off the screen,
+; so SP1 (player 2's falling piece) isn't shown: unused, which leaves room for BG1's slots.
 BG0: $0F $30 $16 $0F
-BG1: $0F $30 $16 $0F
+BG1: $0F *$30 *$16 *$0F
 BG2: $0F $31 $21 $01
 BG3: $0F $30 $16 $00
 SP0: $0F $35 $16 $12
-SP1: $0F $12 $24 $1B
+SP1: $0F -- -- --
 SP2: $0F $35 $1A $37
 SP3: $0F $35 $18 $24

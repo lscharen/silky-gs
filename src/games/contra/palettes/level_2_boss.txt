@@ -1,0 +1,12 @@
+; level_2_boss -- the base 1 boss screen (load_alternate_graphics: lvl_alt_collision_and_palette_tbl, level 2)
+; BG $11 $12 $13 $16, SP $00 $01 $22 $21.  BG2:1 cycles $06/$16/$26 (indoor_boss_palette_2_index $13-$15)
+; and BG3:3 cycles $06/$16/$26 (LEVEL_PALETTE_CYCLE_INDEXES $16-$18).
+
+BG0: $0F $06 $00 $08
+BG1: $0F $20 $00 $08
+BG2: $0F *$06 $00 $08
+BG3: $0F $20 $00 *$06
+SP0: $0F $37 $12 $0f
+SP1: $0F $36 $16 $0f
+SP2: $0F $20 $26 $16
+SP3: $0F $20 $22 $02

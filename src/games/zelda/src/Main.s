@@ -11,6 +11,7 @@
             use   GTE.Macs.s
             put    ../../../Externals.s
             put    ../../../core/Defs.s
+            put    ../../../rom/rom_kbd_macs.s
             put    ../../../ImportEngine.s
 ; AUTOINC:END
 
@@ -318,8 +319,6 @@ Z_RenderScreen ENT
             put    ../../../rom/rom_helpers.s
             put    ../../../rom/rom_input.s
             put    ../../../rom/rom_kbd_basic.s
-            put    ../../../rom/rom_kbd_j13.s
-            put    ../../../rom/rom_kbd_adb.s
             put    ../../../rom/rom_exec.s
             put    ../../../rom/rom_config.s
             put    ../../../rom/rom_config_setup.s
