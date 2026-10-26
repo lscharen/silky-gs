@@ -149,10 +149,14 @@ _GrafOn
                  lda   #$C1              ; SHR On, Linear Memory Map On, Ignore Bank Latch
                  stal  NEW_VIDEO_REG
                  rep   #$20
+                 lda   #1                ; The engine has the display (irqVbl, rom/rom_exec.s: SHR off after
+                 stal  engineVideoOn     ; this means the CDA menu has it)
                  rts
 
                  mx    %00
 _GrafOff
+                 lda   #0
+                 stal  engineVideoOn
                  sep   #$20
                  lda   #$01              ; SHR Off, Linear Memory Map Off
                  stal  NEW_VIDEO_REG

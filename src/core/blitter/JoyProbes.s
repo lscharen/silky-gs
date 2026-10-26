@@ -281,11 +281,12 @@ joyScanOpen dw    0                         ; Set by the strobe, cleared by the 
 
 ; JoyScanService
 ;
-; Called (jsl) by irqHook for a scanline interrupt while armed, with interrupts off, native mode, 16-bit
-; registers, any DBR / D.  Clears the interrupt.  Preserves every register.
+; Called (jsl) by irqHook for a scanline interrupt while armed (irqHook has cleared it), with interrupts
+; off, native mode, any register widths, DBR and D.  Preserves every register.
             mx    %00
 JoyScanService ENT
             php
+            rep   #$30
             pha
             phx
             phb
@@ -293,8 +294,6 @@ JoyScanService ENT
             plb
             sep   #$20
             mx    %10
-            lda   #$FF-$20
-            stal  VGC_INT_CLEAR             ; Clear the scanline interrupt
             JOY_BITS
             xba                             ; (kept in B)
             JOY_NOW

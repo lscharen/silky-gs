@@ -416,6 +416,8 @@ NES_ShutDown
             FIN
             jsr   ShutDown
 
+            lda   #0                       ; The engine gives up the display (irqVbl's suspension test)
+            stal  engineVideoOn
             sep   #$20                     ; The shadowing and video modes the game started with
             lda   SavedShadow
             stal  SHADOW_REG

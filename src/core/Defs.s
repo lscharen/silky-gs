@@ -8,17 +8,22 @@ VBL_HORZ_REG           equ   $E0C02F
 
 VOC_CONTROL_REG        equ   $00C0B1
 
-KBD_REG                equ   $E0C000
-KBD_STROBE_REG         equ   $E0C010
 VBL_STATE_REG          equ   $E0C019
-MOD_REG                equ   $E0C025      ; Modifier key register
-COMMAND_KEY_REG        equ   $E0C061
-OPTION_KEY_REG         equ   $E0C062
 
-MOD_REG_SHIFT_DOWN     equ   $01
-MOD_REG_CONTROL_DOWN   equ   $02
-MOD_REG_OPTION_DOWN    equ   $40
-MOD_REG_COMMAND_DOWN   equ   $80
+; The keyboard drivers of the KEYBOARD input type (config_kbd_driver, KbdDriverPad in core/CoreImpl.s).
+; The keyboard hardware ($C000, $C010, $C025, $C061 / $C062) is only touched in the driver files, which
+; define their own equates.
+; BASIC (rom/rom_kbd_basic.s) is always built.  J13 and ADB are optional: a flag of 1 builds the driver's
+; hooks, and its file must then be added to src/runtime/code.txt (ADB also needs rom_kbd_j13.s).
+KBD_DRIVER_BASIC       equ   0
+KBD_DRIVER_J13         equ   2
+KBD_DRIVER_ADB         equ   4
+KBD_J13                equ   0            ; rom/rom_kbd_j13.s
+KBD_ADB                equ   0            ; rom/rom_kbd_adb.s
+
+; The A / B buttons' mapping (config_input_button_a, ...): the soft switch each one reads
+BUTTON_SWITCH_C061     equ   $61
+BUTTON_SWITCH_C062     equ   $62
 
 SHADOW_SCREEN          equ   $012000
 SHADOW_SCREEN_SCB      equ   $019D00
