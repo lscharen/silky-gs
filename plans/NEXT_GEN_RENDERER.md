@@ -163,7 +163,56 @@ A scrolling frame also stops paying for the PEA field's patching. For reference,
 split renders costing 30.9M, of which 22M was the blit itself, so ~24K per render went to the work around
 the blit (patching, setup, sprites, latching). The threaded design should reach at least parity on full
 renders and probably beat them, if a shadowed write costs the same inside a `sta abs,y` as inside a `pei`.
-That is the number to measure first: GSSquared may not model the slow writes faithfully.
+That is the number to measure first: GSSquared may not model the slow writes faithfully. Counted in real
+time instead of cycles (see "Write timing"), the per-word comparison is about 4.8 us today against 3.0 us
+for a direct store.
+
+### Write timing
+
+Writes to the Super Hi-Res screen (and through shadowing into it) go to the 1MHz side of the machine, and
+the fast side waits to synchronize with it. Apple IIGS Technical Note #70, "Fast Graphics Hints"
+(https://apple2.gs/technotes/tn-iigs-070/), gives the real time per write for a run of writes spaced by the
+same number of fast cycles:
+
+| Fast cycles per write (word) | Real time per word |
+|---|---|
+| 4 to 6 | 3.0 us |
+| 7 to 8 | 4.0 us |
+| 9 to 11 | 5.0 us |
+
+(For byte writes: 3 to 5 cycles, 2.0 us; 6 to 8, 3.0 us; 9 to 11, 4.0 us.) The technote adds that the first
+write of a run takes longer, because the synchronization happens then, and that refresh delays byte writes
+more often than word writes, so word writes are preferred.
+
+What follows from it:
+
+- **Instruction cycles stop mattering below 7.** A 5-cycle and a 6-cycle store in a run both take 3.0 us. A
+  direct, shadowed `sta abs,y` (6 cycles) costs the same real time as a `pei` (6) or a `pea` (5).
+- **The direct write against today's path.** Today a background word costs a `pea` into bank $01 with
+  shadowing off (fast RAM, no synchronization: 5 cycles, about 1.8 us at 2.8MHz) plus a `pei` in the slam
+  (3.0 us): about 4.8 us. A direct shadowed `sta` costs 3.0 us, about 35-40% less, as long as the stores run
+  back to back.
+- **Spacing is the constraint.** More than 6 fast cycles between two writes puts the second one in a slower
+  bucket. A value change (`lda #` 3 + `sta abs,y` 6 = 9 cycles) costs 5.0 us for that word, so grouping the
+  words by value matters more than it does in fast RAM. Background tiles are opaque (NES color 0 is the
+  background color), so they need no read-mask-write: only loads and stores. The dispatch between tiles
+  (`plx` / `ply` / `rtl`) is a gap before each tile's first write, which pays the synchronization.
+- **Direct page stores do not save time on their own.** A 5-cycle `sta dp` falls in the same bucket as the
+  6-cycle `sta abs,y`. What D = the screen address would buy is registers: there is no indexed `stx` / `sty`
+  for a screen address, but `stx dp` / `sty dp` exist, so X and Y could hold two more pixel values and a tile
+  with up to three distinct words would need no reloads between its stores. The cost is the reach:
+  non-indexed `sta dp` covers 256 bytes from D, a tile spans 8 lines x 160 bytes, so D has to be re-based
+  for every pair of lines (offsets 0-163). A dispatch of `pld` (5) + `rtl` (6) instead of `plx` / `ply` /
+  `rtl` (16) gets D from the thread and frees X and Y; with four D values per tile, each `pld` puts a
+  10-cycle gap (5.0 us) before the next write, about +6 us on a ~48 us tile, which pays only when the
+  reloads it saves are worth more.
+- **The composited cells are not affected.** Cells under sprites are drawn with shadowing off, in fast RAM,
+  where the instruction cycles are the real cost; their expose copy to the screen is a slow-side run like the
+  slam.
+
+These numbers describe the hardware's bus synchronization. GSSquared's cycle counts may not model them, so
+the direct write cost has to be measured on hardware (or a cycle-accurate model of the FPI / Mega II
+synchronization) before anything is built on it.
 
 ### Bookkeeping
 
@@ -213,8 +262,10 @@ on a miss. CHR-RAM games already compile background tiles on demand.
 
 ### What to measure first
 
-1. **The direct write cost:** cycles for a compiled 8x8 tile written with shadowing on, against `pea` + `pei`
-   for the same 16 words, on real hardware.
+1. **The direct write cost:** real time for a compiled 8x8 tile written with shadowing on (16 stores grouped
+   by value), against `pea` into bank $01 plus a `pei` slam of the same 16 words, on real hardware. Check the
+   technote's buckets on the way: a run of `sta abs,y` against a run of `sta dp`, and the cost of one value
+   change in a run.
 2. **The PEA side's overhead:** profile SMB's scrolling window with breakpoints around `_BltSetupAlt`, the
    exit restore and the blit, to separate patching from pushing.
 3. **The thread build:** a column-major thread for a full SMB scrolling frame, against today's full render.
