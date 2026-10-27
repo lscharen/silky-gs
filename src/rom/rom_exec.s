@@ -64,17 +64,6 @@ renderVblTicks ENT
 singleStepMode dw  0                      ; If non-zero, the runtime will wait for a user keypress between frames
 nesStackTop dw    0                       ; Initial NES stack pointer (top of the NES stack page)
 
-; mapper state
-mapper_bank ENT
-            ds    2                       ; 64kb IIgs bank that holds the current active 16kb NES bank. 2 bytes for convenience.
-
-; CHR-ROM bank switching (CNROM): the 8KB CHR-ROM bank the ROM selected, and a flag set when it changes.
-; The ROM's bank write sets both; the game's PRE_RENDER loads the bank into CHR_ROM (PPU_ReloadCHR).
-ppu_bank    ENT
-            ds    2
-ppu_bank_changed ENT
-            ds    2
-
 ; switchTask
 ;
 ; Voluntarily give the CPU to the other task.  Returns when this task is scheduled

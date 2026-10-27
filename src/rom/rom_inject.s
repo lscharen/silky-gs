@@ -6,16 +6,11 @@
 ; External wrapper is responsible for setting the stack
 
 ; These are external labels that implement the PPU function found in ppu/ppu.s
-PPUCTRL_WRITE         EXT
-PPUMASK_WRITE         EXT
 PPUSTATUS_READ        EXT
-PPUSTATUS_READ_X      EXT
-OAMADDR_WRITE         EXT
-PPUSCROLL_WRITE       EXT
-PPUADDR_WRITE         EXT
-PPUDATA_READ          EXT
-PPUDATA_WRITE         EXT
 PPUDMA_WRITE          EXT
+PPUDATA_WRITE_CHR     EXT
+PPUDATA_WRITE_PAL     EXT
+ntmWriteTail          EXT       ; ppu/ppu_queues.s: queue a changed nametable byte
 
 ; These are external labels that implement the PPU function found in apu/apu.s
 APU_PULSE1_REG1_WRITE   EXT
@@ -53,6 +48,9 @@ mapper_bank EXT
 mmc1_shft   EXT
 mmc1_regs   EXT
 
+PPU_MEM     EXT                          ; The PPU memory bank (palette RAM reads)
+PPU_CIRAM   EXT                          ; The nametable RAM (unchanged-byte check)
+
 ; Mirror control variables
 PendingMirrorMode EXT
 MirrorMaskLong    EXT
@@ -88,7 +86,7 @@ MMC1_SHIFT  mac
             bit   #$80         ; high-bit set --> register reset
             beq   shft
             lda   #$10
-            stal  mmc1_shft    ; "reset" == set the detection bit in bit 4
+            sta   mmc1_shft    ; "reset" == set the detection bit in bit 4
             pla
             plp
             rts
@@ -96,13 +94,13 @@ shft
             and   #$01         ; isolate the bottom bit
             beq   zero
             lda   #$20         ; inject bit
-            oral  mmc1_shft
-            stal  mmc1_shft
+            ora   mmc1_shft
+            sta   mmc1_shft
 
 zero
-            ldal  mmc1_shft    ; serial shift
+            lda   mmc1_shft    ; serial shift
             lsr
-            stal  mmc1_shft
+            sta   mmc1_shft
             bcs   done         ; is the shift register full?
 
             pla                ; no, return
@@ -114,7 +112,7 @@ done
 
 MMC1_RTN    mac
             lda   #$10         ; reset the shift register automatically (as documented)
-            stal  mmc1_shft
+            sta   mmc1_shft
 
             pla
             plp
@@ -184,7 +182,7 @@ STA_MMC1_REG3
             and   #$07
             clc
             adc   #^ROMBase
-            stal  mapper_bank       ; This is the IIgs memory bank, not the NES data bank
+            sta   mapper_bank       ; This is the IIgs memory bank, not the NES data bank
 
 ; Trampoline to pass control to the other bank.  This rom_inject file must be replicated in
 ; every bank at the same address so that a long jump into the new mapper_bank will still
@@ -204,7 +202,7 @@ SET_MMC1_REG3
             and   #$07
             clc
             adc   #^ROMBase
-            stal  mapper_bank
+            sta   mapper_bank
             stal  :patch+3
 :patch      jml   :done
 :done
@@ -218,7 +216,7 @@ SET_MMC1_REG3_FAST
             and   #$07
             clc
             adc   #^ROMBase
-            stal  mapper_bank
+            sta   mapper_bank
             stal  :patch+3
 :patch      jml   :done
 :done
@@ -636,101 +634,317 @@ STA_4016    rts
 
 LDA_4016
 LDA_4016_X
-            lda #0          ; no input
-            rts
+        lda #0                ; no input
+        rts
 
-; Hooks to call back to the harness for PPU memory-mapped accesses
+; $2000 - PPUCTRL (Write only)
+;
+; Only the VRAM increment is resolved here, because the next $2007 access (NES task) needs it right away.
 STA_2000
-            jsl  PPUCTRL_WRITE
-            rts
-STX_2000
-            php
-            phx
-            pha
-            txa
-            jsl  PPUCTRL_WRITE
-            pla
-            plx
-            plp
-            rts
+        php
+        cmp  ppuctrl
+        beq  :fast_exit
 
+        sta  ppuctrl
+        pha
+        and  #$04             ; Set the vram increment
+        beq  :v1
+        lda  #$21
+:v1     eor  #$01
+        sta  ppuincr          ; just the low byte
+        pla
+
+:fast_exit
+        plp
+        rts
+
+STX_2000
+        php
+        cpx  ppuctrl
+        beq  :fast_exit
+
+        stx  ppuctrl
+        pha
+        txa
+        and  #$04             ; Set the vram increment
+        beq  :v1
+        lda  #$21
+:v1     eor  #$01
+        sta  ppuincr          ; just the low byte
+        pla
+
+:fast_exit
+        plp
+        rts
+
+; $2001 - PPUMASK (Write only)
 
 STA_2001
-            jsl  PPUMASK_WRITE
-            rts
+        sta  ppumask
+        rts
+
+
+        mx    %11
 STX_2001
-            php
-            phx
-            pha
-            txa
-            jsl  PPUMASK_WRITE
-            pla
-            plx
-            plp
-            rts
+        stx  ppumask
+        rts
 
-
-
+; $2002 - PPUSTATUS For "lda ppustatus"
+        mx    %11
 LDA_2002
-            jsl  PPUSTATUS_READ
-            rts
+        lda  #1
+        sta  w_bit
+
+        lda  ppustatus
+        bpl  :out
+        and  #$7F            ; Clear the VBL flag
+        sta  ppustatus
+        ora  #$80            ; Restore negative value
+:out
+        rts
+
+        mx    %11
 LDX_2002
-            pha                   ; space
-            php
-            pha                   ; save
-            jsl  PPUSTATUS_READ
-            sta  3,s
-            pla
-            plp
-            plx
-            rts
+        ldx  #1
+        stx  w_bit
 
+        ldx  ppustatus
+        bpl  :out
+
+        rol  ppustatus      ; Clear the VBL flag without A: bit 0 = C, C = 1 (the VBL bit)
+        clc
+        ror  ppustatus      ; bit 7 = 0, C = bit 0 = the caller's carry
+
+        inx                 ; reset the status flags
+        dex
+
+:out
+        rts
+
+; $2003 - OAM ADDR
+        mx    %11
 STA_2003
-            jsl  OAMADDR_WRITE
-            rts
-STA_2005
-            jsl  PPUSCROLL_WRITE
-            rts
-STA_2006
-            jsl  PPUADDR_WRITE
-            rts
-STY_2006
-            php
-            phy
-            pha
-            tya
-            jsl  PPUADDR_WRITE
-            pla
-            ply
-            plp
-            rts
-STX_2006
-            php
-            phx
-            pha
-            txa
-            jsl  PPUADDR_WRITE
-            pla
-            plx
-            plp
-            rts
+        sta  oamaddr
+        rts
 
+; $2005 - PPU SCROLL
+        mx    %11
+STA_2005
+        php
+        phx
+
+        ldx  w_bit
+        sta  ppuscroll,x
+
+        dex
+        bpl  :ok
+        ldx  #1
+:ok     stx  w_bit
+
+        plx
+        plp
+        rts
+
+; $2006 - PPUADDR
+        mx    %11
+STA_2006
+        php
+        phx
+
+        ldx  w_bit
+        sta  ppuaddr,x
+
+        dex
+        bpl  :ok
+        ldx  #1
+:ok     stx  w_bit
+
+        plx
+        plp
+        rts
+
+        mx    %11
+STY_2006
+        php
+        phy
+        pha
+
+        tya
+        ldy  w_bit
+        sta  ppuaddr,y
+
+        dey
+        bpl  :ok
+        ldy  #1
+:ok     sty  w_bit
+
+        pla
+        ply
+        plp
+        rts
+
+        mx    %11
+STX_2006
+        php
+        phx
+        pha
+
+        txa
+        ldx  w_bit
+        sta  ppuaddr,x
+
+        dex
+        bpl  :ok
+        ldx  #1
+:ok     stx  w_bit
+
+        pla
+        plx
+        plp
+        rts
+
+        mx    %11
 LDA_2007
-            jsl  PPUDATA_READ
-            rts
+        phx
+
+        rep  #$31
+        lda  ppuaddr    ; Load and update the ppu address (guaranteed to be in the range $0000 - $3FFF)
+        tax
+        adc  ppuincr
+        sta  ppuaddr
+
+        cpx  #$3F00     ; If we're reading palette RAM, return the value immediately
+        bcc  :buff_read
+
+        sep  #$20
+        ldal PPU_MEM,x
+        sep  #$10
+        plx
+        ora  #0         ; N / Z from the value, like lda (C and V unchanged)
+        rts
+
+        mx   %00
+:buff_read
+        cpx  #$2000
+        bcc  :chr_read    ; Pattern table ($0000 - $1FFF): read CHR memory, not CIRAM
+
+        txa
+
+        andl MirrorMaskLong           ; ppu2ciram (macros are not loaded in the ROM segment)
+        cmp  #$0800
+        bcc  *+5
+        eor  #$0C00
+
+        tax
+
+        sep  #$20       ; 8-bit acc/16-bit regs
+        lda  vram_buff
+        stal :p2+1      ; (long: the copy of this code in the bank being executed, not the data bank's)
+        ldal PPU_CIRAM,x
+        sta  vram_buff
+        sep  #$30
+
+        plx
+:p2     lda  #0
+        rts
+
+; CHR-ROM / CHR-RAM lives at PPU_MEM $0000 - $1FFF (CHR-RAM writes in PPUDATA_WRITE store there too).
+; SMB's title screen and Ice Climber's title / score screens are loaded by reading data stored in CHR.
+        mx   %00
+:chr_read
+        sep  #$20       ; 8-bit acc/16-bit regs
+        lda  vram_buff
+        stal :p3+1
+        ldal PPU_MEM,x
+        sta  vram_buff
+        sep  #$30
+
+        plx
+:p3     lda  #0
+        rts
+
+        mx    %11
+; PPUDATA_WRITE - Keep the fast path in the bank
 STA_2007
-            jsl  PPUDATA_WRITE
-            rts
+        php
+        pha
+        phx
+
+        rep  #$31
+        lda  ppuaddr                  ; Load and update the ppu address (guaranteed to be in the range $0000 - $3FFF)
+        tax
+        adc  ppuincr
+        sta  ppuaddr
+
+        cpx  #$2000
+        DO   HAS_CHR_RAM
+        bcs  :not_chr
+        sep  #$20
+        lda  2,s
+        cmpl PPU_MEM,x
+        beq  :done
+        stal PPU_MEM,x
+        jsl  PPUDATA_WRITE_CHR
+        bra  :done
+:not_chr
+        ELSE
+        bcc  :done
+        FIN
+
+        cpx  #$3000
+        bcc  :in_nt
+
+        cpx  #$3F00
+        bcs  :pal
+
+:done
+        sep  #$30
+        plx
+        pla
+        plp
+        rts
+
+        mx  %00
+:in_nt  txa
+        andl MirrorMaskLong           ; ppu2ciram (macros are not loaded in the ROM segment)
+        cmp  #$0800
+        bcc  *+5
+        eor  #$0C00
+        tax
+
+        sep  #$20
+        lda  2,s
+        cmpl PPU_CIRAM,x
+        beq  :done
+        stal PPU_CIRAM,x
+
+        jsl  ntmWriteTail
+        bra  :done
+
+        mx   %00
+:pal    txa
+        and  #$3F1F                ; clamp to the palette mirroring range
+        tax
+
+        sep  #$20
+        lda  2,s
+        cmpl PPU_MEM,x                  ; x is the logical PPU address here (>= $3F00)
+        beq  :done                      ; Palette updates can be *very* expensive, so skip if no change
+        stal PPU_MEM,x
+        
+        jsl  PPUDATA_WRITE_PAL
+        bra  :done
+
+        mx    %11
 STX_2007
-            php
-            phx
-            pha
-            txa
-            jsl  PPUDATA_WRITE
-            pla
-            plx
-            plp
-            rts
+        php             ; (STA_2007 preserves X)
+        pha
+        txa
+        jsr  STA_2007
+        pla
+        plp
+        rts
+
 STA_4014
             jsl  PPUDMA_WRITE
             rts

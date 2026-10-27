@@ -16,3 +16,14 @@ CHR_ROM              EXT
 ; Array to hold the excluded scanlines and tile IDs for sprites
 y_exclude            EXT
 tile_exclude         EXT
+
+; Core PPU/APU shadow registers
+ppuctrl              EXT
+ppustatus            EXT
+ppuscroll            EXT
+ppumask              EXT
+w_bit                EXT
+
+mapper_bank          EXT
+ppu_bank             EXT
+ppu_bank_changed     EXT

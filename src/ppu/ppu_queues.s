@@ -68,7 +68,11 @@ ntmFlushEnd dw    0                         ; PPUFlushQueuesAlt: end of the list
 ; The *Site* operands address the current buffer and are moved by PPUFreezeNametableUpdates, so this
 ; routine uses global labels only.  Y belongs to the ROM and is preserved.
             mx    %10
-ntmWriteTail
+ntmWriteTail ENT
+            phb
+            phk
+            plb
+
 ntmSiteD    stal  PPU_MEM+NTM_SB0,x           ; The byte, for the render that reads this buffer
             sty   ntmY
             lda   #0
@@ -103,11 +107,13 @@ ntmSiteL    sta   at_list,x
             inx
             stx   at_count
 ntmDone     ldy   ntmY
-ntmExit     sep   #$30
-            plx
-            pla
+ntmExit
+;            sep   #$30
+;            plx
+;            pla
+;            plb
+;            plp
             plb
-            plp
             rtl
 
             mx    %10                         ; (entered from ntmAttr: 8-bit A, 16-bit X/Y)

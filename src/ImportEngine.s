@@ -37,7 +37,6 @@ PPU_SetPaletteWritesL   EXT   ; ppu/ppu_palette.s: the generated palette code (p
 
 ; Data
 ppuPalDirty             EXT
-ppumask_override        EXT
 Mul160Tbl               EXT
 _ppumask                EXT
 sprClipTop              EXT
@@ -47,5 +46,3 @@ PendingMirrorMode       EXT
 MirrorMaskLong          EXT
 CIRAMRowMask            EXT
 CIRAMColMask            EXT
-ppuctrl                 EXT
-ppustatus               EXT

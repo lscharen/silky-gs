@@ -35,7 +35,7 @@ RenderLatch ENT
             jsl  CUSTOM_PPU_CTRL_LOCK_ADDR
             bcs  :ctrl
             FIN
-            lda  ppuctrl
+            ldal ppuctrl
 :ctrl       sta  _ppuctrl
             jsr  PPUCtrlDecode            ; Resolve the pattern table addresses from the last PPUCTRL write
 
@@ -43,15 +43,15 @@ RenderLatch ENT
             jsl  CUSTOM_PPU_SCROLL_LOCK_ADDR
             bcs  :scroll
             FIN
-            lda  ppuscroll
+            ldal ppuscroll
 :scroll     sep  #$20
             sta  _ppuscroll_y             ; 8-bit values are not contiguous in order to allow blended 8/16 access
             xba
             sta  _ppuscroll_x
             rep  #$20
 
-            lda  ppumask
-            and  ppumask_override
+            ldal ppumask
+            andl ppumask_override
             sta  _ppumask
 
             and  #NES_PPUMASK_BG         ; honor the PPU enable flags for sprites and background. It's important to 
@@ -142,6 +142,37 @@ RenderDraw ENT
             stz   DirtyBits
             plb
             rtl
+
+; The pattern tables PPUCTRL selects, as the offset of the table's tiles in the tiledata and compile
+; banks (512 tiles of 128 bytes): $8000 for the table at $1000, else $0000.  Both start at $0000, like
+; PPUCTRL at power on.  Set by PPUCtrlDecode, for each render.
+spadr_hi  dw $0000 ; Sprites: PPUCTRL bit 3
+bgadr_hi  dw $0000 ; Background: PPUCTRL bit 4
+
+; PPUCtrlDecode
+;
+; Resolve the render's pattern tables from the last PPUCTRL write (spadr_hi, bgadr_hi).  A change of
+; the background table makes every tile in the PEA field stale, so it also asks for every tile to be
+; redrawn (DIRTY_BIT_TILE_REDRAW, done by RenderDraw).  Called by RenderLatch, with interrupts off,
+; before anything in the render reads them.  Only A is changed.  DBR = K.
+        mx    %00
+PPUCtrlDecode
+        ldal ppuctrl          ; (only the low byte is ever written, so the high byte is 0)
+        and  #$0008           ; Sprite pattern table
+        beq  :sp
+        lda  #$8000
+:sp     sta  spadr_hi
+
+        ldal ppuctrl
+        and  #$0010           ; Background pattern table
+        beq  :bg
+        lda  #$8000
+:bg     cmp  bgadr_hi
+        beq  :same
+        sta  bgadr_hi
+        lda  #DIRTY_BIT_TILE_REDRAW
+        tsb  DirtyBits
+:same   rts
 
 ; The PPUMASK enable bits, latched by RenderLatch (moved here from ControlBits.s)
 ;

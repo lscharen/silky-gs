@@ -17,3 +17,5 @@ config_input_p2_type    EXT
 config_joy_cx           EXT
 config_joy_cy           EXT
 config_joy_sens         EXT
+
+ppumask_override        EXT   ; rom/scaffold.s: PPUMASK bits the runtime overrides (RenderLatch)

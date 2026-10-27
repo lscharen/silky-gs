@@ -5,6 +5,7 @@ SetMirrorMode  EXT
 ROMBase ENT
 
             put   ../../../core/Defs.s
+            put   Config.s                    ; HAS_CHR_RAM and the other engine constants rom_inject.s tests
 
 ; Pad up to $5000
             ds    $5000-*
@@ -33,6 +34,8 @@ tile_exclude ENT                  ; Table of excluded tiles
             ds $61-$1D,$00
             db $01                ; Tile $61 - fake "bomb" used for sprite-0 hit detection when scrolling
             ds $9E,$00
+
+            put   ../../../ppu/ppu_reg_vars.s ; The PPU state (not replicated: the other banks reach it with DBR = this bank)
 
 ; Create stubs to handle converting self-references into long addressing so it works when the ROM code is
 ; in another IIgs memory bank.  Our memory model keeps the PBR in a fixed bank so that any access to RAM
