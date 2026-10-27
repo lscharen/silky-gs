@@ -6,41 +6,51 @@
 ; External wrapper is responsible for setting the stack
 
 ; These are external labels that implement the PPU function found in ppu/ppu.s
-PPUCTRL_WRITE         EXT
-PPUMASK_WRITE         EXT
 PPUSTATUS_READ        EXT
-PPUSTATUS_READ_X      EXT
-OAMADDR_WRITE         EXT
-PPUSCROLL_WRITE       EXT
-PPUADDR_WRITE         EXT
-PPUDATA_READ          EXT
-PPUDATA_WRITE         EXT
 PPUDMA_WRITE          EXT
+PPUDATA_WRITE_CHR     EXT
+PPUDATA_WRITE_PAL     EXT
+ntmWriteTail          EXT       ; ppu/ppu_queues.s: queue a changed nametable byte
 
-; These are external labels that implement the PPU function found in apu/apu.s
-APU_PULSE1_REG1_WRITE   EXT
-APU_PULSE1_REG2_WRITE   EXT
-APU_PULSE1_REG3_WRITE   EXT
-APU_PULSE1_REG4_WRITE   EXT
-APU_PULSE2_REG1_WRITE   EXT
-APU_PULSE2_REG2_WRITE   EXT
-APU_PULSE2_REG3_WRITE   EXT
-APU_PULSE2_REG4_WRITE   EXT
-APU_TRIANGLE_REG1_WRITE EXT
-;APU_TRIANGLE_REG2_WRITE EXT
-APU_TRIANGLE_REG3_WRITE EXT
-APU_TRIANGLE_REG4_WRITE EXT
-APU_NOISE_REG1_WRITE    EXT
-APU_NOISE_REG2_WRITE    EXT
-APU_NOISE_REG3_WRITE    EXT
-APU_NOISE_REG4_WRITE    EXT
-
-APU_DMC_REG1_WRITE      EXT
-APU_DMC_REG2_WRITE      EXT
-APU_DMC_REG3_WRITE      EXT
-APU_DMC_REG4_WRITE      EXT
-APU_STATUS_WRITE        EXT
-APU_STATUS_READ         EXT
+; The APU state in apu/apu.s (the APU register shims write it with long addressing), and the DMC start /
+; stop entry
+APU_PULSE1_REG1             EXT
+APU_PULSE1_REG2             EXT
+APU_PULSE1_LENGTH_COUNTER   EXT
+APU_PULSE1_RELOAD_FLAG      EXT
+APU_PULSE1_START_FLAG       EXT
+APU_PULSE1_CURRENT_PERIOD   EXT
+APU_PULSE1_CURRENT_PERIOD_HI EXT
+APU_PULSE2_REG1             EXT
+APU_PULSE2_REG2             EXT
+APU_PULSE2_LENGTH_COUNTER   EXT
+APU_PULSE2_RELOAD_FLAG      EXT
+APU_PULSE2_START_FLAG       EXT
+APU_PULSE2_CURRENT_PERIOD   EXT
+APU_PULSE2_CURRENT_PERIOD_HI EXT
+APU_TRIANGLE_REG1           EXT
+APU_TRIANGLE_LENGTH_COUNTER EXT
+APU_TRIANGLE_START_FLAG     EXT
+APU_TRIANGLE_CURRENT_PERIOD EXT
+APU_TRIANGLE_CURRENT_PERIOD_HI EXT
+APU_NOISE_REG1              EXT
+APU_NOISE_REG3              EXT
+APU_NOISE_LENGTH_COUNTER    EXT
+APU_NOISE_START_FLAG        EXT
+APU_NOISE_CURRENT_PERIOD    EXT
+APU_PULSE1_LENGTH_LOADED    EXT
+APU_PULSE2_LENGTH_LOADED    EXT
+APU_TRIANGLE_LENGTH_LOADED  EXT
+APU_NOISE_LENGTH_LOADED     EXT
+APU_STATUS                  EXT
+APU_FORCE_OFF               EXT
+APU_DMC_REG1                EXT
+APU_DMC_REG2                EXT
+APU_DMC_REG3                EXT
+APU_DMC_REG4                EXT
+LengthTable                 EXT
+NoiseFreqTable              EXT
+APU_DMC_STATUS              EXT
 
 ; Cooperative multitasking return vector.  Allows the non-interrupt ROM code to yield
 ; control back to the IIgs runtime.  Control will be returned the the caller of the
@@ -52,6 +62,9 @@ ROMBase     EXT
 mapper_bank EXT
 mmc1_shft   EXT
 mmc1_regs   EXT
+
+PPU_MEM     EXT                          ; The PPU memory bank (palette RAM reads)
+PPU_CIRAM   EXT                          ; The nametable RAM (unchanged-byte check)
 
 ; Mirror control variables
 PendingMirrorMode EXT
@@ -88,7 +101,7 @@ MMC1_SHIFT  mac
             bit   #$80         ; high-bit set --> register reset
             beq   shft
             lda   #$10
-            stal  mmc1_shft    ; "reset" == set the detection bit in bit 4
+            sta   mmc1_shft    ; "reset" == set the detection bit in bit 4
             pla
             plp
             rts
@@ -96,13 +109,13 @@ shft
             and   #$01         ; isolate the bottom bit
             beq   zero
             lda   #$20         ; inject bit
-            oral  mmc1_shft
-            stal  mmc1_shft
+            ora   mmc1_shft
+            sta   mmc1_shft
 
 zero
-            ldal  mmc1_shft    ; serial shift
+            lda   mmc1_shft    ; serial shift
             lsr
-            stal  mmc1_shft
+            sta   mmc1_shft
             bcs   done         ; is the shift register full?
 
             pla                ; no, return
@@ -114,7 +127,7 @@ done
 
 MMC1_RTN    mac
             lda   #$10         ; reset the shift register automatically (as documented)
-            stal  mmc1_shft
+            sta   mmc1_shft
 
             pla
             plp
@@ -184,7 +197,7 @@ STA_MMC1_REG3
             and   #$07
             clc
             adc   #^ROMBase
-            stal  mapper_bank       ; This is the IIgs memory bank, not the NES data bank
+            sta   mapper_bank       ; This is the IIgs memory bank, not the NES data bank
 
 ; Trampoline to pass control to the other bank.  This rom_inject file must be replicated in
 ; every bank at the same address so that a long jump into the new mapper_bank will still
@@ -204,7 +217,7 @@ SET_MMC1_REG3
             and   #$07
             clc
             adc   #^ROMBase
-            stal  mapper_bank
+            sta   mapper_bank
             stal  :patch+3
 :patch      jml   :done
 :done
@@ -218,7 +231,7 @@ SET_MMC1_REG3_FAST
             and   #$07
             clc
             adc   #^ROMBase
-            stal  mapper_bank
+            sta   mapper_bank
             stal  :patch+3
 :patch      jml   :done
 :done
@@ -236,24 +249,68 @@ STA_UXROM_BANK
             sta   $07EE
             jmp   SET_MMC1_REG3
 
-APU_PULSE1  EXT
-ORA_4000    oral APU_PULSE1+0
-            rts
-LDA_4000    ldal APU_PULSE1+0
-            rts
+; $4000-$4015 - The APU registers
+;
+; The channel state is in apu/apu.s, next to the APU tick that reads it many times per VBL; the shims
+; write it with long addressing (there is no long stx / sty / stz, so those go through A).  Like the NES
+; stores, every shim keeps A, X, Y and P.
 
-STA_4000    jsl  APU_PULSE1_REG1_WRITE
-NO_OP       rts
-
-STX_4000    php
-            phx
+; stx / sty to an APU register: ]1 = the field
+STX_APU     mac
+            php
             pha
             txa
-            jsl  APU_PULSE1_REG1_WRITE
+            stal ]1
             pla
-            plx
             plp
             rts
+            <<<
+
+STY_APU     mac
+            php
+            pha
+            tya
+            stal ]1
+            pla
+            plp
+            rts
+            <<<
+
+; Set a sweep unit's reload flag (]1); the sweep unit reloads its divider at the next half-frame clock
+SET_RELOAD  mac
+            php
+            pha
+            lda  #1
+            stal ]1
+            pla
+            plp
+            rts
+            <<<
+
+; $4003 / $4007 / $400B / $400F - load the length counter from the value on the stack (2,s, after phx)
+; and mark it loaded: ]1 = the length counter, ]2 = the channel's _LENGTH_LOADED.  The new length is not
+; clocked until the next DOC update has shown it (clock_length_counter).  Ends with A = 1.
+LOAD_LENGTH mac
+            lda  2,s                  ; llll lHHH -> the length index
+            lsr
+            lsr
+            lsr
+            tax
+            ldal LengthTable,x
+            stal ]1
+            lda  #1
+            stal ]2
+            <<<
+
+ORA_4000    oral APU_PULSE1_REG1
+            rts
+LDA_4000    ldal APU_PULSE1_REG1
+            rts
+
+STA_4000    stal APU_PULSE1_REG1
+NO_OP       rts
+
+STX_4000    STX_APU APU_PULSE1_REG1
 
 STA_4000_Y
             php
@@ -283,14 +340,16 @@ STA_4000_X
             plp
             rts
 
-
-STA_4001    jsl  APU_PULSE1_REG2_WRITE
-            rts
+; $4001 / $4005 - the sweep unit
+STA_4001    stal APU_PULSE1_REG2
+            SET_RELOAD APU_PULSE1_RELOAD_FLAG
 
 STX_4001    php
             pha
             txa
-            jsl  APU_PULSE1_REG2_WRITE
+            stal APU_PULSE1_REG2
+            lda  #1
+            stal APU_PULSE1_RELOAD_FLAG
             pla
             plp
             rts
@@ -310,17 +369,18 @@ STA_4001_X
             rts
 
 STY_4001    php
-            phy
             pha
             tya
-            jsl  APU_PULSE1_REG2_WRITE
+            stal APU_PULSE1_REG2
+            lda  #1
+            stal APU_PULSE1_RELOAD_FLAG
             pla
-            ply
             plp
             rts
 
-
-STA_4002    jsl  APU_PULSE1_REG3_WRITE
+; $4002 / $4006 / $400A - the timer low byte is the period's low byte (the sweep unit changes the period
+; from there)
+STA_4002    stal APU_PULSE1_CURRENT_PERIOD
             rts
 
 STA_4002_X
@@ -351,17 +411,23 @@ STA_4002_Y
             plp
             rts
 
-STY_4002    php
-            phy
-            pha
-            tya
-            jsl  APU_PULSE1_REG3_WRITE
-            pla
-            ply
-            plp
-            rts
+STY_4002    STY_APU APU_PULSE1_CURRENT_PERIOD
 
-STA_4003    jsl  APU_PULSE1_REG4_WRITE
+; $4003 / $4007 / $400B / $400F - the timer high bits, and the length counter load (only while the
+; channel is enabled in $4015)
+STA_4003    php
+            pha
+            and  #$07
+            stal APU_PULSE1_CURRENT_PERIOD_HI
+            ldal APU_STATUS
+            lsr                       ; bit 0: pulse 1 enabled
+            bcc  :out
+            phx
+            LOAD_LENGTH APU_PULSE1_LENGTH_COUNTER;APU_PULSE1_LENGTH_LOADED
+            stal APU_PULSE1_START_FLAG
+            plx
+:out        pla
+            plp
             rts
 
 STA_4003_X
@@ -393,240 +459,279 @@ STA_4003_Y
             rts
 
 STY_4003    php
-            phy
             pha
             tya
-            jsl  APU_PULSE1_REG4_WRITE
+            jsr  STA_4003
             pla
-            ply
             plp
             rts
 
-APU_PULSE2  EXT
-ORA_4004    oral APU_PULSE2+0
+ORA_4004    oral APU_PULSE2_REG1
             rts
-LDA_4004    ldal APU_PULSE2+0
-            rts
-
-STA_4004    jsl  APU_PULSE2_REG1_WRITE
+LDA_4004    ldal APU_PULSE2_REG1
             rts
 
-STX_4004    php
-            phx
-            pha
-            txa
-            jsl  APU_PULSE2_REG1_WRITE
-            pla
-            plx
-            plp
+STA_4004    stal APU_PULSE2_REG1
             rts
 
-STY_4004    php
-            phy
-            pha
-            tya
-            jsl  APU_PULSE2_REG1_WRITE
-            pla
-            ply
-            plp
-            rts
-    
-STA_4005    jsl  APU_PULSE2_REG2_WRITE
-            rts
+STX_4004    STX_APU APU_PULSE2_REG1
+
+STY_4004    STY_APU APU_PULSE2_REG1
+
+STA_4005    stal APU_PULSE2_REG2
+            SET_RELOAD APU_PULSE2_RELOAD_FLAG
 
 STY_4005    php
-            phy
             pha
             tya
-            jsl  APU_PULSE2_REG2_WRITE
+            stal APU_PULSE2_REG2
+            lda  #1
+            stal APU_PULSE2_RELOAD_FLAG
             pla
-            ply
             plp
             rts
 
 STX_4005    php
-            phx
             pha
             txa
-            jsl  APU_PULSE2_REG2_WRITE
+            stal APU_PULSE2_REG2
+            lda  #1
+            stal APU_PULSE2_RELOAD_FLAG
             pla
-            plx
             plp
             rts
 
-STA_4006    jsl  APU_PULSE2_REG3_WRITE
+STA_4006    stal APU_PULSE2_CURRENT_PERIOD
             rts
 
-STA_4007    jsl  APU_PULSE2_REG4_WRITE
-            rts
-
-STA_4008    jsl  APU_TRIANGLE_REG1_WRITE
-            rts
-
-STY_4008    php
-            phy
+STA_4007    php
             pha
-            tya
-            jsl  APU_TRIANGLE_REG1_WRITE
-            pla
-            ply
+            and  #$07
+            stal APU_PULSE2_CURRENT_PERIOD_HI
+            ldal APU_STATUS
+            and  #$02                 ; pulse 2 enabled
+            beq  :out
+            phx
+            LOAD_LENGTH APU_PULSE2_LENGTH_COUNTER;APU_PULSE2_LENGTH_LOADED
+            stal APU_PULSE2_START_FLAG
+            plx
+:out        pla
             plp
             rts
+
+STA_4008    stal APU_TRIANGLE_REG1
+            rts
+
+STY_4008    STY_APU APU_TRIANGLE_REG1
 
 STA_400A
-STA_400a    jsl  APU_TRIANGLE_REG3_WRITE
+STA_400a    stal APU_TRIANGLE_CURRENT_PERIOD
             rts
 
+; A $400B write always sets the linear counter reload flag, even when the channel is disabled
 STA_400B
-STA_400b    jsl  APU_TRIANGLE_REG4_WRITE
+STA_400b    php
+            pha
+            and  #$07
+            stal APU_TRIANGLE_CURRENT_PERIOD_HI
+            lda  #1
+            stal APU_TRIANGLE_START_FLAG
+            ldal APU_STATUS
+            and  #$04                 ; triangle enabled
+            beq  :out
+            phx
+            LOAD_LENGTH APU_TRIANGLE_LENGTH_COUNTER;APU_TRIANGLE_LENGTH_LOADED
+            plx
+:out        pla
+            plp
             rts
 
 STY_400B
 STY_400b    php
-            phy
             pha
             tya
-            jsl  APU_TRIANGLE_REG4_WRITE
+            jsr  STA_400b
             pla
-            ply
             plp
             rts
 
 STA_400C
-STA_400c    jsl  APU_NOISE_REG1_WRITE
+STA_400c    stal APU_NOISE_REG1
             rts
 
+; $400E - the mode and the period: the period becomes the DOC frequency for the mode's wave
 STA_400E
-STA_400e    jsl  APU_NOISE_REG3_WRITE
+STA_400e    php
+            pha
+            phx
+            stal APU_NOISE_REG3
+            and  #$8F
+            asl                       ; C = the mode, A = the period index * 2
+            bcc  *+4
+            ora  #32                  ; short mode: the second half of NoiseFreqTable
+            tax
+            rep  #$20
+            ldal NoiseFreqTable,x
+            stal APU_NOISE_CURRENT_PERIOD
+            sep  #$20
+            plx
+            pla
+            plp
             rts
 
 STX_400E
 STX_400e    php
-            phx
             pha
             txa
-            jsl  APU_NOISE_REG3_WRITE
+            jsr  STA_400e
             pla
-            plx
             plp
             rts
 
 STA_400F
-STA_400f    jsl  APU_NOISE_REG4_WRITE
+STA_400f    php
+            pha
+            ldal APU_STATUS
+            and  #$08                 ; noise enabled
+            beq  :out
+            phx
+            LOAD_LENGTH APU_NOISE_LENGTH_COUNTER;APU_NOISE_LENGTH_LOADED
+            stal APU_NOISE_START_FLAG
+            plx
+:out        pla
+            plp
             rts
 
 STX_400F
 STX_400f    php
-            phx
             pha
             txa
-            jsl  APU_NOISE_REG4_WRITE
+            jsr  STA_400f
             pla
-            plx
             plp
             rts
 
 STY_400F
 STY_400f    php
-            phy
             pha
             tya
-            jsl  APU_NOISE_REG4_WRITE
-            pla
-            ply
-            plp
-            rts
-
-STA_4010    jsl  APU_DMC_REG1_WRITE
-            rts
-
-STX_4010    php
-            pha
-            txa
-            jsl  APU_DMC_REG1_WRITE
+            jsr  STA_400f
             pla
             plp
             rts
 
-STY_4010    php
-            pha
-            tya
-            jsl  APU_DMC_REG1_WRITE
-            pla
-            plp
+; $4010-$4013 - the DMC registers are only read when $4015 starts a sample
+STA_4010    stal APU_DMC_REG1
             rts
 
-STA_4012    jsl  APU_DMC_REG3_WRITE
+STX_4010    STX_APU APU_DMC_REG1
+
+STY_4010    STY_APU APU_DMC_REG1
+
+STA_4012    stal APU_DMC_REG3
             rts
 
-STX_4012    php
-            pha
-            txa
-            jsl  APU_DMC_REG3_WRITE
-            pla
-            plp
+STX_4012    STX_APU APU_DMC_REG3
+
+STY_4012    STY_APU APU_DMC_REG3
+
+STA_4013    stal APU_DMC_REG4
             rts
 
-STY_4012    php
-            pha
-            tya
-            jsl  APU_DMC_REG3_WRITE
-            pla
-            plp
-            rts
+STX_4013    STX_APU APU_DMC_REG4
 
-STA_4013    jsl  APU_DMC_REG4_WRITE
-            rts
-
-STX_4013    php
-            pha
-            txa
-            jsl  APU_DMC_REG4_WRITE
-            pla
-            plp
-            rts
-
-STY_4013    php
-            pha
-            tya
-            jsl  APU_DMC_REG4_WRITE
-            pla
-            plp
-            rts
+STY_4013    STY_APU APU_DMC_REG4
 
 ; $4011 (DMC direct load) only sets the starting level for the next decoded sample
-STA_4011    jsl  APU_DMC_REG2_WRITE
+STA_4011    stal APU_DMC_REG2
             rts
 
-STX_4011    php
+STX_4011    STX_APU APU_DMC_REG2
+
+STY_4011    STY_APU APU_DMC_REG2
+
+; Reading $4015 reports which channels have a length counter > 0 (bits 0-3).  N / Z from the value, like
+; lda (C and V unchanged).
+LDA_4015    lda  #0
+            pha                       ; build the value
+            ldal APU_PULSE1_LENGTH_COUNTER
+            beq  :p2
+            lda  #$01
+            ora  1,s
+            sta  1,s
+:p2         ldal APU_PULSE2_LENGTH_COUNTER
+            beq  :tri
+            lda  #$02
+            ora  1,s
+            sta  1,s
+:tri        ldal APU_TRIANGLE_LENGTH_COUNTER
+            beq  :noise
+            lda  #$04
+            ora  1,s
+            sta  1,s
+:noise      ldal APU_NOISE_LENGTH_COUNTER
+            beq  :done
+            lda  #$08
+            ora  1,s
+            sta  1,s
+:done       pla
+            rts
+
+; $4015 write.  From the NESDev Wiki: when the enabled bit is cleared, the length counter is forced to 0
+; and cannot be changed until enabled is set again; there is no immediate effect when it is set.  The
+; DMC bit starts or stops a sample (the engine's APU_DMC_STATUS), unless it was clear and stays clear
+; (the sample was stopped then).  While the user has a channel toggled off (APU_FORCE_OFF), the write
+; only updates APU_STATUS.
+STA_4015    php
             pha
-            txa
-            jsl  APU_DMC_REG2_WRITE
-            pla
-            plp
-            rts
+            oral APU_STATUS           ; bit 4: the DMC was or is to be enabled
+            xba                       ; (kept in B)
+            lda  1,s
+            stal APU_STATUS
+            ldal APU_FORCE_OFF
+            bne  :out
 
-STY_4011    php
+            lda  1,s
+            and  #$0F
+            cmp  #$0F
+            beq  :dmc                 ; (all four enabled: nothing to clear)
+            lsr
+            bcs  :p2
             pha
-            tya
-            jsl  APU_DMC_REG2_WRITE
+            lda  #0
+            stal APU_PULSE1_LENGTH_COUNTER
             pla
+:p2         lsr
+            bcs  :tri
+            pha
+            lda  #0
+            stal APU_PULSE2_LENGTH_COUNTER
+            pla
+:tri        lsr
+            bcs  :noise
+            pha
+            lda  #0
+            stal APU_TRIANGLE_LENGTH_COUNTER
+            pla
+:noise      lsr
+            bcs  :dmc
+            lda  #0
+            stal APU_NOISE_LENGTH_COUNTER
+
+:dmc        xba
+            and  #$10
+            beq  :out
+            lda  1,s
+            jsl  APU_DMC_STATUS
+:out        pla
             plp
-            rts
-
-LDA_4015    jsl   APU_STATUS_READ
-            rts
-
-STA_4015    jsl   APU_STATUS_WRITE
             rts
 
 STX_4015    php
-            phx
             pha
             txa
-            jsl   APU_STATUS_WRITE
+            jsr  STA_4015
             pla
-            plx
             plp
             rts
 
@@ -636,101 +741,317 @@ STA_4016    rts
 
 LDA_4016
 LDA_4016_X
-            lda #0          ; no input
-            rts
+        lda #0                ; no input
+        rts
 
-; Hooks to call back to the harness for PPU memory-mapped accesses
+; $2000 - PPUCTRL (Write only)
+;
+; Only the VRAM increment is resolved here, because the next $2007 access (NES task) needs it right away.
 STA_2000
-            jsl  PPUCTRL_WRITE
-            rts
-STX_2000
-            php
-            phx
-            pha
-            txa
-            jsl  PPUCTRL_WRITE
-            pla
-            plx
-            plp
-            rts
+        php
+        cmp  ppuctrl
+        beq  :fast_exit
 
+        sta  ppuctrl
+        pha
+        and  #$04             ; Set the vram increment
+        beq  :v1
+        lda  #$21
+:v1     eor  #$01
+        sta  ppuincr          ; just the low byte
+        pla
+
+:fast_exit
+        plp
+        rts
+
+STX_2000
+        php
+        cpx  ppuctrl
+        beq  :fast_exit
+
+        stx  ppuctrl
+        pha
+        txa
+        and  #$04             ; Set the vram increment
+        beq  :v1
+        lda  #$21
+:v1     eor  #$01
+        sta  ppuincr          ; just the low byte
+        pla
+
+:fast_exit
+        plp
+        rts
+
+; $2001 - PPUMASK (Write only)
 
 STA_2001
-            jsl  PPUMASK_WRITE
-            rts
+        sta  ppumask
+        rts
+
+
+        mx    %11
 STX_2001
-            php
-            phx
-            pha
-            txa
-            jsl  PPUMASK_WRITE
-            pla
-            plx
-            plp
-            rts
+        stx  ppumask
+        rts
 
-
-
+; $2002 - PPUSTATUS For "lda ppustatus"
+        mx    %11
 LDA_2002
-            jsl  PPUSTATUS_READ
-            rts
+        lda  #1
+        sta  w_bit
+
+        lda  ppustatus
+        bpl  :out
+        and  #$7F            ; Clear the VBL flag
+        sta  ppustatus
+        ora  #$80            ; Restore negative value
+:out
+        rts
+
+        mx    %11
 LDX_2002
-            pha                   ; space
-            php
-            pha                   ; save
-            jsl  PPUSTATUS_READ
-            sta  3,s
-            pla
-            plp
-            plx
-            rts
+        ldx  #1
+        stx  w_bit
 
+        ldx  ppustatus
+        bpl  :out
+
+        rol  ppustatus      ; Clear the VBL flag without A: bit 0 = C, C = 1 (the VBL bit)
+        clc
+        ror  ppustatus      ; bit 7 = 0, C = bit 0 = the caller's carry
+
+        inx                 ; reset the status flags
+        dex
+
+:out
+        rts
+
+; $2003 - OAM ADDR
+        mx    %11
 STA_2003
-            jsl  OAMADDR_WRITE
-            rts
-STA_2005
-            jsl  PPUSCROLL_WRITE
-            rts
-STA_2006
-            jsl  PPUADDR_WRITE
-            rts
-STY_2006
-            php
-            phy
-            pha
-            tya
-            jsl  PPUADDR_WRITE
-            pla
-            ply
-            plp
-            rts
-STX_2006
-            php
-            phx
-            pha
-            txa
-            jsl  PPUADDR_WRITE
-            pla
-            plx
-            plp
-            rts
+        sta  oamaddr
+        rts
 
+; $2005 - PPU SCROLL
+        mx    %11
+STA_2005
+        php
+        phx
+
+        ldx  w_bit
+        sta  ppuscroll,x
+
+        dex
+        bpl  :ok
+        ldx  #1
+:ok     stx  w_bit
+
+        plx
+        plp
+        rts
+
+; $2006 - PPUADDR
+        mx    %11
+STA_2006
+        php
+        phx
+
+        ldx  w_bit
+        sta  ppuaddr,x
+
+        dex
+        bpl  :ok
+        ldx  #1
+:ok     stx  w_bit
+
+        plx
+        plp
+        rts
+
+        mx    %11
+STY_2006
+        php
+        phy
+        pha
+
+        tya
+        ldy  w_bit
+        sta  ppuaddr,y
+
+        dey
+        bpl  :ok
+        ldy  #1
+:ok     sty  w_bit
+
+        pla
+        ply
+        plp
+        rts
+
+        mx    %11
+STX_2006
+        php
+        phx
+        pha
+
+        txa
+        ldx  w_bit
+        sta  ppuaddr,x
+
+        dex
+        bpl  :ok
+        ldx  #1
+:ok     stx  w_bit
+
+        pla
+        plx
+        plp
+        rts
+
+        mx    %11
 LDA_2007
-            jsl  PPUDATA_READ
-            rts
+        phx
+
+        rep  #$31
+        lda  ppuaddr    ; Load and update the ppu address (guaranteed to be in the range $0000 - $3FFF)
+        tax
+        adc  ppuincr
+        sta  ppuaddr
+
+        cpx  #$3F00     ; If we're reading palette RAM, return the value immediately
+        bcc  :buff_read
+
+        sep  #$20
+        ldal PPU_MEM,x
+        sep  #$10
+        plx
+        ora  #0         ; N / Z from the value, like lda (C and V unchanged)
+        rts
+
+        mx   %00
+:buff_read
+        cpx  #$2000
+        bcc  :chr_read    ; Pattern table ($0000 - $1FFF): read CHR memory, not CIRAM
+
+        txa
+
+        andl MirrorMaskLong           ; ppu2ciram (macros are not loaded in the ROM segment)
+        cmp  #$0800
+        bcc  *+5
+        eor  #$0C00
+
+        tax
+
+        sep  #$20       ; 8-bit acc/16-bit regs
+        lda  vram_buff
+        stal :p2+1      ; (long: the copy of this code in the bank being executed, not the data bank's)
+        ldal PPU_CIRAM,x
+        sta  vram_buff
+        sep  #$30
+
+        plx
+:p2     lda  #0
+        rts
+
+; CHR-ROM / CHR-RAM lives at PPU_MEM $0000 - $1FFF (CHR-RAM writes in PPUDATA_WRITE store there too).
+; SMB's title screen and Ice Climber's title / score screens are loaded by reading data stored in CHR.
+        mx   %00
+:chr_read
+        sep  #$20       ; 8-bit acc/16-bit regs
+        lda  vram_buff
+        stal :p3+1
+        ldal PPU_MEM,x
+        sta  vram_buff
+        sep  #$30
+
+        plx
+:p3     lda  #0
+        rts
+
+        mx    %11
+; PPUDATA_WRITE - Keep the fast path in the bank
 STA_2007
-            jsl  PPUDATA_WRITE
-            rts
+        php
+        pha
+        phx
+
+        rep  #$31
+        lda  ppuaddr                  ; Load and update the ppu address (guaranteed to be in the range $0000 - $3FFF)
+        tax
+        adc  ppuincr
+        sta  ppuaddr
+
+        cpx  #$2000
+        DO   HAS_CHR_RAM
+        bcs  :not_chr
+        sep  #$20
+        lda  2,s
+        cmpl PPU_MEM,x
+        beq  :done
+        stal PPU_MEM,x
+        jsl  PPUDATA_WRITE_CHR
+        bra  :done
+:not_chr
+        ELSE
+        bcc  :done
+        FIN
+
+        cpx  #$3000
+        bcc  :in_nt
+
+        cpx  #$3F00
+        bcs  :pal
+
+:done
+        sep  #$30
+        plx
+        pla
+        plp
+        rts
+
+        mx  %00
+:in_nt  txa
+        andl MirrorMaskLong           ; ppu2ciram (macros are not loaded in the ROM segment)
+        cmp  #$0800
+        bcc  *+5
+        eor  #$0C00
+        tax
+
+        sep  #$20
+        lda  2,s
+        cmpl PPU_CIRAM,x
+        beq  :done
+        stal PPU_CIRAM,x
+
+        jsl  ntmWriteTail
+        bra  :done
+
+        mx   %00
+:pal    txa
+        and  #$3F1F                ; clamp to the palette mirroring range
+        tax
+
+        sep  #$20
+        lda  2,s
+        cmpl PPU_MEM,x                  ; x is the logical PPU address here (>= $3F00)
+        beq  :done                      ; Palette updates can be *very* expensive, so skip if no change
+        stal PPU_MEM,x
+        
+        jsl  PPUDATA_WRITE_PAL
+        bra  :done
+
+        mx    %11
 STX_2007
-            php
-            phx
-            pha
-            txa
-            jsl  PPUDATA_WRITE
-            pla
-            plx
-            plp
-            rts
+        php             ; (STA_2007 preserves X)
+        pha
+        txa
+        jsr  STA_2007
+        pla
+        plp
+        rts
+
 STA_4014
             jsl  PPUDMA_WRITE
             rts

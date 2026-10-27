@@ -48,10 +48,11 @@ NES_StartUp
 
             lda   #^ROMBase               ; Start off in Bank 0 of the ROM
             and   #$00FF
-            sta   mapper_bank
+            stal  mapper_bank
 
             lda   #0
-            stal  chr_bank                 ; Stub for future MMC1 CHR-bank switching
+            stal  ppu_bank
+            stal  ppu_bank_changed
 
 ; Initialize some application variables
 
@@ -212,6 +213,10 @@ NES_StartExecution
             lda  #0
             sta  skipInterruptHandling
             rts
+
+; Value to mask with ppumask to allow the runtime to override some bits
+ppumask_override ENT
+                 dw $FFFF
 
 ; NES_EvtLoop
 ;

@@ -672,17 +672,20 @@ GameOverModeValue     = 3
 ROMBase  ENT
          ds    $6000-*
 
-y_exclude ENT                     ; Table of excluded sprite Y values -- filled in by InitYExclude at start-up
-            ds 256
+y_exclude ENT                           ; Table of excluded sprite Y values -- filled in by InitYExclude at start-up
+        ds 256
 
-tile_exclude ENT                  ; Table of excluded tiles
+tile_exclude ENT                        ; Table of excluded tiles
         ds 252,$00
-        ds 1,$01                    ; Tile $FC can be skipped
+        ds 1,$01                        ; Tile $FC can be skipped
         ds 3,$00
-HORIZONTAL_MIRRORING equ $01        ; From core/Defs.s, which is not included in the ROM segment
+
+HORIZONTAL_MIRRORING equ $01            ; From core/Defs.s, which is not included in the ROM segment
 VERTICAL_MIRRORING   equ $02
 
-        put  ../../rom/rom_inject.s
+        put  Config.s                   ; HAS_CHR_RAM and the other engine constants rom_inject.s tests
+        put  ../../ppu/ppu_reg_vars.s   ; Only put in the base ROM bank
+        put  ../../rom/rom_inject.s     ; Put in every ROM bank
 
 ; Absolute address in zero page helpers
 JMP_IND_06  JMP_ABS_IND $06

@@ -47,6 +47,8 @@ WriteBlankPrioritySprites  EXT
 SetMirrorMode  EXT
 
             put   ../../../core/Defs.s
+            put   Config.s                    ; HAS_CHR_RAM and the other engine constants rom_inject.s tests
+            put   ../../../ppu/ppu_reg_vars_ext.s   ; The PPU state is in bank 0 (rom_00.s)
 
             mx    %11
             ds    $5000-*
