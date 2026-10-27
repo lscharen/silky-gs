@@ -1,0 +1,19 @@
+# GSSquared machine for "npm run run": a ROM 3 IIgs at 2.8MHz with a hard drive card in slot 7.  The
+# disks are mounted on the command line (package.json): slot 7 drive 1 = a fresh copy of dist/GSOS.2mg
+# (GS/OS 6 with the Finder, scripts/make-gsos-disk.bat), drive 2 = emu/Target.2mg (the games, built by
+# build-image).  GSSquared writes its config back when it quits, so the script runs a copy (emu/run.gs2).
+gs2_version = 1
+id = "4746babc-80ce-49de-903c-eaa30ffddecb"
+name = "SilkyGS Run"
+description = "Silky-GS: GS/OS + Target.2mg"
+platform = "apple2gs_rom3"
+clock = "ntsc"
+scanner = "apple2gs"
+speed = "2.8mhz"
+display = "rgb"
+builtin = false
+bram = "0000000100000d060201010001000000000007060201010000000f06060005060100000000000001000000000502020000002d2d000000000000020202060800010203040506070a000102030405060708090a0b0c0d0e0f0000ffffffffff81ffffffffff0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffdcdf7675"
+
+[[cards]]
+slot = 7
+card = "bazfast3"

@@ -35,6 +35,9 @@ PPUSTATUS_READ ENT
         mx   %10
 DropTileSprites
         rep  #$30
+        DO   SPR_TALL
+        phx                                       ; (for the 8x16 pair, below)
+        FIN
         txa
         and  #$00FF
         asl
@@ -50,6 +53,25 @@ DropTileSprites
         stal PPU_MEM+SPR_COMP_TBL+{]pal*$400}+2,x
 ]pal    =    ]pal+1
         --^
+
+        DO   SPR_TALL                             ; The whole 8x16 sprites of the tile's pair (SPR16_COMP_TBL)
+        pla
+        tax
+        and  #$00FE                               ; the pair's OAM tile ID: bit 0 = the pattern table
+        cpx  #$0100
+        bcc  *+3
+        inc
+        asl
+        asl
+        tax
+        lda  #0
+]pal    =    0
+        lup  4
+        stal PPU_MEM+SPR16_COMP_TBL+{]pal*$400},x
+        stal PPU_MEM+SPR16_COMP_TBL+{]pal*$400}+2,x
+]pal    =    ]pal+1
+        --^
+        FIN
         rts
         FIN
 

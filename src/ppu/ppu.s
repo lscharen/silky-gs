@@ -29,15 +29,24 @@ sprTmp5      equ sprTmp5Hi          ; tiledata bank offset for the tile to draw:
 ; 2 variants of 256, 128 slots in one bank.  SPR_FLIP_PAGE is the page offset of the horizontally
 ; flipped variant, ORed into the slot's SPR_COMP_TBL entry by the dispatch.  The SPR_OWNER and
 ; SPR_SLOT_TBL tables have room for 128 slots.
+;
+; SPR_TALL (the game's Config.s): an 8x16 sprite is compiled as a whole, its key in SPR16_COMP_TBL, and the
+; slots are twice as big.  Its variants are at the slot's quarters (without SPR_PIXEL_SHIFT, its halves):
+; as is, flipped horizontally (SPR16_FLIP_PAGE), and with SPR_PIXEL_SHIFT both shifted (+ SPR16_SHIFT_PAGE).
+; An 8x8 sprite uses the first half of a slot, as it does without SPR_TALL.
         DO    SPR_PIXEL_SHIFT
-SPR_SLOT_SIZE equ $0800
-SPR_BANK_SLOTS equ 32
+SPR_SLOT_SIZE equ $0800*{1+SPR_TALL}
+SPR_BANK_SLOTS equ 32/{1+SPR_TALL}
 SPR_FLIP_PAGE equ 2
+SPR16_FLIP_PAGE equ 4
+SPR16_SHIFT_PAGE equ 8
         ELSE
-SPR_SLOT_SIZE equ $0200
-SPR_BANK_SLOTS equ 128
+SPR_SLOT_SIZE equ $0200*{1+SPR_TALL}
+SPR_BANK_SLOTS equ 128/{1+SPR_TALL}
 SPR_FLIP_PAGE equ 1
+SPR16_FLIP_PAGE equ 2
         FIN
+SPR16_TBL     equ SPR_COMP_TBL+{SPR16_KEY*SPR_TALL}   ; sprCompTbl in the 8x16 loop
 SPR_MAX_SLOTS equ SPR_BANK_SLOTS*SPR_MAX_BANKS   ; (SPR_MAX_BANKS is in Defs.s: InitMemory uses it too)
 
 ; 8x16 sprites: the pattern table is bit 0 of the sprite's own tile ID (PPUCTRL doesn't select it), so
@@ -57,7 +66,8 @@ SPR16_TABLE mac
         sta   sprCompTbl
         <<<
 
-; Set up a sprite for drawing.  X = OAM index (preserved).
+; Set up a sprite for drawing.  X = OAM index (preserved).  ]1 = 8, or 16 for a whole 8x16 sprite (SPR_TALL:
+; its sprShift is SPR16_SHIFT_PAGE); its halves, drawn as 8x8 sprites, use 8.
 ;
 ; Sets sprTmp1 = SHR address, sprTmp4 = horizontal clip amount (0 = no clipping), sprShift = $0004 for
 ; a sprite on an odd pixel (else 0; SPR_PIXEL_SHIFT).  A macro, so each sprite size gets its own copy and the setup is not a nested call.
@@ -89,6 +99,11 @@ SPR_SETUP mac
         rol                            ; sprShift = 4 on an odd pixel: the shifted variants (+$400)
         asl                            ; (carry clear)
         asl
+        FIN
+        DO    SPR_PIXEL_SHIFT*SPR_TALL*{]1/16}
+        asl                            ; a whole 8x16 sprite: SPR16_SHIFT_PAGE = 8 (+$800)
+        FIN
+        DO    SPR_PIXEL_SHIFT
         sta   sprShift
         tya
         FIN
@@ -141,6 +156,9 @@ drawSprites
 
         lda   #Mul160Tbl
         sta   sprMul160
+        DO    ENABLE_DIRTY_RENDERING*SPR_PIXEL_SHIFT
+        stz   sprShift                 ; (gridMarkSprite8/16 set its low byte)
+        FIN
         sep   #$20
         lda   #^Mul160Tbl
         sta   sprMul160+2
@@ -221,9 +239,11 @@ drawSprites
         bne   :clip8
         FIN
 
-        SPR_SETUP
+        DO    1-ENABLE_DIRTY_RENDERING
+        SPR_SETUP 8
+        FIN
         DO    ENABLE_DIRTY_RENDERING
-        jsr   gridMarkSprite8     ; Mark the cells that this sprite covers (nothing is saved)
+        jsr   gridMarkSprite8     ; Set the sprite up (as SPR_SETUP) and mark the cells it covers
         FIN
         ldal  OAM_COPY+1,x            ; Tile and attributes
         sta   sprTmp2
@@ -248,9 +268,11 @@ drawSprites
         DO    SPRITE_CLIP
 :clip8  cmp   #8
         bcs   :hide8
-        SPR_SETUP
+        DO    1-ENABLE_DIRTY_RENDERING
+        SPR_SETUP 8
+        FIN
         DO    ENABLE_DIRTY_RENDERING
-        jsr   gridMarkSprite8     ; Mark the cells that this sprite covers (nothing is saved)
+        jsr   gridMarkSprite8     ; Set the sprite up (as SPR_SETUP) and mark the cells it covers
         FIN
         ldal  OAM_COPY+1,x
         sta   sprTmp2
@@ -269,7 +291,7 @@ drawSprites
         FIN
 
 :is_8x16
-        lda   #SPR_COMP_TBL            ; The fast path's keys include the pattern table (:drawSprite16)
+        lda   #SPR16_TBL               ; The fast path's keys include the pattern table (:drawSprite16)
         sta   sprCompTbl
         plb
 
@@ -286,9 +308,11 @@ drawSprites
 ; Draw both halves of the 8x16 sprite (pattern table select comes from bit 0
 ; of the tile ID, not from spadr/PPUCTRL -- see :drawSprite16)
 
-        SPR_SETUP
+        DO    1-ENABLE_DIRTY_RENDERING
+        SPR_SETUP 16
+        FIN
         DO    ENABLE_DIRTY_RENDERING
-        jsr   gridMarkSprite16     ; Mark the cells that this sprite covers (nothing is saved)
+        jsr   gridMarkSprite16     ; Set the sprite up (as SPR_SETUP) and mark the cells it covers
         FIN
         jsr   :drawSprite16
 
@@ -306,12 +330,17 @@ drawSprites
         DO    SPRITE_CLIP
 :clip16 cmp   #16                     ; Hidden entirely: not set up, marked or drawn
         bcs   :hide16
-        SPR_SETUP
+        DO    1-ENABLE_DIRTY_RENDERING
+        SPR_SETUP 8
+        FIN
         DO    ENABLE_DIRTY_RENDERING
-        jsr   gridMarkSprite16     ; Mark the cells that this sprite covers (nothing is saved)
+        jsr   gridMarkSprite16     ; Set the sprite up (as SPR_SETUP) and mark the cells it covers
+        FIN
+        DO    ENABLE_DIRTY_RENDERING*SPR_PIXEL_SHIFT*SPR_TALL
+        lsr   sprShift             ; (the halves are drawn as 8x8 sprites: their shift, 0 / 4)
         FIN
         jsr   :drawSprite16c
-        lda   #SPR_COMP_TBL            ; (SPR16_TABLE moved it)
+        lda   #SPR16_TBL               ; (SPR16_TABLE moved it)
         sta   sprCompTbl
         bra   :next16
 :hide16
@@ -339,6 +368,38 @@ drawSprites
 ; from sprTmp2) takes the slow path, so that the right tile is queued.
         mx    %00
 :drawSprite16
+
+; SPR_TALL: the whole sprite is one compiled routine, its key in SPR16_COMP_TBL (sprCompTbl = SPR16_TBL in
+; the 8x16 loop): the key of :blitResolvedSprite, with the tile ID's bit 0 (the pattern table) left in.  The
+; routine's return (draw_rtn2) goes back to the loop.  On an odd pixel, the shifted variants are stubs until
+; they are compiled (EmitTallStubs): they queue them (SprQueueTall) and draw the sprite a pixel to the left.
+; A miss queues the key and draws the halves from their bitmaps.
+        DO    SPR_TALL
+        ldal  OAM_COPY+1,x             ; {attribute, tile_id}
+        ldy   sprTmp4                  ; Clipped on the right, or behind the background: the slow path
+        bne   :spr16_slow
+        bit   #$2000
+        bne   :spr16_slow
+        and   #$C3FF                   ; tile, palette and the two flips
+        asl                            ; carry = vertical flip
+        adc   #0
+        asl                            ; carry = horizontal flip
+        tay
+        lda   [sprCompTbl],y
+        beq   :spr16_miss
+        bcc   *+5
+        ora   #SPR16_FLIP_PAGE         ; the horizontally flipped variant
+        DO    SPR_PIXEL_SHIFT
+        ora   sprShift                 ; the shifted variant for a sprite on an odd pixel
+        FIN
+        stal  :t16+2                   ; (the page and bank: :t16+1 is always $00)
+        SPR_STAT SPR_ST_HITS
+        ldy   sprTmp1
+:t16    jml   $000000
+        FIN
+
+; Without SPR_TALL: the halves are 8x8 compiled sprites
+        DO    1-SPR_TALL
         ldal  OAM_COPY+1,x             ; {attribute, tile_id}
         ldy   sprTmp4                  ; Clipped on the right, or behind the background: the slow path
         bne   :spr16_slow
@@ -389,14 +450,62 @@ drawSprites
         stal  :c16+2
         ldy   sprTmp1
 :c16    jml   $000000
+        FIN
 
 ; Slow path: each half through :blitResolvedSprite, with sprCompTbl set to the tile's half of the table
 ; (SPR16_TABLE) and put back afterwards
 :spr16_slow
         jsr   :spr16_halves
-        lda   #SPR_COMP_TBL
+        lda   #SPR16_TBL
         sta   sprCompTbl
         rts
+
+        DO    SPR_TALL
+; A miss: queue the key (Y, from SPR16_COMP_TBL) for SprCacheService, unless this render's quota is used up,
+; and draw the halves from their bitmaps
+:spr16_miss
+        SPR_STAT SPR_ST_MISSES
+        phx
+        ldal  PPU_MEM+SPR_PEND_CNT
+        cmp   #2*SPR_COMPILE_PER_RENDER
+        bcs   :m16_full
+        tax                            ; X = end of the pending list
+        tya
+        ora   #SPR16_KEY
+        stal  PPU_MEM+SPR_PEND,x
+        inx
+        inx
+        txa
+        stal  PPU_MEM+SPR_PEND_CNT
+:m16_full
+        plx
+        jsr   :spr16_bitmaps
+        lda   #SPR16_TBL               ; (SPR16_TABLE moved it)
+        sta   sprCompTbl
+        rts
+
+; Both halves from their bitmaps (as_bitmap: not clipped, in front of the background), so that the 8x8 keys
+; of an SPR_TALL game's 8x16 sprites never fill the cache
+:spr16_bitmaps
+        ldal  OAM_COPY+1,x
+        sta   sprTmp2                  ; {attribute, tile_id}
+        SPR16_TABLE                    ; the pattern table from the tile ID's bit 0
+        lda   sprTmp2
+        and   #$FFFE                   ; top-half tile id
+        bit   #$8000                   ; vertical flip: the low+1 tile is on top
+        beq   *+3
+        inc
+        sta   sprTmp2
+        jsr   as_bitmap
+        lda   sprTmp1
+        clc
+        adc   #8*160
+        sta   sprTmp1
+        lda   sprTmp2
+        eor   #$0001                   ; the other tile
+        sta   sprTmp2
+        jmp   as_bitmap
+        FIN
 
 :spr16_halves
         ldal  OAM_COPY+1,x
@@ -733,6 +842,33 @@ SprQueueShift
         ora  1,s
         stal PPU_MEM+SPR_PEND,x
         pla
+        inx
+        inx
+        txa
+        stal PPU_MEM+SPR_PEND_CNT
+:full   plx
+        rtl
+        FIN
+
+; The same for a whole 8x16 sprite (SPR_TALL), called by the stubs in its shifted variants (EmitTallStubs):
+; its key is built from the OAM entry again (X = the OAM index).  DBR = $01; X and Y are preserved.
+        DO    SPR_PIXEL_SHIFT*SPR_TALL
+        mx    %00
+SprQueueTall
+        SPR_STAT SPR_ST_SHREQ
+        phx
+        ldal PPU_MEM+SPR_PEND_CNT
+        cmp  #2*SPR_COMPILE_PER_RENDER
+        bcs  :full
+        pha                            ; the end of the pending list
+        ldal OAM_COPY+1,x              ; the key offset, as in :drawSprite16
+        and  #$83FF                    ; tile, palette and vertical flip
+        asl
+        adc  #0
+        asl
+        ora  #SPR16_KEY+1              ; and the shift request (+ 1)
+        plx
+        stal PPU_MEM+SPR_PEND,x
         inx
         inx
         txa

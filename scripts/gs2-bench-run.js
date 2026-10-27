@@ -248,9 +248,17 @@ async function main() {
         }
 
         // --stats: the sprite cache counters (SPR_STATS in Defs.s), in the PPU_MEM bank: the bank byte of the
-        // first long store in SprCacheInit (stal PPU_MEM+SPR_COMP_TBL,x)
+        // first long store in SprCacheInit (stal PPU_MEM+SPR_COMP_TBL,x).  SprCacheInit is in the ENGINE segment:
+        // its bank is the bank byte of the first jsl in NES_RenderFrame (jsl RenderLatch), as for --gridstats
         if (o.stats) {
-            const code = await gs2.read((bank << 16) | parseSymbolAddr(sym.SprCacheInit), 16);
+            let codeBank = bank;
+            if (sym.SprCacheInit.segment === 'ENGINE') {
+                const rf = await gs2.read((bank << 16) | parseSymbolAddr(sym.NES_RenderFrame), 32);
+                const jsl = rf.indexOf(0x22);
+                if (jsl < 0) throw new Error('no jsl in NES_RenderFrame');
+                codeBank = rf[jsl + 3];
+            }
+            const code = await gs2.read((codeBank << 16) | parseSymbolAddr(sym.SprCacheInit), 16);
             const at = code.indexOf(0x9F);
             if (at < 0) throw new Error('no stal in SprCacheInit');
             const ppuBank = code[at + 3];

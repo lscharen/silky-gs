@@ -35,6 +35,10 @@ ENABLE_DIRTY_RENDERING equ 1
 ; correction, and the sprite cache uses smaller slots.
 SPR_PIXEL_SHIFT equ 1
 
+; The game draws 8x16 sprites: each one is compiled as a whole (both tiles in one routine), in cache
+; slots twice as big.  0: the two halves are compiled and drawn as 8x8 sprites.
+SPR_TALL equ 1
+
 ; Flag to determine if sprites are not drawn when any part of them goes out
 ; side of the defined playfield area.  When the playfield is full-height,
 ; this prevents *any* access to memory outside of the SHR screen.

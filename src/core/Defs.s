@@ -313,7 +313,7 @@ BLT_P_HORZ     equ  $40                   ; V = 1 for horizontal mirroring
 ;
 ; PPU_MEM bank map: $0000-$1FFF CHR, $2000-$27FF CIRAM (PPU_CIRAM), $2800-$2927 compiled sprite cache
 ; bookkeeping (SPR_OWNER ...), $2A00-$2AFF SPR_SLOT_TBL, $3F00 palette RAM, $4000-$67FF the tables below, $7000-$8FFF SPR_COMP_TBL
-; $6800-$6AFF the grid renderer's sprite skip tables (GQ_*), ($6B00-$6FFF and $9000-$AFFF free),
+; $9000-$9FFF SPR16_COMP_TBL, $6800-$6AFF the grid renderer's sprite skip tables (GQ_*), ($6B00-$6FFF and $A000-$AFFF free),
 ; $B000-$C7FF the grid renderer's cell tables, $C800/$E800 the nametable shadow buffers (NTM_SB0/1).
 
 TILE_SHADOW   equ $4000          ; shadowed values of the nametable tiles
@@ -362,6 +362,14 @@ SPR_MAX_BANKS          equ   1+{3*SPR_PIXEL_SHIFT}
 ; points to is the next one used; if a key owns it (SPR_OWNER), that key is evicted.  A cache hit does not
 ; change anything.  A CHR-RAM write frees a key's slot, which is reused when the cursor gets back to it.
 SPR_COMP_TBL  equ $7000               ; 4096 words
+;
+; SPR_TALL games also compile 8x16 sprites as a whole: SPR16_COMP_TBL is their table, right after
+; SPR_COMP_TBL, so their key offsets (from SPR_COMP_TBL) are SPR16_KEY plus
+;   (palette << 10) | (OAM tile << 2) | (vertical flip << 1)
+; with the OAM tile's bit 0 the pattern table.  The cache's bookkeeping (SPR_OWNER, SPR_PEND) holds both
+; kinds of key offset.
+SPR16_KEY     equ $2000
+SPR16_COMP_TBL equ SPR_COMP_TBL+SPR16_KEY ; 2048 words ($9000-$9FFF)
 
 ; The number of sprite tiles compiled per drawSprites call (0 - 4; 0 never compiles).  The sprites that miss
 ; are drawn from their bitmaps until they are compiled.  2 was measured to be the best (docs/BENCH_ZELDA.md).

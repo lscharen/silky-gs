@@ -405,6 +405,12 @@ gridRowHi   ds    256
 gridKCls    ds    256                     ; Quadrant pattern * 2 = k class * 8 (by OAM y) | p class * 2 (by OAM x)
 gridColOff  ds    256                     ; Indexed by OAM x
 gridPCls    ds    256
+gqSprYLo    ds    256                     ; Indexed by OAM y: the sprite's SHR address at byte 0 (SPR_SETUP)
+gqSprYHi    ds    256
+            DO    SPR_PIXEL_SHIFT
+gqSprXS     ds    256                     ; Indexed by OAM x: sprShift (0 / 4) and the right clip (sprTmp4)
+gqSprXC     ds    256
+            FIN
 gqSC        ds    256                     ; Per OAM offset: +0 cell, +2 pattern * 2, +3 skip flag
 gqSI        equ   gqSC+2                  ;   (byte; read as a word, the high byte is the skip flag)
 gqSkip      equ   gqSC+2                  ;   word: pattern * 2 | skip << 8 -- skip when >= $100
