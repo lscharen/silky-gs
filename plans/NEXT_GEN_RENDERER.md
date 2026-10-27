@@ -98,6 +98,30 @@ build at HEAD), and Zelda's door-band clipping path (the bench route never enter
 
 ## Part 3: the threaded renderer
 
+### TL;DR
+
+An estimate, not a measurement: **full-screen (scrolling) renders could be about 20-30% faster** than the
+PEA field. Full renders are the pain point: the dirty renderer already gets close to 60fps at 2.8MHz and
+is limited by the sprite count, while every scrolling frame is a full render.
+
+- **Where the gain comes from.** A background word written directly to the screen through shadowing would
+  take about 3.0 us, against about 4.8 us today for a `pea` into bank $01 plus a `pei` in the slam (Technote
+  #70's write timing, below): 35-40% less per word. Building the thread, the cells under sprites (composited
+  off screen and exposed, as now) and the reloads between differently colored words bring that down to about
+  20-30% for a whole render. Scrolling frames also stop paying for the PEA field's exit patching and
+  restoring.
+- **What it means for a whole run.** In the Oct 20 Zelda profile, split and full renders took about 40M of
+  the bench's cycles; 20-30% of that is 8-12M, about 4-5% of the run. Games that scroll more (SMB) would
+  gain more.
+- **Dirty renders.** Possibly a small gain. They draw the same cells as the grid does now, but a changed cell
+  with no sprite on it (a tile update, or a cell a sprite has just left) is drawn once, directly through
+  shadowing, instead of being erased from the PEA field into bank $01 and then exposed (two writes per word).
+  Cells under sprites cost the same in both designs, so the gain depends on how many changed cells have no
+  sprite. Besides speed: simpler tracking (no `at_list`, no NTM masks, one renderer instead of two) and a
+  draw order that can follow the scrolling direction to reduce tearing.
+- **It all rests on one number.** The direct write cost has to be measured on hardware first (see "What to
+  measure first"). GSSquared's cycle counts may not show the slow-side timing at all.
+
 ### The idea
 
 The screen is drawn by executing a list of code blocks threaded through the stack. The list lives in bank 0;
