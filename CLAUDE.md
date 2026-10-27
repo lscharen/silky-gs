@@ -23,8 +23,8 @@ npm run build:kbdtest   # Keyboard driver test (src/games/KbdTest: ProDOS 8 BIN 
 npm run build:all       # All games
 
 npm run build-image     # Package built binaries into Target.2mg ProDOS disk image
-npm run build:dist      # One 800KB disk per game in emu/ (build-single.bat <game>: app at the root, icon in Icons/)
-npm run test            # Build image and launch in GSPort emulator
+npm run build:dist      # Two 800KB disks per game in emu/ (build-single.bat <game>): <App>.2mg (app at the root, icon in Icons/) and <App>-boot.2mg (bootable: dist/GSBoot.2mg + the app as System/Start; scripts/make-boot-disk.bat remakes the template)
+npm run run             # Build Target.2mg and launch GSSquared (scripts/run.gs2): boots a fresh copy of dist/GSOS.2mg (800KB GS/OS 6 with the Finder; scripts/make-gsos-disk.bat remakes it from a full system disk) in slot 7 drive 1, with Target.2mg in drive 2
 npm run debug:<game>    # Launch Crossrunner debugger (smb, bf, lo, wump, eb, dk, ic, mb)
 ```
 
@@ -32,7 +32,7 @@ After assembling, every build compacts the load file with `scripts/omf-compact.j
 
 Every build also runs `scripts/check-xbank.js` on the engine segments (MAIN, ENGINE): a 16-bit reference to another segment's symbol (`jsr`/`jmp`, a 16-bit operand, or `EXT+const`) fails the build. A few symbols that are meant as 16-bit offsets in a bank the code sets itself are allowed by name in the script. `scripts/code-signature.js save|compare <gameDir> <linkFile> <json>` records every routine's instruction stream (opcodes and lengths) and later reports the routines whose instructions changed; use it to show that moving code between segments left the hot paths alone (baselines go in `build/`, which is not committed).
 
-External tools are configured in `package.json` under `config`: Merlin32 assembler, Cadius disk utility, GSPort emulator, Crossrunner debugger, Cyrene/KegsCyrene. There is no automated test suite — testing is done by running in emulators.
+External tools are configured in `package.json` under `config`: Merlin32 assembler, Cadius disk utility, GSSquared and GSPort emulators, Crossrunner debugger, Cyrene/KegsCyrene. There is no automated test suite — testing is done by running in emulators.
 
 ## Architecture
 
