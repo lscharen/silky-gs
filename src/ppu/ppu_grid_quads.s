@@ -26,7 +26,7 @@
 
             DO    ENABLE_DIRTY_RENDERING
 
-GQ_ROWS     equ   {GRID_ROWS+4}             ; Pad row above, playfield rows, pad rows below (8x16 reach)
+GQ_ROWS     equ   {GRID_ROWS+4+GRID_UNALIGNED_Y}  ; Pad row above, playfield rows (+ the bottom edge row), pad rows below (8x16 reach)
 GQ_BYTES    equ   {GQ_ROWS*GQ_PITCH2}
 GQ_PITCH2X2 equ   {GQ_PITCH2*2}
 GQ_MAXREC   equ   64                        ; One record per OAM entry
@@ -75,9 +75,9 @@ gqInitTables
 :ypos       lsr
             lsr
             lsr
-            cmp   #GRID_ROWS
+            cmp   #GRID_ROWS+GRID_UNALIGNED_Y  ; (GRID_UNALIGNED_Y: the bottom edge row, or a pad row when j = 0)
             bcc   *+5
-            lda   #GRID_ROWS
+            lda   #GRID_ROWS+GRID_UNALIGNED_Y
             inc                           ; Padded row = row + 1
 :ymul       tax
             lda   #0
@@ -213,6 +213,17 @@ gqInitTables
             cpx   #GQ_BYTES
             bcc   :eq
 
+; SHR addresses: every cell starts as a pad cell (0; 1 with GRID_UNALIGNED_Y, whose edge cells have bit 0
+; set too: a cell's SHR address is always even); gridBuildScr sets the playfield cells
+
+            ldx   #0
+            lda   #GRID_UNALIGNED_Y
+:scr        stal  PPU_MEM+GRID_CELL_SCR,x
+            inx
+            inx
+            cpx   #GQ_BYTES
+            bcc   :scr
+
 ; The erase routines read the code field with long addressing: store each set's bank in its operands
 
             ldx   #0
@@ -228,6 +239,22 @@ gqInitTables
             inx
             cpx   #GQ_EBSITES*2
             bcc   :eb
+
+            DO    GRID_UNALIGNED_Y        ; The edge sequences' bank bytes
+            ldx   #0
+:ee         sep   #$20
+            ldy   gqEESites1,x
+            lda   #^lite_base_1
+            sta:  $0000,y
+            ldy   gqEESites2,x
+            lda   #^lite_base_2
+            sta:  $0000,y
+            rep   #$20
+            inx
+            inx
+            cpx   #GQ_EESITES*2
+            bcc   :ee
+            FIN
 
             lda   #gqRec                  ; Current records in the first array, none previous
             sta   gqRecBase
@@ -317,14 +344,23 @@ gridMarkSprite8
             DO    1-SPR_PIXEL_SHIFT
             GQ_SPR_SETUP0
             FIN
-            lda   gridRowLo,x             ; cell = row offset + column offset
-            clc
+            DO    GRID_UNALIGNED_Y
+gqPRL1
+            FIN
+            lda:  gridRowLo,x             ; cell = row offset + column offset (gridSetPhase patches the
+            clc                           ; three table bases by j)
             adc   gridColOff,y
             sta   gqCell
-            lda   gridRowHi,x
+            DO    GRID_UNALIGNED_Y
+gqPRH1
+            FIN
+            lda:  gridRowHi,x
             adc   #0
             sta   gqCell+1
-            lda   gridKCls,x              ; pattern * 2 (ppu_grid_marks.s)
+            DO    GRID_UNALIGNED_Y
+gqPKC1
+            FIN
+            lda:  gridKCls,x              ; pattern * 2 (ppu_grid_marks.s)
             ora   gridPCls,y
             tax
             rep   #$30                    ; X high byte is 0
@@ -360,14 +396,23 @@ gridMarkSprite16
             DO    1-SPR_PIXEL_SHIFT
             GQ_SPR_SETUP0
             FIN
-            lda   gridRowLo,x             ; cell = row offset + column offset
-            clc
+            DO    GRID_UNALIGNED_Y
+gqPRL2
+            FIN
+            lda:  gridRowLo,x             ; cell = row offset + column offset (gridSetPhase patches the
+            clc                           ; three table bases by j)
             adc   gridColOff,y
             sta   gqCell
-            lda   gridRowHi,x
+            DO    GRID_UNALIGNED_Y
+gqPRH2
+            FIN
+            lda:  gridRowHi,x
             adc   #0
             sta   gqCell+1
-            lda   gridKCls,x              ; pattern * 2 (ppu_grid_marks.s)
+            DO    GRID_UNALIGNED_Y
+gqPKC2
+            FIN
+            lda:  gridKCls,x              ; pattern * 2 (ppu_grid_marks.s)
             ora   gridPCls,y
             tax
             rep   #$30                    ; X high byte is 0
@@ -624,7 +669,13 @@ gqExposeOp
             lda   #0
             stal  gqGrid,x
             ldal  PPU_MEM+GRID_CELL_SCR,x
+            DO    1-GRID_UNALIGNED_Y
             beq   :out                    ; Pad cell
+            FIN
+            DO    GRID_UNALIGNED_Y
+            bit   #$0001                  ; Pad cell or edge cell (bit 0: the addresses are even, and
+            bne   :special                ; span $1Bxx - $9Cxx, so no high bit is free)
+            FIN
             tay
             DO    GRID_CELL_STATS
             inc   tmp7
@@ -638,6 +689,18 @@ gqExposeOp
             FIN
             jmp   (gridXQTbl,x)           ; The copy routine returns to the cell array
 :out        rts
+            DO    GRID_UNALIGNED_Y
+:special    and   #$FFFE
+            beq   :out                    ; Pad cell
+            tay                           ; Edge cell: its visible lines, whatever the mask (X = cell)
+            ldal  PPU_MEM+GRID_CELL_EQ,x
+            lsr
+            lsr
+            lsr
+            lsr
+            tax
+            jmp   (gridXETbl,x)           ; (by the cell's erase routine set: top or bottom)
+            FIN
 
 ; Clear handler (after a full render).  Y = cell.  DBR = K.
             mx    %00
@@ -770,6 +833,12 @@ gqSkipPrepare
             cmpl  PPU_MEM+GQ_PREV_OAM+2,x
             bne   :chg
             jsr   gqCellIdx               ; Unchanged: cell / pattern, skip flag
+            DO    GRID_UNALIGNED_Y        ; A sprite that touches an edge row is never skipped: the edge
+            cpy   gqEdgeLo                ; copies ignore the quadrant masks, so they can reach any of
+            bcc   :chg                    ; its quadrants (gqCellIdx kept X)
+            cpy   gqEdgeHi
+            bcs   :chg
+            FIN
             ora   #$0100
             sta   gqSI,x
             tya
@@ -825,14 +894,23 @@ gqCellIdx
             tay
             lda   OAM_COPY,x
             tax
-            lda   gridRowLo,x
+            DO    GRID_UNALIGNED_Y
+gqPRL3
+            FIN
+            lda:  gridRowLo,x             ; (gridSetPhase patches the three table bases by j)
             clc
             adc   gridColOff,y
             sta   gqCell
-            lda   gridRowHi,x
+            DO    GRID_UNALIGNED_Y
+gqPRH3
+            FIN
+            lda:  gridRowHi,x
             adc   #0
             sta   gqCell+1
-            lda   gridKCls,x
+            DO    GRID_UNALIGNED_Y
+gqPKC3
+            FIN
+            lda:  gridKCls,x
             ora   gridPCls,y
             rep   #$30
             mx    %00

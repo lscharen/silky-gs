@@ -294,7 +294,10 @@ _UpdateScrollStart
                 beq   :out                       ; Easy, if nothing changed, then nothing changes
 
                 sta   StartY                     ; Save the new position
-                cmp   #240                       ; Virtual lines 240 - 479 are the same rows in CIRAM page 1
+                DO    ENABLE_DIRTY_RENDERING*GRID_UNALIGNED_Y
+                jsr   gridSetPhase               ; The grid's sprite tables follow the scroll's line in its tile (A kept)
+                FIN
+                cmp   #240                      ; Virtual lines 240 - 479 are the same rows in CIRAM page 1
                 bcc   *+5
                 sbc   #240
                 sta   StartRow

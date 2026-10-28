@@ -5109,6 +5109,14 @@ gridQX8
 gridEQTbl   dw    gridQE1_0,gridQE1_1,gridQE1_2,gridQE1_3,gridQE1_4,gridQE1_5,gridQE1_6,gridQE1_7,gridQE1_8,gridQE1_9,gridQE1_10,gridQE1_11,gridQE1_12,gridQE1_13,gridQE1_14,gridQE1_15
             dw    gridQE2_0,gridQE2_1,gridQE2_2,gridQE2_3,gridQE2_4,gridQE2_5,gridQE2_6,gridQE2_7,gridQE2_8,gridQE2_9,gridQE2_10,gridQE2_11,gridQE2_12,gridQE2_13,gridQE2_14,gridQE2_15
             dw    gridQE1_0,gridQE1_0,gridQE1_0,gridQE1_0,gridQE1_0,gridQE1_0,gridQE1_0,gridQE1_0,gridQE1_0,gridQE1_0,gridQE1_0,gridQE1_0,gridQE1_0,gridQE1_0,gridQE1_0,gridQE1_0
+; GRID_UNALIGNED_Y: the edge rows' sets, 96 / 128 = top (bank 1 / 2), 160 / 192 = bottom: their stubs, whatever
+; the mask (but nothing to erase: mask 0)
+            DO    GRID_UNALIGNED_Y
+            dw    gridQE1_0,gqETop1,gqETop1,gqETop1,gqETop1,gqETop1,gqETop1,gqETop1,gqETop1,gqETop1,gqETop1,gqETop1,gqETop1,gqETop1,gqETop1,gqETop1
+            dw    gridQE1_0,gqETop2,gqETop2,gqETop2,gqETop2,gqETop2,gqETop2,gqETop2,gqETop2,gqETop2,gqETop2,gqETop2,gqETop2,gqETop2,gqETop2,gqETop2
+            dw    gridQE1_0,gqEBot1,gqEBot1,gqEBot1,gqEBot1,gqEBot1,gqEBot1,gqEBot1,gqEBot1,gqEBot1,gqEBot1,gqEBot1,gqEBot1,gqEBot1,gqEBot1,gqEBot1
+            dw    gridQE1_0,gqEBot2,gqEBot2,gqEBot2,gqEBot2,gqEBot2,gqEBot2,gqEBot2,gqEBot2,gqEBot2,gqEBot2,gqEBot2,gqEBot2,gqEBot2,gqEBot2,gqEBot2
+            FIN
 gridXQTbl   dw    gridQX0,gridQX1,gridQX2,gridQX3,gridQX4,gridQX5,gridQX6,gridQX7,gridQX8,gridQX9,gridQX10,gridQX11,gridQX12,gridQX13,gridQX14,gridQX15
 ; The erase routines' bank bytes, per code field bank (gqInitTables)
 GQ_EBSITES  equ   60
@@ -5128,5 +5136,300 @@ gqEBSites2  dw    gqEB2_0+3,gqEB2_1+3,gqEB2_2+3,gqEB2_3+3,gqEB2_4+3,gqEB2_5+3,gq
             dw    gqEB2_40+3,gqEB2_41+3,gqEB2_42+3,gqEB2_43+3,gqEB2_44+3,gqEB2_45+3,gqEB2_46+3,gqEB2_47+3
             dw    gqEB2_48+3,gqEB2_49+3,gqEB2_50+3,gqEB2_51+3,gqEB2_52+3,gqEB2_53+3,gqEB2_54+3,gqEB2_55+3
             dw    gqEB2_56+3,gqEB2_57+3,gqEB2_58+3,gqEB2_59+3
+
+            DO    GRID_UNALIGNED_Y
+; Edge rows, erase, code field bank 1: top (forward), bottom (backward)
+            mx    %00
+gqEF1_0
+gqEEB1_0    ldal  {0*_LINE_SPAN}+4,x
+            sta:  {0*SHR_LINE_WIDTH},y
+gqEEB1_1    ldal  {0*_LINE_SPAN}+1,x
+            sta:  {0*SHR_LINE_WIDTH}+2,y
+gqEF1_1
+gqEEB1_2    ldal  {1*_LINE_SPAN}+4,x
+            sta:  {1*SHR_LINE_WIDTH},y
+gqEEB1_3    ldal  {1*_LINE_SPAN}+1,x
+            sta:  {1*SHR_LINE_WIDTH}+2,y
+gqEF1_2
+gqEEB1_4    ldal  {2*_LINE_SPAN}+4,x
+            sta:  {2*SHR_LINE_WIDTH},y
+gqEEB1_5    ldal  {2*_LINE_SPAN}+1,x
+            sta:  {2*SHR_LINE_WIDTH}+2,y
+gqEF1_3
+gqEEB1_6    ldal  {3*_LINE_SPAN}+4,x
+            sta:  {3*SHR_LINE_WIDTH},y
+gqEEB1_7    ldal  {3*_LINE_SPAN}+1,x
+            sta:  {3*SHR_LINE_WIDTH}+2,y
+gqEF1_4
+gqEEB1_8    ldal  {4*_LINE_SPAN}+4,x
+            sta:  {4*SHR_LINE_WIDTH},y
+gqEEB1_9    ldal  {4*_LINE_SPAN}+1,x
+            sta:  {4*SHR_LINE_WIDTH}+2,y
+gqEF1_5
+gqEEB1_10   ldal  {5*_LINE_SPAN}+4,x
+            sta:  {5*SHR_LINE_WIDTH},y
+gqEEB1_11   ldal  {5*_LINE_SPAN}+1,x
+            sta:  {5*SHR_LINE_WIDTH}+2,y
+gqEF1_6
+gqEEB1_12   ldal  {6*_LINE_SPAN}+4,x
+            sta:  {6*SHR_LINE_WIDTH},y
+gqEEB1_13   ldal  {6*_LINE_SPAN}+1,x
+            sta:  {6*SHR_LINE_WIDTH}+2,y
+gqEF1_7
+gqEEB1_14   ldal  {7*_LINE_SPAN}+4,x
+            sta:  {7*SHR_LINE_WIDTH},y
+gqEEB1_15   ldal  {7*_LINE_SPAN}+1,x
+            sta:  {7*SHR_LINE_WIDTH}+2,y
+            rts   
+gqER1_7
+gqEEB1_16   ldal  {7*_LINE_SPAN}+4,x
+            sta:  {7*SHR_LINE_WIDTH},y
+gqEEB1_17   ldal  {7*_LINE_SPAN}+1,x
+            sta:  {7*SHR_LINE_WIDTH}+2,y
+gqER1_6
+gqEEB1_18   ldal  {6*_LINE_SPAN}+4,x
+            sta:  {6*SHR_LINE_WIDTH},y
+gqEEB1_19   ldal  {6*_LINE_SPAN}+1,x
+            sta:  {6*SHR_LINE_WIDTH}+2,y
+gqER1_5
+gqEEB1_20   ldal  {5*_LINE_SPAN}+4,x
+            sta:  {5*SHR_LINE_WIDTH},y
+gqEEB1_21   ldal  {5*_LINE_SPAN}+1,x
+            sta:  {5*SHR_LINE_WIDTH}+2,y
+gqER1_4
+gqEEB1_22   ldal  {4*_LINE_SPAN}+4,x
+            sta:  {4*SHR_LINE_WIDTH},y
+gqEEB1_23   ldal  {4*_LINE_SPAN}+1,x
+            sta:  {4*SHR_LINE_WIDTH}+2,y
+gqER1_3
+gqEEB1_24   ldal  {3*_LINE_SPAN}+4,x
+            sta:  {3*SHR_LINE_WIDTH},y
+gqEEB1_25   ldal  {3*_LINE_SPAN}+1,x
+            sta:  {3*SHR_LINE_WIDTH}+2,y
+gqER1_2
+gqEEB1_26   ldal  {2*_LINE_SPAN}+4,x
+            sta:  {2*SHR_LINE_WIDTH},y
+gqEEB1_27   ldal  {2*_LINE_SPAN}+1,x
+            sta:  {2*SHR_LINE_WIDTH}+2,y
+gqER1_1
+gqEEB1_28   ldal  {1*_LINE_SPAN}+4,x
+            sta:  {1*SHR_LINE_WIDTH},y
+gqEEB1_29   ldal  {1*_LINE_SPAN}+1,x
+            sta:  {1*SHR_LINE_WIDTH}+2,y
+gqER1_0
+gqEEB1_30   ldal  {0*_LINE_SPAN}+4,x
+            sta:  {0*SHR_LINE_WIDTH},y
+gqEEB1_31   ldal  {0*_LINE_SPAN}+1,x
+            sta:  {0*SHR_LINE_WIDTH}+2,y
+            rts   
+; Edge rows, erase, code field bank 2: top (forward), bottom (backward)
+            mx    %00
+gqEF2_0
+gqEEB2_0    ldal  {0*_LINE_SPAN}+4,x
+            sta:  {0*SHR_LINE_WIDTH},y
+gqEEB2_1    ldal  {0*_LINE_SPAN}+1,x
+            sta:  {0*SHR_LINE_WIDTH}+2,y
+gqEF2_1
+gqEEB2_2    ldal  {1*_LINE_SPAN}+4,x
+            sta:  {1*SHR_LINE_WIDTH},y
+gqEEB2_3    ldal  {1*_LINE_SPAN}+1,x
+            sta:  {1*SHR_LINE_WIDTH}+2,y
+gqEF2_2
+gqEEB2_4    ldal  {2*_LINE_SPAN}+4,x
+            sta:  {2*SHR_LINE_WIDTH},y
+gqEEB2_5    ldal  {2*_LINE_SPAN}+1,x
+            sta:  {2*SHR_LINE_WIDTH}+2,y
+gqEF2_3
+gqEEB2_6    ldal  {3*_LINE_SPAN}+4,x
+            sta:  {3*SHR_LINE_WIDTH},y
+gqEEB2_7    ldal  {3*_LINE_SPAN}+1,x
+            sta:  {3*SHR_LINE_WIDTH}+2,y
+gqEF2_4
+gqEEB2_8    ldal  {4*_LINE_SPAN}+4,x
+            sta:  {4*SHR_LINE_WIDTH},y
+gqEEB2_9    ldal  {4*_LINE_SPAN}+1,x
+            sta:  {4*SHR_LINE_WIDTH}+2,y
+gqEF2_5
+gqEEB2_10   ldal  {5*_LINE_SPAN}+4,x
+            sta:  {5*SHR_LINE_WIDTH},y
+gqEEB2_11   ldal  {5*_LINE_SPAN}+1,x
+            sta:  {5*SHR_LINE_WIDTH}+2,y
+gqEF2_6
+gqEEB2_12   ldal  {6*_LINE_SPAN}+4,x
+            sta:  {6*SHR_LINE_WIDTH},y
+gqEEB2_13   ldal  {6*_LINE_SPAN}+1,x
+            sta:  {6*SHR_LINE_WIDTH}+2,y
+gqEF2_7
+gqEEB2_14   ldal  {7*_LINE_SPAN}+4,x
+            sta:  {7*SHR_LINE_WIDTH},y
+gqEEB2_15   ldal  {7*_LINE_SPAN}+1,x
+            sta:  {7*SHR_LINE_WIDTH}+2,y
+            rts   
+gqER2_7
+gqEEB2_16   ldal  {7*_LINE_SPAN}+4,x
+            sta:  {7*SHR_LINE_WIDTH},y
+gqEEB2_17   ldal  {7*_LINE_SPAN}+1,x
+            sta:  {7*SHR_LINE_WIDTH}+2,y
+gqER2_6
+gqEEB2_18   ldal  {6*_LINE_SPAN}+4,x
+            sta:  {6*SHR_LINE_WIDTH},y
+gqEEB2_19   ldal  {6*_LINE_SPAN}+1,x
+            sta:  {6*SHR_LINE_WIDTH}+2,y
+gqER2_5
+gqEEB2_20   ldal  {5*_LINE_SPAN}+4,x
+            sta:  {5*SHR_LINE_WIDTH},y
+gqEEB2_21   ldal  {5*_LINE_SPAN}+1,x
+            sta:  {5*SHR_LINE_WIDTH}+2,y
+gqER2_4
+gqEEB2_22   ldal  {4*_LINE_SPAN}+4,x
+            sta:  {4*SHR_LINE_WIDTH},y
+gqEEB2_23   ldal  {4*_LINE_SPAN}+1,x
+            sta:  {4*SHR_LINE_WIDTH}+2,y
+gqER2_3
+gqEEB2_24   ldal  {3*_LINE_SPAN}+4,x
+            sta:  {3*SHR_LINE_WIDTH},y
+gqEEB2_25   ldal  {3*_LINE_SPAN}+1,x
+            sta:  {3*SHR_LINE_WIDTH}+2,y
+gqER2_2
+gqEEB2_26   ldal  {2*_LINE_SPAN}+4,x
+            sta:  {2*SHR_LINE_WIDTH},y
+gqEEB2_27   ldal  {2*_LINE_SPAN}+1,x
+            sta:  {2*SHR_LINE_WIDTH}+2,y
+gqER2_1
+gqEEB2_28   ldal  {1*_LINE_SPAN}+4,x
+            sta:  {1*SHR_LINE_WIDTH},y
+gqEEB2_29   ldal  {1*_LINE_SPAN}+1,x
+            sta:  {1*SHR_LINE_WIDTH}+2,y
+gqER2_0
+gqEEB2_30   ldal  {0*_LINE_SPAN}+4,x
+            sta:  {0*SHR_LINE_WIDTH},y
+gqEEB2_31   ldal  {0*_LINE_SPAN}+1,x
+            sta:  {0*SHR_LINE_WIDTH}+2,y
+            rts   
+; Edge rows, expose: top (forward), bottom (backward)
+            mx    %00
+gqXF_0
+            lda:  {0*SHR_LINE_WIDTH},y
+            sta:  {0*SHR_LINE_WIDTH},y
+            lda:  {0*SHR_LINE_WIDTH}+2,y
+            sta:  {0*SHR_LINE_WIDTH}+2,y
+gqXF_1
+            lda:  {1*SHR_LINE_WIDTH},y
+            sta:  {1*SHR_LINE_WIDTH},y
+            lda:  {1*SHR_LINE_WIDTH}+2,y
+            sta:  {1*SHR_LINE_WIDTH}+2,y
+gqXF_2
+            lda:  {2*SHR_LINE_WIDTH},y
+            sta:  {2*SHR_LINE_WIDTH},y
+            lda:  {2*SHR_LINE_WIDTH}+2,y
+            sta:  {2*SHR_LINE_WIDTH}+2,y
+gqXF_3
+            lda:  {3*SHR_LINE_WIDTH},y
+            sta:  {3*SHR_LINE_WIDTH},y
+            lda:  {3*SHR_LINE_WIDTH}+2,y
+            sta:  {3*SHR_LINE_WIDTH}+2,y
+gqXF_4
+            lda:  {4*SHR_LINE_WIDTH},y
+            sta:  {4*SHR_LINE_WIDTH},y
+            lda:  {4*SHR_LINE_WIDTH}+2,y
+            sta:  {4*SHR_LINE_WIDTH}+2,y
+gqXF_5
+            lda:  {5*SHR_LINE_WIDTH},y
+            sta:  {5*SHR_LINE_WIDTH},y
+            lda:  {5*SHR_LINE_WIDTH}+2,y
+            sta:  {5*SHR_LINE_WIDTH}+2,y
+gqXF_6
+            lda:  {6*SHR_LINE_WIDTH},y
+            sta:  {6*SHR_LINE_WIDTH},y
+            lda:  {6*SHR_LINE_WIDTH}+2,y
+            sta:  {6*SHR_LINE_WIDTH}+2,y
+gqXF_7
+            lda:  {7*SHR_LINE_WIDTH},y
+            sta:  {7*SHR_LINE_WIDTH},y
+            lda:  {7*SHR_LINE_WIDTH}+2,y
+            sta:  {7*SHR_LINE_WIDTH}+2,y
+            rts   
+gqXR_7
+            lda:  {7*SHR_LINE_WIDTH},y
+            sta:  {7*SHR_LINE_WIDTH},y
+            lda:  {7*SHR_LINE_WIDTH}+2,y
+            sta:  {7*SHR_LINE_WIDTH}+2,y
+gqXR_6
+            lda:  {6*SHR_LINE_WIDTH},y
+            sta:  {6*SHR_LINE_WIDTH},y
+            lda:  {6*SHR_LINE_WIDTH}+2,y
+            sta:  {6*SHR_LINE_WIDTH}+2,y
+gqXR_5
+            lda:  {5*SHR_LINE_WIDTH},y
+            sta:  {5*SHR_LINE_WIDTH},y
+            lda:  {5*SHR_LINE_WIDTH}+2,y
+            sta:  {5*SHR_LINE_WIDTH}+2,y
+gqXR_4
+            lda:  {4*SHR_LINE_WIDTH},y
+            sta:  {4*SHR_LINE_WIDTH},y
+            lda:  {4*SHR_LINE_WIDTH}+2,y
+            sta:  {4*SHR_LINE_WIDTH}+2,y
+gqXR_3
+            lda:  {3*SHR_LINE_WIDTH},y
+            sta:  {3*SHR_LINE_WIDTH},y
+            lda:  {3*SHR_LINE_WIDTH}+2,y
+            sta:  {3*SHR_LINE_WIDTH}+2,y
+gqXR_2
+            lda:  {2*SHR_LINE_WIDTH},y
+            sta:  {2*SHR_LINE_WIDTH},y
+            lda:  {2*SHR_LINE_WIDTH}+2,y
+            sta:  {2*SHR_LINE_WIDTH}+2,y
+gqXR_1
+            lda:  {1*SHR_LINE_WIDTH},y
+            sta:  {1*SHR_LINE_WIDTH},y
+            lda:  {1*SHR_LINE_WIDTH}+2,y
+            sta:  {1*SHR_LINE_WIDTH}+2,y
+gqXR_0
+            lda:  {0*SHR_LINE_WIDTH},y
+            sta:  {0*SHR_LINE_WIDTH},y
+            lda:  {0*SHR_LINE_WIDTH}+2,y
+            sta:  {0*SHR_LINE_WIDTH}+2,y
+            rts   
+; Entry tables, by line * 2
+gqEF1Tbl    dw    gqEF1_0,gqEF1_1,gqEF1_2,gqEF1_3,gqEF1_4,gqEF1_5,gqEF1_6,gqEF1_7
+gqEF2Tbl    dw    gqEF2_0,gqEF2_1,gqEF2_2,gqEF2_3,gqEF2_4,gqEF2_5,gqEF2_6,gqEF2_7
+gqXFTbl     dw    gqXF_0,gqXF_1,gqXF_2,gqXF_3,gqXF_4,gqXF_5,gqXF_6,gqXF_7
+gqER1Tbl    dw    gqER1_0,gqER1_1,gqER1_2,gqER1_3,gqER1_4,gqER1_5,gqER1_6,gqER1_7
+gqER2Tbl    dw    gqER2_0,gqER2_1,gqER2_2,gqER2_3,gqER2_4,gqER2_5,gqER2_6,gqER2_7
+gqXRTbl     dw    gqXR_0,gqXR_1,gqXR_2,gqXR_3,gqXR_4,gqXR_5,gqXR_6,gqXR_7
+; Erase stubs (gridEQTbl): take bit 0 off the SHR address, then the sequence (jmp patched by gridPatchEdges)
+            mx    %00
+gqETop1     tya   
+            and   #$FFFE
+            tay   
+gqETop1J    jmp   gqEF1_0
+gqETop2     tya   
+            and   #$FFFE
+            tay   
+gqETop2J    jmp   gqEF2_0
+gqEBot1     tya   
+            and   #$FFFE
+            tay   
+gqEBot1J    jmp   gqER1_0
+gqEBot2     tya   
+            and   #$FFFE
+            tay   
+gqEBot2J    jmp   gqER2_0
+; Expose stubs (gridXETbl; gqExposeOp has taken bit 0 off)
+gqXTopJ     jmp   gqXF_0
+gqXBotJ     jmp   gqXR_0
+; Expose dispatch of the edge cells, by GRID_CELL_EQ / 16 (sets 0 - 64 never get here)
+gridXETbl   dw    gridQX0,gridQX0,gridQX0,gqXTopJ,gqXTopJ,gqXBotJ,gqXBotJ
+; The edge erase sequences' bank bytes, per code field bank (gqInitTables)
+GQ_EESITES  equ   32
+gqEESites1  dw    gqEEB1_0+3,gqEEB1_1+3,gqEEB1_2+3,gqEEB1_3+3,gqEEB1_4+3,gqEEB1_5+3,gqEEB1_6+3,gqEEB1_7+3
+            dw    gqEEB1_8+3,gqEEB1_9+3,gqEEB1_10+3,gqEEB1_11+3,gqEEB1_12+3,gqEEB1_13+3,gqEEB1_14+3,gqEEB1_15+3
+            dw    gqEEB1_16+3,gqEEB1_17+3,gqEEB1_18+3,gqEEB1_19+3,gqEEB1_20+3,gqEEB1_21+3,gqEEB1_22+3,gqEEB1_23+3
+            dw    gqEEB1_24+3,gqEEB1_25+3,gqEEB1_26+3,gqEEB1_27+3,gqEEB1_28+3,gqEEB1_29+3,gqEEB1_30+3,gqEEB1_31+3
+gqEESites2  dw    gqEEB2_0+3,gqEEB2_1+3,gqEEB2_2+3,gqEEB2_3+3,gqEEB2_4+3,gqEEB2_5+3,gqEEB2_6+3,gqEEB2_7+3
+            dw    gqEEB2_8+3,gqEEB2_9+3,gqEEB2_10+3,gqEEB2_11+3,gqEEB2_12+3,gqEEB2_13+3,gqEEB2_14+3,gqEEB2_15+3
+            dw    gqEEB2_16+3,gqEEB2_17+3,gqEEB2_18+3,gqEEB2_19+3,gqEEB2_20+3,gqEEB2_21+3,gqEEB2_22+3,gqEEB2_23+3
+            dw    gqEEB2_24+3,gqEEB2_25+3,gqEEB2_26+3,gqEEB2_27+3,gqEEB2_28+3,gqEEB2_29+3,gqEEB2_30+3,gqEEB2_31+3
+            FIN
 
             FIN

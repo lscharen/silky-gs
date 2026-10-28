@@ -276,6 +276,9 @@ drawTileToScreenV
 
           rts
 
+; Behind-the-background (priority) sprites.  NOTE: vertical flip is not implemented for them: the V / HV
+; entries are aliases of the unflipped ones, so a vertically flipped priority sprite is drawn upright (here
+; and in drawTileToScreenP below).
         mx    %00
 drawClippedTileToScreenPHV
 drawClippedTileToScreenPH
@@ -289,7 +292,8 @@ drawClippedTileToScreenP
         tay
         ldx   sprTmp1
 
-        jsr   _copyMaskToBufferP      ; Build a screen mask in the direct page
+        jsr   _copyMaskToBufferP      ; The pixels where the sprite may show, in the direct page (as
+                                      ; drawTileToScreenP; clipBuffer / vclipMaskBuffer zero the hidden ones)
         jsr   clipBuffer
         jsr   vclipMaskBuffer
 ;        jmp   _copyBufferToScreenP
@@ -330,7 +334,7 @@ zr
 _copyMaskToBufferP
 ]line   equ   0
         lup   8
-        ldal  $010000+{]line*SHR_LINE_WIDTH}+0,x     ; create mask where 0 = !0 and 0 = F.
+        ldal  $010000+{]line*SHR_LINE_WIDTH}+0,x     ; Screen mask: F = background pixel, 0 = transparent
         beq   zero_left
         bit   #$F000
         beq   *+5
@@ -345,6 +349,7 @@ _copyMaskToBufferP
         beq   *+5
         ora   #$000F
 zero_left
+        eor   #$FFFF     ; The pixels where the sprite may show: the background's transparent ones
         sta   blttmp+{]line*4}
 
         ldal  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; create mask where 0 = !0 and 0 = F.
@@ -362,12 +367,14 @@ zero_left
         beq   *+5
         ora   #$000F
 zero_right
+        eor   #$FFFF
         sta   blttmp+{]line*4}+2
 
 ]line   equ   ]line+1
         --^
         rts
 
+; NOTE: vertical flip is not implemented (PV / PHV are aliases of P / PH; see drawClippedTileToScreenP)
         mx    %00
 drawTileToScreenPHV
 drawTileToScreenPH
