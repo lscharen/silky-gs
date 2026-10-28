@@ -5,6 +5,7 @@ ROMBase ENT
             put   ../../../core/Defs.s
             use   equates.inc
             ds    $5000-*
+            put   Config.s
             put   ../../../rom/rom_inject.s
             put   helpers.s
             ds    \,$00
@@ -12,6 +13,7 @@ y_exclude ENT
             ds    256
 tile_exclude ENT
             ds    256
+            put   ../../../ppu/ppu_reg_vars.s ; PPU state: not replicated, and after rom_inject so that is at the same address in every bank
             ds    $8000-*
 ; Contra US Disassembly - v1.4
 ; https://github.com/vermiceli/nes-contra-us

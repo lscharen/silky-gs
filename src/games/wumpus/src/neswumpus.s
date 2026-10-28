@@ -159,6 +159,8 @@ ROMBase ENT
     ds   $7000-*            ; Pad up to $7000; the injected code and y_exclude below must end before $8000
 HORIZONTAL_MIRRORING equ $01        ; From core/Defs.s, which is not included in the ROM segment
 VERTICAL_MIRRORING   equ $02
+    put  ../Config.s                   ; HAS_CHR_RAM and the other engine constants rom_inject.s tests
+    put  ../../../ppu/ppu_reg_vars.s  ; PPU state, only put in the base ROM bank
     put  ../../../rom/rom_inject.s
     ds   \,$00
 

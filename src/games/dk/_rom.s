@@ -58,6 +58,8 @@ tile_exclude ENT                  ; Table of excluded tiles
 
 HORIZONTAL_MIRRORING equ $01        ; From core/Defs.s, which cannot be included here (symbol clashes with Defines.s)
 VERTICAL_MIRRORING   equ $02
+        put  Config.s                   ; HAS_CHR_RAM and the other engine constants rom_inject.s tests
+        put  ../../ppu/ppu_reg_vars.s   ; PPU state, only put in the base ROM bank
         put  ../../rom/rom_inject.s
 
 STA_PhaseNo_Y STA_ABS_Y PhaseNo
