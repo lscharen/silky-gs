@@ -127,6 +127,49 @@ gqInitTables
             cpy   #256
             bcc   :xl
 
+; SPR_SETUP's results, for gridMarkSprite8/16 (GQ_SPR_SETUP): by OAM y (+1), the SHR address of the
+; sprite's line at byte 0; with SPR_PIXEL_SHIFT, by OAM x, sprShift (4 on an odd pixel) and the right clip
+; (sprTmp4).  From byte 124 on, sprites are drawn on even pixels and clipped by the bytes past 124.
+
+            ldy   #0
+            lda   #$2000-{y_offset*160}+x_offset
+:sy         sep   #$20
+            sta   gqSprYLo,y
+            xba
+            sta   gqSprYHi,y
+            xba
+            rep   #$20
+            clc
+            adc   #160
+            iny
+            cpy   #256
+            bcc   :sy
+
+            DO    SPR_PIXEL_SHIFT
+            ldy   #0
+:sx         tya
+            and   #$0001
+            asl
+            asl
+            tax                           ; the shift on an odd pixel
+            tya
+            lsr                           ; IIgs byte
+            cmp   #124
+            bcc   :sxin
+            sbc   #124                    ; (carry set) the bytes past 124, on an even pixel
+            ldx   #0
+            bra   :sxs
+:sxin       lda   #0
+:sxs        sep   #$20
+            sta   gqSprXC,y
+            txa
+            sta   gqSprXS,y
+            rep   #$20
+            iny
+            cpy   #256
+            bcc   :sx
+            FIN
+
 ; Cell code array: A0 00 00 / 20 <gqCellOp> = ldy #0000 / jsr gqCellOp
 
             ldx   #0
@@ -199,8 +242,63 @@ gqInitTables
             rts
 
 ; ---------------------------------------------------------------------------
-; gridMarkSprite8 / gridMarkSprite16 -- called from drawSprites (any DBR).  X = OAM_COPY index (preserved)
+; gridMarkSprite8 / gridMarkSprite16 -- called from drawSprites (DBR = $01).  X = OAM_COPY index (preserved)
+;
+; They also set the sprite up for drawing, as SPR_SETUP does (sprTmp1, sprShift, sprTmp4), from the same
+; coordinates and with the same 8-bit registers: drawSprites calls them instead of SPR_SETUP.
 ; ---------------------------------------------------------------------------
+
+; The setup, with SPR_PIXEL_SHIFT: X = OAM y, Y = OAM x, 8-bit registers, DBR = K.  The high byte of
+; sprShift is 0 (drawSprites).  ]1 = 8, or 16 (SPR_TALL: sprShift for the whole 8x16 sprite, 0 / 8).
+GQ_SPR_SETUP mac
+            tya
+            lsr                           ; IIgs byte
+            clc
+            adc   gqSprYLo,x
+            sta   sprTmp1
+            lda   gqSprYHi,x
+            adc   #0
+            sta   sprTmp1+1
+            lda   gqSprXS,y
+            DO    SPR_TALL*{]1/16}
+            asl
+            FIN
+            sta   sprShift
+            lda   gqSprXC,y
+            sta   sprTmp4
+            stz   sprTmp4+1
+            <<<
+
+; Without SPR_PIXEL_SHIFT: from X = the OAM offset, sets X = OAM y and Y = the grid's x (the pixel the sprite
+; is drawn at: OAM x + the scroll's parity, as the background starts at an even pixel; $FF past the right
+; edge).  The sprite's byte is half the 9-bit sum, clipped from 125 on.  8-bit registers, DBR = K.
+GQ_SPR_SETUP0 mac
+            lda   OAM_COPY+3,x
+            clc
+            adc   sprXPar
+            tay
+            ror                           ; IIgs byte: (x + parity) / 2, 128 past the right edge
+            bpl   *+4
+            ldy   #$FF                    ; (past the right edge)
+            sta   sprTmp1
+            cmp   #125
+            bcc   *+6
+            sbc   #124                    ; (carry set) the bytes past 124
+            bra   *+4
+            lda   #0
+            sta   sprTmp4
+            stz   sprTmp4+1
+            lda   OAM_COPY,x              ; Y-coordinate (already adjusted by +1)
+            tax
+            lda   sprTmp1
+            clc
+            adc   gqSprYLo,x
+            sta   sprTmp1
+            lda   gqSprYHi,x
+            adc   #0
+            sta   sprTmp1+1
+            <<<
+
             mx    %00
 gridMarkSprite8
             phx
@@ -211,19 +309,14 @@ gridMarkSprite8
             sep   #$30                    ; 8-bit: the coordinates index the byte tables directly
             mx    %11
             DO    SPR_PIXEL_SHIFT
-            lda   OAM_COPY,x              ; Y-coordinate (already adjusted by +1)
             ldy   OAM_COPY+3,x            ; X-coordinate
+            lda   OAM_COPY,x              ; Y-coordinate (already adjusted by +1)
+            tax
+            GQ_SPR_SETUP 8
             FIN
             DO    1-SPR_PIXEL_SHIFT
-            lda   OAM_COPY+3,x            ; X: the pixel the sprite is drawn at (SPR_SETUP), the NES pixel
-            clc                           ; + the scroll's parity, as the background starts at an even pixel
-            adc   sprXPar
-            bcc   *+4
-            lda   #$FF                    ; (off the right edge)
-            tay
-            lda   OAM_COPY,x              ; Y-coordinate (already adjusted by +1)
+            GQ_SPR_SETUP0
             FIN
-            tax
             lda   gridRowLo,x             ; cell = row offset + column offset
             clc
             adc   gridColOff,y
@@ -259,19 +352,14 @@ gridMarkSprite16
             sep   #$30                    ; 8-bit: the coordinates index the byte tables directly
             mx    %11
             DO    SPR_PIXEL_SHIFT
-            lda   OAM_COPY,x              ; Y-coordinate (already adjusted by +1)
             ldy   OAM_COPY+3,x            ; X-coordinate
+            lda   OAM_COPY,x              ; Y-coordinate (already adjusted by +1)
+            tax
+            GQ_SPR_SETUP 16
             FIN
             DO    1-SPR_PIXEL_SHIFT
-            lda   OAM_COPY+3,x            ; X: the pixel the sprite is drawn at (SPR_SETUP), the NES pixel
-            clc                           ; + the scroll's parity, as the background starts at an even pixel
-            adc   sprXPar
-            bcc   *+4
-            lda   #$FF                    ; (off the right edge)
-            tay
-            lda   OAM_COPY,x              ; Y-coordinate (already adjusted by +1)
+            GQ_SPR_SETUP0
             FIN
-            tax
             lda   gridRowLo,x             ; cell = row offset + column offset
             clc
             adc   gridColOff,y
