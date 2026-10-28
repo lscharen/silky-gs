@@ -66,6 +66,8 @@ ptr                   = $00         ; pointer for the nametable upload
             ds    $6000-*           ; (the cartridge has no WRAM)
 HORIZONTAL_MIRRORING equ $01        ; From core/Defs.s, which is not included in the ROM segment
 VERTICAL_MIRRORING   equ $02
+            put  Config.s                      ; HAS_CHR_RAM and the other engine constants rom_inject.s tests
+            put  ../../ppu/ppu_reg_vars.s  ; PPU state, only put in the base ROM bank
             put   ../../rom/rom_inject.s
 
 y_exclude   ENT                     ; Table of excluded sprite Y values -- filled in by InitYExclude at start-up

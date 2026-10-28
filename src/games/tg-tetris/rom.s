@@ -28,6 +28,8 @@ y_exclude   ENT                               ; Table of excluded sprite Y value
 tile_exclude ENT                              ; Table of excluded tiles (none)
             ds    256
 
+            put  Config.s                      ; HAS_CHR_RAM and the other engine constants rom_inject.s tests
+            put  ../../ppu/ppu_reg_vars.s  ; PPU state, only put in the base ROM bank
             put   ../../rom/rom_inject.s      ; The PPU / APU register hooks
             put   abs_y.s                     ; The abs,Y helpers for the NES zero page (generated)
             put   support.s                   ; The routines the patches call

@@ -5,6 +5,8 @@ ROMBase EXT
             put   ../../../core/Defs.s
             use   equates.inc
             ds    $5000-*
+            put   Config.s
+            put   ../../../ppu/ppu_reg_vars_ext.s
             put   ../../../rom/rom_inject.s
             put   helpers.s
             ds    $8000-*
