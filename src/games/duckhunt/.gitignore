@@ -1,0 +1,4 @@
+tools/plain/prg.bin
+tools/plain/error_output.txt
+tools/plain/rom_plain.s
+tools/plain/ram.s

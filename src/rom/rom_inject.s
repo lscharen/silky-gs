@@ -312,6 +312,8 @@ NO_OP       rts
 
 STX_4000    STX_APU APU_PULSE1_REG1
 
+STY_4000    STY_APU APU_PULSE1_REG1
+
 STA_4000_Y
             php
             phx

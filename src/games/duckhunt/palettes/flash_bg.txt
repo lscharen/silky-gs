@@ -1,0 +1,10 @@
+; The Zapper's light test, background targets (PaletteTable record 3, $E5A0): everything black but the
+; white of BG0 color 3
+BG0: $0F $0F $0F $30
+BG1: $0F $0F $0F $0F
+BG2: $0F $0F $0F $0F
+BG3: $0F $0F $0F $0F
+SP0: $0F $0F $0F $0F
+SP1: $0F $0F $0F $0F
+SP2: $0F $0F $0F $0F
+SP3: $0F $0F $0F $0F

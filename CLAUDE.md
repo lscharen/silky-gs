@@ -18,6 +18,7 @@ npm run build:bf        # Balloon Fight
 npm run build:lo        # Lights Out
 npm run build:wump      # Wumpus
 npm run build:zelda     # Zelda
+npm run build:duckhunt  # Duck Hunt
 npm run build:bench     # Engine benchmark (src/games/bench: scrolling SMB scene, no game logic)
 npm run build:kbdtest   # Keyboard driver test (src/games/KbdTest: ProDOS 8 BIN at $2000, BRUN from BASIC.SYSTEM; emu/KbdTest.2mg)
 npm run build:all       # All games
