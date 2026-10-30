@@ -90,7 +90,29 @@ _BltRangeLite
                 dec
                 sta   :patch+1            ; save the stack once (compensate for the PHP below)
 
+; A line that an earlier render left blank on both screens ($01 and $E1, nbgLine) and that nothing has
+; drawn on since is not blanked again.  So while a game keeps the background off (transitions, loading
+; screens), only the lines of the sprites are drawn.  A line blanked with shadowing off is blank in $01
+; only: the sprites are drawn on it next (drawShadowList), so it is not marked.
+
+                sep   #$20
+                ldal  SHADOW_REG
+                rep   #$20
+                and   #$0008              ; Shadowing of the SHR screen off?
+                sta   nbgShOff
+                lda   #1
+                sta   nbgAny
+
 :no_bg_loop
+                lda   nbgLine,y
+                beq   :nbg_draw
+                lda   nbgShOff
+                beq   :nbg_next           ; blank on both screens: nothing to do
+                lda   #0                  ; a sprite line: $01 is blank already, but the sprites
+                sta   nbgLine,y           ; drawn on it next make it not blank any more
+                bra   :nbg_next
+
+:nbg_draw
                 sep   #$20                ; 8-bit mode
                 php                       ; save the current processor flags
                 ldx   RTable,y            ; This is the right edge
@@ -110,21 +132,52 @@ _BltRangeLite
 :patch          ldx   #0000               ; stack save
                 txs                       ; restore the stack
                 plp                       ; re-enable interrupts
-                rep   #$21                ; 16-bit and clear carry
+                rep   #$20                ; 16-bit
 
+                lda   nbgShOff            ; Blank on both screens now, unless shadowing was off
+                eor   #$0008
+                sta   nbgLine,y           ; (non-zero: blank)
+
+:nbg_next       clc
                 tya
                 adc   tmp1
                 tay
                 cpy   tmp0
-                bcc   :no_bg_loop
+                bcs   *+5
+                brl   :no_bg_loop
 
                 rts
+
+; nbgLine: for each screen line (index = line * 2), non-zero if both screens have it blank (color 0)
+; since a render with the background off.  nbgAny is set when some may be non-zero.  The marks are
+; dropped when the background is drawn (_BltRangeLiteBody) and at a forced refresh (RenderDraw:
+; DIRTY_BIT_BG0_REFRESH -- the background turned on or off, the configuration screen, ...).
+nbgLine         ds    400
+nbgAny          dw    0
+nbgShOff        dw    0
+
+; Forget the blank lines: something else drew on the screen.  Only A is changed.
+nbgInvalidate
+                lda   nbgAny
+                beq   :done
+                stz   nbgAny
+                phy
+                ldy   #398
+                lda   #0
+:loop           sta   nbgLine,y
+                dey
+                dey
+                bpl   :loop
+                ply
+:done           rts
 
 ; Blit the lines from X up to tmp1 (exclusive)
 _BltRangeLiteBody
 :exit_ptr       equ   tmp0
 :last_line      equ   tmp1
 :jmp_low_save   equ   tmp2
+
+                jsr   nbgInvalidate       ; The background is drawn: no line is known to be blank
 
                 clc
                 lda   :last_line

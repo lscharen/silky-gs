@@ -124,6 +124,14 @@ RenderDraw ENT
             stal  renderActive
             FIN
 
+; A forced refresh redraws everything (the configuration screen may have drawn over the playfield):
+; the background-off blanking knows no line to be blank any more (core/blitter/BlitterLite.s)
+
+            lda   #DIRTY_BIT_BG0_REFRESH
+            bit   DirtyBits
+            beq   *+5
+            jsr   nbgInvalidate
+
             jsr   _ShowDebugInfo
 
 ; The game's render screen draws the renders it handles (C = 1, A = the DirtyBits to keep), and the
