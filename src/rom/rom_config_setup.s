@@ -125,6 +125,10 @@ _FixPrefInputTypes
             cmp   #INPUT_JOYSTICK
             beq   :ok
             FIN
+            DO    MOUSE_ZAPPER
+            cmp   #INPUT_MOUSE
+            beq   :ok
+            FIN
             stz:  0,x
 :ok         rts
 

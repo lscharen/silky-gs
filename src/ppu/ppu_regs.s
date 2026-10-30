@@ -144,9 +144,16 @@ PPUDATA_WRITE_PAL ENT
 ; Trigger a copy from a page of memory to OAM.  Since this is a DMA operation, we can cheat a little and do a 16-bit copy
 PPU_OAM equ 0                       ; direct page base address
 
+        DO MOUSE_ZAPPER
+Mouse_OamDma EXT                    ; rom/rom_mouse.s (MAIN)
+        FIN
+
         mx    %11
 PPUDMA_WRITE ENT
         DO DIRECT_OAM_READ
+        DO MOUSE_ZAPPER
+        jml   Mouse_OamDma          ; The Zapper's light sense keeps the page the NES shows (rom/rom_mouse.s)
+        FIN
         rtl                         ; Cheat a lot and pretend it didn't happen.  Read from NES RAM directly when we render
         ELSE
 

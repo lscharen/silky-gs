@@ -7,6 +7,7 @@
             mx    %11
 
 NES_ReadJoy EXT                               ; rom/rom_input.s (MAIN)
+Mouse_SenseL EXT                              ; rom/rom_mouse.s (MAIN): the Zapper's light sense
 
 ; Reset ($C01E): the RAM clear, sta ($00),y from $06FF down to $0000 (the pointer at $00 starts at $0600).
 ; Through the data bank, the zero page writes would miss the direct page, so clear it and $0200-$06FF
@@ -49,9 +50,16 @@ WaitNMI_GS
 
 ; The controller read ($C291): ldy #8 and the loop that shifts JOYPAD1,X in, A first (bit 7).  X = 0 / 1;
 ; the runtime's controller bytes (NES_ReadJoy) have the same layout.  Returns with Y = 0, as the loop did.
+; Port 2 is the Zapper, which has no serial data (it reads as 0); its trigger and light sense are read
+; at $D131 and in the light sense loops.
 ReadJoy_GS
+            cpx   #0
+            bne   :zapper
             jsl   NES_ReadJoy
             ldy   #0
+            rts
+:zapper     ldy   #0
+            lda   #0
             rts
 
 ; _func_f35e-_func_f36a ($F378): copy a channel's 4 register values, lda ($F6),y / sta ($F4),y for
@@ -79,8 +87,29 @@ WriteApuRegs_GS
             cmp   #$04
             rts
 
-; The Zapper's trigger ($D131): lda JOYPAD2 (bit 4 = the trigger, bit 3 = 0 when it sees light).
-; TODO: zapper detection.  For now the trigger is never pulled and no light is seen.
+; The Zapper's trigger ($D131): lda JOYPAD2 (bit 4 = the trigger, bit 3 = 0 when it sees light).  The
+; trigger is port 2's pad from the last poll: the mouse driver's PAD_RIGHT (rom/rom_mouse.s), bit 0 of the
+; controller byte.  The light sense isn't looked at here: it reads as no light.
 ReadZapper_GS
-            lda   #$08
+            phx
+            ldx   #1
+            jsl   NES_ReadJoy                 ; Port 2's controller byte
+            plx
+            and   #$01                        ; PAD_RIGHT: the trigger
+            beq   :up
+            lda   #$10+$08
             rts
+:up         lda   #$08
+            rts
+
+; The light sense loops ($D1D1, $D226): lda JOYPAD2 / and #$08 / bne (the loop) until light is seen or
+; the NMI ($20).  The light sense is a sprite (the white boxes) in NES OAM under the pointer now (Mouse_SenseL), not at
+; the press.
+; Returns Z = 1 if light is seen; if not, yields first (the loop then checks $20 again) and returns Z = 0.
+ZapperLight_GS
+            jsl   Mouse_SenseL                ; A = 0 if light, $08 if not
+            and   #$08
+            beq   :out
+            jsl   yield
+            lda   #$08                        ; Z = 0: no light
+:out        rts

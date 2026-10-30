@@ -89,6 +89,29 @@ PPU_DrawScreen ENT
             plb
             rtl
 
+; Add a sprite to this render's, after the game's (so it is drawn under them), e.g. a pointer.  Call from
+; PRE_RENDER: RenderLatch has copied the game's sprites by then.  It is drawn even while the game has the
+; sprites off, and dropped if the render has 64 sprites already.
+;
+; A = the OAM entry's first word: Y in the low byte (the sprite's top line is Y + 1, as on the NES), the tile
+; X = its second word: the attributes in the low byte, X
+PPU_AddSprite ENT
+            phb
+            phk
+            plb
+            ldy   spriteCount             ; (count * 4)
+            cpy   #256
+            bcs   :full
+            inc                           ; Y + 1, as scanOAMSprites
+            sta   OAM_COPY,y
+            txa
+            sta   OAM_COPY+2,y
+            tya
+            adc   #4                      ; (carry clear)
+            sta   spriteCount
+:full       plb
+            rtl
+
 ; The CHR-ROM (CHR_ROM, PPU $0000-$1FFF) was replaced, e.g. a CHR-ROM bank switch: convert all 512 tiles
 ; into the tiledata bank again, recompile the background tiles, drop the compiled sprites and redraw the
 ; whole background.  Very slow (a few seconds' worth of frames): for games that switch banks between

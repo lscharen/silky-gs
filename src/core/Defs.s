@@ -282,6 +282,7 @@ JOY_RUN_ROW_EVEN_0 equ 6                  ; ... with CTRL_EVEN_RENDER (even rows
 JOY_RUN_ROW_EVEN_1 equ 54
 
 INPUT_JOYSTICK   equ 4                    ; config_input_p1_type / p2_type: the joystick (_ReadControl)
+INPUT_MOUSE      equ 6                    ; ... the mouse as a Zapper (the game's MOUSE_ZAPPER, rom/rom_mouse.s)
 JOY_DEFAULT_CENTER equ 12                 ; Steps (1.52 ms), before a calibration
 JOY_DEFAULT_SENS equ 4                    ; Sensitivity 1 - 7: dead zone = 8 - sensitivity steps
 JOY_DIR_LOW      equ 1                    ; An axis' direction: left / up

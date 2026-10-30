@@ -29,9 +29,12 @@ EVT_LOOP_END mac
 ;
              <<<
 
-; Before each render: pick up the palette changes
+; Before each render: pick up the palette changes, and show the Zapper's pointer (the mouse)
 PRE_RENDER   mac
              jsl  ApplyPaletteChange ; switch to a new palette detected since the last frame
+             DO   MOUSE_ZAPPER
+             jsl  DH_ShowPointer
+             FIN
              <<<
 
 POST_RENDER  mac
@@ -48,9 +51,16 @@ SPRITE_PRE_DRAW  mac
 ; Non-zero if SPRITE_PRE_DRAW can set sprClipTop: the sprite renderer only tests it then
 SPRITE_CLIP equ 0
 
-; Callback after the configuration has been applied.  X = config_block_start, Y = config_game_start
+; Callback after the configuration has been applied.  X = config_block_start, Y = config_game_start.
+; The game expects a controller in port 1 and the Zapper in port 2: player 1 is the keyboard, player 2
+; the mouse (whatever the preferences file says)
 CONFIG_APPLY_HOOK mac
-;
+             DO   MOUSE_ZAPPER
+             lda  #0                  ; KEYBOARD
+             stal config_input_p1_type
+             lda  #INPUT_MOUSE
+             stal config_input_p2_type
+             FIN
              <<<
 
 ; Game-specific configuration values (none): CONFIG_GAME_DEFAULTS lays out their defaults at their IDs in

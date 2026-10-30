@@ -2898,8 +2898,8 @@ _func_d12b
             rts                                     ; D130 60
 
 _func_d131
-; IIgs: Zapper trigger read (TODO: zapper detection)
-            jsr   ReadZapper_GS             ; (was lda JOYPAD2) TODO: zapper detection
+; IIgs: Zapper trigger read
+            jsr   ReadZapper_GS             ; (was lda JOYPAD2: the trigger from the port 2 pad)
 ;           lda JOYPAD2                             ; D131 AD 17 40  (patched)
             and   #$10                              ; D134 29 10
             cmp   _var_00b7                         ; D136 C5 B7
@@ -3001,14 +3001,13 @@ _label_d1ca
 _label_d1cd
             lda   _var_0020                         ; D1CD A5 20
             bne   _label_d1f4                       ; D1CF D0 23
-; IIgs: Zapper light sense loop 1: yield (TODO: zapper detection)
-; TODO: zapper detection.  The NMI ends the loop: no light is seen, so the shot misses.
-            jsl   yield                     ; (was lda JOYPAD2 / and #$08 / bne _label_d1cd)
-            bra   _label_d1cd
+; IIgs: Zapper light sense loop 1: the pixel under the mouse pointer
+            jsr   ZapperLight_GS            ; (was lda JOYPAD2 / and #$08: Z = 1 if light, yields if not)
+            bne   _label_d1cd
 ;           lda JOYPAD2                             ; D1D1 AD 17 40  (patched)
 ;           and #$08                                ; D1D4 29 08  (patched)
 ;           bne _label_d1cd                         ; D1D6 D0 F5  (patched)
-            ds    1,$EA                 ; (NOP padding: the ROM layout is kept)
+            ds    2,$EA                 ; (NOP padding: the ROM layout is kept)
             lda   _var_00b0                         ; D1D8 A5 B0
             jmp   _label_d28a                       ; D1DA 4C 8A D2
 
@@ -3053,14 +3052,13 @@ _label_d207
 _label_d222
             lda   _var_0020                         ; D222 A5 20
             bne   _label_d270                       ; D224 D0 4A
-; IIgs: Zapper light sense loop 2: yield (TODO: zapper detection)
-; TODO: zapper detection.  The NMI ends the loop: no light is seen, so the shot misses.
-            jsl   yield                     ; (was lda JOYPAD2 / and #$08 / bne _label_d222)
-            bra   _label_d222
+; IIgs: Zapper light sense loop 2: the pixel under the mouse pointer
+            jsr   ZapperLight_GS            ; (was lda JOYPAD2 / and #$08: Z = 1 if light, yields if not)
+            bne   _label_d222
 ;           lda JOYPAD2                             ; D226 AD 17 40  (patched)
 ;           and #$08                                ; D229 29 08  (patched)
 ;           bne _label_d222                         ; D22B D0 F5  (patched)
-            ds    1,$EA                 ; (NOP padding: the ROM layout is kept)
+            ds    2,$EA                 ; (NOP padding: the ROM layout is kept)
             lda   _var_00b0                         ; D22D A5 B0
             cmp   #$02                              ; D22F C9 02
             bne   _label_d246                       ; D231 D0 13

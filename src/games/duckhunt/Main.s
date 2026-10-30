@@ -87,6 +87,17 @@ PREF_FILENAME strl '1/duckhunt.prefs'
 InitPlayfield
             jmp   SetDefaultPalette
 
+; The Zapper's pointer (PRE_RENDER): the mouse driver's sprite (rom/rom_mouse.s), tile $EE in palette 0, in
+; front of the background
+DH_POINTER_TILE equ $EF
+DH_POINTER_ATTR equ $00
+            DO    MOUSE_ZAPPER
+DH_ShowPointer
+            lda   #{DH_POINTER_ATTR*256}+DH_POINTER_TILE
+            jsr   Mouse_AddPointer
+            rtl
+            FIN
+
             mx    %00
 
 ; The palette management generated from palettes/ (ApplyPaletteChange; Merlin32 only reads puts
@@ -104,6 +115,7 @@ InitPlayfield
             put    ../../rom/rom_helpers.s
             put    ../../rom/rom_input.s
             put    ../../rom/rom_kbd_basic.s
+            put    ../../rom/rom_mouse.s
             put    ../../rom/rom_exec.s
             put    ../../rom/rom_config.s
             put    ../../rom/rom_config_setup.s

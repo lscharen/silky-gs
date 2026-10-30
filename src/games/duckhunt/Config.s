@@ -53,6 +53,12 @@ NO_CONFIG         equ 0
 ; Read the game-port joystick with probes hooked into the PEA field (core/blitter/JoyProbes.s)
 JOYSTICK_SUPPORT  equ 1
 
+; The mouse as a Zapper: the INPUT_MOUSE input type (rom/rom_mouse.s)
+MOUSE_ZAPPER      equ 1
+MOUSE_OAM_SLOTS   equ 16                  ; The OAM slots the light sense looks at, from slot 0: Duck Hunt
+                                          ; draws its hit box from slot 0 (_label_c67c), 16 sprites at most
+                                          ; (the 4x4 box, shape 9 at $EB95), and hides the rest first
+
 ; Decode the DMC samples listed in DMC_SAMPLE_LIST into DOC RAM at start-up (see apu/apu.s).
 ; 0 = decode each sample when the game plays it.
 CACHE_DMC_SAMPLES equ 1
