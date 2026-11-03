@@ -85,8 +85,69 @@ NES_PollInput
             lda   InputPlayer2+1
             sta   native_joy+1
             rep   #$20
-            plp
+
+            lda   config_autofire_a
+            ora   config_autofire_b
+            beq   :out
+            jsr   _ApplyAutofire
+:out        plp
             rts
+
+; _ApplyAutofire
+;
+; TURBO > AUTOFIRE A / B (config_autofire_a / b: 0 = off, otherwise N = 1, 2 or 4).  While a button is held,
+; the ROM sees it down for N NES frames, up for N, and so on, from the frame the press was first seen; a
+; button that is not held passes through, and pressing it again starts over.  The phase comes from the frame
+; number rather than a count of polls, so reading the controller more than once in a frame, or the event
+; loop's poll (NES_TakeKey), doesn't advance it.  Both players use the same settings; native_joy read as a word
+; is P1 in the low byte and P2 in the high byte.  Interrupts are off.  No direct page temporaries: this can run
+; on the NES task in the middle of a render.
+            mx  %00
+_ApplyAutofire
+            ldx   #0
+            ldy   #$0080                  ; P1 A
+            lda   config_autofire_a
+            jsr   :button
+            ldx   #2
+            ldy   #$8000                  ; P2 A
+            lda   config_autofire_a
+            jsr   :button
+            ldx   #4
+            ldy   #$0040                  ; P1 B
+            lda   config_autofire_b
+            jsr   :button
+            ldx   #6
+            ldy   #$4000                  ; P2 B
+            lda   config_autofire_b
+
+; X = the button's state, Y = its bit in native_joy, A = N (Z set if off)
+:button     beq   :done
+            sta   afPeriod
+            tya
+            bit   native_joy
+            bne   :down
+            stz   afHeld,x                ; Released: the next press starts over
+:done       rts
+
+:down       lda   afHeld,x
+            bne   :held
+            inc   afHeld,x                ; A new press: it goes through
+            ldal  nesFrameCount
+            sta   afStart,x
+            rts
+
+:held       ldal  nesFrameCount           ; N is a power of 2, so its bit in the frames since the
+            sec                           ; press says which half of the cycle this is
+            sbc   afStart,x
+            bit   afPeriod
+            beq   :done
+            tya
+            trb   native_joy
+            rts
+
+afPeriod    dw    0
+afHeld      dw    0,0,0,0                 ; Non-zero while held: P1 A, P2 A, P1 B, P2 B
+afStart     dw    0,0,0,0                 ; nesFrameCount at the press
 
 ; NES_TakeKey
 ;

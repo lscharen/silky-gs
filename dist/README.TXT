@@ -103,6 +103,12 @@ INPUT
   SLOT          1 - 7: the slot of the SNES MAX card. Player 1 uses
                 its first controller and player 2 its second.
 
+TURBO
+  AUTOFIRE A,   OFF, 1, 2 or 4. While the button is held, it repeats:
+  AUTOFIRE B    down for that many NES frames, then up for as many (at
+                60 frames a second, 1 is 30 presses a second and 4 is
+                7.5). Works with every input type.
+
 DRIVERS
   KEYBOARD      BASIC, J13 or ADB: how the keyboard is read.
                 BASIC sees one key at a time: the last key pressed.
