@@ -66,6 +66,10 @@ CONFIG_GAME_MENU     equ 0          ; append a GAME_CONFIG menu defined by Hooks
 ; 0 = decode each sample when the game plays it.
 CACHE_DMC_SAMPLES equ 1
 
+; Debug cheat: enemies and bullets pass through the players (falling off the screen still kills).
+; Weapon items can still be picked up.  Must be 0 for release.
+CHEAT_INVINCIBLE equ 0
+
 ; Turn on some off-screen information
 SHOW_DEBUG_VARS equ 0
 
