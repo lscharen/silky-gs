@@ -95,6 +95,7 @@ PPU_DrawScreen ENT
 ;
 ; A = the OAM entry's first word: Y in the low byte (the sprite's top line is Y + 1, as on the NES), the tile
 ; X = its second word: the attributes in the low byte, X
+; Returns Y = the sprite's OAM_COPY index (count * 4), or 256 or more when there was no room
 PPU_AddSprite ENT
             phb
             phk

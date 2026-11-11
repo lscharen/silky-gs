@@ -58,6 +58,8 @@ MOUSE_ZAPPER      equ 1
 MOUSE_OAM_SLOTS   equ 16                  ; The OAM slots the light sense looks at, from slot 0: Duck Hunt
                                           ; draws its hit box from slot 0 (_label_c67c), 16 sprites at most
                                           ; (the 4x4 box, shape 9 at $EB95), and hides the rest first
+MOUSE_PTR_HOT_X   equ 3                   ; The pointer's hot spot: the middle of the 7x7 cursors (the
+MOUSE_PTR_HOT_Y   equ 3                   ; tiles in tools/convert.js, CURSOR_TILES)
 
 ; Decode the DMC samples listed in DMC_SAMPLE_LIST into DOC RAM at start-up (see apu/apu.s).
 ; 0 = decode each sample when the game plays it.
@@ -69,7 +71,7 @@ CONFIG_VIDEO_MENU    equ 1          ; show the VIDEO menu
 CONFIG_VIDEO_FASTBLIT equ 0         ; show the FAST BLIT option (scrolling games only)
 CONFIG_VIDEO_STATUSBAR equ 0        ; show the STATUS BAR option (separately drawn status bar)
 CONFIG_INPUT_2P      equ 0          ; show P1/P2 tabs on the INPUT menu
-CONFIG_GAME_MENU     equ 0          ; append a GAME_CONFIG menu defined by Hooks.s
+CONFIG_GAME_MENU     equ 1          ; append the GAME menu (GAME_CONFIG, Main.s)
 
 ; Turn on some off-screen information
 SHOW_DEBUG_VARS equ 0

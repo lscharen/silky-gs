@@ -59,6 +59,8 @@ renderActive ENT
              dw   0                       ; RENDER_VBL_COUNT: non-zero while the GS task is inside RenderScreen
 renderVblTicks ENT
                dw 0                       ; RENDER_VBL_COUNT: VBLs counted during the current / last render
+vblCount    dw    0                       ; vblWork: counts every VBL (60Hz, wraps), e.g. for a game's
+                                          ; PRE_RENDER effects timed in seconds
 
 ; Miscellaneous data fields
 singleStepMode dw  0                      ; If non-zero, the runtime will wait for a user keypress between frames
@@ -532,6 +534,7 @@ vblWork
             plb
             lda   DPSave
             tcd
+            inc   vblCount
 
             DO    APU_STATS
             inc   apu_stat_vbl            ; APU rate check (see apu_stats in apu/apu.s)

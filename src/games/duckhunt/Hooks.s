@@ -29,7 +29,8 @@ EVT_LOOP_END mac
 ;
              <<<
 
-; Before each render: pick up the palette changes, and show the Zapper's pointer (the mouse)
+; Before each render: pick up the palette changes, and show the Zapper's pointer (the mouse; GAME menu:
+; the cursor's size and strobe)
 PRE_RENDER   mac
              jsl  ApplyPaletteChange ; switch to a new palette detected since the last frame
              DO   MOUSE_ZAPPER
@@ -44,8 +45,18 @@ POST_RENDER  mac
 ; Callback before each sprite is set up and drawn (drawSprites, ppu.s): X = OAM index, ]1 = the
 ; sprite height (8 or 16), DBR = $01 (the shadow screen), 16-bit registers.  It can set sprClipTop to
 ; hide the sprite's top lines.
-SPRITE_PRE_DRAW  mac
 ;
+; The pointer is drawn from pattern table 1 (EngineExt.s): DH_PointerTable for the pointer and for the
+; sprite after it.  The game only draws 8x8 sprites.
+SPRITE_PRE_DRAW  mac
+             DO   16-]1
+             txa
+             cmpl dhPtrIdx            ; The pointer?
+             beq  *+8
+             ldal dhPtrTbl1           ; Or the sprite after it?
+             beq  *+5
+             jsr  DH_PointerTable
+             FIN
              <<<
 
 ; Non-zero if SPRITE_PRE_DRAW can set sprClipTop: the sprite renderer only tests it then
@@ -53,20 +64,30 @@ SPRITE_CLIP equ 0
 
 ; Callback after the configuration has been applied.  X = config_block_start, Y = config_game_start.
 ; The game expects a controller in port 1 and the Zapper in port 2: player 1 is the keyboard, player 2
-; the mouse (whatever the preferences file says)
+; the mouse (whatever the preferences file says).  Then the GAME menu's values (DH_ApplyConfig, Main.s).
 CONFIG_APPLY_HOOK mac
              DO   MOUSE_ZAPPER
              lda  #0                  ; KEYBOARD
              stal config_input_p1_type
              lda  #INPUT_MOUSE
              stal config_input_p2_type
+             jsl  DH_ApplyConfig
              FIN
              <<<
 
-; Game-specific configuration values (none): CONFIG_GAME_DEFAULTS lays out their defaults at their IDs in
-; the game's block (see rom/rom_config_setup.s, which also has the built-in values, menus and ApplyConfig)
+; Game-specific configuration values (the GAME menu, Main.s).  Each has an ID, its byte offset in the
+; game's block, and CONFIG_GAME_DEFAULTS lays out the defaults at those offsets (see
+; rom/rom_config_setup.s, which also has the built-in values, menus and ApplyConfig).  Add new values after
+; the last one.  0 is each one's default, as in a preferences file from before it existed.
+CFG_GAME_CURSOR equ 0                   ; (word) the pointer: 0 = LARGE, 1 = SMALL
+CFG_GAME_JITTER equ 2                   ; (word) 0 - 3: the bits of the video counter the shot moves by
+CFG_GAME_STROBE equ 4                   ; (word) the frames of each second the still pointer is hidden:
+                                        ; 0, 15, 30, 45, 60 (0 - 100%)
+
 CONFIG_GAME_DEFAULTS mac
-;
+             dw   0                     ; CFG_GAME_CURSOR: LARGE
+             dw   0                     ; CFG_GAME_JITTER
+             dw   0                     ; CFG_GAME_STROBE
              <<<
 
 ; Palette RAM writes: the engine's handlers (ppu/ppu_palette.s) mark the palette dirty for the code

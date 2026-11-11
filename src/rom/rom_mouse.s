@@ -21,11 +21,16 @@
 ; The pointer is drawn by the game, as a sprite: Mouse_AddPointer from its PRE_RENDER hook.  The sprite is
 ; kept in the playfield (MOUSE_PTR_X_MAX / Y_MAX), and the light sense is taken at its hot spot.
 ;
+; Jitter (mouseJitter, set by the game): at each press, the light sense's point is moved by a few pixels
+; in X and Y, at random (the video counters), so a shot at a target's edge can miss.  It stays there until
+; the next press (mouseJitX / Y).
+;
 ; The mouse interrupt ($C027 bit 6) is turned off the first time the driver is used, so that no firmware
 ; handler takes the reports, and put back by Mouse_ShutDown.
 
 ; Built when the game's Config.s sets MOUSE_ZAPPER (INPUT_MOUSE: core/Defs.s), which must then also set
-; MOUSE_OAM_SLOTS: the OAM slots, from slot 0, that the game draws its light targets in.  The file's sep / rep
+; MOUSE_OAM_SLOTS: the OAM slots, from slot 0, that the game draws its light targets in, and
+; MOUSE_PTR_HOT_X / Y: the pixel of the pointer's 8x8 sprite that is on the pointer (0 - 7).  The file's sep / rep
 ; pairs are balanced, so the MX state after it is the same when it is skipped.
                   DO        MOUSE_ZAPPER
 
@@ -41,12 +46,12 @@ MOUSE_BUTTON_UP   equ   $80           ; The Y byte: bit 7 = 1 while the button i
 MOUSE_MAX_X       equ   319           ; The pointer's range: the SHR screen
 MOUSE_MAX_Y       equ   SHR_SCREEN_HEIGHT-1
 
-MOUSE_PTR_HOT_X   equ   0             ; The hot spot: the pointer sprite's pixel on the pointer
-MOUSE_PTR_HOT_Y   equ   0
 MOUSE_PTR_X_MAX   equ   256-8         ; The pointer sprite's top left corner, relative to the playfield's
 MOUSE_PTR_Y_MAX   equ   200-9         ; (SHR byte x_offset, line 0): 0 - X_MAX, 0 - Y_MAX
 
 MOUSE_SHOT_FRAMES equ   30            ; OAM DMAs after the release that Mouse_OamDma still copies
+
+MOUSE_VIDEO_COUNT equ   $E0C02E       ; The video counters (16-bit read): $C02E = V7 - V1, $C02F = V0, H6 - H0
 
 ; Mouse_Pad
 ;
@@ -63,7 +68,8 @@ Mouse_Pad         lda       mouseOn
                   beq       :up
                   lda       mousePad
                   bne       :out                ; Held: the light sense of the press
-                  jsr       mouseSense          ; Just pressed: look at the sprites
+                  jsr       mouseJitterPick     ; Just pressed: where the shot goes, then look at the sprites
+                  jsr       mouseSense
                   ora       #PAD_RIGHT
                   sta       mousePad
 :out              rts
@@ -177,9 +183,11 @@ Mouse_ShutDown    lda       mouseOn
 ; Show the pointer: add an 8x8 sprite to this render (PPU_AddSprite, drawn under the game's sprites) with
 ; its hot spot (MOUSE_PTR_HOT_X / Y) on the pointer, kept in the playfield (mousePtrPos).  Nothing until the
 ; driver is in use.  Call from PRE_RENDER.  A = the sprite's tile (low byte) and attributes (high byte).
-; 16-bit registers, DBR = the main bank.
+; Returns Y = the sprite's OAM_COPY index (count * 4), 256 or more if it wasn't added.  16-bit registers,
+; DBR = the main bank.
                 mx %00
-Mouse_AddPointer  ldx       mouseOn
+Mouse_AddPointer  ldy       #$FFFF              ; (not added)
+                  ldx       mouseOn
                   beq       :out
                   sta       mousePtrTile
                   jsr       mousePtrPos         ; A = the sprite's NES X, X = its line in the playfield
@@ -303,6 +311,37 @@ mousePtrPos       lda       mouseY
                   lda       #MOUSE_PTR_X_MAX
 :x_ok             rts
 
+; The jitter of a press (mouseJitter = 0, 1, 3 or 7, the bits of the horizontal counter to use): mouseJitX
+; = +/- (H & mouseJitter), mouseJitY = +/- ((H >> 3) & mouseJitter), the signs from V0 and V1.  16-bit
+; registers, DBR = the main bank.
+                mx %00
+mouseJitterPick   lda       mouseJitter
+                  beq       :none
+                  ldal      MOUSE_VIDEO_COUNT   ; V7 - V1 | V0, H6 - H0 << 8
+                  sta       mouseCount
+                  xba
+                  and       mouseJitter         ; X: the low bits of H
+                  bit       mouseCount          ; N = V0
+                  bpl       :x_pos
+                  eor       #$FFFF
+                  inc
+:x_pos            sta       mouseJitX
+                  lda       mouseCount
+                  xba
+                  lsr
+                  lsr
+                  lsr
+                  and       mouseJitter         ; Y: H's next bits
+                  lsr       mouseCount          ; C = V1
+                  bcc       :y_pos
+                  eor       #$FFFF
+                  inc
+:y_pos            sta       mouseJitY
+                  rts
+:none             stz       mouseJitX
+                  stz       mouseJitY
+                  rts
+
 ; Returns A = PAD_LEFT if an 8x8 sprite the NES shows (mouseOam: the OAM page at the last DMA, not the
 ; renderer's latched copy) covers the pointer sprite's hot spot, 0 if not, with Z set from A.  Any
 ; sprite counts, whatever its color.  Nothing is light while the game's last PPUMASK write has the sprites
@@ -313,13 +352,17 @@ mousePtrPos       lda       mouseY
 mouseSense        ldal      ppumask             ; The game's PPUMASK (not the latched _ppumask)
                   and       #$0010              ; The sprites are shown
                   beq       :dark
-                  jsr       mousePtrPos         ; The hot spot's NES coordinates
+                  jsr       mousePtrPos         ; The hot spot's NES coordinates, moved by the press's jitter
                   clc
                   adc       #MOUSE_PTR_HOT_X
+                  clc
+                  adc       mouseJitX
                   pha                           ; (3,s) its X
                   txa
                   clc
                   adc       #y_offset-1+MOUSE_PTR_HOT_Y
+                  clc
+                  adc       mouseJitY
                   pha                           ; (1,s) its line - 1, to compare with OAM Y (top line - 1)
                   ldx       #{MOUSE_OAM_SLOTS-1}*4
 :loop             lda       mouseOam,x          ; Y and the tile
@@ -362,5 +405,9 @@ mousePad          dw        0                   ; While the button is held: PAD_
 mousePtrTile      dw        0                   ; Mouse_AddPointer: the tile and attributes
 mouseLight        dw        0                   ; Mouse_SenseL: the answer
 mouseShot         dw        0                   ; Mouse_OamDma: the DMAs left to copy after a release
+mouseJitter       dw        0                   ; Set by the game: 0, 1, 3 or 7 (pixels at most, each way)
+mouseJitX         dw        0                   ; mouseJitterPick: the press's offsets (signed)
+mouseJitY         dw        0
+mouseCount        dw        0                   ; mouseJitterPick: the video counters
 mouseOam          ds        MOUSE_OAM_SLOTS*4   ; The OAM page at the last DMA (its first slots), during a shot
                   FIN
