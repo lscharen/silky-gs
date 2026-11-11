@@ -7,15 +7,6 @@
             mx    %11
 
 NES_ReadJoy EXT                               ; rom/rom_input.s (MAIN)
-PPUSTATUS_READ EXT                            ; (declared by rom_inject.s too)
-
-; bit PPUSTATUS.  The ROM only uses it to reset the PPU address latch before setting PPUADDR (its
-; VBlank waits are patched out), so the flags are not emulated.  A is preserved.
-BIT_2002
-            pha
-            jsl   PPUSTATUS_READ
-            pla
-            rts
 
 ; mainLoop ($800F): lda frameCounterLow / cmp frameCounterLowLastFrame, then beq mainLoop.  On the NES
 ; the loop spins until the NMI has counted a frame; here the NMI runs when the ROM yields, so yield

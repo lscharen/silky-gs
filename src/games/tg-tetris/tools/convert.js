@@ -24,7 +24,7 @@
  * that every byte the shims don't touch assembles to the original.
  *
  * Shims:
- *   - PPU / APU register loads and stores -> JSR to the rom_inject.s hooks (BIT_2002 is in support.s)
+ *   - PPU / APU register loads and stores -> JSR to the rom_inject.s hooks
  *   - abs,Y accesses to the NES zero page (the direct page is in another bank) -> JSR to a _ABS_Y helper
  *   - the hand patches in PATCHES (by address): reset, the NMI, the CNROM bank write, the controller
  *     read, the indirect APU writes and the loops that wait for the NMI (they yield instead)
@@ -48,7 +48,7 @@ const REGS = {
   OAMDMA: '4014', SND_CHN: '4015', JOY1: '4016', JOY2: '4017',
 };
 
-// The register hooks that exist (rom_inject.s, and BIT_2002 in support.s)
+// The register hooks that exist (rom_inject.s)
 const HOOKS = new Set([
   'STA_2000', 'STX_2000', 'STA_2001', 'STX_2001', 'LDA_2002', 'LDX_2002', 'BIT_2002', 'STA_2003',
   'STA_2005', 'STA_2006', 'STX_2006', 'STY_2006', 'LDA_2007', 'STA_2007', 'STX_2007',

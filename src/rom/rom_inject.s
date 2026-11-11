@@ -6,7 +6,6 @@
 ; External wrapper is responsible for setting the stack
 
 ; These are external labels that implement the PPU function found in ppu/ppu.s
-PPUSTATUS_READ        EXT
 PPUDMA_WRITE          EXT
 PPUDATA_WRITE_CHR     EXT
 PPUDATA_WRITE_PAL     EXT
@@ -753,13 +752,12 @@ STA_2000
         beq  :fast_exit
 
         sta  ppuctrl
-        pha
         and  #$04             ; Set the vram increment
         beq  :v1
         lda  #$21
 :v1     eor  #$01
         sta  ppuincr          ; just the low byte
-        pla
+        lda  ppuctrl          ; restore A (cheaper than pha / pla; plp restores the flags)
 
 :fast_exit
         plp
@@ -799,8 +797,7 @@ STX_2001
 ; $2002 - PPUSTATUS For "lda ppustatus"
         mx    %11
 LDA_2002
-        lda  #1
-        sta  w_bit
+        stz  w_bit           ; (0 = the first write is next)
 
         lda  ppustatus
         bpl  :out
@@ -812,8 +809,7 @@ LDA_2002
 
         mx    %11
 LDX_2002
-        ldx  #1
-        stx  w_bit
+        stz  w_bit           ; (0 = the first write is next)
 
         ldx  ppustatus
         bpl  :out
@@ -828,6 +824,22 @@ LDX_2002
 :out
         rts
 
+; "bit ppustatus": N / V / Z as bit sets them, A unchanged
+        mx    %11
+BIT_2002
+        stz  w_bit           ; (0 = the first write is next)
+
+        bit  ppustatus
+        bpl  :out
+        php
+        pha
+        lda  #$80            ; Clear the VBL flag
+        trb  ppustatus
+        pla
+        plp
+:out
+        rts
+
 ; $2003 - OAM ADDR
         mx    %11
 STA_2003
@@ -836,19 +848,17 @@ STA_2003
 
 ; $2005 - PPU SCROLL
         mx    %11
+; w_bit is 0 when the first write is next, $FF when the second is (bit copies bit 7 to N, whatever A holds)
 STA_2005
         php
-        phx
-
-        ldx  w_bit
-        sta  ppuscroll,x
-
-        dex
-        bpl  :ok
-        ldx  #1
-:ok     stx  w_bit
-
-        plx
+        bit  w_bit
+        bmi  :second
+        sta  ppuscroll+1      ; the first write: X
+        dec  w_bit
+        plp
+        rts
+:second sta  ppuscroll        ; the second: Y
+        stz  w_bit
         plp
         rts
 
@@ -856,57 +866,42 @@ STA_2005
         mx    %11
 STA_2006
         php
-        phx
-
-        ldx  w_bit
-        sta  ppuaddr,x
-
-        dex
-        bpl  :ok
-        ldx  #1
-:ok     stx  w_bit
-
-        plx
+        bit  w_bit
+        bmi  :second
+        sta  ppuaddr+1        ; the first write: the high byte
+        dec  w_bit
+        plp
+        rts
+:second sta  ppuaddr          ; the second: the low byte
+        stz  w_bit
         plp
         rts
 
         mx    %11
 STY_2006
         php
-        phy
-        pha
-
-        tya
-        ldy  w_bit
-        sta  ppuaddr,y
-
-        dey
-        bpl  :ok
-        ldy  #1
-:ok     sty  w_bit
-
-        pla
-        ply
+        bit  w_bit
+        bmi  :second
+        sty  ppuaddr+1        ; the first write: the high byte
+        dec  w_bit
+        plp
+        rts
+:second sty  ppuaddr          ; the second: the low byte
+        stz  w_bit
         plp
         rts
 
         mx    %11
 STX_2006
         php
-        phx
-        pha
-
-        txa
-        ldx  w_bit
-        sta  ppuaddr,x
-
-        dex
-        bpl  :ok
-        ldx  #1
-:ok     stx  w_bit
-
-        pla
-        plx
+        bit  w_bit
+        bmi  :second
+        stx  ppuaddr+1        ; the first write: the high byte
+        dec  w_bit
+        plp
+        rts
+:second stx  ppuaddr          ; the second: the low byte
+        stz  w_bit
         plp
         rts
 
