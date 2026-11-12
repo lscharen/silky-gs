@@ -20,7 +20,9 @@
  *
  * and their dispatch tables, indexed by n * 2, plus gqX8TL/TR/BL/BR: the 8x8 masks in both nibbles, for the
  * skip cascade's test.  Then the copy routines of the erase pass (one set per code field bank) and the
- * expose pass, one per quadrant mask, and their dispatch tables gridEQTbl / gridXQTbl.
+ * expose pass, one per quadrant mask, and their dispatch tables gridEQTbl / gridXQTbl.  With
+ * GRID_UNALIGNED_Y (assembly time), also the edge row copies (forward / backward line sequences per pass,
+ * their entry tables and stubs, 4 more gridEQTbl sets and gridXETbl).
  *
  * Usage: node scripts/gen-grid-marks.js [--check]   (--check: exit 1 if the file is out of date)
  */
@@ -240,6 +242,13 @@ const masks = [...Array(16).keys()];
 L.push(pad('gridEQTbl', 12) + 'dw    ' + masks.map((m) => `gridQE1_${m}`).join(','));
 L.push(pad('', 12) + 'dw    ' + masks.map((m) => `gridQE2_${m}`).join(','));
 L.push(pad('', 12) + 'dw    ' + masks.map(() => 'gridQE1_0').join(','));
+L.push('; GRID_UNALIGNED_Y: the edge rows\' sets, 96 / 128 = top (bank 1 / 2), 160 / 192 = bottom: their stubs, whatever');
+L.push('; the mask (but nothing to erase: mask 0)');
+L.push('            DO    GRID_UNALIGNED_Y');
+['gqETop1', 'gqETop2', 'gqEBot1', 'gqEBot2'].forEach((stub) => {
+    L.push(pad('', 12) + 'dw    ' + masks.map((m) => (m === 0 ? 'gridQE1_0' : stub)).join(','));
+});
+L.push('            FIN');
 tbl('gridXQTbl', (m) => `gridQX${m}`);
 L.push('; The erase routines\' bank bytes, per code field bank (gqInitTables)');
 L.push(`GQ_EBSITES  equ   ${sites[1].length}`);
@@ -248,6 +257,72 @@ L.push(`GQ_EBSITES  equ   ${sites[1].length}`);
         L.push(pad(i === 0 ? `gqEBSites${b}` : '', 12) + 'dw    ' + sites[b].slice(i, i + 8).map((x) => `${x}+3`).join(','));
     }
 });
+
+// Edge rows (GRID_UNALIGNED_Y): a cell of the top row shows lines j - 7 of its tile, one of the bottom row lines
+// 0 - (j - 1).  Their copies take both words of each visible line, whatever the quadrant mask, from the same
+// X / Y as the quadrant routines (X = code field address of tile line 0, Y = SHR address of tile line 0, DBR =
+// $01), so no invisible line is written.  Two unrolled sequences per pass, entered at a line and run to the end:
+// forward (lines 0 - 7) for the top edge, entered at line j, and backward (lines 7 - 0) for the bottom edge,
+// entered at line j - 1.  The entry tables are indexed by line * 2; gridPatchEdges (ppu_grid.s) points the
+// stubs' jmp at the entries for j.  The cells' SHR addresses have bit 0 set (they are even): the erase stubs
+// take it off, gqExposeOp does for the expose pass.
+const EDGE_WORDS = [{ pea: 4, shr: 0 }, { pea: 1, shr: 2 }];   // left word, right word
+const FWD = [0, 1, 2, 3, 4, 5, 6, 7];
+const BWD = [7, 6, 5, 4, 3, 2, 1, 0];
+const eeSites = { 1: [], 2: [] };
+function edgeSeq(name, lines, body) {
+    lines.forEach((l) => {
+        L.push(`${name}_${l}`);
+        EDGE_WORDS.forEach((w) => body(w, l));
+    });
+    L.push(ins('rts'));
+}
+const entryTbl = (name) => L.push(pad(`${name}Tbl`, 12) + 'dw    ' + FWD.map((l) => `${name}_${l}`).join(','));
+L.push('');
+L.push('            DO    GRID_UNALIGNED_Y');
+[1, 2].forEach((b) => {
+    const erase = (w, l) => {
+        const site = `gqEEB${b}_${eeSites[b].length}`;
+        eeSites[b].push(site);
+        L.push(lbl(site, 'ldal', `{${l}*_LINE_SPAN}+${w.pea},x`));
+        L.push(ins('sta:', shrOp(w, l)));
+    };
+    L.push(`; Edge rows, erase, code field bank ${b}: top (forward), bottom (backward)`);
+    L.push('            mx    %00');
+    edgeSeq(`gqEF${b}`, FWD, erase);
+    edgeSeq(`gqER${b}`, BWD, erase);
+});
+L.push('; Edge rows, expose: top (forward), bottom (backward)');
+L.push('            mx    %00');
+const expose = (w, l) => {
+    L.push(ins('lda:', shrOp(w, l)));
+    L.push(ins('sta:', shrOp(w, l)));
+};
+edgeSeq('gqXF', FWD, expose);
+edgeSeq('gqXR', BWD, expose);
+L.push('; Entry tables, by line * 2');
+['gqEF1', 'gqEF2', 'gqXF', 'gqER1', 'gqER2', 'gqXR'].forEach(entryTbl);
+L.push('; Erase stubs (gridEQTbl): take bit 0 off the SHR address, then the sequence (jmp patched by gridPatchEdges)');
+L.push('            mx    %00');
+[['gqETop1', 'gqEF1'], ['gqETop2', 'gqEF2'], ['gqEBot1', 'gqER1'], ['gqEBot2', 'gqER2']].forEach(([stub, seq]) => {
+    L.push(lbl(stub, 'tya'));
+    L.push(ins('and', '#$FFFE'));
+    L.push(ins('tay'));
+    L.push(lbl(`${stub}J`, 'jmp', `${seq}_0`));
+});
+L.push('; Expose stubs (gridXETbl; gqExposeOp has taken bit 0 off)');
+L.push(lbl('gqXTopJ', 'jmp', 'gqXF_0'));
+L.push(lbl('gqXBotJ', 'jmp', 'gqXR_0'));
+L.push('; Expose dispatch of the edge cells, by GRID_CELL_EQ / 16 (sets 0 - 64 never get here)');
+L.push(pad('gridXETbl', 12) + 'dw    ' + ['gridQX0', 'gridQX0', 'gridQX0', 'gqXTopJ', 'gqXTopJ', 'gqXBotJ', 'gqXBotJ'].join(','));
+L.push('; The edge erase sequences\' bank bytes, per code field bank (gqInitTables)');
+L.push(`GQ_EESITES  equ   ${eeSites[1].length}`);
+[1, 2].forEach((b) => {
+    for (let i = 0; i < eeSites[b].length; i += 8) {
+        L.push(pad(i === 0 ? `gqEESites${b}` : '', 12) + 'dw    ' + eeSites[b].slice(i, i + 8).map((x) => `${x}+3`).join(','));
+    }
+});
+L.push('            FIN');
 L.push('');
 L.push('            FIN');
 L.push('');
