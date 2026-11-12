@@ -409,6 +409,9 @@ NES_ShutDown
             DO    KBD_ADB
             jsr   KbdAdb_ShutDown          ; Keyboard autopolling back on, if the ADB driver is in
             FIN
+            DO    MOUSE_ZAPPER
+            jsr   Mouse_ShutDown           ; The mouse interrupt back on, if the mouse driver took it
+            FIN
             DO    JOYSTICK_SUPPORT
             jsl   JoyScanDisarmL           ; The joystick's scanline interrupts, if armed
             FIN

@@ -27,7 +27,8 @@ set GAMES=.\src\games\smb\SuperMarioGS ^
           .\src\games\mb\MarioBrosGS ^
           .\src\games\zelda\src\ZeldaGS ^
           .\src\games\contra\src\ContraGS ^
-          .\src\games\tg-tetris\TetrisGS
+          .\src\games\tg-tetris\TetrisGS ^
+          .\src\games\duckhunt\DuckHuntGS
 
 REM Cadius reports ADDFILE errors but always exits 0, so check the inputs up front
 for %%F in (%GAMES% .\emu\Classics .\dist\README.TXT) do if not exist "%%~F" (

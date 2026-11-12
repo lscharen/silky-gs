@@ -328,9 +328,21 @@ kbdHandled        dw        0                   ; Non-zero if a player's keyboar
                   DO        JOYSTICK_SUPPORT
                   dw        _ReadJoystick1      ; INPUT_JOYSTICK
                   FIN
+                  DO        MOUSE_ZAPPER
+                  DO        1-JOYSTICK_SUPPORT
+                  dw        _ReadKeyboard1      ; (INPUT_JOYSTICK, not built)
+                  FIN
+                  dw        _ReadMouse1         ; INPUT_MOUSE
+                  FIN
 :input_proc2      dw        _ReadKeyboard2,_ReadSNESMAX2
                   DO        JOYSTICK_SUPPORT
                   dw        _ReadJoystick2
+                  FIN
+                  DO        MOUSE_ZAPPER
+                  DO        1-JOYSTICK_SUPPORT
+                  dw        _ReadKeyboard2
+                  FIN
+                  dw        _ReadMouse2
                   FIN
 
 ; Player Input Configuration offsets
@@ -422,6 +434,27 @@ _ReadJoystick2    jsr       _ReadKeyboard2
 _ReadJoystick     PAD_PUSH_BUTTONS
                   pha
                   jsl       JoyGetPadL
+                  ora       1,s
+                  sta       1,s
+                  pla
+                  rts
+                  FIN
+
+; The mouse as a Zapper (INPUT_MOUSE): the trigger (PAD_RIGHT) and the light sense (PAD_LEFT) from
+; Mouse_Pad (rom/rom_mouse.s), on top of the player's keyboard map without its left / right (Start,
+; Select and the other keys still work).  Mouse_Pad's two bits are left together: this doesn't go through
+; _ReadKeyboard's opposite-directions check.
+                  DO        MOUSE_ZAPPER
+_ReadMouse1       jsr       _ReadKeyboard1
+                  ldx       #config_block_p1
+                  ldy       #0
+                  bra       _ReadMouse
+_ReadMouse2       jsr       _ReadKeyboard2
+                  ldx       #config_block_p2
+                  ldy       #1
+_ReadMouse        and       #$FFFF-PAD_LEFT-PAD_RIGHT
+                  pha
+                  jsr       Mouse_Pad
                   ora       1,s
                   sta       1,s
                   pla

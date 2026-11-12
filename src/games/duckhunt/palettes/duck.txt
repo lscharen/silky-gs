@@ -1,0 +1,14 @@
+; Game A / B, the duck hunt (PaletteTable records 1 and 5, $E558 / $E5B4).  The sprite palettes change
+; with the ducks' colors (_func_cf44 copies two of the _data_e724 pairs to $3F10: the first duck in SP0 /
+; SP1, the second in SP2 / SP3; the dog uses SP2 / SP3), so the cells that differ are reserved.  The sky
+; ($3F00 / $3F10) turns pink when a duck gets away: color 0 is always the IIgs slot 0.
+;
+; 16 slots: BG2's $18 (the tree trunk's dark olive) is drawn in $07 (dark red-brown)
+BG0: $21 $07 $29 $0A
+BG1: $21 $30 $29 $0A
+BG2: $21 $0F $29 $18~$07
+BG3: $21 $0F $30 $16
+SP0: $21 $30 *$0A *$0F
+SP1: $21 $30 $26 *$0F
+SP2: $21 $30 *$17 *$0F
+SP3: $21 *$07 *$17 *$0F

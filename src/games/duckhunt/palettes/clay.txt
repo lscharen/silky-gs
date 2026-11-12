@@ -1,0 +1,9 @@
+; Game C, clay shooting (PaletteTable record 2, $E57C)
+BG0: $2C $29 $19 $09
+BG1: $2C $07 $29 $1A
+BG2: $2C $0F $29 $10
+BG3: $2C $0F $30 $16
+SP0: $2C $30 $0F $0F
+SP1: $2C $30 $16 $07
+SP2: $2C $30 $17 $0F
+SP3: $2C $07 $17 $0F

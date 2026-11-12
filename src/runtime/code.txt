@@ -10,6 +10,8 @@
 ../rom/rom_helpers.s
 ../rom/rom_input.s
 ../rom/rom_kbd_basic.s
+# The mouse as a Zapper: built when the game's Config.s sets MOUSE_ZAPPER
+../rom/rom_mouse.s
 # The optional keyboard drivers: to build one, set its flag in core/Defs.s (KBD_J13 / KBD_ADB) and add
 # its file here, after rom_kbd_basic.s.  The ADB driver also needs rom_kbd_j13.s (its key tables).
 #../rom/rom_kbd_j13.s

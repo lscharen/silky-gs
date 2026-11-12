@@ -1,0 +1,28 @@
+; Palette transitions.  Each [section] lists the palettes that can follow it.  The title screen goes to
+; a game (A / B: the ducks, C: the clay); after a shot, a game shows the Zapper's light test for a frame
+; (TODO: zapper detection) and goes back; game over goes back to the title screen.
+
+[init]
+title
+
+[title]
+duck
+clay
+
+[duck]
+flash_bg
+flash_sp
+title
+
+[clay]
+flash_bg
+flash_sp
+title
+
+[flash_bg]
+duck
+clay
+
+[flash_sp]
+duck
+clay

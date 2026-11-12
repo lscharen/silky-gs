@@ -9,6 +9,7 @@ PPU_DrawScreenRange     EXT
 PPU_SetupLines          EXT
 PPU_DrawScreen          EXT
 PPU_ReloadCHR           EXT
+PPU_AddSprite           EXT
 _ppuctrl               EXT
 _ppuscroll_x            EXT
 _ppuscroll_y            EXT
