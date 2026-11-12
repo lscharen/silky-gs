@@ -638,7 +638,6 @@ apu_stat_qsd            dw  0     ; APU_quarter_speed_driver calls (60Hz mode)
 apu_stat_quarter        dw  0     ; quarter_frame_clock calls
 apu_stat_half           dw  0     ; half_frame_clock calls
 apu_stat_update         dw  0     ; update_doc_registers runs
-apu_stat_nmi            dw  0     ; NES frames run (nesRunNMI): the game's frame rate against apu_stat_vbl
 apu_stat_render         dw  0     ; renders (NES_RenderFrame)
 apu_stat_chain          dw  0     ; native-mode interrupts irqHook left to the firmware (rom/rom_exec.s)
                         FIN

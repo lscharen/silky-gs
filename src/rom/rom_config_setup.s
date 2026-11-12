@@ -213,7 +213,9 @@ config_input_p2_key_dr dw  0
 ; Room for new built-in values.  Add them here (taking from the reserve), so the size of the block, and
 ; with it the preferences file, stays the same and older files keep loading (misc/io.s checks the size).
 ; A new value must default to 0, since an older file has 0 in its place.
-config_reserved        ds  92
+config_autofire_a      dw  0              ; TURBO > AUTOFIRE A: 0 = off, else frames down / frames up (1, 2, 4)
+config_autofire_b      dw  0              ; ... B (_ApplyAutofire, rom/rom_input.s)
+config_reserved        ds  88
 config_block_end
 
 ; The game's own values (CONFIG_GAME_DEFAULTS, the game's Main.s), in a block of a fixed size, saved and
@@ -263,6 +265,13 @@ INPUT_SNESMAX_PORT_STR str 'SLOT'
 INPUT_BUTTON_A_STR  str 'A BUTTON'
 INPUT_BUTTON_B_STR  str 'B BUTTON'
 
+TURBO_TITLE_STR     str 'TURBO'
+TURBO_A_STR         str 'AUTOFIRE A'
+TURBO_B_STR         str 'AUTOFIRE B'
+TURBO_OPT_1         str '1'
+TURBO_OPT_2         str '2'
+TURBO_OPT_4         str '4'
+
 DRIVERS_TITLE_STR   str 'DRIVERS'
 DRIVERS_KBD_STR     str 'KEYBOARD'
 DRIVERS_LATCH_STR   str 'LATCH DIRS'  ; the BASIC driver's held directions (config_kbd_latch)
@@ -304,13 +313,14 @@ CONFIG_BLK   db   CONFIG_PALETTE        ; Which background palette to use
              db   TILE_A                ; First tile for the alphabet A - Z characters
              db   TILE_SPACE
 
-; Menu list: "Audio", ["Video"], "Input", "Drivers", [game menu], "Credits"
-CONFIG_MENU  dw   4+CONFIG_VIDEO_MENU+CONFIG_GAME_MENU
+; Menu list: "Audio", ["Video"], "Input", "Turbo", "Drivers", [game menu], "Credits"
+CONFIG_MENU  dw   5+CONFIG_VIDEO_MENU+CONFIG_GAME_MENU
              dw   AUDIO_CONFIG
              DO   CONFIG_VIDEO_MENU
              dw   VIDEO_CONFIG
              FIN
              dw   INPUT_CONFIG
+             dw   TURBO_CONFIG
              dw   DRIVERS_CONFIG
              DO   CONFIG_GAME_MENU
              dw   GAME_CONFIG
@@ -402,7 +412,7 @@ INPUT_CONFIG dw   INPUT_TITLE_STR
              ELSE
              dw   AUDIO_CONFIG
              FIN
-             dw   DRIVERS_CONFIG        ; next menu item
+             dw   TURBO_CONFIG          ; next menu item
 
              dw   1
              DO   CONFIG_INPUT_2P
@@ -571,10 +581,44 @@ INPUT_ITEM_13 dw  BTNMAP
              dw   config_input_p2_button_b
              FIN
 
+; Turbo: autofire for the A and B buttons, of every input type (_ApplyAutofire, rom/rom_input.s).  A menu of
+; its own, since the INPUT menu of a two-player game has no rows left.
+TURBO_CONFIG dw   TURBO_TITLE_STR
+             dw   INPUT_CONFIG          ; previous menu item
+             dw   DRIVERS_CONFIG        ; next menu item
+
+             dw   2
+             dw   TURBO_ITEM_A
+             dw   TURBO_ITEM_B
+
+TURBO_ITEM_A dw   TAB
+             dw   0                     ; previous control
+             dw   TURBO_ITEM_B          ; next control
+             dw   3,2
+             dw   TURBO_A_STR
+             dw   config_autofire_a
+             dw   4                     ; four options: value, label, label width, conditional control
+             dw   0,CHKBOX_OFF,5,0
+             dw   1,TURBO_OPT_1,3,0
+             dw   2,TURBO_OPT_2,3,0
+             dw   4,TURBO_OPT_4,3,0
+
+TURBO_ITEM_B dw   TAB
+             dw   TURBO_ITEM_A          ; previous control
+             dw   0                     ; next control
+             dw   3,5
+             dw   TURBO_B_STR
+             dw   config_autofire_b
+             dw   4
+             dw   0,CHKBOX_OFF,5,0
+             dw   1,TURBO_OPT_1,3,0
+             dw   2,TURBO_OPT_2,3,0
+             dw   4,TURBO_OPT_4,3,0
+
 ; Drivers: the keyboard driver used by the KEYBOARD input type.  The key mappings stay on the INPUT menu
 ; and apply to either driver.
 DRIVERS_CONFIG dw DRIVERS_TITLE_STR
-             dw   INPUT_CONFIG          ; previous menu item
+             dw   TURBO_CONFIG          ; previous menu item
              DO   CONFIG_GAME_MENU
              dw   GAME_CONFIG           ; next menu item
              ELSE
