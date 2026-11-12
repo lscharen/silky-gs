@@ -31,7 +31,7 @@
 ppuaddr     ENT
             ds 2     ; 16-bit ppu address
 w_bit       ENT
-            dw 1     ; currently writing to high or low to the address latch
+            dw 0     ; the address latch toggle: 0 = the first (high / X) write is next, $FF = the second
 vram_buff   ENT
             dw 0     ; latched data when reading VRAM ($0000 - $3EFF)
 

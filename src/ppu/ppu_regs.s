@@ -4,26 +4,9 @@
 ; (ppu/ppu_reg_vars.s), so the ROM reaches them with jsr / rts.  This file has what they hand off to
 ; the engine with jsl, and the long entry points other code still calls:
 ;
-;     PPUSTATUS_READ    ($2002 R) - VBL flag, clears address latch (tg-tetris support.s)
 ;     PPUDATA_WRITE_CHR ($2007 W) - CHR-RAM write: mark the tile dirty (HAS_CHR_RAM)
 ;     PPUDATA_WRITE_PAL ($2007 W) - palette RAM write: palette dispatch
 ;     PPUDMA_WRITE      ($4014 W) - Sprite DMA transfer
-
-; $2002 - PPUSTATUS For "lda ppustatus"
-; MUST NOT change any P flags not set by the PLA before the return.
-        mx    %11
-PPUSTATUS_READ ENT
-        lda  #1
-        stal w_bit           ; Reset the address latch used by PPUSCROLL and PPUADDR
-
-        ldal ppustatus
-        bpl  :out
-        and  #$7F            ; Clear the VBL flag
-        stal ppustatus
-        ora  #$80            ; Restore negative value
-:out
-        rtl
-
 
         DO   HAS_CHR_RAM
 ; The first write since the sprite form was converted (PPUDATA_WRITE): drop the tile's compiled sprites
