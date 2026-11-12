@@ -441,7 +441,7 @@ ttColorTbl  dw    $7777                     ; (none yet: title's layout)
             dw    $AAAA                     ; PAL_LEADERBOARD
             dw    $AAAA                     ; PAL_BONUS
 
-ttHighText  asc   'H. SCORE'
+ttHighText  asc   'HI SCORE'
 ttScoreText asc   'SCORE   '
 ttP1Text    asc   'P1 SCORE'
 ttP2Text    asc   'P2 SCORE'
@@ -483,6 +483,7 @@ ttOut       dw    0
             put    ../../rom/rom_helpers.s
             put    ../../rom/rom_input.s
             put    ../../rom/rom_kbd_basic.s
+            put    ../../rom/rom_mouse.s
             put    ../../rom/rom_exec.s
             put    ../../rom/rom_config.s
             put    ../../rom/rom_config_setup.s
