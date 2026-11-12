@@ -6583,6 +6583,9 @@ check_players_collision
 :collide_with_enemy
             lda ENEMY_TYPE,y    ; load current enemy type
             beq pick_up_weapon_item    ; branch if weapon item enemy
+            do    CHEAT_INVINCIBLE
+            jmp   :next_player    ; debug cheat (Config.s): walk through enemies and bullets
+            fin
             lda NEW_LIFE_INVINCIBILITY_TIMER,x    ; timer for invincibility (after dying)
             bne :next_player    ; when still invincible after dying, player walks through enemy, skip
             lda INVINCIBILITY_TIMER,x
