@@ -18,9 +18,9 @@
 ; attribute byte, the group's attribute-written flag (main bank).  The group's flag byte also has a
 ; queued bit: the first write to a group in a period puts it on at_list, so at_list holds every group
 ; that needs drawing exactly once.
-; PPUFreezeNametableUpdates (interrupts off) only flips the write path, and the at_list append, to the
-; other buffer by patching their operands.  PPUFlushQueuesAlt reads the previous buffer with interrupts on while the ROM fills the
-; other one.  A buffer's data is valid exactly where its masks / flags say a byte was written; every
+; PPUFreezeNametableUpdates (interrupts off) only switches the write path, and the at_list append, to the
+; other buffer (ntmWriteTail has a copy per buffer).  PPUFlushQueuesAlt reads the previous buffer with
+; interrupts on while the ROM fills the other one.  A buffer's data is valid exactly where its masks / flags say a byte was written; every
 ; other value is unchanged since the last render and already in TILE_SHADOW.  The flush clears the
 ; masks and flags it consumes, so a buffer is clean again before it becomes current.
 ;
@@ -33,7 +33,7 @@
 ; Attribute index = CIRAM page << 6 | attribute offset ($00-$3F).
 ;
 ; Routines:
-;   ntmWriteTail / atmWriteTail - End of PPUDATA_WRITE for a tile / attribute byte
+;   ntmWriteTail              - End of PPUDATA_WRITE for a changed nametable byte (one copy per buffer)
 ;   PPUFreezeNametableUpdates - Flip the write path to the other buffer (interrupts off)
 ;   PPUFlushQueuesAlt         - Draw the previous buffer's updates into the PEA field
 ;   PPUResetQueues            - Empty queues, clean buffers, write path on buffer 0
@@ -42,18 +42,18 @@ NTM_SB0     equ   $C800                     ; Shadow data buffer 0 (PPU_MEM offs
 NTM_SB1     equ   NTM_SB0+$2000
 
 ; Attribute indices queued for rendering.  One list per buffer, at the same offset as its masks and
-; flags (buffer 1 = +$100): the ROM appends to the current buffer's list (ntmSiteL, moved with the other
-; sites) while the render reads the previous one.  A group is queued at most once per period, so there
+; flags (buffer 1 = +$100), one byte per entry: the ROM appends to the current buffer's list while the
+; render reads the previous one.  A group is queued at most once per period, so there
 ; are at most 128 entries (2 CIRAM pages x 64 attribute bytes).
 AT_LIST_LEN        equ 128
 NTM_QUEUED         equ $80                  ; NTM_FLAG bits: the group is on at_list
 NTM_ATTR           equ $01                  ;                its attribute byte was written
-at_count           dw 0                     ; Bytes in the current buffer's list (the ROM appends here)
-at_prev_count      dw 0                     ; Bytes in the previous buffer's list (the render draws these)
-at_list            ds {AT_LIST_LEN*4}
+; at_count: entries in the current buffer's list (the ROM appends there) is in the base ROM bank
+; (ppu/ppu_reg_vars.s), so that ntmWriteTail reaches it with the NES task's DBR
+at_prev_count      dw 0                     ; Entries in the previous buffer's list (the render draws these)
+at_list            ds $100+AT_LIST_LEN           ; buffer 0 at +$000, buffer 1 at +$100
 
 ntmSel      dw    0                         ; $00 / $20: high-byte offset of the PPU_MEM buffer being written
-ntmY        dw    0
 ntmFlushEnd dw    0                         ; PPUFlushQueuesAlt: end of the list being drawn
 
 ; The masks and flags of both buffers (NTM_MASK0 / 1, NTM_FLAG0 / 1; buffer 1 = +$100) and the
@@ -63,111 +63,151 @@ ntmFlushEnd dw    0                         ; PPUFlushQueuesAlt: end of the list
 ; ---------------------------------------------------------------------------
 ; ntmWriteTail
 ; ---------------------------------------------------------------------------
-; Jumped to from PPUDATA_WRITE once a *changed* nametable byte has been stored in PPU_CIRAM.  A = value
-; (8-bit), X = CIRAM address (16-bit X/Y), DBR = K, PPUDATA_WRITE's saved P / B / A / X on the stack.
-; The *Site* operands address the current buffer and are moved by PPUFreezeNametableUpdates, so this
-; routine uses global labels only.  Y belongs to the ROM and is preserved.
+; Called (jsl) from PPUDATA_WRITE once a *changed* nametable byte has been stored in PPU_CIRAM.  A = value
+; (8-bit), X = CIRAM address (16-bit X/Y), DBR = the NES task's (the base ROM bank, where at_count is),
+; PPUDATA_WRITE's saved P / A / X on the stack.  Every engine access is long, so DBR is never changed.
+; Returns with 8-bit X (PPUDATA_WRITE's exit sets 8-bit registers before it pulls X).  Y belongs to the
+; ROM and is not touched.
+;
+; There is one copy of the code per buffer, with fixed operands: ntmB0 (buffer 0) is ntmWriteTail
+; itself, and while buffer 1 is the one being written PPUFreezeNametableUpdates replaces its first
+; instruction word with "bra ntmB1".  That word is the only code that is ever modified.
+;
+; NTM_QUEUED is set in both bytes of a group's flag word, so a tile write tests it at its own mask
+; index (group index * 2, +1 for the HI half).  A group that is not queued has a flag word of 0 (flags
+; are set only together with NTM_QUEUED and the flush clears whole words), so the first write stores
+; its flags outright.  at_list holds one byte per group (index < 128) and at_count is the entry count.
+;
+; Layout: both fast paths first, then both slow paths, so that every branch is in range.
+
             mx    %10
 ntmWriteTail ENT
-            phb
-            phk
-            plb
-
-ntmSiteD    stal  PPU_MEM+NTM_SB0,x           ; The byte, for the render that reads this buffer
-            sty   ntmY
-            lda   #0
-            xba                               ; B = 0 for the transfers to Y
-            lda   T2IDX,x
-            tay                               ; Y = group index * 2 (+1 for the HI half of a tile mask)
-            lda   T2BIT,x
-            beq   ntmAttr                     ; Attribute bytes have no tile bit
-ntmSiteM0   ora   NTM_MASK0,y                 ; Tile: add its bit to the group's mask
-ntmSiteM1   sta   NTM_MASK0,y
-            tya
-            and   #$FE
-            tay                               ; Y = group index * 2
-ntmSiteF0   lda   NTM_FLAG0,y
-            bmi   ntmDone                     ; Already on at_list this period: nothing to store
-            ora   #NTM_QUEUED
-ntmSiteF1   sta   NTM_FLAG0,y
-            bra   ntmAppend
-
-ntmAttr
-ntmSiteF2   lda   NTM_FLAG0,y
-            bmi   ntmAttrQ
-            ora   #NTM_QUEUED+NTM_ATTR
-ntmSiteF3   sta   NTM_FLAG0,y
-
-ntmAppend   rep   #$20                        ; First write to the group: append its index to at_list
-            tya
-            lsr
-            ldx   at_count
-ntmSiteL    sta   at_list,x
-            inx
-            inx
-            stx   at_count
-ntmDone     ldy   ntmY
-ntmExit
-;            sep   #$30
-;            plx
-;            pla
-;            plb
-;            plp
-            plb
+ntmB0       stal  PPU_MEM+NTM_SB0,x           ; The byte, for the render that reads this buffer
+            ldal  T2BIT,x
+            beq   ntmB0Attr                   ; Attribute bytes have no tile bit
+            xba                               ; B = tile bit
+            ldal  T2IDX,x                     ; group index * 2 (+1 for the HI half of a tile mask)
+            sep   #$10                        ; (the ROM's Y is 8-bit: its high byte is already 0)
+            tax
+            xba                               ; A = tile bit
+            oral  NTM_MASK0,x                 ; Tile: add its bit to the group's mask
+            stal  NTM_MASK0,x
+            ldal  NTM_FLAG0,x
+            bpl   ntmB0Tile                   ; First write to the group this period
             rtl
 
-            mx    %10                         ; (entered from ntmAttr: 8-bit A, 16-bit X/Y)
-ntmAttrQ    ora   #NTM_ATTR                   ; Already on at_list: just flag the attribute byte
-ntmSiteF4   sta   NTM_FLAG0,y
-            bra   ntmDone
+            mx    %10
+ntmB1       stal  PPU_MEM+NTM_SB1,x
+            ldal  T2BIT,x
+            beq   ntmB1Attr
+            xba
+            ldal  T2IDX,x
+            sep   #$10
+            tax
+            xba
+            oral  NTM_MASK1,x
+            stal  NTM_MASK1,x
+            ldal  NTM_FLAG1,x
+            bpl   ntmB1Tile
+            rtl
+
+; Buffer 0, first write to a group: a tile (8-bit A / X, X = group index * 2 (+1)) or the attribute
+; byte (8-bit A, 16-bit X = CIRAM address)
+            mx    %11
+ntmB0Tile   txa
+            and   #$FE
+            tax                               ; X = group index * 2
+            lda   #NTM_QUEUED
+            stal  NTM_FLAG0,x
+            stal  NTM_FLAG0+1,x
+            txa
+            lsr
+            ldx   at_count                    ; (DBR = the base ROM bank)
+            stal  at_list,x
+            inc   at_count
+            rtl
+
+            mx    %10
+ntmB0Attr   ldal  T2IDX,x                     ; group index * 2
+            sep   #$10
+            tax
+            ldal  NTM_FLAG0,x
+            bmi   :queued
+            lda   #NTM_QUEUED+NTM_ATTR
+            stal  NTM_FLAG0,x
+            lda   #NTM_QUEUED
+            stal  NTM_FLAG0+1,x
+            txa
+            lsr
+            ldx   at_count
+            stal  at_list,x
+            inc   at_count
+            rtl
+:queued     ora   #NTM_ATTR                   ; Already on at_list: just flag the attribute byte
+            stal  NTM_FLAG0,x
+            rtl
+
+; Buffer 1: the same
+            mx    %11
+ntmB1Tile   txa
+            and   #$FE
+            tax
+            lda   #NTM_QUEUED
+            stal  NTM_FLAG1,x
+            stal  NTM_FLAG1+1,x
+            txa
+            lsr
+            ldx   at_count
+            stal  at_list+$100,x
+            inc   at_count
+            rtl
+
+            mx    %10
+ntmB1Attr   ldal  T2IDX,x
+            sep   #$10
+            tax
+            ldal  NTM_FLAG1,x
+            bmi   :queued
+            lda   #NTM_QUEUED+NTM_ATTR
+            stal  NTM_FLAG1,x
+            lda   #NTM_QUEUED
+            stal  NTM_FLAG1+1,x
+            txa
+            lsr
+            ldx   at_count
+            stal  at_list+$100,x
+            inc   at_count
+            rtl
+:queued     ora   #NTM_ATTR
+            stal  NTM_FLAG1,x
+            rtl
 
 ; ---------------------------------------------------------------------------
 ; PPUFreezeNametableUpdates
 ; ---------------------------------------------------------------------------
 ; Called by NES_RenderFrame with interrupts off.  The current buffer and its at_list become the ones the
-; render draws, and the write path moves to the other buffer, whose list starts empty: the PPU_MEM site
-; moves by $2000 and the main bank sites (masks, flags, list) by one page, in the high byte of each operand.
+; render draws, and the write path moves to the other buffer, whose list starts empty.  The NES task is
+; never preempted inside the engine (schedTask), so it is not inside ntmWriteTail now.
+;
+; Buffer 1: ntmWriteTail's first word becomes "bra ntmB1".  Buffer 0: it gets its stal back, copied
+; from ntmB1's, which is the same word: the opcode and the operand's low byte, and NTM_SB0 and NTM_SB1
+; have the same low byte.  (Copied, not assembled as #$9F+...: PPU_MEM is EXT in some games.)
         mx  %00
 PPUFreezeNametableUpdates
-        lda  at_count
+        ldal at_count
         sta  at_prev_count
-        stz  at_count
+        lda  #0
+        stal at_count
 
-        sep  #$20
-        lda  ntmSel
-        eor  #$20
+        lda  ntmSel                           ; (high byte always 0)
+        eor  #$0020
         sta  ntmSel
-        beq  :down
-
-        lda  ntmSiteD+2                       ; Buffer 0 -> buffer 1
-        clc
-        adc  #$20
-        sta  ntmSiteD+2
-        inc  ntmSiteM0+2
-        inc  ntmSiteM1+2
-        inc  ntmSiteF0+2
-        inc  ntmSiteF1+2
-        inc  ntmSiteF2+2
-        inc  ntmSiteF3+2
-        inc  ntmSiteF4+2
-        inc  ntmSiteL+2
-        rep  #$20
+        beq  :b0
+        lda  #$80+{{ntmB1-ntmB0-2}*256}       ; bra ntmB1
+        sta  ntmB0
         rts
-
-        mx   %10                              ; (reached from the beq above: 8-bit A)
-:down   lda  ntmSiteD+2                       ; Buffer 1 -> buffer 0
-        sec
-        sbc  #$20
-        sta  ntmSiteD+2
-        dec  ntmSiteM0+2
-        dec  ntmSiteM1+2
-        dec  ntmSiteF0+2
-        dec  ntmSiteF1+2
-        dec  ntmSiteF2+2
-        dec  ntmSiteF3+2
-        dec  ntmSiteF4+2
-        dec  ntmSiteL+2
-        rep  #$20
+:b0     lda  ntmB1
+        sta  ntmB0
         rts
 
 ; ---------------------------------------------------------------------------
@@ -183,10 +223,13 @@ PPUFreezeNametableUpdates
 ;      that copies and draws just those tiles
         mx    %00
 PPUFlushQueuesAlt
-        lda   ntmSiteD+1                      ; The previous buffer is the one not being written now: the
-        eor   #$2000                          ; write path's (relocated) operand with buffer 0 <-> 1.  Not
-        sta   NtmPtr                          ; #PPU_MEM+NTM_SB0: when PPU_MEM is EXT (Zelda) the loader drops
-        lda   ntmSiteD+3                      ; the +constant of a 16-bit operand (MERLIN32_OMF_EXT_OFFSET_BUG.md)
+        lda   ntmB1+1                         ; The previous buffer is the one not being written now.  Its
+        ldx   ntmSel                          ; address from ntmB1's (relocated) operand, which is never
+        beq   :ptr                            ; patched (ntmB0's first word is), less $2000 for buffer 0.
+        sec                                   ; Not #PPU_MEM+NTM_SB0: when PPU_MEM is EXT (Zelda) the loader
+        sbc   #NTM_SB1-NTM_SB0                ; drops the +constant of a 16-bit operand
+:ptr    sta   NtmPtr                          ; (MERLIN32_OMF_EXT_OFFSET_BUG.md)
+        lda   ntmB1+3
         and   #$00FF
         sta   NtmPtr+2
         lda   ntmSel
@@ -204,13 +247,14 @@ PPUFlushQueuesAlt
         lda   NtmPrev                         ; The buffer's list is at the same offset as its masks / flags
         tay
         clc
-        adc   at_prev_count
+        adc   at_prev_count                   ; (one byte per entry)
         sta   ntmFlushEnd
 :entry  cpy   ntmFlushEnd
         bcc   *+5
         brl   :done
         phy
         lda   at_list,y
+        and   #$00FF
         sta   NtmIdx                          ; page << 6 | attribute offset
         asl
         tax                                   ; X = index * 2
@@ -224,7 +268,7 @@ PPUFlushQueuesAlt
 ; 1. Mask and flags, cleared for the buffer's next period.  Every group is on at_list once, and has a
 ;    non-zero mask or its attribute flag.
 
-        lda   NTM_FLAG0,y                     ; (the odd byte is never written: high byte 0)
+        lda   NTM_FLAG0,y                     ; (NTM_QUEUED in both bytes, NTM_ATTR in the low one)
         bit   #NTM_ATTR
         bne   :attr_written
         lda   NTM_MASK0,y                     ; Tiles only: palette unchanged
@@ -772,7 +816,6 @@ PPUFlushQueuesAlt
 :dn     rep   #$20
 :next   ply
         iny
-        iny
         brl   :entry
 :done
         rts
@@ -1080,10 +1123,10 @@ PPUResetQueues
         and    #$00FF
         beq    :sel0
         jsr    PPUFreezeNametableUpdates
-:sel0   stz    at_count                       ; Both lists empty
-        stz    at_prev_count
-        ldx    #$03FE                          ; Clean both buffers' masks and flags
+:sel0   stz    at_prev_count                  ; Both lists empty
         lda    #0
+        stal   at_count
+        ldx    #$03FE                          ; Clean both buffers' masks and flags
 :clr    sta    NTM_MASK0,x
         dex
         dex

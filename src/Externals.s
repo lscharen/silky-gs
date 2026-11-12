@@ -23,6 +23,7 @@ ppustatus            EXT
 ppuscroll            EXT
 ppumask              EXT
 w_bit                EXT
+at_count             EXT                ; ppu/ppu_queues.s's list count, in the base ROM bank
 
 mapper_bank          EXT
 ppu_bank             EXT

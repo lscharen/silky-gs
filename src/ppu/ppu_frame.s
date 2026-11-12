@@ -257,7 +257,7 @@ _ShowDebugInfo
 
 
 ; Show the size of the attribute queues (current, previous)
-            lda   at_count
+            ldal  at_count
             ldx   #{0*160}+144
             ldy   #$FFFF
             jsl   DrawWordL

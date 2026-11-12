@@ -48,6 +48,11 @@ oamaddr     ENT
 ppuscroll   ENT
             dw 0     ; Y X coordinates
 
+; Entries in the at_list the ROM is appending to (ppu/ppu_queues.s).  Here so that ntmWriteTail, which runs
+; with the NES task's DBR, needs no bank change for it; the engine reaches it with long addressing.
+at_count    ENT
+            dw 0
+
 ; MMC1 registers
 mmc1_shft   ENT
             ds    1

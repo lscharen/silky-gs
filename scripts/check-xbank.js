@@ -39,6 +39,7 @@ const DEFAULT_SEGMENTS = ['MAIN', 'ENGINE'];
 const ALLOWED = [
   { re: /^lite_base_[12]$/, why: 'an offset in a blitter bank; the code supplies the bank' },
   { re: /^(y|tile)_exclude$/, why: 'read by the OAM scan with DBR = the ROM bank that holds it' },
+  { re: /^at_count$/, why: 'ntmWriteTail runs with the NES task\'s DBR = the base ROM bank that holds it' },
   { re: /_SWIZZLE$/, why: 'an offset in the PALDATA bank; the code supplies the bank' },
 ];
 
