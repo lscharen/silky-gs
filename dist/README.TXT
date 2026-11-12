@@ -113,13 +113,3 @@ DRIVERS
   KEYBOARD      BASIC, J13 or ADB: how the keyboard is read.
                 BASIC sees one key at a time: the last key pressed.
                 Holding Left and pressing Up turns to Up only.
-
-                J13 sees up to three keys held at once (Left and Up
-                together go diagonally), on a ROM 00 or ROM 01 IIgs.
-                On a ROM 3 IIgs, and on most emulators, it works like
-                BASIC.
-
-                ADB (the default) talks directly to the ADB bus and
-                is the preferred keyboard driver.  It
-                implements the same keyboard handling method as
-                Wolfenstein 3D.
