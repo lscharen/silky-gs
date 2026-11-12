@@ -319,6 +319,7 @@ Z_RenderScreen ENT
             put    ../../../rom/rom_helpers.s
             put    ../../../rom/rom_input.s
             put    ../../../rom/rom_kbd_basic.s
+            put    ../../../rom/rom_mouse.s
             put    ../../../rom/rom_exec.s
             put    ../../../rom/rom_config.s
             put    ../../../rom/rom_config_setup.s

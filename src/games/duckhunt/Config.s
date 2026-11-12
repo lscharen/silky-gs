@@ -29,6 +29,11 @@ OAM_END_INDEX     equ 64
 ; every frame is a full render.
 ENABLE_DIRTY_RENDERING equ 1
 
+; Dirty rendering also when the vertical scroll is not a multiple of 8: the grid follows the nametable and
+; the partly visible top and bottom tile rows are drawn by the edge copies (ppu_grid.s).  0 = only aligned
+; vertical scroll positions render dirty.
+GRID_UNALIGNED_Y equ 0
+
 ; Draw sprites on single pixels (compiled variants shifted one pixel to the right for a sprite on an
 ; odd pixel).  Off: sprites are drawn on even pixels (IIgs bytes), with the scroll's half-pixel
 ; correction, and the sprite cache uses smaller slots.
