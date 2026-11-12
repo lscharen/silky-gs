@@ -8,7 +8,8 @@ REM   %2 = the game: smb, bf, lo, wump, ic, eb, dk, mb, zelda, contra, tetris, d
 REM        build-image:<game>); with no game, every game but bench (npm run build:dist)
 REM
 REM Two images, named after the application (e.g. ZeldaGS), both with the application's name as the
-REM volume name and README.TXT (dist\README.TXT: the keys and settings that every game shares) at the root:
+REM volume name and README.TXT at the root: the game's README.txt (src\games\<game>\README.txt, the keys
+REM and settings with the game's own options), or dist\README.TXT for a game without one (bench):
 REM
 REM   .\emu\<application>.2mg       the application at the root and the icon file in Icons/, for a
 REM                               system disk or hard drive; always created from scratch
@@ -72,16 +73,24 @@ if not exist "%BOOT%" (
     exit /b 1
 )
 
-if not exist ".\dist\README.TXT" (
+REM The game's README is in its folder: the application's, or the one above it for the games built in
+REM src\ (zelda, contra)
+for %%A in (%APP%) do set APPDIR=%%~dpA
+set README=%APPDIR%README.txt
+if not exist "%README%" set README=%APPDIR%..\README.txt
+if not exist "%README%" set README=.\dist\README.TXT
+if not exist "%README%" (
     echo build-single: missing .\dist\README.TXT
     exit /b 1
 )
 
-REM The README (keys and settings, the same for every game) goes on the disk as a ProDOS text file:
-REM CR line endings, file type TXT.  scripts\prodos-text.js stages that copy in .\build\dist
-node .\scripts\prodos-text.js .\build\dist .\dist\README.TXT
+REM The README goes on the disk as a ProDOS text file named README.TXT: CR line endings, file type TXT.
+REM scripts\prodos-text.js stages that copy in .\build\dist\<application> (one folder per game, since
+REM every game's file has the same name)
+set STAGE=.\build\dist\%NAME%
+node .\scripts\prodos-text.js %STAGE% "%README%=README.TXT"
 if errorlevel 1 (
-    echo build-single: could not stage .\dist\README.TXT
+    echo build-single: could not stage %README%
     exit /b 1
 )
 
@@ -96,7 +105,7 @@ if errorlevel 1 (
 
 REM The file types come from _FileInformation.txt next to each file
 %CADIUS% ADDFILE %IMAGE% %FOLDER% %APP% >nul
-%CADIUS% ADDFILE %IMAGE% %FOLDER% .\build\dist\README.TXT >nul
+%CADIUS% ADDFILE %IMAGE% %FOLDER% %STAGE%\README.TXT >nul
 %CADIUS% CREATEFOLDER %IMAGE% %FOLDER%Icons >nul
 %CADIUS% ADDFILE %IMAGE% %FOLDER%Icons %ICON% >nul
 
@@ -138,7 +147,7 @@ if errorlevel 1 (
 )
 %CADIUS% RENAMEVOLUME %BOOTIMAGE% %NAME% >nul
 %CADIUS% ADDFILE %BOOTIMAGE% %FOLDER%System %START%\Start >nul
-%CADIUS% ADDFILE %BOOTIMAGE% %FOLDER% .\build\dist\README.TXT >nul
+%CADIUS% ADDFILE %BOOTIMAGE% %FOLDER% %STAGE%\README.TXT >nul
 
 %CADIUS% CATALOG %BOOTIMAGE% | findstr /i /r /c:"^/%NAME%/" >nul
 if errorlevel 1 (

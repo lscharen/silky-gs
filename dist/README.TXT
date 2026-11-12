@@ -110,6 +110,5 @@ TURBO
                 7.5). Works with every input type.
 
 DRIVERS
-  KEYBOARD      BASIC, J13 or ADB: how the keyboard is read.
-                BASIC sees one key at a time: the last key pressed.
+  KEYBOARD      BASIC sees one key at a time: the last key pressed.
                 Holding Left and pressing Up turns to Up only.

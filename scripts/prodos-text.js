@@ -2,22 +2,25 @@
 'use strict';
 // Stage text files for a ProDOS disk image: copies each file into the output folder with CR line
 // endings (ProDOS / Apple II text) and writes the folder's _FileInformation.txt, which gives Cadius
-// ADDFILE their file type (TXT, $04).
+// ADDFILE their file type (TXT, $04).  A file given as <text file>=<name> is staged under that name
+// (e.g. a game's README.txt as README.TXT).
 //
-//   node scripts/prodos-text.js <output folder> <text file>...
+//   node scripts/prodos-text.js <output folder> <text file>[=<name>]...
 const fs = require('fs');
 const path = require('path');
 
 const [outDir, ...files] = process.argv.slice(2);
 if (!outDir || files.length === 0) {
-    console.error('usage: prodos-text.js <output folder> <text file>...');
+    console.error('usage: prodos-text.js <output folder> <text file>[=<name>]...');
     process.exit(1);
 }
 fs.mkdirSync(outDir, { recursive: true });
 
 const info = [];
-for (const file of files) {
-    const name = path.basename(file);
+for (const arg of files) {
+    const eq = arg.lastIndexOf('=');
+    const file = eq > 0 ? arg.slice(0, eq) : arg;
+    const name = eq > 0 ? arg.slice(eq + 1) : path.basename(file);
     if (!/^[A-Za-z][A-Za-z0-9.]{0,14}$/.test(name)) {
         console.error(`prodos-text: ${name} is not a ProDOS file name (a letter, then up to 14 letters, digits or periods)`);
         process.exit(1);
