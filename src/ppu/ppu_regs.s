@@ -60,28 +60,21 @@ DropTileSprites
 
 ; PPUDATA_WRITE_CHR
 ;
-; Called (jsl) by STA_2007 (rom_inject.s) after it stored a byte of CHR-RAM ($0000-$1FFF) at PPU_MEM.
-; X = the CHR address (16-bit), 8-bit A.  Marks the tile dirty for on-demand recompilation at draw time
-; (DrawPPUTile / sprChrCheck), instead of pre-compiling everything up front like a fixed CHR-ROM game.
+; Called (jsl) by STA_2007 (rom_inject.s) after it stored a byte of CHR-RAM ($0000-$1FFF) at PPU_MEM and
+; found the tile's ChrRamDirty byte not already both forms dirty (the usual case is tested there).
+; X = the tile index (16-bit, 0-511), 8-bit A = its ChrRamDirty byte.  Marks the tile dirty for on-demand
+; recompilation at draw time (DrawPPUTile / sprChrCheck), instead of pre-compiling everything up front
+; like a fixed CHR-ROM game.
         DO   HAS_CHR_RAM
         mx   %10
 PPUDATA_WRITE_CHR ENT
-        rep  #$30
-        txa                    ; X is in the range $0000 - $1FFF
-        lsr                    ; Convert to tile index
-        lsr
-        lsr
-        lsr
-        tax
-        sep  #$20
-        ldal ChrRamDirty,x
-        pha                                       ; (was the sprite form already dirty?)
+        and  #CHRRAM_SPR_DIRTY
+        xba                                       ; B = was the sprite form already dirty?
         lda  #{CHRRAM_BG_DIRTY+CHRRAM_SPR_DIRTY}  ; both forms need recompiling -- see CHRRAM_BG_DIRTY/
                                                   ; CHRRAM_SPR_DIRTY (CoreData.s) for why these are two
                                                   ; independent bits, not one shared flag
         stal ChrRamDirty,x
-        pla
-        bit  #CHRRAM_SPR_DIRTY
+        xba                                       ; (Z from it)
         bne  :done
         jsr  DropTileSprites
 :done   rtl
@@ -94,20 +87,34 @@ PPUDATA_WRITE_CHR ENT
 ; The only default behavior is writing the background color, which is always mapped to
 ; palette index 0 for convenience.
 
-        mx   %00
 ; Called (jsl) by STA_2007 with the byte in PPU_MEM already updated; X = the palette address, 8-bit A,
 ; the ROM's P / A / X on the stack below the return address.  DBR is the ROM's bank, not ours.
+;
+; With the engine's table, the usual write (colors 1-3 of a group, not a [direct] cell of the palette on
+; screen) only marks the palette dirty, as ppu_PalWrite would: done here with long addressing, without
+; the bank change and the dispatch.  The color 0s and the [direct] cells go through the table.
+        mx   %10
 PPUDATA_WRITE_PAL ENT
-        phb
-        phk
-        plb
         rep  #$20
-
         txa
         and  #$001F
         asl
-        tax
+        tax                             ; X = the entry * 2
 
+        DO   1-CUSTOM_PPU_PALETTE_DISPATCH
+        bit  #$0006                     ; A color 0 ($3F00 / $3F10, or an unused one)?
+        beq  :table
+        ldal ppuPalWrites,x
+        bpl  :table                     ; A [direct] cell: straight to its IIgs slot
+        lda  #1
+        stal ppuPalDirty
+        rtl
+:table
+        FIN
+
+        phb
+        phk
+        plb
         lda  6,s                        ; (B, the return address, X, then the ROM's A)
         and  #$003F                     ; Pass in the NES color in the accumulator
 

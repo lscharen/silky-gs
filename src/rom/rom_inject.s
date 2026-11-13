@@ -10,6 +10,7 @@ PPUDMA_WRITE          EXT
 PPUDATA_WRITE_CHR     EXT
 PPUDATA_WRITE_PAL     EXT
 ntmWriteTail          EXT       ; ppu/ppu_queues.s: queue a changed nametable byte
+ChrRamDirty           EXT       ; core/Data.s: per CHR tile, the forms that need recompiling (HAS_CHR_RAM)
 
 ; The APU state in apu/apu.s (the APU register shims write it with long addressing), and the DMC start /
 ; stop entry
@@ -942,14 +943,14 @@ LDA_2007
         tax
 
         sep  #$20       ; 8-bit acc/16-bit regs
-        lda  vram_buff
-        stal :p2+1      ; (long: the copy of this code in the bank being executed, not the data bank's)
+        lda  vram_buff  ; Return the buffered byte (kept in B meanwhile) and buffer this one
+        xba
         ldal PPU_CIRAM,x
         sta  vram_buff
         sep  #$30
 
         plx
-:p2     lda  #0
+        xba             ; (N / Z from the value, like lda)
         rts
 
 ; CHR-ROM / CHR-RAM lives at PPU_MEM $0000 - $1FFF (CHR-RAM writes in PPUDATA_WRITE store there too).
@@ -958,13 +959,13 @@ LDA_2007
 :chr_read
         sep  #$20       ; 8-bit acc/16-bit regs
         lda  vram_buff
-        stal :p3+1
+        xba
         ldal PPU_MEM,x
         sta  vram_buff
         sep  #$30
 
         plx
-:p3     lda  #0
+        xba
         rts
 
         mx    %11
@@ -988,6 +989,17 @@ STA_2007
         cmpl PPU_MEM,x
         beq  :done
         stal PPU_MEM,x
+        rep  #$20                     ; X = the tile (CHR address / 16, 0-511)
+        txa
+        lsr
+        lsr
+        lsr
+        lsr
+        tax
+        sep  #$20
+        ldal ChrRamDirty,x            ; Both forms already dirty (CHRRAM_BG_DIRTY + CHRRAM_SPR_DIRTY, ppu/
+        cmp  #$03                     ; CoreData.s): nothing to mark.  15 of a tile's 16 bytes end here
+        beq  :done
         jsl  PPUDATA_WRITE_CHR
         bra  :done
 :not_chr
@@ -1266,16 +1278,14 @@ LDY_ABS_X   mac
             rts
             <<<
 
+; jmp (]1), ]1 on the NES zero page.  A native-mode rti is an exact jump: it pulls P, then the PC
+; (without the +1 an rts adds), then PBR, so push them in the reverse order.  A and the flags are
+; unchanged, and nothing is patched.  The callers jmp here (no return address on the stack).
 JMP_ABS_IND mac
-            php
-            pha
-            lda  ]1
-            stal jai_patch+1
-            lda  ]1+1
-            stal jai_patch+2
-            pla
-            plp
-jai_patch   jmp  $0000
+            phk                 ; PBR: the same bank, as jmp (abs) would
+            pei  ]1             ; the target, from the NES zero page (D)
+            php                 ; P as the ROM had it
+            rti
             <<<
 
 ; Helpers for handling LDA (dp),y and STA (dp),y when the target value can also be on the zero page.  Since
