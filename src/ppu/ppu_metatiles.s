@@ -109,24 +109,12 @@ RefreshMetatile                            ; Alternate entry point is not settin
         rep   #$20
         ldal  PPU_MEM+TILE_SHADOW-1+$00,x  ; the tile ID in the high byte
         SET_COMPILED_TILE_HI patch1
-        DO    HAS_CHR_RAM
-        jsr   CheckBgTileDirty        ; A = the slot; preserves X and Y
-        FIN
         ldal  PPU_MEM+TILE_SHADOW-1+$01,x  ; the tile ID in the high byte
         SET_COMPILED_TILE_HI patch2
-        DO    HAS_CHR_RAM
-        jsr   CheckBgTileDirty        ; A = the slot; preserves X and Y
-        FIN
         ldal  PPU_MEM+TILE_SHADOW-1+$20,x  ; the tile ID in the high byte
         SET_COMPILED_TILE_HI patch3
-        DO    HAS_CHR_RAM
-        jsr   CheckBgTileDirty        ; A = the slot; preserves X and Y
-        FIN
         ldal  PPU_MEM+TILE_SHADOW-1+$21,x  ; the tile ID in the high byte
         SET_COMPILED_TILE_HI patch4
-        DO    HAS_CHR_RAM
-        jsr   CheckBgTileDirty        ; A = the slot; preserves X and Y
-        FIN
         sep   #$20
 
         ldal  PPU_MEM+TILE_BANK,x     ; The tiles in the same row will have the same bank
@@ -185,46 +173,247 @@ patch4  CALL_COMPILED_TILE
 bad_row2
         rts
 
-; CHR-RAM support: recompile one background tile if its dirty flag is set, before RefreshMetatile
-; dispatches through the compiled tile code.  Without this, a metatile whose attribute byte changes
-; before DrawPPUTile has ever compiled the referenced tile would jsl into a stale or uninitialized
-; compiled-code address and crash.
+; ---------------------------------------------------------------------------
+; CHR-RAM background tiles: recompiled when they are called (HAS_CHR_RAM)
+; ---------------------------------------------------------------------------
 ;
-; A = the tile's compiled-code slot (tile * 128 | bgadr_hi, from SET_COMPILED_TILE_HI); 16-bit A, X
-; and Y.  X (the metatile's CIRAM address) and Y are preserved; A is not.  The slot >> 7 is the tile's
-; ChrRamDirty index (0 - 511: ChrRamDirty spans both CHR-RAM pattern tables, see PPUDATA_WRITE), and
-; the slot is also the tile's offset in the tiledata bank.
+; A tile the game rewrites in CHR-RAM is recompiled the first time it is drawn afterwards, without the
+; draw paths testing anything: its compiled slot holds a stub instead of the tile's code,
+;
+;   phk / pea slot-1 / jml BgTileFault
+;
+; and BgTileFault recompiles the tile into the slot (over the stub) and continues into it.  The stubs
+; are written on the GS task, which is the only one that runs compiled tiles: the NES task could
+; preempt it inside the very tile it rewrites.  So a CHR-RAM write only queues the tile (ChrQueueBg,
+; from PPUDATA_WRITE_CHR, the first time its CHRRAM_BG_DIRTY bit is set), RenderLatch freezes the queue
+; with the rest of the NES state, and ChrInstallStubs, right after it, stubs the tiles that are still
+; dirty.  A cell drawn between a CHR-RAM write and the next latch shows the old pattern, as a cell drawn
+; before the write does (nothing redraws cells when CHR-RAM changes).
+;
+; CHRRAM_BG_DIRTY (ChrRamDirty) means "queued or stubbed, not recompiled yet": set by the write, cleared
+; only by the recompile (ChrRecompileBg).  At start-up every tile is dirty and stubbed (ChrStartUp).
+;
+; The queue is double-buffered: the NES task appends to one list while ChrInstallStubs reads the other.
+; A list that fills up is marked instead, and the installer then visits all 512 tiles.
         DO    HAS_CHR_RAM
+CHR_PEND_MAX    equ   128               ; Entries per list
+chrPendSel      dw    0                 ; 0 / CHR_PEND_MAX*2: the list the NES task appends to
+chrPendCnt      dw    0                 ; Bytes in it
+chrPendAll      dw    0                 ; Non-zero: it overflowed
+chrPendPrevCnt  dw    0                 ; The frozen list (RenderLatch) for ChrInstallStubs
+chrPendPrevAll  dw    0
+chrInsPtr       dw    0
+chrInsEnd       dw    0
+chrStubW2       dw    0                 ; The stub's last two words: $5C (jml), BgTileFault (ChrStartUp)
+chrStubW3       dw    0
+chrPendList     ds    CHR_PEND_MAX*4    ; Both lists: tile indexes (0 - 511), one word each
+
+; Queue a tile whose CHRRAM_BG_DIRTY bit has just been set.  NES task (the PPUDATA_WRITE_CHR jsl),
+; DBR = the ROM's, 8-bit A, 16-bit X = the tile (0 - 511).  A, X and Y are preserved.
+        mx    %10
+ChrQueueBg
+        phb
+        phk
+        plb
+        pha
+        rep   #$20
+        lda   chrPendCnt
+        cmp   #CHR_PEND_MAX*2
+        bcs   :full
+        phy
+        adc   chrPendSel                ; (C = 0)
+        tay
+        txa
+        sta   chrPendList,y
+        ply
+        inc   chrPendCnt
+        inc   chrPendCnt
+        sep   #$20
+        pla
+        plb
+        rts
+        mx    %00
+:full   lda   #1                        ; (no room: visit every tile)
+        sta   chrPendAll
+        sep   #$20
+        pla
+        plb
+        rts
+
+; Freeze the queue.  RenderLatch, interrupts off, 16-bit registers, DBR = K.
+        mx    %00
+ChrLatchQueue
+        lda   chrPendCnt
+        sta   chrPendPrevCnt
+        stz   chrPendCnt
+        lda   chrPendAll
+        sta   chrPendPrevAll
+        stz   chrPendAll
+        lda   chrPendSel
+        eor   #CHR_PEND_MAX*2
+        sta   chrPendSel
+        rts
+
+; Stub the frozen list's tiles that are still dirty (a game can recompile one itself in between:
+; CheckBgTileDirty).  GS task, interrupts on, 16-bit registers, DBR = K, D = the runtime's (CompileBank0).
+; A, X and Y are trashed.
+        mx    %00
+ChrInstallStubs
+        lda   chrPendPrevAll
+        bne   :all
+        lda   chrPendSel                ; The frozen list is the one not being appended to
+        eor   #CHR_PEND_MAX*2
+        sta   chrInsPtr
+        clc
+        adc   chrPendPrevCnt
+        sta   chrInsEnd
+:next   ldx   chrInsPtr
+        cpx   chrInsEnd
+        bcs   :done
+        lda   chrPendList,x
+        inx
+        inx
+        stx   chrInsPtr
+        tax
+        jsr   :one
+        bra   :next
+
+:all    ldx   #0
+:anext  jsr   :one
+        inx
+        cpx   #512
+        bcc   :anext
+:done   stz   chrPendPrevCnt
+        stz   chrPendPrevAll
+        rts
+
+; X = the tile (preserved)
+:one    lda   ChrRamDirty,x             ; (a 16-bit read: only bit 0 is tested)
+        bit   #CHRRAM_BG_DIRTY
+        beq   :clean
+        txa                             ; the slot: tile * 128
+        lsr
+        xba
+        bcc   *+5
+        ora   #$0080
+        tay
+        lda   #$F44B                    ; phk / pea
+        sta   [CompileBank0],y
+        tya
+        dec                             ; slot - 1: the rtl at the end of BgTileFault lands on the slot
+        iny
+        iny
+        sta   [CompileBank0],y
+        iny
+        iny
+        lda   chrStubW2                 ; jml BgTileFault
+        sta   [CompileBank0],y
+        iny
+        iny
+        lda   chrStubW3
+        sta   [CompileBank0],y
+:clean  rts
+
+; Stub every tile and mark it dirty (PPUStartUp: nothing has been uploaded yet).  16-bit registers,
+; DBR = K, D = the runtime's.
+        mx    %00
+ChrStartUp
+        lda   #BgTileFault              ; The stub's jml operand
+        xba
+        pha
+        and   #$FF00
+        ora   #$005C                    ; jml, then the address' low byte
+        sta   chrStubW2
+        pla
+        and   #$00FF                    ; the address' high byte, then the bank
+        sta   chrStubW3
+        sep   #$20
+        phk
+        pla
+        sta   chrStubW3+1
+        rep   #$20
+
+        ldx   #0
+        lda   #{CHRRAM_BG_DIRTY+CHRRAM_SPR_DIRTY}*$0101
+:mark   sta   ChrRamDirty,x
+        inx
+        inx
+        cpx   #512
+        bcc   :mark
+        stz   chrPendCnt
+        stz   chrPendAll
+        lda   #1                        ; visit them all
+        sta   chrPendPrevAll
+        jmp   ChrInstallStubs
+
+; A stubbed tile was called (CALL_COMPILED_TILE: 16-bit registers, X = the code field address, DBR =
+; the code field bank; the compiled code itself sets Y and A).  The stub left the compile bank and
+; slot - 1 on the stack, over the caller's return address.  Recompile the tile, then rtl into it: it
+; returns to the caller.  X, DBR and P are preserved.
+        mx    %00
+BgTileFault
+        php
+        phb
+        phx
+        phk
+        plb
+        lda   5,s                       ; slot - 1 (X at 1,s, B at 3,s, P at 4,s)
+        inc
+        jsr   ChrRecompileBg
+        plx
+        plb
+        plp
+        rtl
+
+; Recompile a background tile: convert its CHR-RAM bytes into its tiledata slot and compile them into
+; its compiled slot (over a stub, if it has one).  A = the slot (tile * 128 | bgadr_hi: also the tile's
+; tiledata offset), 16-bit registers, DBR = K.  A, X and Y are trashed.
+;
+; The bit is cleared before the bytes are read, so a write that comes in meanwhile marks the tile again
+; (and queues it).  With interrupts off: the NES task may set the byte's other bit in between.
+        mx    %00
+ChrRecompileBg
+        pha                             ; the slot
+        CHR_INDEX                       ; X = the tile's ChrRamDirty index
+        sep   #$20
+        php
+        sei
+        lda   ChrRamDirty,x
+        and   #CHRRAM_BG_DIRTY!$FF      ; clear only the BG bit, keep the sprite bit
+        sta   ChrRamDirty,x
+        plp
+        rep   #$20
+
+        lda   1,s
+        lsr
+        lsr
+        lsr
+        tax                             ; X = the CHR-RAM source address (index * 16 = slot / 8)
+        lda   1,s                       ; A = the tiledata destination (the slot)
+        jsr   FastROMTileToLookup       ; writes the 32-byte bitmap directly into tiledata; trashes A/X/Y
+        lda   1,s
+        tay                             ; Y = the compiled-code slot, A = the bitmap (the same offset)
+        ldx   #^tiledata                ; X = bank of the bitmap source
+        jsr   CompileTile
+        pla
+        rts
+
+; Recompile a background tile now if it is dirty: for a game that redraws tiles itself after
+; rewriting them (Contra's barriers, EngineExt.s).  A = the slot; 16-bit registers, DBR = K.  X and Y
+; are preserved; A is not.
         mx    %00
 CheckBgTileDirty
         phx
-        pha                           ; the slot, which is also the tile's tiledata address
-        CHR_INDEX                     ; X = the tile's ChrRamDirty index
-
-        sep   #$20                    ; 8-bit A for the byte-table check/clear
-        ldal  ChrRamDirty,x
-        bit   #CHRRAM_BG_DIRTY        ; test only the background-form-dirty bit
-        beq   :bgclean
-        and   #CHRRAM_BG_DIRTY!$FF    ; clear only the BG bit, preserve the sprite bit
-        stal  ChrRamDirty,x
-        rep   #$20
-        phy                           ; (the slot at 3,s)
-
-        lda   3,s
-        lsr
-        lsr
-        lsr
-        tax                           ; X = the CHR-RAM source address (index * 16 = slot / 8)
-        lda   3,s                     ; A = the tiledata destination (the slot)
-        jsr   FastROMTileToLookup     ; writes the 32-byte bitmap directly into tiledata; trashes A/X/Y
-        lda   3,s
-        tay                           ; Y = the compiled-code slot, A = the bitmap (the same offset)
-        ldx   #^tiledata              ; X = bank of the bitmap source
-        jsr   CompileTile
+        phy
+        pha
+        CHR_INDEX                       ; X = the tile's ChrRamDirty index
+        lda   ChrRamDirty,x             ; (a 16-bit read: only bit 0 is tested)
+        bit   #CHRRAM_BG_DIRTY
+        beq   :clean
+        lda   1,s
+        jsr   ChrRecompileBg
+:clean  pla
         ply
-:bgclean
-        rep   #$20
-        pla                           ; (the slot)
         plx
         rts
         FIN

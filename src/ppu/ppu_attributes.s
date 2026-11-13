@@ -188,32 +188,14 @@ DrawPPUTile
         jsr   _PEAFieldStable
 :stable pla
 
-; CHR-RAM support: if the game changed the tile in CHR-RAM since it was last compiled, recompile it
-; before the call below uses it.  CheckBgTileDirty takes the tile's slot, which SET_COMPILED_TILE has
-; just put into the call's address.
-        DO    HAS_CHR_RAM
-        SET_COMPILED_TILE patch0      ; Point the call below at this tile's compiled code first
-        rep   #$20
-        lda   patch0+1                ; the slot: tile * 128 | bgadr_hi
-        phx
-        CHR_INDEX                     ; X = the tile's ChrRamDirty index
-        ldal  ChrRamDirty,x
-        plx
-        bit   #CHRRAM_BG_DIRTY        ; (tested here: the call only when the tile is dirty)
-        beq   :chr_ok
-        lda   patch0+1
-        jsr   CheckBgTileDirty        ; (preserves X and Y)
-:chr_ok sep   #$20
-        bra   _DrawPPUTileSet
-        FIN
+; (CHR-RAM games: a tile the game rewrote has a stub in its compiled slot, which recompiles it when it
+; is called -- BgTileFault, ppu_metatiles.s -- so there is nothing to check here)
 
-; _DrawPPUTile: DrawPPUTile without its checks, for a caller that has made the PEA field stable
-; (_PEAFieldStable) and, in a CHR-RAM game, knows the tile is compiled (CheckBgTileDirty).  The same
-; registers.
+; _DrawPPUTile: DrawPPUTile without its check, for a caller that has made the PEA field stable
+; (_PEAFieldStable).  The same registers.
         mx    %10
 _DrawPPUTile
         SET_COMPILED_TILE patch0      ; Point the call below at this tile's compiled code
-_DrawPPUTileSet
         clc
         ldal  PPU_MEM+ATTR_SHADOW,x   ; Load the palette select byte from shadow memory
         adc   SwizzlePtr+1

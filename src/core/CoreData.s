@@ -173,11 +173,12 @@ Col2CodeOffset
 RTable            ds    400
                   ds    400
 
-; CHR-RAM support: two independent dirty bits per tile, set by PPUDATA_WRITE
-; when the game writes into CHR-RAM ($0000-$1FFF) and checked at draw time
-; (DrawPPUTile / CheckBgTileDirty / sprChrCheck) to recompile just that
-; tile on demand. Only used by games with HAS_CHR_RAM equ 1, but reserved
-; unconditionally (512 bytes) since MarkTileDirty (ppu_regs.s)
+; CHR-RAM support: two independent dirty bits per tile, set by PPUDATA_WRITE_CHR
+; when the game writes into CHR-RAM ($0000-$1FFF), so that just that tile is
+; recompiled when it is next drawn: the background form through a stub in its
+; compiled slot (BgTileFault, ppu/ppu_metatiles.s), the sprite form by the
+; bitmap draws (sprChrCheck) after its compiled sprites were dropped.  Only
+; used by games with HAS_CHR_RAM equ 1, but reserved unconditionally (512 bytes)
 ;
 ; A single tile ID can be drawn as both a background tile and a sprite (e.g.
 ; the same CHR-RAM tile reused for a title-screen sprite and a level-map
@@ -190,5 +191,5 @@ RTable            ds    400
 ; compiled code uninitialized, which a later unconditional jump into it would
 ; crash on. So each byte holds two independent bits, tested/cleared
 ; separately by the BG- and sprite-side consumers:
-CHRRAM_BG_DIRTY   equ   $01     ; DrawPPUTile / CheckBgTileDirty
+CHRRAM_BG_DIRTY   equ   $01     ; queued or stubbed, not recompiled yet (ChrRecompileBg clears it)
 CHRRAM_SPR_DIRTY  equ   $02     ; sprChrCheck

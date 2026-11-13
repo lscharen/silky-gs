@@ -196,9 +196,14 @@ ntmB1Attr   ldal  T2IDX,x
 PPUFreezeNametableUpdates
         ldal at_count
         sta  at_prev_count
-        lda  #0
+        bne  :queued
+        rts                                   ; Nothing queued: both buffers are clean (every group with
+                                              ; a mask or a flag is on at_list), so the write path stays
+:queued lda  #0
         stal at_count
 
+; Switch the write path to the other buffer (also PPUResetQueues)
+ntmFlipBuffers
         lda  ntmSel                           ; (high byte always 0)
         eor  #$0020
         sta  ntmSel
@@ -223,6 +228,9 @@ PPUFreezeNametableUpdates
 ;      that copies and draws just those tiles
         mx    %00
 PPUFlushQueuesAlt
+        lda   at_prev_count                   ; Nothing queued (PPUFreezeNametableUpdates left the write
+        bne   *+3                             ; path where it was)
+        rts
         lda   ntmB1+1                         ; The previous buffer is the one not being written now.  Its
         ldx   ntmSel                          ; address from ntmB1's (relocated) operand, which is never
         beq   :ptr                            ; patched (ntmB0's first word is), less $2000 for buffer 0.
@@ -1122,7 +1130,7 @@ PPUResetQueues
         lda    ntmSel                         ; Write path back on buffer 0
         and    #$00FF
         beq    :sel0
-        jsr    PPUFreezeNametableUpdates
+        jsr    ntmFlipBuffers
 :sel0   stz    at_prev_count                  ; Both lists empty
         lda    #0
         stal   at_count

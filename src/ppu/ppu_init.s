@@ -27,6 +27,10 @@ PPUStartUp
         jsr   SprCacheInit              ; Empty compiled sprite cache; all of the slots are free (the
                                         ; dispatch, csd, takes each slot's bank from its entry)
 
+        DO    HAS_CHR_RAM               ; CHR-RAM: nothing uploaded yet, so every tile is dirty and its
+        jsr   ChrStartUp                ; compiled slot a recompile stub (ppu_metatiles.s)
+        FIN
+
 ; Clear / initialize any of the tracking queues
 
         jsr   PPUResetQueues

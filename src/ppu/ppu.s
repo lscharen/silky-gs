@@ -799,8 +799,12 @@ sprChrCheck
 ; NES task may set in between.  The tile has no compiled sprites to drop: PPUDATA_WRITE dropped them
 ; when the flag was set, and SprCompileTile does not compile a tile while its flag is set.
 :dirty  sep   #$20
+        php                           ; (re-read with interrupts off: the NES task may have set the
+        sei                           ; background bit since the test)
+        ldal  ChrRamDirty,x
         and   #CHRRAM_SPR_DIRTY!$FF   ; clear only the sprite bit, preserve the BG bit
         stal  ChrRamDirty,x
+        plp
         rep   #$20
         phy
         pei   sprBankSwap             ; (with DBR = the tiledata bank, as it was written for)

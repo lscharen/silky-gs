@@ -27,6 +27,12 @@ RenderLatch ENT
 ; Freeze the nametable updates: the buffer and attribute list the ROM has been filling become the ones
 ; this render draws, and new PPU writes go to the other buffer, so they don't interfere with the render
             jsr  PPUFreezeNametableUpdates
+            DO   HAS_CHR_RAM
+            lda  chrPendCnt              ; and the CHR-RAM tiles to recompile, if the game rewrote any
+            ora  chrPendAll              ; (stubbed below)
+            beq  *+5
+            jsr  ChrLatchQueue
+            FIN
 
 ; Cache the values that set the view port: the PPU registers' last values, or the game's (the locks
 ; return C = 1 and the value in A; see ppu_api.s)
@@ -64,6 +70,16 @@ RenderLatch ENT
             jsr  scanOAMSprites            ; Copy the sprite OAM data into internal RAM space for rendering
 
             plp
+
+; CHR-RAM tiles the game rewrote: stub their compiled slots, so they are recompiled when they are next
+; drawn (ppu_metatiles.s).  With interrupts on again, and before the game's PRE_RENDER, which can draw
+; tiles (e.g. the palette code's RefreshPPUAttributes)
+            DO   HAS_CHR_RAM
+            lda  chrPendPrevCnt
+            ora  chrPendPrevAll
+            beq  *+5
+            jsr  ChrInstallStubs
+            FIN
             plb
             rtl
 
@@ -132,7 +148,9 @@ RenderDraw ENT
             beq   *+5
             jsr   nbgInvalidate
 
+            DO    SHOW_DEBUG_VARS
             jsr   _ShowDebugInfo
+            FIN
 
 ; The game's render screen draws the renders it handles (C = 1, A = the DirtyBits to keep), and the
 ; engine's renderer the rest

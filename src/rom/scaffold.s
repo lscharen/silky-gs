@@ -148,19 +148,11 @@ NES_StartUp
 ; hardware does: the pattern tables are at $0000 at power on (PPUCTRL = 0) and each PPUCTRL the game
 ; writes selects them (PPUCtrlDecode).  CHR-ROM games have their tiles converted offline into the
 ; tiledata bank by build.js (scripts/lib/nromBuild.js): compile all 512 now (sprites are compiled when
-; they are first drawn, SprCompileTile).  CHR-RAM games don't have a fixed image -- mark every tile
-; dirty instead, so DrawPPUTile / CheckBgTileDirty / sprChrCheck compile each tile the first
-; time it's drawn (once the game has uploaded real data for it).
+; they are first drawn, SprCompileTile).  CHR-RAM games don't have a fixed image: PPUStartUp marked
+; every tile dirty and stubbed its compiled slot (ChrStartUp, ppu_metatiles.s), so each tile is
+; compiled the first time it's drawn (once the game has uploaded real data for it).
 
-            DO    HAS_CHR_RAM
-            ldx   #0
-            lda   #$0303           ; both bytes = CHRRAM_BG_DIRTY+CHRRAM_SPR_DIRTY
-:mtloop     stal  ChrRamDirty,x
-            inx
-            inx
-            cpx   #512
-            bcc   :mtloop
-            ELSE
+            DO    1-HAS_CHR_RAM
             jsl   ROM_CompileBackgroundTilesL
             FIN
 
