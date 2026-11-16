@@ -2,7 +2,7 @@
 ;
 ; * $01/2000 - $01/9FFF for the shadow screen
 ; * $xx/0000 - $xx/07FF for NES RAM in the NES code bank
-; * 1 bank for the compiled background tiles: 512 slots of 128 bytes (CompileTile)
+; * what the engine needs for itself (EngineAllocL)
 ; * 1 - SPR_MAX_BANKS banks for cached sprites (as many as there is memory for, at least 1)
 
                mx        %00
@@ -19,9 +19,7 @@ InitMemory
 
 ; Allocate a couple of banks of memory
 
-               jsr       AllocOneBank2
-               sta       CompileBank
-               stz       CompileBank0
+               jsl       EngineAllocL                ; Any banks the engine needs for itself
 
                ldx       #0                          ; The compiled sprite cache's banks (SprCacheInit)
 :spr_bank      phx
@@ -79,3 +77,9 @@ AllocOneBank2  PushLong  #0
                bcs       :err                        ; (carry set: no memory)
                _Deref
 :err           rts
+
+; For an engine (EngineAllocL): one full bank, as AllocOneBank2
+               mx        %00
+AllocBankL     ENT
+               jsr       AllocOneBank2
+               rtl

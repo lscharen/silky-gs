@@ -67,6 +67,11 @@ mmc1_reg3   ds    1
 mapper_bank ENT
             ds    2                       ; 64kb IIgs bank that holds the current active NES bank. 2 bytes for convenience.
 
+; The tile engine's list of changed nametable bytes (engines/tile/Front.s): the list being written, and where it ends.  Here so
+; CellWrite, called by STA_2007 with DBR = this bank, reaches it with absolute addressing.  (Unused by the PEA engine)
+NtTail      ENT
+            dw    0
+
 ; CHR-ROM bank switching (CNROM): the 8KB CHR-ROM bank the ROM selected, and a flag set when it changes.
 ; The ROM's bank write sets both; the game's PRE_RENDER loads the bank into CHR_ROM (PPU_ReloadCHR).
 ppu_bank    ENT

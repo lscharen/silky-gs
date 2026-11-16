@@ -2,7 +2,7 @@ import { join } from 'node:path';
 
 const SRC_ROOT   = process.env.SRC_ROOT;
 const DEFS       = join(SRC_ROOT, 'core/Defs.s');
-const PPU_MACROS = join(SRC_ROOT, 'ppu/ppu_macros.s');
+const PPU_MACROS = join(SRC_ROOT, 'engines/pea/ppu/ppu_macros.s');
 const PPU_REGS   = join(SRC_ROOT, 'ppu/ppu_regs.s');
 
 // Assembly-time constants required by conditional directives in ppu_regs.s.

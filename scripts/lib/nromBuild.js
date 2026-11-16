@@ -137,11 +137,26 @@ function run(cmd, args) {
   execFileSync(cmd, args, { stdio: 'inherit', cwd: PROJECT_ROOT });
 }
 
-const ENGINE_SOURCE = path.join(PROJECT_ROOT, 'src', 'Engine.s');
+const ENGINES_DIR = path.join(PROJECT_ROOT, 'src', 'engines');
 const STAGE_DIR = path.join(PROJECT_ROOT, 'src', 'game');
 
+// The engine segments besides MAIN and ENGINE that check-xbank checks, per engine (the tile engine's sprite code and silky's
+// sprite cache are segments of their own)
+const ENGINE_SEGMENTS = { pea: [], tile: ['SPRITE', 'SPRLIB'] };
+
 /**
- * Copy the game's files the shared engine segment (src/Engine.s) puts into src/game/: Merlin32 finds a
+ * The engine a game is built against: its link file's "ASM .../engines/<engine>/Engine.s" line (src/engines/<engine>/).
+ */
+function engineOf(gameDir, linkFile) {
+  const link = fs.readFileSync(path.join(gameDir, linkFile), 'utf8');
+  const m = link.match(/^\s+ASM\s+\S*engines\/([^/\s]+)\/Engine\.s\s*$/m);
+  if (!m) throw new Error(`${linkFile}: no "ASM .../engines/<engine>/Engine.s" line (the link file picks the engine)`);
+  if (!fs.existsSync(path.join(ENGINES_DIR, m[1], 'Engine.s'))) throw new Error(`${linkFile}: no engine src/engines/${m[1]}`);
+  return m[1];
+}
+
+/**
+ * Copy the game's files the engine segment (src/engines/<engine>/Engine.s) puts into src/game/: Merlin32 finds a
  * put file only relative to the source that puts it.  Config.s and Hooks.s (the callback macros) are
  * required; pal_defs.s (the generated palette ids) is staged empty when the game has none.
  * EngineExt.s is the game's code for the engine's bank, or empty when it has none.  The game's other
@@ -162,21 +177,28 @@ function stageEngineFiles(gameDir) {
 }
 
 /**
- * Assemble a game: stage its engine-side files for src/Engine.s (stageEngineFiles), expand the mput
- * blocks in Main.s and src/Engine.s and assemble the Merlin32 link file, then check the engine
- * segments for 16-bit references into another bank (scripts/check-xbank.js; any is an error).
+ * Assemble a game: stage its engine-side files for the engine its link file names (engineOf,
+ * stageEngineFiles), run the engine's generator if it has one (src/engines/<engine>/gen.js <gameDir>:
+ * the tile engine writes src/game/tile/ from the game's TileGame.js), expand the mput blocks in Main.s
+ * and the engine's Engine.s and assemble the Merlin32 link file, then check the engine segments for
+ * 16-bit references into another bank (scripts/check-xbank.js; any is an error).
  * Shared by every game, NROM or not.
  *
  *   gameDir     - the directory that holds Main.s and the link file
  *   linkFile    - Merlin32 link file, relative to gameDir (e.g. 'Master.s')
  */
 function assembleGame(gameDir, linkFile) {
+  const engine = engineOf(gameDir, linkFile);
+  const engineDir = path.join(ENGINES_DIR, engine);
   stageEngineFiles(gameDir);
+  const gen = path.join(engineDir, 'gen.js');
+  if (fs.existsSync(gen)) run(process.execPath, [gen, gameDir]);
   run(process.execPath, [path.join(PROJECT_ROOT, 'scripts', 'gen-includes.js'), path.join(gameDir, 'Main.s')]);
-  run(process.execPath, [path.join(PROJECT_ROOT, 'scripts', 'gen-includes.js'), ENGINE_SOURCE]);
+  run(process.execPath, [path.join(PROJECT_ROOT, 'scripts', 'gen-includes.js'), path.join(engineDir, 'Engine.s')]);
   run(PACKAGE_JSON.config.merlin32, ['-V', PACKAGE_JSON.config.macros, path.join(gameDir, linkFile)]);
 
-  const xbank = checkXBank(gameDir, linkFile);
+  const segments = ['MAIN', 'ENGINE', ...(ENGINE_SEGMENTS[engine] || [])];
+  const xbank = checkXBank(gameDir, linkFile, { segments });
   reportXBank(xbank, linkFile);
   if (xbank.errors.length) throw new Error(`${linkFile}: ${xbank.errors.length} 16-bit reference(s) into another bank`);
 }
@@ -212,4 +234,4 @@ function buildNromGame(gameDir, linkFile) {
   compactGame(gameDir, linkFile, ['PPURAM', 'CHRDATA']);
 }
 
-module.exports = { buildNromGame, assembleGame, compactGame, generateTileData, loadChrFromPPU, parseDataSource };
+module.exports = { buildNromGame, assembleGame, compactGame, engineOf, generateTileData, loadChrFromPPU, parseDataSource };

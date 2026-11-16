@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * gen-grid-marks -- writes src/ppu/ppu_grid_marks.s, the grid renderer's sprite mark routines and its
+ * gen-grid-marks -- writes src/engines/pea/ppu/ppu_grid_marks.s, the grid renderer's sprite mark routines and its
  * quadrant copy routines (see the end of this file)
  *
  * A sprite at line k (0-7) and pixel p (0-7) of its top-left cell covers 2 x 2 cells (8x8) or 3 x 2 cells
@@ -30,7 +30,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const OUT = path.join(__dirname, '..', 'src', 'ppu', 'ppu_grid_marks.s');
+const OUT = path.join(__dirname, '..', 'src', 'engines', 'pea', 'ppu', 'ppu_grid_marks.s');
 const REP = [0, 1, 4, 5];                         // a k / p value of each class
 const cls = (v) => (v === 0 ? 0 : v < 4 ? 1 : v === 4 ? 2 : 3);
 

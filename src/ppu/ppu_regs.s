@@ -63,9 +63,10 @@ DropTileSprites
 ; Called (jsl) by STA_2007 (rom_inject.s) after it stored a byte of CHR-RAM ($0000-$1FFF) at PPU_MEM and
 ; found the tile's ChrRamDirty byte not already both forms dirty (the usual case is tested there).
 ; X = the tile index (16-bit, 0-511), 8-bit A = its ChrRamDirty byte.  Marks both forms of the tile
-; dirty, instead of pre-compiling everything up front like a fixed CHR-ROM game.  A background form
-; that was clean is queued for a recompile stub (ChrQueueBg, ppu_metatiles.s); a sprite form that was
-; clean has its compiled sprites dropped (the bitmap draws reconvert it: sprChrCheck).
+; dirty, instead of pre-compiling everything up front like a fixed CHR-ROM game.  What a background form
+; that was clean needs is the engine's (CHR_WRITE_HOOK, defined by each engine's Engine.s: the PEA engine
+; queues a recompile stub, the tile engine queues the tile); a sprite form that was clean has its compiled
+; sprites dropped (the bitmap draws reconvert it: sprChrCheck).
         DO   HAS_CHR_RAM
         mx   %10
 PPUDATA_WRITE_CHR ENT
@@ -75,10 +76,8 @@ PPUDATA_WRITE_CHR ENT
                                                   ; independent bits, not one shared flag
         stal ChrRamDirty,x
         xba
-        bit  #CHRRAM_BG_DIRTY
-        bne  :bg
-        jsr  ChrQueueBg                           ; (A, X and Y preserved)
-:bg     bit  #CHRRAM_SPR_DIRTY
+        CHR_WRITE_HOOK                            ; The engine's: A = the old flags, X = the tile index (A, X, Y kept)
+        bit  #CHRRAM_SPR_DIRTY
         bne  :done
         jsr  DropTileSprites
 :done   rtl

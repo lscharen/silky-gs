@@ -42,7 +42,8 @@ tcbS        dw    0,0                     ; Saved stack pointer of each task
 nesActive   dw    0                       ; Non-zero once the NES task has been created
 nesBusy     dw    0                       ; Non-zero while the NES task owes a frame
 nesOverrun  dw    0                       ; Consecutive VBLs that the current NES frame has overrun
-nesFrameCount dw  0                       ; NES frames run (wraps).  frameCount counts renders, and is reset every second
+nesFrameCount ENT
+            dw    0                       ; NES frames run (wraps).  frameCount counts renders, and is reset every second
 engineVideoOn ENT
             dw    0                       ; Non-zero once the engine has turned SHR on (_GrafOn, core/Graphics.s)
 engineSuspended dw 0                      ; Non-zero while something else has the display (irqVbl)

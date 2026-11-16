@@ -99,8 +99,8 @@ function harnessEdits(o) {
         return t;
     };
     if (o.gridstats) {
-        edits[path.join(SRC, 'ppu', 'ppu_grid.s')] = (t) => setConst(t, 'GRID_STATS', 1);
-        edits[path.join(SRC, 'ppu', 'ppu_grid_quads.s')] = (t) => setConst(t, 'GRID_CELL_STATS', 1);
+        edits[path.join(SRC, 'engines', 'pea', 'ppu', 'ppu_grid.s')] = (t) => setConst(t, 'GRID_STATS', 1);
+        edits[path.join(SRC, 'engines', 'pea', 'ppu', 'ppu_grid_quads.s')] = (t) => setConst(t, 'GRID_CELL_STATS', 1);
     }
     if (!o.bench) return edits;
     edits[MAIN] = (t) => {

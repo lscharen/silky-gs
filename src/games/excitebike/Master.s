@@ -14,17 +14,17 @@
 
 ; The engine (PPU simulation, renderers, blitter, tile / sprite compilers)
 
-            ASM   ../../Engine.s
+            ASM   ../../engines/pea/Engine.s
             KND   #$1100
             SNA   ENGINE
 
 ; Segment #2 & #3 -- PPU blitter
 
-            ASM   ../../core/blitter/TemplateLiteBank1.s
+            ASM   ../../engines/pea/blitter/TemplateLiteBank1.s
             KND   #$1100
             SNA   PPU1
 
-            ASM   ../../core/blitter/TemplateLiteBank2.s
+            ASM   ../../engines/pea/blitter/TemplateLiteBank2.s
             KND   #$1100
             SNA   PPU2
 

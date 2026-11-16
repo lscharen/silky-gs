@@ -36,7 +36,7 @@ import { cpu65816 }               from 'iigs-unit';
 
 const SRC_ROOT      = process.env.SRC_ROOT;
 const DEFS = join(SRC_ROOT, 'core/Defs.s');
-const PPU_SHADOWLIST = join(SRC_ROOT, 'ppu/ppu_shadowlist.s');
+const PPU_SHADOWLIST = join(SRC_ROOT, 'engines/pea/ppu/ppu_shadowlist.s');
 
 // Use a 3-byte window (scanlines 0–23) with no leading-byte offset for clarity.
 const CONSTANTS = `\

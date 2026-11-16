@@ -13,15 +13,15 @@
             KND   $0012
             SNA   STKDP
 
-            ASM   ../../../Engine.s
+            ASM   ../../../engines/pea/Engine.s
             KND   #$1100
             SNA   ENGINE
 
-            ASM   ../../../core/blitter/TemplateLiteBank1.s
+            ASM   ../../../engines/pea/blitter/TemplateLiteBank1.s
             KND   #$1100
             SNA   PPU1
 
-            ASM   ../../../core/blitter/TemplateLiteBank2.s
+            ASM   ../../../engines/pea/blitter/TemplateLiteBank2.s
             KND   #$1100
             SNA   PPU2
 

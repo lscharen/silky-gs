@@ -41,6 +41,9 @@ const ALLOWED = [
   { re: /^(y|tile)_exclude$/, why: 'read by the OAM scan with DBR = the ROM bank that holds it' },
   { re: /^at_count$/, why: 'ntmWriteTail runs with the NES task\'s DBR = the base ROM bank that holds it' },
   { re: /_SWIZZLE$/, why: 'an offset in the PALDATA bank; the code supplies the bank' },
+  { re: /^NtTail$/, why: 'the tile engine\'s ntmWriteTail (CellWrite) runs with the NES task\'s DBR = the base ROM bank that holds it' },
+  { re: /^tiledata$/, why: 'the low word of a long pointer; the next instruction stores its bank (#^tiledata)' },
+  { re: /^draw_rtn2$/, why: 'the low word of a compiled sprite\'s jml operand; its bank (#^draw_rtn2) is stored after it' },
 ];
 
 // jsr abs, jmp abs, jmp (abs), jmp (abs,x), jsr (abs,x)

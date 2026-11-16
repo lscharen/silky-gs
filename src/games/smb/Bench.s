@@ -13,13 +13,13 @@
             TYP   $06
             DSK   PPU1
             ORG   $040000
-            ASM   ../../core/blitter/TemplateLiteBank1.s
+            ASM   ../../engines/pea/blitter/TemplateLiteBank1.s
             SNA   PPU1
 
             TYP   $06
             DSK   PPU2
             ORG   $050000
-            ASM   ../../core/blitter/TemplateLiteBank2.s
+            ASM   ../../engines/pea/blitter/TemplateLiteBank2.s
             SNA   PPU2
 
 ; Segment #4 -- Converted Tile Storage

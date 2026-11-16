@@ -9,14 +9,14 @@ ppu_metatiles.s
 # ppu_nametable.s -- transitioning away from TILE_ROW and TILE_COL tables
 ppu_nametable2.s
 ppu_queues.s
-ppu_palette.s
-ppu_regs.s
+../../../ppu/ppu_palette.s
+../../../ppu/ppu_regs.s
 ppu_render.s
 ppu_grid.s
 ppu_grid_quads.s
 ppu_grid_marks.s
 ppu_sprites.s
-ppu_tile_blitters.s
+../../../ppu/ppu_tile_blitters.s
 ppu_frame.s
 ppu_entry.s
 ppu_api.s

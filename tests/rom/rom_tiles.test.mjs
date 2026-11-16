@@ -44,7 +44,8 @@ const TILE_STAGGERED = [
 ];
 
 const SRC_ROOT   = process.env.SRC_ROOT;
-const ROM_TILES  = join(SRC_ROOT, 'rom/rom_tiles.s');
+const ROM_TILES  = join(SRC_ROOT, 'engines/pea/rom_tiles.s');
+const CHR_CONVERT = join(SRC_ROOT, 'ppu/chr_convert.s');   // FastROMTileToLookup, FastROMMaskedTileToLookup (shared by both engines)
 
 // Stubs for symbols rom_tiles.s expects a per-game Main.s to provide.
 // See file header for what each one is standing in for.
@@ -60,7 +61,7 @@ tmp4 equ 248
 `;
 
 const { jsr } = cpu65816({
-  includes: [ROM_TILES],
+  includes: [ROM_TILES, CHR_CONVERT],
   assembler: 'merlin32',
   inline: [STUBS],
   // FastROMTileToLookup references `tiledata` unconditionally (`lda #^tiledata`),
@@ -79,7 +80,7 @@ const { jsr } = cpu65816({
 // label, and merlin32 doesn't reliably fail loudly on the duplicate -- it
 // just silently produces a harness that never reaches AUnit_WriteResults).
 const { jsr: jsrMasked } = cpu65816({
-  includes: [ROM_TILES],
+  includes: [ROM_TILES, CHR_CONVERT],
   assembler: 'merlin32',
   inline: [STUBS],
 });

@@ -18,6 +18,9 @@ _ppuscroll_y            EXT
 RenderLatch             EXT
 RenderDraw              EXT
 PPUStartUpL             EXT
+EngineAllocL            EXT   ; core/Memory.s: an engine's own banks, before the sprite cache's
+EngineStartUpL          EXT   ; core/CoreImpl.s: an engine's own start-up, last
+EngineRenderModeL       EXT   ; core/CoreImpl.s: a setting that changes how the engine renders has changed
 InitYExcludeL           EXT
 ForceMetatileRefreshL   EXT
 PPUSetMirrorModeL       EXT

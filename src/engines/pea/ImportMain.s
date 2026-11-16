@@ -4,6 +4,7 @@
 ; at their definitions.  Everything here is in another bank: long addressing / JSL only
 ; (scripts/check-xbank.js checks this).
 
+AllocBankL              EXT   ; core/Memory.s: one full bank, for EngineAllocL
 SprBanks                EXT   ; core/Memory.s: the sprite cache's banks
 SprBankCount            EXT
 renderActive            EXT   ; rom/rom_exec.s: RENDER_VBL_COUNT

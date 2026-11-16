@@ -21,7 +21,7 @@ blt_return_lite    EXT
 lite_bank_entry_2  EXT
 
                    use   GTE.Macs.s
-                   use   ../Defs.s
+                   use   ../../../core/Defs.s
                    use   TemplateLite.Macs.s
 
                    mx    %00                        ; Code can actually be run with M = 0 or 1
