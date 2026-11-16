@@ -137,6 +137,25 @@ function run(cmd, args) {
   execFileSync(cmd, args, { stdio: 'inherit', cwd: PROJECT_ROOT });
 }
 
+/**
+ * Assemble a link file with Merlin32 and fail if it didn't assemble.  Merlin32 can exit 0 after an
+ * error: it writes error_output.txt next to the link file (and its message to the console) and no load
+ * file.  So the load file (the link file's DSK) and any old error_output.txt are removed first, and the
+ * build stops if error_output.txt appears or the load file doesn't -- otherwise the steps after this
+ * would compact and package the previous build's load file.
+ */
+function runMerlin(gameDir, linkFile) {
+  const m = fs.readFileSync(path.join(gameDir, linkFile), 'utf8').match(/^\s+DSK\s+(\S+)/m);
+  if (!m) throw new Error(`${linkFile}: no DSK line`);
+  const app = path.join(gameDir, m[1]);
+  const errors = path.join(gameDir, 'error_output.txt');
+  fs.rmSync(app, { force: true });
+  fs.rmSync(errors, { force: true });
+  run(PACKAGE_JSON.config.merlin32, ['-V', PACKAGE_JSON.config.macros, path.join(gameDir, linkFile)]);
+  if (fs.existsSync(errors)) throw new Error(`${linkFile}: Merlin32 reported an error (see the message above, and ${path.relative(PROJECT_ROOT, errors)})`);
+  if (!fs.existsSync(app)) throw new Error(`${linkFile}: Merlin32 did not write ${m[1]}`);
+}
+
 const ENGINE_SOURCE = path.join(PROJECT_ROOT, 'src', 'Engine.s');
 const STAGE_DIR = path.join(PROJECT_ROOT, 'src', 'game');
 
@@ -174,7 +193,7 @@ function assembleGame(gameDir, linkFile) {
   stageEngineFiles(gameDir);
   run(process.execPath, [path.join(PROJECT_ROOT, 'scripts', 'gen-includes.js'), path.join(gameDir, 'Main.s')]);
   run(process.execPath, [path.join(PROJECT_ROOT, 'scripts', 'gen-includes.js'), ENGINE_SOURCE]);
-  run(PACKAGE_JSON.config.merlin32, ['-V', PACKAGE_JSON.config.macros, path.join(gameDir, linkFile)]);
+  runMerlin(gameDir, linkFile);
 
   const xbank = checkXBank(gameDir, linkFile);
   reportXBank(xbank, linkFile);

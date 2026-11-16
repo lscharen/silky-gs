@@ -1278,14 +1278,28 @@ LDY_ABS_X   mac
             rts
             <<<
 
-; jmp (]1), ]1 on the NES zero page.  A native-mode rti is an exact jump: it pulls P, then the PC
-; (without the +1 an rts adds), then PBR, so push them in the reverse order.  A and the flags are
-; unchanged, and nothing is patched.  The callers jmp here (no return address on the stack).
+; jmp (]1).  A native-mode rti is an exact jump: it pulls P, then the PC (without the +1 an rts adds),
+; then PBR, so push them in the reverse order.  A and the flags are unchanged, and nothing is patched.
+; The callers jmp here (no return address on the stack).  ]1 must be defined before the macro is used:
+; whether it is on the NES zero page picks the code.
 JMP_ABS_IND mac
+            DO   ]1/$100        ; Past the zero page (Duck Hunt's jmp ($0610)): pei can't reach it
+            phk                 ; PBR: the same bank, as jmp (abs) would
+            phd                 ; room for the target (any two bytes)
+            php                 ; P as the ROM had it: the rti restores it, so M can change below
+            hex  C220           ; rep #$20, as bytes: Merlin32 would take a rep as a change of the assembly width (MX)
+                                ; for the rest of the caller's file, even in the DO branch it skips
+            pha                 ; all of A
+            lda  ]1             ; the target, from NES RAM (DBR = the ROM bank)
+            sta  4,s            ; over the room
+            pla
+            rti
+            ELSE
             phk                 ; PBR: the same bank, as jmp (abs) would
             pei  ]1             ; the target, from the NES zero page (D)
             php                 ; P as the ROM had it
             rti
+            FIN
             <<<
 
 ; Helpers for handling LDA (dp),y and STA (dp),y when the target value can also be on the zero page.  Since
