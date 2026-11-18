@@ -1172,7 +1172,7 @@ CallT       hex   22000000
 ; CallT runs CallZ unchanged.  A list entry's word is then CallZ's too, so the cells are exposed by SprExposeZ, not the list.
 ; The view may still be last frame's scroll, a fine one: a line off the screen is left alone.
 
-SCREEN_END  equ   $2000+200*160       ; (the SCBs follow)
+SCREEN_END  equ   $2000+{200*160}       ; (the SCBs follow)
 
 ; A = 0: the cells' tiles again; 1: the zero fill; 2: no draws at all (the screen was just blanked).  D = the engine's page
 SprBgOffL   ENT
