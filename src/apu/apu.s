@@ -222,10 +222,28 @@ make_half_pulse
                         ldx #$C838                  ; 128 x +72, 128 x -72
                         jmp make_pulse
 
+; 75%: the 25% wave with its high part in the middle of the cycle (96 x -36, 64 x +109, 96 x -36), so
+; that, like the other duties, the table ends on the low level: a note-off halts the oscillator at the
+; end of the table (pulse_release), and the last level is the step to silence.
 make_inv_quarter_pulse
-                        ldy #192
-                        ldx #$5CED                  ; 192 x -36, 64 x +109
-                        jmp make_pulse
+                        sep #$30
+                        mx  %11
+                        stz sound_address
+                        xba
+                        sta sound_address+1
+                        ldx #0
+:loop                   lda #$5C                    ; -36
+                        cpx #96
+                        bcc :out
+                        cpx #160
+                        bcs :out
+                        lda #$ED                    ; +109
+:out                    sta sound_data
+                        inx
+                        bne :loop
+                        rep #$30
+                        mx  %00
+                        rts
 
 ; A = DOC page << 8, Y = samples at the first level, X = first level << 8 | second level
 make_pulse
@@ -420,6 +438,10 @@ setup_doc_registers
                         sta   sound_data
 
                         stz   _apu_noise_last_mode                 ; the noise oscillators are on the long mode wave
+                        stz   pulse_state+pulse1_oscillator        ; the pulse pairs are in free-run mode
+                        stz   pulse_state+pulse2_oscillator
+                        stz   dmc_frozen                           ; the DMC pair is halted
+                        stz   dmc_fade_vol
 
 ; doc_shadow (DOC_PAIR) holds what the settings tables just wrote (they are in a row, pulse 1 to DMC)
                         sep   #$10
@@ -970,7 +992,8 @@ update_doc_registers
 ; First, set the frequency, if the period is <8 then the pulse channel is muted,
 ; to test that first
                         lda   APU_PULSE1_LENGTH_COUNTER      ; If the length counter is zero, no output
-                        beq   :mute_pulse1
+                        bne   *+5
+                        brl   :mute_pulse1
                         rep   #$30
                         lda   APU_PULSE1_REG2                ; The sweep unit mutes the channel when the
                         bit   #$0008                          ; target period is > $7FF, whether or not the
@@ -980,11 +1003,13 @@ update_doc_registers
                         tax
                         lda   APU_PULSE1_CURRENT_PERIOD
                         cmp   SweepMuteLimit,x
-                        bcs   :mute_pulse1
+                        bcc   *+5
+                        brl   :mute_pulse1
 :no_sweep_mute1
                         lda   APU_PULSE1_CURRENT_PERIOD
                         cmp   #8                              ; It also mutes periods < 8
-                        bcc   :mute_pulse1
+                        bcs   *+5
+                        brl   :mute_pulse1
 
                         cmp   _apu_pulse1_last_period         ; it's expensive to recalc frequencies, so avoid it when possible
                         beq   :freq_end_pulse1
@@ -1008,30 +1033,33 @@ update_doc_registers
                         lda   APU_PULSE1_REG1                ; Get the cycle duty bits
                         DOC_DUTY
 
-                        ldx   #$40+pulse1_oscillator
-;                        sta   sound_address
                         lda   APU_PULSE1_REG1
                         bit   #PULSE_CONST_VOL_FLAG           ; Check the constant volume bit
                         bne   :volume_pulse1
                         lda   APU_PULSE1_ENVELOPE
-                        bra   :volume_pulse1
+:volume_pulse1          and   #$0F                            ; 0-15 -> the DOC volume
+                        beq   :mute_pulse1                    ; (volume 0 is a note-off too)
+                        asl
+                        asl
+                        asl
+                        asl
+                        ldx   #$40+pulse1_oscillator
+                        DOC_PAIR
+                        ldx   #pulse1_oscillator
+                        jsr   pulse_play
+                        bra   :end_pulse1
 
 :mute_pulse1
                         sep   #$30
-                        ldx   #$40+pulse1_oscillator
-                        lda   #0                              ; (already the DOC volume)
-                        bra   :set_volume_pulse1
-:volume_pulse1          and   #$0F                            ; 0-15 -> the DOC volume
-                        asl
-                        asl
-                        asl
-                        asl
-:set_volume_pulse1      DOC_PAIR
+                        ldx   #pulse1_oscillator
+                        jsr   pulse_release
+:end_pulse1
 
 
 ; Now do the second square wave
                         lda   APU_PULSE2_LENGTH_COUNTER      ; If the length counter is zero, no output
-                        beq   :mute_pulse2
+                        bne   *+5
+                        brl   :mute_pulse2
                         rep   #$30
                         lda   APU_PULSE2_REG2                ; The sweep unit mutes the channel when the
                         bit   #$0008                          ; target period is > $7FF, whether or not the
@@ -1041,11 +1069,13 @@ update_doc_registers
                         tax
                         lda   APU_PULSE2_CURRENT_PERIOD
                         cmp   SweepMuteLimit,x
-                        bcs   :mute_pulse2
+                        bcc   *+5
+                        brl   :mute_pulse2
 :no_sweep_mute2
                         lda   APU_PULSE2_CURRENT_PERIOD
                         cmp   #8                              ; It also mutes periods < 8
-                        bcc   :mute_pulse2
+                        bcs   *+5
+                        brl   :mute_pulse2
 
                         cmp   _apu_pulse2_last_period
                         beq   :freq_end_pulse2
@@ -1068,24 +1098,27 @@ update_doc_registers
                         lda   APU_PULSE2_REG1           ; Get the cycle duty bits
                         DOC_DUTY
 
-                        ldx   #$40+pulse2_oscillator
-;                        sta   sound_address
                         lda   APU_PULSE2_REG1
                         bit   #PULSE_CONST_VOL_FLAG           ; Check the constant volume bit
                         bne   :volume_pulse2
                         lda   APU_PULSE2_ENVELOPE
-                        bra   :volume_pulse2
+:volume_pulse2          and   #$0F                            ; 0-15 -> the DOC volume
+                        beq   :mute_pulse2                    ; (volume 0 is a note-off too)
+                        asl
+                        asl
+                        asl
+                        asl
+                        ldx   #$40+pulse2_oscillator
+                        DOC_PAIR
+                        ldx   #pulse2_oscillator
+                        jsr   pulse_play
+                        bra   :end_pulse2
+
 :mute_pulse2
                         sep   #$30
-                        ldx   #$40+pulse2_oscillator
-                        lda   #0                              ; (already the DOC volume)
-                        bra   :set_volume_pulse2
-:volume_pulse2          and   #$0F                            ; 0-15 -> the DOC volume
-                        asl
-                        asl
-                        asl
-                        asl
-:set_volume_pulse2      DOC_PAIR
+                        ldx   #pulse2_oscillator
+                        jsr   pulse_release
+:end_pulse2
 
 ; Now the triangle wave.  This wave needs linear counter support to be silenced
 
@@ -1203,6 +1236,18 @@ update_doc_registers
                         asl
 :set_volume_noise       DOC_PAIR
 
+; A DMC sample stopped by $4015 (dmc_disable) holds its last level, like the NES DAC; fade that level
+; out, as the NES output filter does, so the next sample doesn't start with a jump
+                        lda   dmc_fade_vol
+                        beq   :not_timer
+                        sec
+                        sbc   #DMC_FADE_STEP
+                        bcs   *+4
+                        lda   #0
+                        sta   dmc_fade_vol
+                        ldx   #$40+dmc_oscillator
+                        jsr   set_osc_register_pair
+
 :not_timer
 no_frame
 ;                        ldal  show_border
@@ -1244,6 +1289,82 @@ apu_mute
                         cpx   #$40+10
                         bcc   :mute
                         rts
+
+; Pulse note-off and note-on.
+;
+; A pulse wave is never at the centre level, so cutting the volume to 0 part way through a cycle is a
+; step (a click).  Instead, a note-off switches the pair to one-shot mode: the DOC plays on to the end
+; of the 256-byte table (the end of the cycle, on the low level of every duty table) and halts itself.
+; Once the halt is seen, the volume is set to 0 too (doc_shadow).  A note-on puts the pair back in
+; free-run mode: a pair still finishing its cycle carries on, and a halted pair restarts at the start
+; of the cycle (as $4003 resets the NES sequencer).  The mode registers are only written on these
+; state changes: a write also clears the halt bit, which would restart a halted oscillator.
+;
+; X = the left oscillator (pulse1_oscillator / pulse2_oscillator).  D = $C000, DBR = K, 8-bit registers,
+; the GLU set for DOC register access.  A, X and Y are not kept.
+PULSE_RUNNING           =     0
+PULSE_RELEASING         =     1                     ; one-shot, finishing the cycle
+PULSE_HALTED            =     2                     ; halted, volume 0
+
+                        mx    %11
+pulse_release
+                        lda   pulse_state,x
+                        bne   :releasing
+                        lda   #PULSE_RELEASING
+                        sta   pulse_state,x
+                        txa
+                        ora   #$a0
+                        sta   sound_address
+                        lda   #$02                  ; one-shot, running (left)
+                        sta   sound_data
+                        inc   sound_address
+                        lda   #$12                  ; one-shot, running (right)
+                        sta   sound_data
+                        rts
+
+:releasing              cmp   #PULSE_HALTED
+                        beq   :done
+                        txa
+                        ora   #$a0
+                        sta   sound_address
+                        lda   sound_data            ; (the first read returns the previous value)
+                        lda   sound_data
+                        lsr                         ; halt bit -> carry
+                        bcc   :done
+                        lda   #PULSE_HALTED
+                        sta   pulse_state,x
+                        txa
+                        ora   #$40
+                        tax
+                        lda   #0
+                        DOC_PAIR
+:done                   rts
+
+pulse_play
+                        lda   pulse_state,x
+                        beq   :running
+                        tay                         ; Y = the old state
+                        lda   #PULSE_RUNNING
+                        sta   pulse_state,x
+                        txa
+                        ora   #$a0
+                        sta   sound_address
+                        cpy   #PULSE_HALTED
+                        bne   :run
+                        lda   #$03                  ; halt both (the right one may lag a little), so
+                        sta   sound_data            ; they restart together
+                        inc   sound_address
+                        lda   #$13
+                        sta   sound_data
+                        dec   sound_address
+:run                    lda   #$00                  ; free-run (left)
+                        sta   sound_data
+                        inc   sound_address
+                        lda   #$10                  ; free-run (right)
+                        sta   sound_data
+:running                rts
+
+pulse_state             ds    4                     ; indexed by the left oscillator (0, 2)
 
 ; X = addr
 ; A = data
@@ -1697,7 +1818,16 @@ DMC_OUT                 mac
 
 ; $4015 bit 4 cleared: stop the sample
 ;
-; Called from dmc_status with B = K
+; The NES DAC holds the last level when a sample stops.  Halting the oscillators would drop the output
+; to silence part way through the sample (a click), so instead a frequency of 0 freezes them on their
+; current sample (as the triangle's mute does), and update_doc_registers fades the volume out
+; (dmc_fade_vol).  dmc_frozen tells dmc_enable that the pair is free for a new sample even though it
+; isn't halted.  Nothing to do if the sample already ended (halted) or is already frozen: games write
+; $4015 often, and freezing again would restart the fade.
+;
+; Called from dmc_status with B = K.  Preserves X and Y.
+DMC_FADE_STEP      =  16       ; volume steps per DOC update (16 updates: 1/4 s at 60Hz, 1/16 s at 240Hz)
+
                         mx    %11
 dmc_disable
                         php
@@ -1706,18 +1836,34 @@ dmc_disable
                         pld
                         sei
 
+                        lda   dmc_frozen
+                        bne   :out
                         jsr   access_doc_registers
                         lda   #$a0+dmc_oscillator
                         sta   sound_address
-                        lda   #$03                      ; one-shot + halted
-                        sta   sound_data
-                        inc   sound_address
-                        lda   #$13
-                        sta   sound_data
+                        lda   sound_data                ; DOC register reads return the previously latched value
+                        lda   sound_data
+                        lsr                             ; halt bit -> carry
+                        bcs   :out                      ; (the sample has ended)
 
-                        pld
+                        phx
+                        lda   #0
+                        ldx   #$00+dmc_oscillator       ; frequency 0: hold the current sample
+                        jsr   set_osc_register_pair
+                        ldx   #$20+dmc_oscillator
+                        jsr   set_osc_register_pair
+                        plx
+                        lda   #1
+                        sta   dmc_frozen
+                        lda   #DMC_VOLUME
+                        sta   dmc_fade_vol
+
+:out                    pld
                         plp
                         rts
+
+dmc_frozen         dfb  0      ; non-zero: the sample was stopped by $4015 and the pair is frozen (dmc_disable)
+dmc_fade_vol       dfb  0      ; the volume of the frozen pair, faded out by update_doc_registers
 
 ; $4015 bit 4 set: start the sample, unless one is still playing
 ;
@@ -1734,16 +1880,19 @@ dmc_enable
                         mx    %10
 
 ; Writing a 1 has no effect while a sample is still playing.  The DOC sets the halt bit
-; itself when a one-shot reaches the $00 at the end of the sample.
+; itself when a one-shot reaches the $00 at the end of the sample.  A pair frozen by
+; dmc_disable counts as halted (dmc_frozen = 1).
 
                         php
                         sei
+                        lda   dmc_frozen
+                        bne   :halt_read
                         jsr   access_doc_registers
                         lda   #$a0+dmc_oscillator
                         sta   sound_address
                         lda   sound_data                ; DOC register reads return the previously latched value
                         lda   sound_data
-                        plp
+:halt_read              plp
                         lsr                             ; halt bit -> carry
                         bcs   *+5
                         brl   dmc_exit
@@ -1817,6 +1966,8 @@ dmc_play
                         php
                         sei
                         jsr   access_doc_registers      ; (clobbers A)
+                        stz   dmc_frozen                ; a new sample replaces a frozen one
+                        stz   dmc_fade_vol
 
 ; FHL = DmcFreqTable / (4 * decimation), rounded
 
