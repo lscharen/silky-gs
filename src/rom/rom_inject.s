@@ -289,7 +289,7 @@ SET_RELOAD  mac
 
 ; $4003 / $4007 / $400B / $400F - load the length counter from the value on the stack (2,s, after phx)
 ; and mark it loaded: ]1 = the length counter, ]2 = the channel's _LENGTH_LOADED.  The new length is not
-; clocked until the next DOC update has shown it (clock_length_counter).  Ends with A = 1.
+; clocked until the next DOC update has shown it (clock_length, apu/apu.s).  Ends with A = 1.
 LOAD_LENGTH mac
             lda  2,s                  ; llll lHHH -> the length index
             lsr

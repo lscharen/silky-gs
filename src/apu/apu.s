@@ -657,8 +657,8 @@ apu_stat_vbl            dw  0     ; VBL heartbeats
 apu_stat_irq            dw  0     ; DOC interrupts seen by interrupt_handler
 apu_stat_timer          dw  0     ;   ... that were the timer oscillator (120 / 240Hz modes)
 apu_stat_qsd            dw  0     ; APU_quarter_speed_driver calls (60Hz mode)
-apu_stat_quarter        dw  0     ; quarter_frame_clock calls
-apu_stat_half           dw  0     ; half_frame_clock calls
+apu_stat_quarter        dw  0     ; quarter-frame clocks (apu_clock)
+apu_stat_half           dw  0     ; half-frame clocks (apu_clock)
 apu_stat_update         dw  0     ; update_doc_registers runs
 apu_stat_render         dw  0     ; renders (NES_RenderFrame)
 apu_stat_chain          dw  0     ; native-mode interrupts irqHook left to the firmware (rom/rom_exec.s)
@@ -694,572 +694,314 @@ DOC_PAIR                mac
                         sta   sound_data
                         <<<
 
-; X = the wavetable pointer register, A = REG1 (the duty cycle in bits 6-7).  Y is not kept.
-DOC_DUTY                mac
-                        rol
-                        rol
-                        rol
-                        and   #$03
-                        tay
-                        lda   duty_cycle_page,y
-                        DOC_PAIR
+; Add the byte ]2 to the 16-bit counter ]1, with an 8-bit accumulator and DBR = K.  Nothing without APU_STATS.
+APU_COUNT_N             mac
+                        DO    APU_STATS
+                        lda   ]1
+                        clc
+                        adc   ]2
+                        sta   ]1
+                        bcc   *+5
+                        inc   ]1+1
+                        FIN
                         <<<
 
-; ]1 = REG1, ]2 = the halt flag (#), ]3 = the length counter, ]4 = the channel's _LENGTH_LOADED flag: a
-; length counter loaded since the last DOC update is not clocked until that update has shown it.  The
-; driver clocks a whole tick's worth of the frame sequence before it updates the DOC (2 half-frame clocks
-; at 60Hz), and without this a note loaded during the tick would be clocked for the part of the tick
-; before it was written: a length of 2 (e.g. SMB's brick shatter and short drum beats) would be silenced
-; before it ever sounded.  Notes already playing are clocked as usual.
-clock_length_counter    mac
-                        lda   ]4
-                        bne   no_count
-                        lda   ]1
-                        bit   ]2
-                        bne   no_count
-                        lda   ]3
-                        beq   no_count                        ; stops at zero (channel is silenced)
-                        dec
-                        sta   ]3
-no_count                <<<
-
-; The triangle's linear counter
-clock_linear_counter    mac
-                        lda   APU_TRIANGLE_START_FLAG
-                        beq   do_clock
-                        lda   APU_TRIANGLE_REG1
-                        and   #$7F
-                        sta   APU_TRIANGLE_LINEAR_COUNTER
-                        bra   check_reset
-
-do_clock                lda   APU_TRIANGLE_LINEAR_COUNTER
-                        beq   check_reset
-                        dec
-                        sta   APU_TRIANGLE_LINEAR_COUNTER
-
-check_reset
-                        lda   APU_TRIANGLE_REG1
-                        bmi   no_reset
-                        stz   APU_TRIANGLE_START_FLAG
-no_reset                <<<
-
-; ]1 = the sweep divider, ]2 = the reload flag, ]3 = REG2, ]4 = the current period, ]5 = 1 for pulse 2
-; (two's complement negate)
-clock_sweep             mac
-                        lda   ]1
-                        dec
-                        sta   ]1
-                        bpl   no_sweep
-
-                        lda   #1
-                        sta   ]2
-
-                        lda   ]3                              ; get the barrel shift argument from the register
-                        bpl   no_sweep                        ; if sweep is not enabled, do nothing
-                        and   #$07
-                        beq   no_sweep                        ; shift must be != 0
-                        asl
-                        tax
-
-                        lda   ]3                              ; put the negate flag in the y register
-                        and   #$08
-                        tay
-
-                        rep   #$20
-                        lda   ]4
-                        cmp   #8
-                        bcc   no_sweep0                 ; current period must be >= 8
-                        jmp   (bitshift,x)              ; shift it by the shifter amount
-bitshift                da    bitshift_0,bitshift_1,bitshift_2,bitshift_3,bitshift_4,bitshift_5,bitshift_6,bitshift_7
-bitshift_7              asl                             ; >> 7 = (<< 1) >> 8, period <= $7FF
-                        xba
-                        and   #$00FF
-                        bra   bitshift_0
-bitshift_6              lsr
-bitshift_5              lsr
-bitshift_4              lsr
-bitshift_3              lsr
-bitshift_2              lsr
-bitshift_1              lsr
-bitshift_0
-                        cpy   #0                            ; check if the negate flag was set
-                        beq   no_negate
-                        eor   #$FFFF                        ; pulse 1 uses 1's complement
-                        DO    ]5
-                        inc
-                        FIN
-no_negate               clc
-                        adc   ]4
-                        cmp   #$800
-                        bcs   no_sweep0
-                        sta   ]4
-no_sweep0
-                        sep   #$20
-no_sweep
-                        lda   ]2                              ; check if we need to reload the sweep delay
-                        beq   no_reload
-                        stz   ]2
-                        lda   ]3
-                        lsr
-                        lsr
-                        lsr
-                        lsr
-                        and   #7
-                        sta   ]1
-no_reload               <<<
-
-; ]1 = the start flag, ]2 = REG1, ]3 = the envelope divider, ]4 = the envelope level
-clock_envelope          mac
-                        lda   ]1
-                        beq   no_start
-                        stz   ]1                          ; clear the start flag
-                        lda   #15
-                        sta   ]4                          ; reset the envelope saw wave decay value
-                        lda   ]2
-                        and   #$0F
-                        sta   ]3                          ; reset the divider value
-                        bra   envelope_out                ; nothing else to do
-
-no_start
-                        lda   ]3                          ; clock the divider
-                        dec
-                        sta   ]3
-                        bpl   envelope_out                ; as long as divider is >=0, nothing to do
-
-                        lda   ]2                          ; reset the divider to the volume/envelope value
-                        and   #$0F
-                        sta   ]3
-
-                        lda   ]4
-                        bne   tick_envelope
-
-                        lda   ]2                          ; if decay level counter is 0, check the loop bit and set counter to 15 if loop bit is set
-                        bit   #PULSE_HALT_FLAG
-                        beq   envelope_out
-                        lda   #16                         ; Set to 15
-tick_envelope
-                        dec
-                        sta   ]4
-envelope_out            <<<
-
-half_frame_clock
-                        APU_COUNT apu_stat_half
-; clock the length counters
-                        clock_length_counter APU_PULSE1_REG1;#PULSE_HALT_FLAG;APU_PULSE1_LENGTH_COUNTER;APU_PULSE1_LENGTH_LOADED
-                        clock_length_counter APU_PULSE2_REG1;#PULSE_HALT_FLAG;APU_PULSE2_LENGTH_COUNTER;APU_PULSE2_LENGTH_LOADED
-                        clock_length_counter APU_TRIANGLE_REG1;#TRIANGLE_HALT_FLAG;APU_TRIANGLE_LENGTH_COUNTER;APU_TRIANGLE_LENGTH_LOADED
-                        clock_length_counter APU_NOISE_REG1;#NOISE_HALT_FLAG;APU_NOISE_LENGTH_COUNTER;APU_NOISE_LENGTH_LOADED
-
-; clock the sweep units
-                        clock_sweep  APU_PULSE1_SWEEP_DIVIDER;APU_PULSE1_RELOAD_FLAG;APU_PULSE1_REG2;APU_PULSE1_CURRENT_PERIOD;0
-                        clock_sweep  APU_PULSE2_SWEEP_DIVIDER;APU_PULSE2_RELOAD_FLAG;APU_PULSE2_REG2;APU_PULSE2_CURRENT_PERIOD;1
-                        rts
-
-quarter_frame_clock
-                        APU_COUNT apu_stat_quarter
-; clock the envelopes and triangle linear counter
-                        clock_linear_counter
-
-                        clock_envelope APU_PULSE1_START_FLAG;APU_PULSE1_REG1;APU_PULSE1_ENVELOPE_DIVIDER;APU_PULSE1_ENVELOPE
-                        clock_envelope APU_PULSE2_START_FLAG;APU_PULSE2_REG1;APU_PULSE2_ENVELOPE_DIVIDER;APU_PULSE2_ENVELOPE
-                        clock_envelope APU_NOISE_START_FLAG;APU_NOISE_REG1;APU_NOISE_ENVELOPE_DIVIDER;APU_NOISE_ENVELOPE
-                        rts
-
-;-----------------------------------------------------------------------------------------
-; interupt handler
-;-----------------------------------------------------------------------------------------
-
-; The frame sequencer runs the 4-step pattern (Q, Q+H, Q, Q+H at 240Hz).  The NES 5-step mode
-; ($4017 bit 7) has a silent fifth step, but games such as Zelda write $4017 once per video frame,
-; which clocks Q+H immediately and restarts the sequence -- that also works out to exactly
-; 4 quarter-frame and 2 half-frame clocks per 1/60s, so the 4-step pattern is used for both.
-apu_frame_steps      equ 4
 PULSE_HALT_FLAG      equ $20
 NOISE_HALT_FLAG      equ $20     ; noise and pulse channels have halt flag in same bit position in REG1
 PULSE_CONST_VOL_FLAG equ $10
 NOISE_CONST_VOL_FLAG equ $10
 TRIANGLE_HALT_FLAG   equ $80
 
+;-----------------------------------------------------------------------------------------
+; The frame sequencer
+;
+; The NES clocks the envelopes and the triangle's linear counter 4 times per frame (quarter frames) and
+; the length counters and sweep units twice (half frames).  The NES 5-step mode ($4017 bit 7) has a
+; silent fifth step, but games such as Zelda write $4017 once per video frame, which clocks Q+H
+; immediately and restarts the sequence -- that also works out to 4 quarter-frame and 2 half-frame
+; clocks per 1/60s, so the 4-step pattern is used for both.
+;
+; Each driver tick does its share of a frame's clocks in one call to apu_clock, then updates the DOC:
+;
+;            ticks/frame   quarter   half
+;   60Hz          1           4       2
+;   120Hz         2           2       1
+;   240Hz         4           1       0, 1, 0, 1
+;
+; The units don't depend on each other, so clocking each one N times in a row is the same as the NES's
+; interleaved quarter and half frame steps.
+;-----------------------------------------------------------------------------------------
+
+; X = the quarter-frame clocks, Y = the half-frame clocks.  D = $C000, DBR = K, 8-bit registers.
+; A, X and Y are not kept.
+                        mx    %11
+apu_clock
+                        stx   apu_quarters
+                        sty   apu_halves
+                        APU_COUNT_N apu_stat_quarter;apu_quarters
+                        APU_COUNT_N apu_stat_half;apu_halves
+                        lda   apu_halves
+                        beq   :quarter
+
+                        lda   #PULSE_HALT_FLAG          ; the length counters
+                        ldx   #CH_PULSE1
+                        jsr   clock_length
+                        lda   #PULSE_HALT_FLAG
+                        ldx   #CH_PULSE2
+                        jsr   clock_length
+                        lda   #TRIANGLE_HALT_FLAG
+                        ldx   #CH_TRIANGLE
+                        jsr   clock_length
+                        lda   #NOISE_HALT_FLAG
+                        ldx   #CH_NOISE
+                        jsr   clock_length
+
+:sweep                  lda   APU_PULSE1_REG2           ; the sweep units, once per half frame, while
+                        bpl   :sweep2                   ; enabled (see clock_sweep)
+                        ldx   #CH_PULSE1
+                        jsr   clock_sweep
+:sweep2                 lda   APU_PULSE2_REG2
+                        bpl   :sweep_next
+                        ldx   #CH_PULSE2
+                        jsr   clock_sweep
+:sweep_next             dec   apu_halves
+                        bne   :sweep
+
+:quarter                jsr   clock_linear
+                        ldx   #CH_PULSE1
+                        jsr   clock_envelope
+                        ldx   #CH_PULSE2
+                        jsr   clock_envelope
+                        ldx   #CH_NOISE
+                        jmp   clock_envelope
+
+; A length counter: X = the channel, A = its halt flag in REG1.  It counts down to 0 (the channel is
+; silenced), unless halted.  A length loaded since the last DOC update (CH_LOADED) is not clocked until
+; that update has shown it: the 60Hz driver clocks a whole frame before it updates the DOC, and without
+; this a note loaded during the frame would be clocked for the part of the frame before it was written:
+; a length of 2 (e.g. SMB's brick shatter and short drum beats) would be silenced before it ever sounded.
+clock_length
+                        and   APU_CH+CH_REG1,x
+                        ora   APU_CH+CH_LOADED,x
+                        bne   :out
+                        lda   APU_CH+CH_LENGTH,x
+                        sec
+                        sbc   apu_halves
+                        bcs   *+4
+                        lda   #0
+                        sta   APU_CH+CH_LENGTH,x
+:out                    rts
+
+; One clock of a pulse channel's sweep unit: X = the channel (CH_PULSE1 / CH_PULSE2).  The divider counts
+; down from P (REG2 bits 4-6) to 0 and then, if the shift count isn't 0, the period moves by period >> shift:
+; up, or down when the negate flag is set (pulse 1 subtracts one more, it uses the one's complement).  A
+; target over $7FF leaves the period alone (update_pulse mutes the channel).  The divider is reloaded when
+; it expires and after a $4001 / $4005 write (CH_RELOAD).
+;
+; Only called while the sweep is enabled (REG2 bit 7).  The NES keeps clocking a disabled unit, but only
+; its divider changes, and enabling it takes a $4001 / $4005 write, which reloads the divider: the count
+; it had only sets whether the first step comes at the first clock or up to P clocks later.
+clock_sweep
+                        dec   APU_CH+CH_SWEEP_DIV,x
+                        bpl   :reload
+                        lda   #1                        ; expired: reload the divider below
+                        sta   APU_CH+CH_RELOAD,x
+                        lda   APU_CH+CH_REG2,x
+                        and   #$07
+                        beq   :reload                   ; shift count 0
+                        tay
+                        rep   #$20
+                        mx    %01
+                        lda   APU_CH+CH_PERIOD,x
+                        cmp   #8                        ; the period must be >= 8
+                        bcc   :done
+:shift                  lsr
+                        dey
+                        bne   :shift
+                        sta   sweep_delta
+                        lda   APU_CH+CH_REG1,x          ; (REG2 in the high byte)
+                        bit   #$0800                    ; the negate flag
+                        bne   :down
+                        lda   APU_CH+CH_PERIOD,x
+                        clc
+                        adc   sweep_delta
+                        cmp   #$800
+                        bcs   :done                     ; over $7FF
+                        bra   :store
+:down                   lda   APU_CH+CH_PERIOD,x
+                        cpx   #CH_PULSE2                ; C = 0 for pulse 1: period - change - 1
+                        sbc   sweep_delta               ; (>= 3: the change is at most period / 2)
+:store                  sta   APU_CH+CH_PERIOD,x
+:done                   sep   #$20
+                        mx    %11
+
+:reload                 lda   APU_CH+CH_RELOAD,x
+                        beq   :out
+                        stz   APU_CH+CH_RELOAD,x
+                        lda   APU_CH+CH_REG2,x
+                        lsr
+                        lsr
+                        lsr
+                        lsr
+                        and   #7
+                        sta   APU_CH+CH_SWEEP_DIV,x
+:out                    rts
+
+; The triangle's linear counter, clocked apu_quarters times.  While the reload flag ($400B) is set, every
+; clock reloads the counter (REG1 bits 0-6); the first clock clears the flag unless the control bit (REG1
+; bit 7) is set, and the clocks after it count down.  Otherwise every clock counts down, stopping at 0.
+clock_linear
+                        lda   APU_TRIANGLE_START_FLAG
+                        beq   :count
+                        lda   APU_TRIANGLE_REG1
+                        bmi   :reload                   ; control set: reloaded on every clock
+                        stz   APU_TRIANGLE_START_FLAG
+                        and   #$7F                      ; reloaded by the first clock: reload + 1 - clocks
+                        inc
+                        bra   :sub
+:count                  lda   APU_TRIANGLE_LINEAR_COUNTER
+:sub                    sec
+                        sbc   apu_quarters
+                        bcs   :store
+                        lda   #0
+:store                  sta   APU_TRIANGLE_LINEAR_COUNTER
+                        rts
+:reload                 and   #$7F
+                        sta   APU_TRIANGLE_LINEAR_COUNTER
+                        rts
+
+; An envelope, clocked apu_quarters times: X = the channel (CH_PULSE1 / CH_PULSE2 / CH_NOISE).  The start
+; flag ($4003 / $4007 / $400F) restarts it at level 15.  Otherwise the divider counts down from P (REG1
+; bits 0-3) to 0 and then the level drops by 1, stopping at 0 or, with the loop flag (the halt flag),
+; going back to 15.
+;
+; Skipped while the channel is silent (length counter 0 and no restart): the length counter is only
+; loaded by a $4003 / $4007 / $400F write, which also sets the start flag, so the envelope is restarted
+; before it can be heard again.
+clock_envelope
+                        ldy   apu_quarters
+                        lda   APU_CH+CH_START,x
+                        beq   :running
+                        stz   APU_CH+CH_START,x         ; restart
+                        lda   #15
+                        sta   APU_CH+CH_ENV,x
+                        lda   APU_CH+CH_REG1,x
+                        and   #$0F
+                        sta   APU_CH+CH_ENV_DIV,x
+                        dey
+                        bne   :clock
+                        rts
+:running                lda   APU_CH+CH_LENGTH,x
+                        beq   :out                      ; silent
+
+:clock                  tya                             ; Y = the clocks left
+                        eor   #$FF
+                        sec
+                        adc   APU_CH+CH_ENV_DIV,x       ; A = divider - clocks
+                        bcc   :expires
+                        sta   APU_CH+CH_ENV_DIV,x       ; the divider doesn't run out: it just counts down
+                        rts
+:expires                eor   #$FF                      ; it runs out at clock divider + 1: Y = the clocks
+                        tay                             ; after that one
+                        lda   APU_CH+CH_REG1,x          ; reload the divider and step the level
+                        and   #$0F
+                        sta   APU_CH+CH_ENV_DIV,x
+                        lda   APU_CH+CH_ENV,x
+                        bne   :decay
+                        lda   APU_CH+CH_REG1,x
+                        and   #PULSE_HALT_FLAG          ; loop (the same bit for the noise channel)
+                        beq   :next
+                        lda   #16
+:decay                  dec
+                        sta   APU_CH+CH_ENV,x
+:next                   cpy   #0
+                        bne   :clock
+:out                    rts
+
+;-----------------------------------------------------------------------------------------
+; Driver entry points
+;-----------------------------------------------------------------------------------------
+
+; APU_quarter_speed_driver
+;
+; The 60Hz driver, called once per NES frame by the scheduler (rom/rom_exec.s) when apu_mode is APU_60HZ:
+; a whole frame's clocks, then the DOC update.  jsl, 8-bit registers; A, X and Y are not kept.
                         mx %11
 APU_quarter_speed_driver    = *
-
                         phb
                         phd
-
                         phk
                         plb
-                        APU_COUNT apu_stat_qsd
-
-                        pea  $c000
+                        pea   $c000
                         pld
-
+                        APU_COUNT apu_stat_qsd
                         lda   apu_suspended             ; Suspended (the CDA menu): silent, nothing clocked
-                        beq   :qsd_run
-                        jsr   apu_mute
-                        brl   no_frame
-:qsd_run
-
+                        bne   apu_silent
                         jsr   access_doc_registers      ; (for update_doc_registers)
+                        ldx   #4
+                        ldy   #2
+                        bra   apu_tick
 
-; Quarter-speed driver (60Hz) -- one call covers a whole 4-step sequence: 2 half-frame and
-; 4 quarter-frame clocks
-                        jsr   half_frame_clock
-                        jsr   quarter_frame_clock
-                        jsr   quarter_frame_clock
-                        jsr   half_frame_clock
-                        jsr   quarter_frame_clock
-                        jsr   quarter_frame_clock
+apu_silent              jsr   apu_mute
+apu_exit                pld
+                        plb
+                        clc
+                        rtl
 
-                        brl   update_doc_registers
-
+; The DOC timer interrupt (120 / 240Hz), when the firmware dispatches it
                         mx %11
 interrupt_handler       = *
-
                         phb
                         phd
-
                         phk
                         plb
                         APU_COUNT apu_stat_irq
-
                         clc
                         xce
-
-                        pea  $c000
+                        pea   $c000
                         pld
-
-; Make sure it's the oscillator we care about
-
                         lda   osc_interrupt             ; which oscillator generated the interrupt?
                         and   #%00111110
                         cmp   #2*interrupt_oscillator
-                        beq   *+5
-                        brl   no_frame                  ; Only service timer interrupts
+                        bne   apu_exit                  ; Only service timer interrupts
                         jsr   access_doc_registers      ; (for update_doc_registers)
 
 ; The timer tick.  Also entered by APU_timer_tick (irqHook's fast path), with B = K and D = $C000 pushed
 ; and set, 8-bit registers, native mode, and the GLU set for DOC register access.
 apu_timer_dispatch
                         lda   apu_suspended             ; Suspended (the CDA menu): silent, nothing clocked
-                        beq   :tick_run
-                        jsr   apu_mute
-                        brl   no_frame
-:tick_run
+                        bne   apu_silent
                         APU_COUNT apu_stat_timer
-
-; Update the frame counter and leave the doubled countin x-register for dispatch
-                        ldx   apu_frame_counter
-                        inx
-                        inx
-                        cpx   #2*apu_frame_steps
-                        bcc   *+4
-                        ldx   #0
-                        stx   apu_frame_counter
-
-; Figure out which speed we are dispatching
+                        ldx   #2                        ; 120Hz: 2 quarter frames and a half frame
+                        ldy   #1
                         lda   apu_mode
                         cmp   #APU_240HZ
-                        beq   :do_240hz_mode
-                        jmp   (:apu_120hz_table,x)
-:do_240hz_mode          jmp   (:apu_240hz_table,x)
-:apu_240hz_table        da    :quarter_frame_240,:half_frame_240,:quarter_frame_240,:half_frame_240
-:apu_120hz_table        da    :half_frame_120,:half_frame_120,:half_frame_120,:half_frame_120
+                        bne   apu_tick
+                        lda   apu_frame_phase           ; 240Hz: one quarter frame, and a half frame
+                        eor   #1                        ; every other tick (Q, Q+H, Q, Q+H)
+                        sta   apu_frame_phase
+                        tay
+                        ldx   #1
 
-; Full speed emulation (240Hz)
-:half_frame_240         jsr   half_frame_clock
-:quarter_frame_240      jsr   quarter_frame_clock
-                        bra   update_doc_registers
+apu_tick                jsr   apu_clock
 
-; Half-speed interrupts (120Hz) -- clock twice in each handler
-:half_frame_120
-:quarter_frame_120
-                        jsr   half_frame_clock
-                        jsr   quarter_frame_clock
-                        jsr   quarter_frame_clock
-
-; Apply any changes to the DOC registers
+; Apply any changes to the DOC registers.  (The GLU is set for DOC register access: by irqHook on the
+; fast path, by the other entries themselves.)
 update_doc_registers
                         APU_COUNT apu_stat_update
                         stz   APU_PULSE1_LENGTH_LOADED      ; the lengths loaded since the last update are
                         stz   APU_PULSE2_LENGTH_LOADED      ; shown now: clocked from the next tick on
-                        stz   APU_TRIANGLE_LENGTH_LOADED    ; (clock_length_counter)
+                        stz   APU_TRIANGLE_LENGTH_LOADED    ; (clock_length)
                         stz   APU_NOISE_LENGTH_LOADED
 
-; (The GLU is set for DOC register access: by irqHook on the fast path, by the other entries themselves)
-
-; Set the parameters for the first square wave channel.
-;
-; First, set the frequency, if the period is <8 then the pulse channel is muted,
-; to test that first
-                        lda   APU_PULSE1_LENGTH_COUNTER      ; If the length counter is zero, no output
-                        bne   *+5
-                        brl   :mute_pulse1
-                        rep   #$30
-                        lda   APU_PULSE1_REG2                ; The sweep unit mutes the channel when the
-                        bit   #$0008                          ; target period is > $7FF, whether or not the
-                        bne   :no_sweep_mute1                ; sweep is enabled (see SweepMuteLimit)
-                        and   #$0007
-                        asl
-                        tax
-                        lda   APU_PULSE1_CURRENT_PERIOD
-                        cmp   SweepMuteLimit,x
-                        bcc   *+5
-                        brl   :mute_pulse1
-:no_sweep_mute1
-                        lda   APU_PULSE1_CURRENT_PERIOD
-                        cmp   #8                              ; It also mutes periods < 8
-                        bcs   *+5
-                        brl   :mute_pulse1
-
-                        cmp   _apu_pulse1_last_period         ; it's expensive to recalc frequencies, so avoid it when possible
-                        beq   :freq_end_pulse1
-                        sta   _apu_pulse1_last_period
-                        jsr   get_pulse_freq                  ; return freq in 16-bit accumulator
-                        sep   #$30
-
-                        ldx   #$00+pulse1_oscillator
-                        DOC_PAIR
-;                        stx   sound_address
-;                        sta   sound_data
-                        ldx   #$20+pulse1_oscillator
-;                        stx   sound_address
-                        xba
-                        DOC_PAIR
-;                        sta   sound_data
-:freq_end_pulse1        sep   #$30                           ; redundent, but avoids extra branches
-
-                        ldx   #$80+pulse1_oscillator
-;                        sta   sound_address
-                        lda   APU_PULSE1_REG1                ; Get the cycle duty bits
-                        DOC_DUTY
-
-                        lda   APU_PULSE1_REG1
-                        bit   #PULSE_CONST_VOL_FLAG           ; Check the constant volume bit
-                        bne   :volume_pulse1
-                        lda   APU_PULSE1_ENVELOPE
-:volume_pulse1          and   #$0F                            ; 0-15 -> the DOC volume
-                        beq   :mute_pulse1                    ; (volume 0 is a note-off too)
-                        asl
-                        asl
-                        asl
-                        asl
-                        ldx   #$40+pulse1_oscillator
-                        DOC_PAIR
-                        ldx   #pulse1_oscillator
-                        jsr   pulse_play
-                        bra   :end_pulse1
-
-:mute_pulse1
-                        sep   #$30
-                        ldx   #pulse1_oscillator
-                        jsr   pulse_release
-:end_pulse1
-
-
-; Now do the second square wave
-                        lda   APU_PULSE2_LENGTH_COUNTER      ; If the length counter is zero, no output
-                        bne   *+5
-                        brl   :mute_pulse2
-                        rep   #$30
-                        lda   APU_PULSE2_REG2                ; The sweep unit mutes the channel when the
-                        bit   #$0008                          ; target period is > $7FF, whether or not the
-                        bne   :no_sweep_mute2                ; sweep is enabled (see SweepMuteLimit)
-                        and   #$0007
-                        asl
-                        tax
-                        lda   APU_PULSE2_CURRENT_PERIOD
-                        cmp   SweepMuteLimit,x
-                        bcc   *+5
-                        brl   :mute_pulse2
-:no_sweep_mute2
-                        lda   APU_PULSE2_CURRENT_PERIOD
-                        cmp   #8                              ; It also mutes periods < 8
-                        bcs   *+5
-                        brl   :mute_pulse2
-
-                        cmp   _apu_pulse2_last_period
-                        beq   :freq_end_pulse2
-                        sta   _apu_pulse2_last_period
-                        jsr   get_pulse_freq                  ; return freq in 16-bic accumulator
-                        sep   #$30
-                        ldx   #$00+pulse2_oscillator
-;                        stx   sound_address
-;                        sta   sound_data
-                        DOC_PAIR
-                        ldx   #$20+pulse2_oscillator
-;                        stx   sound_address
-                        xba
-;                        sta   sound_data
-                        DOC_PAIR
-:freq_end_pulse2        sep   #$30
-
-                        ldx   #$80+pulse2_oscillator
-;                        sta   sound_address
-                        lda   APU_PULSE2_REG1           ; Get the cycle duty bits
-                        DOC_DUTY
-
-                        lda   APU_PULSE2_REG1
-                        bit   #PULSE_CONST_VOL_FLAG           ; Check the constant volume bit
-                        bne   :volume_pulse2
-                        lda   APU_PULSE2_ENVELOPE
-:volume_pulse2          and   #$0F                            ; 0-15 -> the DOC volume
-                        beq   :mute_pulse2                    ; (volume 0 is a note-off too)
-                        asl
-                        asl
-                        asl
-                        asl
-                        ldx   #$40+pulse2_oscillator
-                        DOC_PAIR
-                        ldx   #pulse2_oscillator
-                        jsr   pulse_play
-                        bra   :end_pulse2
-
-:mute_pulse2
-                        sep   #$30
-                        ldx   #pulse2_oscillator
-                        jsr   pulse_release
-:end_pulse2
-
-; Now the triangle wave.  This wave needs linear counter support to be silenced
-
-                        lda   APU_TRIANGLE_LENGTH_COUNTER      ; If the length counter is zero, no output
-                        beq   :mute_triangle
-                        lda   APU_TRIANGLE_LINEAR_COUNTER      ; If the linear counter is zero, no output
-                        beq   :mute_triangle
-                        rep   #$30
-                        lda   APU_TRIANGLE_CURRENT_PERIOD
-                        cmp   #2
-                        bcc   :mute_triangle
-
-; NOTE on Triangle channel frequence from https://www.nesdev.org/wiki/APU_Triangle
-;
-; Unlike the pulse channels, the triangle channel supports frequencies up to the maximum frequency the
-; timer will allow, meaning frequencies up to fCPU/32 (about 55.9 kHz for NTSC) are possible - far above
-; the audible range. Some games, e.g. Mega Man 2, "silence" the triangle channel by setting the timer to
-; zero, which produces a popping sound when an audible frequency is resumed, easily heard e.g. in Crash
-; Man's stage. At the expense of accuracy, these can be eliminated in an emulator e.g. by halting the
-; triangle channel when an ultrasonic frequency is set (a timer value less than 2).
-
-                        cmp   _apu_triangle_last_period
-                        beq   :freq_end_triangle
-                        sta   _apu_triangle_last_period
-                        jsr   get_triangle_freq               ; return freq in 16-bit accumulator
-                        sep   #$30
-                        ldx   #$00+triangle_oscillator
-;                        stx   sound_address
-;                        sta   sound_data
-                        DOC_PAIR
-                        ldx   #$20+triangle_oscillator
-;                        stx   sound_address
-                        xba
-;                        sta   sound_data
-                        DOC_PAIR
-:freq_end_triangle      sep   #$30
-
-                        ldx   #$40+triangle_oscillator
-;                        sta   sound_address
-                        lda   #12*16                          ; Triangle is a bit softer than pulse channels
-                        DOC_PAIR
-                        bra   :end_triangle
-
-; A silenced NES triangle doesn't drop to zero: it holds its current output level and resumes
-; from the same point.  Muting by volume cut the wave at a random point, with a pop at every
-; note start and stop.  Instead, a frequency of 0 stops the DOC oscillator stepping so it holds
-; its current sample.  The last-period cache is cleared so the next note rewrites the frequency.
-:mute_triangle
-                        sep   #$30
-                        lda   #0
-                        ldx   #$00+triangle_oscillator
-                        DOC_PAIR
-                        ldx   #$20+triangle_oscillator
-                        DOC_PAIR
-                        lda   #$FF
-                        sta   _apu_triangle_last_period
-                        sta   _apu_triangle_last_period+1
-:end_triangle
-
-; Now the noise channel.  It's mixer volume output is ~half of the pulse channels
-;
-; First, point the oscillators at the wave for the mode (long / short) if it changed
-                        lda   APU_NOISE_REG3
-                        and   #$80
-                        cmp   _apu_noise_last_mode
-                        beq   :noise_mode_done
-                        sta   _apu_noise_last_mode
-                        cmp   #0
-                        bne   :noise_short
-                        ldx   #$80+noise_oscillator
-                        lda   #NOISE_DOC_PAGE
-                        DOC_PAIR
-                        ldx   #$c0+noise_oscillator
-                        lda   #NOISE_TABLE_SIZE
-                        DOC_PAIR
-                        bra   :noise_mode_done
-:noise_short            ldx   #$80+noise_oscillator
-                        lda   #NOISE_SHORT_DOC_PAGE
-                        DOC_PAIR
-                        ldx   #$c0+noise_oscillator
-                        lda   #NOISE_SHORT_TABLE_SIZE
-                        DOC_PAIR
-:noise_mode_done
-
-
-                        lda   APU_NOISE_LENGTH_COUNTER      ; If the length counter is zero, no output
-                        beq   :mute_noise
-
-                        ldx   #$00+noise_oscillator
-;                        stx   sound_address
-                        lda   APU_NOISE_CURRENT_PERIOD
-;                        sta   sound_data
-                        DOC_PAIR
-                        ldx   #$20+noise_oscillator
-;                        stx   sound_address
-                        lda   APU_NOISE_CURRENT_PERIOD+1
-;                        sta   sound_data
-                        DOC_PAIR
-
-                        ldx   #$40+noise_oscillator
-;                        sta   sound_address
-                        lda   APU_NOISE_REG1
-                        bit   #NOISE_CONST_VOL_FLAG        ; Check the constant volume bit
-                        bne   :volume_noise
-                        lda   APU_NOISE_ENVELOPE
-                        bra   :volume_noise
-:mute_noise
-                        ldx   #$40+noise_oscillator
-                        lda   #0                           ; (already the DOC volume)
-                        bra   :set_volume_noise
-:volume_noise
-                        and   #$0F
-                        asl
-                        asl
-                        asl
-:set_volume_noise       DOC_PAIR
-
-; A DMC sample stopped by $4015 (dmc_disable) holds its last level, like the NES DAC; fade that level
-; out, as the NES output filter does, so the next sample doesn't start with a jump
-                        lda   dmc_fade_vol
-                        beq   :not_timer
-                        sec
-                        sbc   #DMC_FADE_STEP
-                        bcs   *+4
-                        lda   #0
-                        sta   dmc_fade_vol
-                        ldx   #$40+dmc_oscillator
-                        jsr   set_osc_register_pair
-
-:not_timer
-no_frame
-;                        ldal  show_border
-;                        beq   :no_show2
-;                        ldal  border_color
-;                        jsr   setborder
-;:no_show2
-
-                        pld
-                        plb
-                        clc
-                        rtl
+                        ldy   #CH_PULSE1
+                        jsr   update_pulse
+                        ldy   #CH_PULSE2
+                        jsr   update_pulse
+                        jsr   update_triangle
+                        jsr   update_noise
+                        jsr   update_dmc_fade
+                        brl   apu_exit
 
 ; APU_timer_tick
 ;
@@ -1274,7 +1016,211 @@ APU_timer_tick
                         plb
                         pea   $c000
                         pld
-                        brl   apu_timer_dispatch        ; (returns with rtl through no_frame)
+                        brl   apu_timer_dispatch        ; (returns with rtl through apu_exit)
+
+;-----------------------------------------------------------------------------------------
+; The DOC updates.  D = $C000, DBR = K, 8-bit registers, the GLU set for DOC register access.  A, X and Y
+; are not kept.
+;-----------------------------------------------------------------------------------------
+
+; A pulse channel: Y = the channel (CH_PULSE1 / CH_PULSE2), whose left oscillator is Y / 8
+; (pulse1_oscillator / pulse2_oscillator).
+                        mx    %11
+update_pulse
+                        sty   apu_chan
+                        tya
+                        lsr
+                        lsr
+                        lsr
+                        sta   apu_osc
+                        lda   APU_CH+CH_LENGTH,y        ; length counter 0: silent
+                        bne   :live
+:release                ldx   apu_osc
+                        jmp   pulse_release
+:release16              sep   #$20
+                        mx    %11
+                        bra   :release
+
+:live                   rep   #$20
+                        mx    %01
+                        lda   APU_CH+CH_REG1,y          ; (REG2 in the high byte)
+                        bit   #$0800                    ; The sweep unit mutes the channel when the target
+                        bne   :period                   ; period is > $7FF, unless the negate flag is set,
+                        xba                             ; whether or not the sweep is enabled
+                        and   #$0007                    ; (see SweepMuteLimit)
+                        asl
+                        tax
+                        lda   APU_CH+CH_PERIOD,y
+                        cmp   SweepMuteLimit,x
+                        bcs   :release16
+:period                 lda   APU_CH+CH_PERIOD,y
+                        cmp   #8                        ; It also mutes periods < 8
+                        bcc   :release16
+                        cmp   APU_CH+CH_LAST,y          ; it's expensive to recalc frequencies, so avoid it when possible
+                        beq   :duty
+                        sta   APU_CH+CH_LAST,y
+                        rep   #$10
+                        mx    %00
+                        jsr   get_pulse_freq            ; A = F_HL (X and Y are not kept)
+                        sep   #$30
+                        mx    %11
+                        ldx   apu_osc                   ; frequency low register
+                        DOC_PAIR
+                        lda   apu_osc                   ; frequency high register (B holds the value)
+                        ora   #$20
+                        tax
+                        xba
+                        DOC_PAIR
+                        ldy   apu_chan
+
+:duty                   sep   #$20
+                        mx    %11
+                        lda   apu_osc                   ; wavetable pointer register: the duty cycle's
+                        ora   #$80                      ; page of DOC RAM, (REG1 >> 6) + 1
+                        tax
+                        lda   APU_CH+CH_REG1,y
+                        rol
+                        rol
+                        rol
+                        and   #$03
+                        inc
+                        DOC_PAIR
+
+                        lda   apu_osc                   ; volume register
+                        ora   #$40
+                        tax
+                        lda   APU_CH+CH_REG1,y
+                        bit   #PULSE_CONST_VOL_FLAG     ; Check the constant volume bit
+                        bne   :volume
+                        lda   APU_CH+CH_ENV,y
+:volume                 and   #$0F                      ; 0-15 -> the DOC volume
+                        bne   :play
+                        ldx   apu_osc                   ; (volume 0 is a note-off too)
+                        jmp   pulse_release
+:play                   asl
+                        asl
+                        asl
+                        asl
+                        DOC_PAIR
+                        ldx   apu_osc
+                        jmp   pulse_play
+
+; The triangle.  This wave needs linear counter support to be silenced.
+update_triangle
+                        lda   APU_TRIANGLE_LENGTH_COUNTER      ; If the length counter is zero, no output
+                        beq   :mute
+                        lda   APU_TRIANGLE_LINEAR_COUNTER      ; If the linear counter is zero, no output
+                        beq   :mute
+                        rep   #$30
+                        mx    %00
+                        lda   APU_TRIANGLE_CURRENT_PERIOD
+                        cmp   #2
+                        bcc   :mute
+
+; NOTE on Triangle channel frequence from https://www.nesdev.org/wiki/APU_Triangle
+;
+; Unlike the pulse channels, the triangle channel supports frequencies up to the maximum frequency the
+; timer will allow, meaning frequencies up to fCPU/32 (about 55.9 kHz for NTSC) are possible - far above
+; the audible range. Some games, e.g. Mega Man 2, "silence" the triangle channel by setting the timer to
+; zero, which produces a popping sound when an audible frequency is resumed, easily heard e.g. in Crash
+; Man's stage. At the expense of accuracy, these can be eliminated in an emulator e.g. by halting the
+; triangle channel when an ultrasonic frequency is set (a timer value less than 2).
+
+                        cmp   _apu_triangle_last_period
+                        beq   :volume
+                        sta   _apu_triangle_last_period
+                        jsr   get_triangle_freq               ; return freq in 16-bit accumulator
+                        sep   #$30
+                        mx    %11
+                        ldx   #$00+triangle_oscillator
+                        DOC_PAIR
+                        ldx   #$20+triangle_oscillator
+                        xba
+                        DOC_PAIR
+
+:volume                 sep   #$30
+                        mx    %11
+                        ldx   #$40+triangle_oscillator
+                        lda   #12*16                          ; Triangle is a bit softer than pulse channels
+                        DOC_PAIR
+                        rts
+
+; A silenced NES triangle doesn't drop to zero: it holds its current output level and resumes
+; from the same point.  Muting by volume cut the wave at a random point, with a pop at every
+; note start and stop.  Instead, a frequency of 0 stops the DOC oscillator stepping so it holds
+; its current sample.  The last-period cache is cleared so the next note rewrites the frequency.
+:mute                   sep   #$30
+                        mx    %11
+                        lda   #0
+                        ldx   #$00+triangle_oscillator
+                        DOC_PAIR
+                        ldx   #$20+triangle_oscillator
+                        DOC_PAIR
+                        lda   #$FF
+                        sta   _apu_triangle_last_period
+                        sta   _apu_triangle_last_period+1
+                        rts
+
+; The noise channel.  Its mixer volume output is ~half of the pulse channels.
+;
+; First, point the oscillators at the wave for the mode (long / short) if it changed
+update_noise
+                        lda   APU_NOISE_REG3
+                        and   #$80
+                        cmp   _apu_noise_last_mode
+                        beq   :mode_done
+                        sta   _apu_noise_last_mode
+                        ldx   #$80+noise_oscillator
+                        cmp   #0
+                        bne   :short
+                        lda   #NOISE_DOC_PAGE
+                        DOC_PAIR
+                        ldx   #$c0+noise_oscillator
+                        lda   #NOISE_TABLE_SIZE
+                        DOC_PAIR
+                        bra   :mode_done
+:short                  lda   #NOISE_SHORT_DOC_PAGE
+                        DOC_PAIR
+                        ldx   #$c0+noise_oscillator
+                        lda   #NOISE_SHORT_TABLE_SIZE
+                        DOC_PAIR
+:mode_done
+                        ldx   #$40+noise_oscillator
+                        lda   APU_NOISE_LENGTH_COUNTER      ; If the length counter is zero, no output
+                        beq   :volume                       ; (A = 0, the DOC volume)
+
+                        ldx   #$00+noise_oscillator
+                        lda   APU_NOISE_CURRENT_PERIOD
+                        DOC_PAIR
+                        ldx   #$20+noise_oscillator
+                        lda   APU_NOISE_CURRENT_PERIOD+1
+                        DOC_PAIR
+
+                        ldx   #$40+noise_oscillator
+                        lda   APU_NOISE_REG1
+                        bit   #NOISE_CONST_VOL_FLAG        ; Check the constant volume bit
+                        bne   :level
+                        lda   APU_NOISE_ENVELOPE
+:level                  and   #$0F
+                        asl
+                        asl
+                        asl
+:volume                 DOC_PAIR
+                        rts
+
+; A DMC sample stopped by $4015 (dmc_disable) holds its last level, like the NES DAC; fade that level
+; out, as the NES output filter does, so the next sample doesn't start with a jump
+update_dmc_fade
+                        lda   dmc_fade_vol
+                        beq   :out
+                        sec
+                        sbc   #DMC_FADE_STEP
+                        bcs   *+4
+                        lda   #0
+                        sta   dmc_fade_vol
+                        ldx   #$40+dmc_oscillator
+                        jmp   set_osc_register_pair
+:out                    rts
 
 ; apu_mute: volume 0 on the NES channels' 10 oscillators (stop_playing).  update_doc_registers sets the
 ; volumes again when the engine resumes (doc_shadow has the 0s).  D = $C000, DBR = K, 8-bit registers.
@@ -1375,20 +1321,6 @@ set_osc_register_pair                                   ; (not through doc_shado
                         inc   sound_address
                         sta   sound_data
                         rts
-
-; This is a bit different because we actually calculate a scan rate directly to match the
-; rate at which new samples are read form DOC RAM to the period of the noise channel
-;
-; IIgs Scan Rate (SR) = 894886 Hz / (OSC + 2) = 894886 Hz / 34 = 26320.1765 samples / sec
-; IIgs Sample Rate = 51.406 * F_HL samples / sec
-
-;  We have 256 samples
-; NES Noise Sample Rate = 1789772 Hz / P
-;
-; An as example, let P = 8, so a new sample should be output 
-; Solving for F_HL: F_HL = 1789772 / (51.406 * 8) = 4352
-get_noise_freq
-
 
 ; NES freq = f_CPU / (16 * (t + 1))
 ;          = 1.789773 MHz / (16 * (t + 1))
@@ -1534,31 +1466,45 @@ PulseFreqTable
                         dw    17684,17667,17649,17632,17614,17597,17580,17562
                         dw    17545,17528,17511,17493,17476,17459,17442,17425
 
-turn_off_interrupts
-                        php
-                        sep   #$20
-                        lda   #$a0+interrupt_oscillator
-                        sta   sound_address
-                        lda   #0
-                        sta   sound_data
-                        plp
-                        rts
-
 ; Internal APU registers.
 ;
-; These variables track the internal flags, counters and other status bits that make up 
+; These variables track the internal flags, counters and other status bits that make up
 ; the core functionality of the different channel hardware
 
-apu_frame_counter dw 0                  ; frame counter, clocked at 240Hz from the interrupt handler
-
-duty_cycle_page dfb $01,$02,$03,$04     ; Page of DOC RAM that holds the different duty cycle wavforms
-show_border     dw 0
-border_color    dw 0
+apu_frame_phase dfb 0                   ; 240Hz: 1 on the ticks with a half-frame clock
+apu_quarters    dfb 0                   ; apu_clock: the quarter-frame clocks of this tick
+apu_halves      dfb 0                   ;            and the half-frame clocks
+apu_chan        dfb 0                   ; update_pulse: the channel
+apu_osc         dfb 0                   ;               and its left oscillator
+sweep_delta     dw  0                   ; clock_sweep: period >> shift
 
 ; The channel state.  The APU tick (interrupt time) reads it many times per VBL with DBR = this bank, so it
 ; lives here and is reached with absolute addressing.  The register shims (rom/rom_inject.s, in the ROM
 ; bank) write the fields marked ENT with long addressing.
+;
+; Pulse 1, pulse 2, the triangle and the noise channel are blocks of CH_SIZE bytes with the same layout, so
+; the clocks and update_pulse take the channel in an index register (APU_CH+CH_<field>,x).  Fields a
+; channel doesn't have are padding.
+CH_REG1                 =   0           ; $4000 / $4004 / $4008 / $400C
+CH_REG2                 =   1           ; $4001 / $4005 (the sweep unit: EPPP NSSS); noise: $400E (M--- PPPP)
+CH_LENGTH               =   2           ; the length counter
+CH_LOADED               =   3           ; non-zero: the length counter was loaded since the last DOC update
+CH_START                =   4           ; non-zero: restart the envelope; triangle: reload the linear counter
+CH_PERIOD               =   5           ; (word) the period driving the oscillator (the sweep unit changes it);
+                                        ;   noise: the DOC frequency for the period (NoiseFreqTable)
+CH_RELOAD               =   7           ; non-zero: reload the sweep divider ($4001 / $4005 written)
+CH_SWEEP_DIV            =   8           ; the sweep divider
+CH_ENV_DIV              =   9           ; the envelope divider
+CH_ENV                  =   10          ; the envelope level; triangle: the linear counter
+CH_LAST                 =   11          ; (word) the period the oscillators' frequency was set for
+CH_SIZE                 =   16
 
+CH_PULSE1               =   0*CH_SIZE
+CH_PULSE2               =   1*CH_SIZE   ; (update_pulse: the left oscillator is the channel / 8)
+CH_TRIANGLE             =   2*CH_SIZE
+CH_NOISE                =   3*CH_SIZE
+
+APU_CH
 ; Pulse Channel 1
 APU_PULSE1_REG1             ENT       ; DDLC NNNN - Duty, length counter halt, constant volume/envelope, envelope period/volume
                             ds 1
@@ -1566,19 +1512,21 @@ APU_PULSE1_REG2             ENT       ; EPPP NSSS - Sweep unit: enabled, period,
                             ds 1
 APU_PULSE1_LENGTH_COUNTER   ENT
                             ds 1
-APU_PULSE1_RELOAD_FLAG      ENT       ; non-zero: reload the sweep divider ($4001 written)
+APU_PULSE1_LENGTH_LOADED    ENT
                             ds 1
 APU_PULSE1_START_FLAG       ENT       ; non-zero: restart the envelope ($4003 written)
                             ds 1
-APU_PULSE1_CURRENT_PERIOD   ENT       ; the period driving the oscillator (the sweep unit changes it)
+APU_PULSE1_CURRENT_PERIOD   ENT
                             ds 1
 APU_PULSE1_CURRENT_PERIOD_HI ENT
+                            ds 1
+APU_PULSE1_RELOAD_FLAG      ENT       ; non-zero: reload the sweep divider ($4001 written)
                             ds 1
 APU_PULSE1_SWEEP_DIVIDER    dfb 0
 APU_PULSE1_ENVELOPE_DIVIDER dfb 0
 APU_PULSE1_ENVELOPE         dfb 0
-
-_apu_pulse1_last_period     dw  $FFFF ; optimization
+_apu_pulse1_last_period     dw  $FFFF
+                            ds  CH_SIZE-13
 
 ; Pulse Channel 2
 APU_PULSE2_REG1             ENT
@@ -1587,7 +1535,7 @@ APU_PULSE2_REG2             ENT
                             ds 1
 APU_PULSE2_LENGTH_COUNTER   ENT
                             ds 1
-APU_PULSE2_RELOAD_FLAG      ENT
+APU_PULSE2_LENGTH_LOADED    ENT
                             ds 1
 APU_PULSE2_START_FLAG       ENT
                             ds 1
@@ -1595,26 +1543,30 @@ APU_PULSE2_CURRENT_PERIOD   ENT
                             ds 1
 APU_PULSE2_CURRENT_PERIOD_HI ENT
                             ds 1
+APU_PULSE2_RELOAD_FLAG      ENT
+                            ds 1
 APU_PULSE2_SWEEP_DIVIDER    dfb 0
 APU_PULSE2_ENVELOPE_DIVIDER dfb 0
 APU_PULSE2_ENVELOPE         dfb 0
-
-_apu_pulse2_last_period     dw  $FFFF ; optimization
+_apu_pulse2_last_period     dw  $FFFF
+                            ds  CH_SIZE-13
 
 ; Triangle
 APU_TRIANGLE_REG1           ENT       ; CRRR RRRR - Length counter halt / linear counter control, linear counter reload value
-                            ds 1
+                            ds 2
 APU_TRIANGLE_LENGTH_COUNTER ENT
+                            ds 1
+APU_TRIANGLE_LENGTH_LOADED  ENT
                             ds 1
 APU_TRIANGLE_START_FLAG     ENT       ; the linear counter reload flag ($400B written)
                             ds 1
 APU_TRIANGLE_CURRENT_PERIOD ENT
                             ds 1
 APU_TRIANGLE_CURRENT_PERIOD_HI ENT
-                            ds 1
+                            ds 4
 APU_TRIANGLE_LINEAR_COUNTER dfb 0
-
-_apu_triangle_last_period   dw  $FFFF ; optimization
+_apu_triangle_last_period   dw  $FFFF
+                            ds  CH_SIZE-13
 
 ; Noise
 APU_NOISE_REG1              ENT       ; --LC NNNN - length counter halt, constant volume/envelope, envelope period/volume
@@ -1623,26 +1575,29 @@ APU_NOISE_REG3              ENT       ; M--- PPPP - Mode and period lookup
                             ds 1
 APU_NOISE_LENGTH_COUNTER    ENT
                             ds 1
+APU_NOISE_LENGTH_LOADED     ENT
+                            ds 1
 APU_NOISE_START_FLAG        ENT
                             ds 1
 APU_NOISE_CURRENT_PERIOD    ENT       ; the DOC frequency for the period (NoiseFreqTable)
-                            ds 2
+                            ds 4
 APU_NOISE_ENVELOPE_DIVIDER  dfb 0
 APU_NOISE_ENVELOPE          dfb 0
+                            ds  CH_SIZE-11
+
+; The blocks must match the CH_ offsets
+                            ERR   APU_PULSE2_REG1-APU_CH-CH_PULSE2
+                            ERR   APU_TRIANGLE_REG1-APU_CH-CH_TRIANGLE
+                            ERR   APU_NOISE_REG1-APU_CH-CH_NOISE
+                            ERR   APU_PULSE1_RELOAD_FLAG-APU_CH-CH_RELOAD
+                            ERR   _apu_pulse2_last_period-APU_CH-CH_PULSE2-CH_LAST
+                            ERR   APU_TRIANGLE_LINEAR_COUNTER-APU_CH-CH_TRIANGLE-CH_ENV
+                            ERR   APU_NOISE_ENVELOPE-APU_CH-CH_NOISE-CH_ENV
+                            ERR   pulse2_oscillator-{CH_PULSE2/8}
 
 _apu_noise_last_mode        dfb $00   ; $400E bit 7 of the wave the noise oscillators play (setup_doc_registers: long)
 
 doc_shadow                  ds  256   ; The last value written to each DOC register (DOC_PAIR)
-
-; Non-zero when the channel's length counter was loaded since the last DOC update (clock_length_counter)
-APU_PULSE1_LENGTH_LOADED    ENT
-                            ds 1
-APU_PULSE2_LENGTH_LOADED    ENT
-                            ds 1
-APU_TRIANGLE_LENGTH_LOADED  ENT
-                            ds 1
-APU_NOISE_LENGTH_LOADED     ENT
-                            ds 1
 
 ; $4015
 APU_STATUS                  ENT
