@@ -171,8 +171,10 @@ drawSprites
         FIN
         FIN
         rep   #$20
-        lda   CMPL_BANK                ; For switching to the tiledata bank and back to $01
-        xba
+        lda   CMPL_BANK                ; For switching to the tiledata bank and back to $E0 (VOC spike: the
+        xba                            ; sprite plane)
+        and   #$00FF
+        ora   #$E000
         sta   sprBankSwap
         sep   #$20
         lda   #^PPU_MEM                ; SPR_COMP_TBL's bank (the low word is set for 8x8 mode below, or
@@ -191,7 +193,7 @@ drawSprites
         FIN
 
         phb                            ; Save the current data bank
-        pea   $0101
+        pea   $E0E0                    ; VOC spike: the sprites are drawn into bank $E0
         lda   :spriteCount             ; Draw the sprites from the last to the first: the NES draws a
         sec                            ; lower OAM index on top
         sbc   #4

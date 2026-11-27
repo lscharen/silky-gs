@@ -35,7 +35,7 @@
 
 ; Set the palettes and swizzle tables
 
-            jsr   SetDefaultPalette
+            jsr   VocSetDefaultPalette
 
 ; Set an internal flag to tell the VBL interrupt handler that it is
 ; ok to start invoking the game logic.  The ROM code has to be run
@@ -141,7 +141,7 @@ InitPlayfield
 
 ; Start with the title screen's (ground) palette
 
-            jmp   SetDefaultPalette
+            jmp   VocSetDefaultPalette
 
 ; Copy just the tiles that change directly to the graphics screen
 
@@ -158,8 +158,16 @@ CopyStatusToScreen
 
             mx    %00
 
-; The palette management generated from palettes/ (ApplyPaletteChange)
+; The palette management generated from palettes/ (ApplyPaletteChange; unused by the VOC spike)
             put   pal_transitions.s
+
+; VOC spike: one fixed palette map, the identity swizzle tables (pal_voc.s, EngineExt.s)
+PAL_VOC_SWIZZLE EXT
+            mx    %00
+VocSetDefaultPalette
+            ldx   #PAL_VOC_SWIZZLE
+            lda   #^PAL_VOC_SWIZZLE
+            jmp   NES_SetPaletteMap
 
 ; The render screen (CUSTOM_RENDER_SCREEN_ADDR, see ppu/ppu_api.s): the status bar, the top 16 lines,
 ; doesn't scroll; the rest of the screen is at the scroll position.  The game never scrolls vertically.

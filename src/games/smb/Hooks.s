@@ -31,7 +31,7 @@ EVT_LOOP_END mac
              <<<
 
 PRE_RENDER   mac
-             jsl  ApplyPaletteChange ; switch to a new palette detected since the last frame
+; VOC spike: the palettes are written straight to the two SHR planes (EngineExt.s)
              <<<
 
 POST_RENDER  mac
@@ -57,7 +57,8 @@ CONFIG_APPLY_HOOK mac
 ; generated from palettes/, or write a [direct] cell straight to its slot.  A game with handlers of its own
 ; sets CUSTOM_PPU_PALETTE_DISPATCH equ 1 and PPU_PALETTE_DISPATCH equ its table, and defines the table
 ; (and the handlers) in EngineExt.s: the PPU write shim reads it with 16-bit addresses in the engine's bank.
-CUSTOM_PPU_PALETTE_DISPATCH equ 0
+CUSTOM_PPU_PALETTE_DISPATCH equ 1
+PPU_PALETTE_DISPATCH equ VOC_PALETTE_DISPATCH   ; (EngineExt.s)
 
 ; The PPU register values a render latches (RenderLatch), when they aren't simply the registers' last
 ; values: CUSTOM_PPU_CTRL_LOCK / CUSTOM_PPU_SCROLL_LOCK equ 1, and CUSTOM_PPU_CTRL_LOCK_ADDR /

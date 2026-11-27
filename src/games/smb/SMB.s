@@ -51,3 +51,9 @@
             ASM   palettes.s
             KND   #$1100
             SNA   PALDATA
+
+; VOC spike: the identity swizzle tables
+
+            ASM   pal_voc.s
+            KND   #$1100
+            SNA   VOCPAL

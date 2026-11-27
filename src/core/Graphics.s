@@ -10,9 +10,11 @@ InitGraphics
                  ldx   #$2FE
                  lda   #0
 :lp              stal  $E19D00,x
+                 stal  $E09D00,x             ; (VOC spike) the sprite plane's SCBs and palettes
                  dex
                  dex
                  bpl   :lp
+                 jsr   SetupVOC              ; (VOC spike) the chroma key, which the clear just zeroed
 
                  ldy   #200                  ; Full height
                  jsr   _SetScreenHeight      ; Calls SetScreenRect
@@ -87,6 +89,7 @@ _SetBorderColor  sep   #$20                 ; ACC = $X_Y, REG = $W_Z
 _ClearToColor
                  ldx  #$7CFE
 :loop            stal $012000,x
+                 stal $E02000,x              ; (VOC spike) the sprite plane: all transparent
                  dex
                  dex
                  bpl  :loop
@@ -151,6 +154,38 @@ _GrafOn
                  rep   #$20
                  lda   #1                ; The engine has the display (irqVbl, rom/rom_exec.s: SHR off after
                  stal  engineVideoOn     ; this means the CDA menu has it)
+                 jmp   SetupVOC
+
+; VOC two-plane spike (from dwsJason on Apple II Infinitum slack):
+;
+; 1. Feed the IIgs motherboard composite output into the VOC input
+; 2. Set the VOC to display from main memory bank $E0 (bits 5:4 of $C0B1 = 01) with linearization enabled
+;
+; The background is rendered into bank $01 with shadowing to $E1, as usual; the sprites go straight to
+; bank $E0, whose color 0 is the chroma key, so the background shows through it.  The VOC doesn't scan
+; out IIgs memory, it captures the writes into its own, so the sprite plane is erased with the capture
+; off and the erased cells are written again afterwards (drawScreen, ppu/ppu_render.s).
+                 mx    %00
+SetupVOC
+                 lda   #ChromaKeyRGB
+                 stal  $E09E00
+                 sep   #$20
+                 xba                     ; Red, with the blanking source and genlock set to the NTSC input
+                 and   #$0F
+                 ora   #$30
+                 stal  VOC_RED_REGISTER
+                 lda   #ChromaKeyRGB&$FF ; Blue / green
+                 stal  VOC_BLUE_GREEN_REGISTER
+
+                 ldal  VOC_CONTROL_REGISTER   ; Main bank page select, linearization, capture on
+                 and   #%11000110
+                 ora   #%00011000
+                 stal  VOC_CONTROL_REGISTER
+
+                 ldal  VOC_DISSOLVE_REGISTER  ; Bank $E0 graphics are 100% opaque
+                 and   #%11111000
+                 stal  VOC_DISSOLVE_REGISTER
+                 rep   #$20
                  rts
 
                  mx    %00

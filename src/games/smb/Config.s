@@ -26,7 +26,7 @@ OAM_END_INDEX     equ 64
 ; Dirty rendering: when the background did not scroll, the screen-aligned 8x8 grid renderer
 ; (ppu_grid.s, ppu_grid_quads.s) redraws only the cells that changed, erasing from the PEA field.  0 =
 ; every frame is a full render.
-ENABLE_DIRTY_RENDERING equ 0
+ENABLE_DIRTY_RENDERING equ 1         ; VOC spike: only the grid's sprite records / expose pass are used (ppu_render.s)
 
 ; Dirty rendering also when the vertical scroll is not a multiple of 8: the grid follows the nametable and
 ; the partly visible top and bottom tile rows are drawn by the edge copies (ppu_grid.s).  0 = only aligned

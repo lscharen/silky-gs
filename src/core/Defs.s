@@ -32,6 +32,14 @@ SHR_SCREEN             equ   $E12000
 SHR_SCB                equ   $E19D00
 SHR_PALETTES           equ   $E19E00
 SHR_LINE_WIDTH         equ   160
+
+; VOC two-plane spike (SMB): the Video Overlay Card shows bank $E0 (the sprites) over the motherboard's
+; bank $E1 (the background).  See SetupVOC (Graphics.s) and drawScreen (ppu/ppu_render.s).
+VOC_CONTROL_REGISTER   equ   $E0C0B1     ; bit 0 set: writes to bank $E0 are not captured; bits 5:4 page select; bit 3 linearize
+VOC_DISSOLVE_REGISTER  equ   $E0C0B3
+VOC_BLUE_GREEN_REGISTER equ  $E0C0B4
+VOC_RED_REGISTER       equ   $E0C0B5
+ChromaKeyRGB           equ   $0F0F       ; Bank $E0 color 0 (transparent): not one of the NES colors
 SHR_SCREEN_HEIGHT      equ   200
 
 ; Direct page locations used by the engine

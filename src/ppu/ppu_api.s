@@ -82,10 +82,7 @@ PPU_DrawScreen ENT
             phb
             phk
             plb
-            jsr   drawScreen
-            DO    ENABLE_DIRTY_RENDERING
-            jsr   gridEndFull             ; drawSprites recorded this frame's sprite cells
-            FIN
+            jsr   drawScreen              ; (VOC spike: it ends the grid's frame itself)
             plb
             rtl
 

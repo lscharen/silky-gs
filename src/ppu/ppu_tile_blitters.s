@@ -114,15 +114,15 @@ _copyBufferToScreen
 ]line   equ   0
         lup   8
 
-        ldal  $010000+{]line*SHR_LINE_WIDTH},x       ; Load the screen data
+        ldal  $E00000+{]line*SHR_LINE_WIDTH},x       ; Load the screen data
         and:  {]line*4}+32,y                         ; mask
         ora   blttmp+{]line*4}
-        stal  $010000+{]line*SHR_LINE_WIDTH},x
+        stal  $E00000+{]line*SHR_LINE_WIDTH},x
 
-        ldal  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; Load the screen data
+        ldal  $E00000+{]line*SHR_LINE_WIDTH}+2,x     ; Load the screen data
         and:  {]line*4}+32+2,y                       ; mask
         ora   blttmp+{]line*4}+2
-        stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+        stal  $E00000+{]line*SHR_LINE_WIDTH}+2,x
 
 ]line   equ   ]line+1
         --^
@@ -227,17 +227,17 @@ drawTileToScreen
           ldy:  {]line*4},x                            ; Load the tile data lookup value
           lda:  {]line*4}+32,x                         ; Load the mask value
           ldx   sprTmp1
-          andl  $010000+{]line*SHR_LINE_WIDTH},x       ; Mask against the screen
+          andl  $E00000+{]line*SHR_LINE_WIDTH},x       ; Mask against the screen
           db    ORA_IND_LONG_IDX,ActivePtr             ; Merge in the remapped tile data
-          stal  $010000+{]line*SHR_LINE_WIDTH},x
+          stal  $E00000+{]line*SHR_LINE_WIDTH},x
 
           ldx   sprTmp0
           ldy:  {]line*4}+2,x
           lda:  {]line*4}+32+2,x
           ldx   sprTmp1
-          andl  $010000+{]line*SHR_LINE_WIDTH}+2,x
+          andl  $E00000+{]line*SHR_LINE_WIDTH}+2,x
           db    ORA_IND_LONG_IDX,ActivePtr
-          stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+          stal  $E00000+{]line*SHR_LINE_WIDTH}+2,x
 
 ]line     equ   ]line+1
           --^
@@ -259,17 +259,17 @@ drawTileToScreenV
           ldy:  {{7-]line}*4},x
           lda:  {{7-]line}*4}+32,x
           ldx   sprTmp1
-          andl  $010000+{]line*SHR_LINE_WIDTH},x
+          andl  $E00000+{]line*SHR_LINE_WIDTH},x
           db    ORA_IND_LONG_IDX,ActivePtr
-          stal  $010000+{]line*SHR_LINE_WIDTH},x
+          stal  $E00000+{]line*SHR_LINE_WIDTH},x
 
           ldx   sprTmp0
           ldy:  {{7-]line}*4}+2,x
           lda:  {{7-]line}*4}+32+2,x
           ldx   sprTmp1
-          andl  $010000+{]line*SHR_LINE_WIDTH}+2,x
+          andl  $E00000+{]line*SHR_LINE_WIDTH}+2,x
           db    ORA_IND_LONG_IDX,ActivePtr
-          stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+          stal  $E00000+{]line*SHR_LINE_WIDTH}+2,x
 
 ]line     equ   ]line+1
           --^
@@ -310,8 +310,8 @@ _copyBufferToScreenP
         ldy:  {]line*4}+0,x                         ; Load the packed sprite data
         ldx   sprTmp1
         db    AND_IND_LONG_IDX,ActivePtr
-        oral  $010000+{]line*SHR_LINE_WIDTH}+0,x
-        stal  $010000+{]line*SHR_LINE_WIDTH}+0,x
+        oral  $E00000+{]line*SHR_LINE_WIDTH}+0,x
+        stal  $E00000+{]line*SHR_LINE_WIDTH}+0,x
 
         ldx   sprTmp0
 zl
@@ -321,8 +321,8 @@ zl
         ldy:  {]line*4}+2,x
         ldx   sprTmp1
         db    AND_IND_LONG_IDX,ActivePtr
-        oral  $010000+{]line*SHR_LINE_WIDTH}+2,x
-        stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+        oral  $E00000+{]line*SHR_LINE_WIDTH}+2,x
+        stal  $E00000+{]line*SHR_LINE_WIDTH}+2,x
 
         ldx   sprTmp0
 zr
@@ -414,8 +414,8 @@ zero_left
           ldx   sprTmp1                                ; restore the screen address
 
           db    AND_IND_LONG_IDX,ActivePtr             ; Apply against the sprite data
-          oral  $010000+{]line*SHR_LINE_WIDTH}+0,x
-          stal  $010000+{]line*SHR_LINE_WIDTH}+0,x
+          oral  $E00000+{]line*SHR_LINE_WIDTH}+0,x
+          stal  $E00000+{]line*SHR_LINE_WIDTH}+0,x
 
 skip_left
           ldal  $010000+{]line*SHR_LINE_WIDTH}+2,x     ; create mask where F = !0 and 0 = 0.
@@ -441,8 +441,8 @@ zero_right
           ldx   sprTmp1                                ; restore the screen address
 
           db    AND_IND_LONG_IDX,ActivePtr
-          oral  $010000+{]line*SHR_LINE_WIDTH}+2,x
-          stal  $010000+{]line*SHR_LINE_WIDTH}+2,x
+          oral  $E00000+{]line*SHR_LINE_WIDTH}+2,x
+          stal  $E00000+{]line*SHR_LINE_WIDTH}+2,x
 skip_right
 
 ]line     equ   ]line+1
