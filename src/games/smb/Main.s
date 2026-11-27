@@ -15,6 +15,19 @@
             put    ../../ImportEngine.s
 ; AUTOINC:END
 
+; VOC spike start-up checkpoints for real hardware (used in core/ and rom/ too): set the border color (]1 = 0 - 15).  16-bit registers;
+; A and the flags are kept.  The word write also writes $C035 (the shadow register) with the value read.
+VOC_BORDER             mac
+                       php
+                       pha
+                       ldal  BORDER_REG
+                       and   #$FFF0
+                       ora   #]1
+                       stal  BORDER_REG
+                       pla
+                       plp
+                       <<<
+
 ; The game's configuration (constants) and its callbacks (Hooks.s, macros only: put after the entry code)
             put   Config.s
             put   pal_defs.s                  ; Palette ids (generated from palettes/)
@@ -29,6 +42,7 @@
             tax                           ; X = memory manager user ID (passed in A by GS/OS)
             lda   #VERTICAL_MIRRORING      ; A = cartridge nametable mirroring at power on
             jsr   NES_StartUp
+            VOC_BORDER 8                  ; (VOC spike checkpoint: brown)
 
 ; Now, initialize the game-specific functionality that this wrapper needs in order to
 ; run the game in an effective manner.
@@ -44,7 +58,9 @@
 ;
 ; Call the boot code in the ROM
 
+            VOC_BORDER 9                  ; (VOC spike checkpoint: orange)
             jsr   NES_ColdBoot
+            VOC_BORDER 12                 ; (VOC spike checkpoint: green)
 
 ; Apply hacks
 ;WorldNumber           = $075f
@@ -192,7 +208,9 @@ SMB_RenderScreen ENT
             ldy   StartX
             jsl   PPU_SetupLines
 
+            VOC_BORDER 13                 ; (VOC spike checkpoint: yellow -- a render started)
             jsl   PPU_DrawScreen
+            VOC_BORDER 15                 ; (VOC spike checkpoint: white -- a render finished)
 
             DO    SHOW_DEBUG_VARS
             lda   LastRead                ; The keyboard input (the engine shows the rest)

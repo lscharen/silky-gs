@@ -6,6 +6,9 @@
 
 SprBanks                EXT   ; core/Memory.s: the sprite cache's banks
 SprBankCount            EXT
+vocLoAddr               EXT   ; core/Memory.s: (VOC spike) the Memory Manager's span of $E0/2000 - $9FFF
+vocLen                  EXT
+vocSwapBank             EXT
 renderActive            EXT   ; rom/rom_exec.s: RENDER_VBL_COUNT
 renderVblTicks          EXT
 framesPerSecond         EXT

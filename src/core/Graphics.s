@@ -89,10 +89,28 @@ _SetBorderColor  sep   #$20                 ; ACC = $X_Y, REG = $W_Z
 _ClearToColor
                  ldx  #$7CFE
 :loop            stal $012000,x
-                 stal $E02000,x              ; (VOC spike) the sprite plane: all transparent
                  dex
                  dex
                  bpl  :loop
+
+; (VOC spike) the sprite plane: all transparent, except the span the Memory Manager owns (Memory.s: its
+; plane copy in the swap bank was zeroed)
+                 ldx  #$7CFE
+:l2              pha
+                 txa
+                 clc
+                 adc  #$2000
+                 cmpl vocLoAddr
+                 bcc  :clr
+                 cmpl vocHiAddr
+                 bcc  :skip
+:clr             pla
+                 stal $E02000,x
+                 bra  :nx
+:skip            pla
+:nx              dex
+                 dex
+                 bpl  :l2
                  rts
 
 ; Clear the SHR shadow screen ($01/2000) to zeros with shadowing on, so the visible screen ($E1/2000)

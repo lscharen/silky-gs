@@ -85,6 +85,7 @@ NES_StartUp
             jsl   PPUStartUpL
             bcc   *+5
             jmp   Fail
+            VOC_BORDER 3                  ; (VOC spike checkpoint: purple)
 
 ; Build the sprite Y filter used by scanOAMSprites from this game's playfield settings
 
@@ -131,6 +132,7 @@ NES_StartUp
             lda   config_audio_quality
             jsr   APUStartUp              ; APU_60HZ (external driver), APU_120HZ or APU_240HZ
             FIN
+            VOC_BORDER 4                  ; (VOC spike checkpoint: dark green)
 
 ; Decode the game's DMC samples into DOC RAM up front (see DMC_SAMPLE_LIST in Main.s)
 

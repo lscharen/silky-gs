@@ -15,7 +15,98 @@ InitMemory
                _NewHandle                            ; returns LONG Handle on stack
                plx                                   ; base address of the new handle
                ply                                   ; high address 00XX of the new handle (bank)
-               bcs       mem_err
+               bcc       *+5
+               brl       mem_err
+
+; VOC spike: the sprite plane, $E0/2000 - $E0/9FFF (with its SCBs and palettes), is written directly.  Part
+; of it can already hold the Memory Manager's own master pointer blocks (owner $00FF; $E0/6000 - $73FF
+; on the GSBoot disk), which can't be moved.  So: find the pages it owns (vocLoAddr, vocLen: the span
+; from the first to the last owned page), reserve every free page so nothing else is put there, and
+; allocate a bank to swap the span through (drawScreen, ppu/ppu_render.s): its sprite plane copy at
+; B/0000 + (addr - $2000), the Memory Manager's bytes at B/8000 + (addr - $2000).
+               lda       #$20
+               sta       vocPage
+               stz       vocRun                      ; start of the current free run (page), or 0
+               stz       vocLoAddr
+               stz       vocHiAddr
+:probe         PushLong  #0
+               pea       $00E0
+               lda       vocPage
+               xba
+               pha
+               _FindHandle
+               pla
+               ora       1,s
+               sta       1,s
+               pla                                   ; A = 0: the page is free
+               beq       :free
+               lda       vocLoAddr                   ; Owned: the span, and end the free run
+               bne       :haslo
+               lda       vocPage
+               xba
+               sta       vocLoAddr
+:haslo
+               lda       vocPage
+               inc
+               xba
+               sta       vocHiAddr
+               jsr       :reserve
+               bra       :next
+:free          lda       vocRun
+               bne       :next
+               lda       vocPage
+               sta       vocRun
+:next          inc       vocPage
+               lda       vocPage
+               cmp       #$A0
+               bcc       :probe
+               jsr       :reserve                    ; (the last run)
+
+               lda       vocHiAddr
+               sec
+               sbc       vocLoAddr
+               sta       vocLen                      ; 0: nothing to swap
+
+               jsr       AllocOneBank2               ; The swap bank, zeroed (the plane starts transparent)
+               bcc       *+5
+               brl       mem_err
+               sep       #$20
+               stal      vocSwapBank
+               stal      :zp+3
+               rep       #$20
+               ldx       #0
+               lda       #0
+:zp            stal      $000000,x
+               inx
+               inx
+               bne       :zp
+               bra       :voc_ok
+
+; Reserve the free run from page vocRun to vocPage (exclusive), if there is one
+:reserve       lda       vocRun
+               beq       :rr
+               PushLong  #0
+               lda       vocPage
+               sec
+               sbc       vocRun
+               xba                                   ; size = pages * 256
+               pea       $0000
+               pha
+               PushWord  UserId
+               PushWord  #%11000000_00010111         ; Fixed location
+               pea       $00E0
+               lda       vocRun
+               xba
+               pha
+               _NewHandle
+               plx
+               ply
+               bcc       *+4
+               brk       $e3                         ; (A = the Memory Manager error)
+               stz       vocRun
+:rr            rts
+:voc_ok
+
 
 ; Allocate a couple of banks of memory
 
@@ -44,6 +135,16 @@ InitMemory
                clc
 mem_err
                rts
+
+vocPage        dw        0
+vocRun         dw        0
+vocHiAddr      dw        0
+vocLoAddr ENT
+               dw        0                           ; (VOC spike) the span of $E0 the Memory Manager owns
+vocLen ENT
+               dw        0                           ;   (bytes; 0 = none)
+vocSwapBank ENT
+               dw        0                           ;   and the bank it is swapped through
 
 SprBanks ENT
                ds        SPR_MAX_BANKS               ; The sprite cache's banks

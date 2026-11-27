@@ -16,9 +16,11 @@ _CoreStartUp
 
                   jsr       InitMemory          ; Allocate and initialize memory for the engine
                   bcs       :core_err2
+                  VOC_BORDER 1                  ; (VOC spike checkpoint: deep red)
 
                   jsr       EngineReset         ; All of the resources are allocated, put the engine in a known state
                   jsr       InitGraphics        ; Initialize all of the graphics-related data
+                  VOC_BORDER 2                  ; (VOC spike checkpoint: dark blue)
 
 ; Once the graphics arrays and core engine data is set up, prep the PEA field as if a render has already
 ; happened.  This is to put everything in a valid state because other wise if the code tried to render

@@ -23,6 +23,12 @@ drawScreen
         ldy   #y_height
         jsr   _BltRangeLite
 
+; 0. The span of the plane the Memory Manager owns (core/Memory.s): its bytes out, the plane's in (the
+; sprite routines read the plane).  Until step 5, nothing may call the Memory Manager.
+
+        jsr   VocCaptureOff
+        jsr   vocSwapIn
+
 ; 1. Replay the previous frame's sprite records into the erase nibble (as gridDrawDirty)
 
         ldx   gqPrevEnd
@@ -71,7 +77,90 @@ drawScreen
         ldy   #$E0E0
         lda   #gqExposeOp
         jsr   gqRunCells
-        jmp   gqSwap
+        jsr   gqSwap
+
+; 5. The span back to the Memory Manager, with the capture off: the VOC keeps the sprites
+
+        jsr   VocCaptureOff
+        jsr   vocSwapOut
+        jmp   VocCaptureOn
+
+; Swap the Memory Manager's span of the plane (vocLoAddr, vocLen bytes) through the swap bank B
+; (vocSwapBank): the plane's copy at B/addr - $2000, the Memory Manager's bytes at B/addr + $6000.  DBR = K.
+        mx   %00
+vocSwapIn
+        ldal  vocLen
+        beq   :out
+        ; $E0 span -> B/addr + $6000
+        jsr   vocSetBanks
+        ldal  vocLoAddr
+        tax
+        clc
+        adc   #$6000
+        tay
+        jsr   vocMove
+        ; B/addr - $2000 -> $E0 span
+        jsr   vocSetBanksRev
+        ldal  vocLoAddr
+        tay
+        sec
+        sbc   #$2000
+        tax
+        jsr   vocMove
+:out    rts
+
+        mx   %00
+vocSwapOut
+        ldal  vocLen
+        beq   :out
+        ; $E0 span -> B/addr - $2000
+        jsr   vocSetBanks
+        ldal  vocLoAddr
+        tax
+        sec
+        sbc   #$2000
+        tay
+        jsr   vocMove
+        ; B/addr + $6000 -> $E0 span
+        jsr   vocSetBanksRev
+        ldal  vocLoAddr
+        tay
+        clc
+        adc   #$6000
+        tax
+        jsr   vocMove
+:out    rts
+
+; Patch the move's banks: vocSetBanks = from $E0 to B, vocSetBanksRev = from B to $E0
+        mx   %00
+vocSetBanks
+        ldal  vocSwapBank
+        sep   #$20
+        sta   vocMv+1                 ; (MVN: opcode, destination bank, source bank)
+        lda   #$E0
+        sta   vocMv+2
+        rep   #$20
+        rts
+
+        mx   %00
+vocSetBanksRev
+        ldal  vocSwapBank
+        sep   #$20
+        sta   vocMv+2
+        lda   #$E0
+        sta   vocMv+1
+        rep   #$20
+        rts
+
+; X = source address, Y = destination address: move vocLen bytes.  DBR = K on exit.
+        mx   %00
+vocMove
+        ldal  vocLen
+        dec
+        phb
+vocMv   db    $54,$00,$00             ; mvn (patched)
+        plb
+        rts
 
 ; The VOC erase handler (gqRunCells).  Y = cell, DBR = $E0.  Zero the cell's erase quadrants (4 lines x
 ; 1 word each: TL, TR, BL, BR = bits 1-4 of the mask * 2).  The cell keeps its bits for the expose pass.
