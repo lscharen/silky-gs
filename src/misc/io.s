@@ -12,6 +12,10 @@
 LoadROMData
             ldy        #svCreateRec
 LoadROMFile
+            ldal       P8Booted                ; Booted from ProDOS 8 (scripts/p8boot): no GS/OS, no files (C = 1)
+            beq        *+4
+            sec
+            rts
             jsr        IrqSystemEnter          ; GS/OS gets the system's interrupt handling (rom/rom_exec.s)
             jsr        ioLoadROMFile
             jmp        IrqSystemLeave          ; (keeps C)
@@ -50,6 +54,10 @@ PREF_FILE_SIZE equ config_game_end-config_block_start
 
             mx    %00
 LoadPrefData
+            ldal       P8Booted                ; Booted from ProDOS 8 (scripts/p8boot): no GS/OS, no files (C = 1)
+            beq        *+4
+            sec
+            rts
             jsr        IrqSystemEnter
             jsr        ioLoadPrefData
             jmp        IrqSystemLeave
@@ -109,6 +117,10 @@ ioLoadPrefData
 SaveROMData
             ldy        #svCreateRec
 SaveROMFile
+            ldal       P8Booted                ; Booted from ProDOS 8 (scripts/p8boot): no GS/OS, no files (C = 1)
+            beq        *+4
+            sec
+            rts
             jsr        IrqSystemEnter
             jsr        ioSaveROMFile
             jmp        IrqSystemLeave
@@ -153,6 +165,10 @@ ioSaveROMFile
 ; Returns C = 0 if the file was written, C = 1 if it could not be (e.g. a write-protected disk)
             mx    %00
 SavePrefData
+            ldal       P8Booted                ; Booted from ProDOS 8 (scripts/p8boot): no GS/OS, no files (C = 1)
+            beq        *+4
+            sec
+            rts
             jsr        IrqSystemEnter
             jsr        ioSavePrefData
             jmp        IrqSystemLeave

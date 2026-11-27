@@ -101,6 +101,7 @@ ContinueArea           = $7E00   ; patches operand
 ; The user has existed the runtime
 quit
             jsr   NES_ShutDown
+            jsr   NES_P8Quit              ; (returns under GS/OS)
 
 ; Exit the application
 

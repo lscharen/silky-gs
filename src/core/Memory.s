@@ -36,11 +36,18 @@ InitMemory
                pha
                _FindHandle
                pla
-               ora       1,s
-               sta       1,s
-               pla                                   ; A = 0: the page is free
+               sta       tmp0
+               pla
+               sta       tmp1
+               ora       tmp0                        ; 0: the page is free
                beq       :free
-               lda       vocLoAddr                   ; Owned: the span, and end the free run
+               ldy       #6                          ; The handle's owner: the Memory Manager's own blocks are
+               lda       [tmp0],y                    ; swapped; anyone else's (the P8 loader reserves the whole
+               cmp       #$00FF                      ; plane for us) is left alone
+               beq       :mm
+               jsr       :reserve                    ; (ends the free run)
+               bra       :next
+:mm            lda       vocLoAddr                   ; The Memory Manager's: the span, and end the free run
                bne       :haslo
                lda       vocPage
                xba

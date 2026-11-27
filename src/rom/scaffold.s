@@ -13,6 +13,22 @@
 ; X = memory manager user ID (GS/OS passes it to the application in A)
             mx    %00
 NES_StartUp
+            pha                           ; Started by the ProDOS 8 loader (scripts/p8boot/Loader.s)?  Its
+            lda   $00                     ; signature, 'P8BT', and quit vector are at the start of the direct
+            cmp   #$3850                  ; page; GS/OS doesn't put anything there
+            bne   :gsos
+            lda   $02
+            cmp   #$5442
+            bne   :gsos
+            lda   #1
+            stal  P8Booted
+            lda   $04
+            stal  P8Quit+1
+            lda   $05
+            stal  P8Quit+2
+            stz   $00
+            stz   $02
+:gsos       pla
             stx   UserId
             and   #HORIZONTAL_MIRRORING+VERTICAL_MIRRORING
             stal  PendingMirrorMode       ; Applied by PPUStartUp (before A is reused below)
@@ -441,6 +457,15 @@ NES_ShutDown
 
             jsr   SavePrefData
             rts
+
+; NES_P8Quit: back to ProDOS 8 if the game was started by the P8 loader (P8Quit: its quit vector, a JML
+; patched by NES_StartUp); otherwise it returns, for the game's _QuitGS.  Called after NES_ShutDown.
+                  mx    %00
+NES_P8Quit        ldal  P8Booted
+                  bne   P8Quit
+                  rts
+P8Quit            jml   $000000
+P8Booted          dw    0          ; non-zero: started by the ProDOS 8 loader (no GS/OS calls)
 
 OneSecondCounter  dw  0
 DPSave            dw  0

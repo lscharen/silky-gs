@@ -60,6 +60,7 @@
     "build-image:tetris": ".\\build-single.bat %npm_package_config_cadius% tetris",
     "build-image:duckhunt": ".\\build-single.bat %npm_package_config_cadius% duckhunt",
     "build-image:bench": ".\\build-single.bat %npm_package_config_cadius% bench",
+    "build-p8:smb": "node scripts/build-p8-disk.js src/games/smb/SuperMarioGS emu/SuperMarioP8.2mg --name SMB",
     "build:dist": ".\\build-single.bat %npm_package_config_cadius%",
     "gen-includes": "node scripts/gen-includes.js",
     "bench": "node scripts/run-bench.js",
