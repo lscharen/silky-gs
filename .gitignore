@@ -2,3 +2,5 @@ node_modules/
 emu/
 /build/
 /src/game/
+.claude/
+src/games/adventureisland/
