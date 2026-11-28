@@ -26,7 +26,17 @@ NES_StartUp
             stal  P8Quit+1
             lda   $05
             stal  P8Quit+2
-            stz   $00
+            lda   $07                     ; The Video Overlay Card's slot the user gave the loader (1 - 7)
+            and   #$00FF
+            beq   :noslot
+            cmp   #8
+            bcs   :noslot
+            asl
+            asl
+            asl
+            asl
+            stal  vocSlotX
+:noslot     stz   $00
             stz   $02
 :gsos       pla
             stx   UserId
@@ -466,6 +476,8 @@ NES_P8Quit        ldal  P8Booted
                   rts
 P8Quit            jml   $000000
 P8Booted          dw    0          ; non-zero: started by the ProDOS 8 loader (no GS/OS calls)
+vocSlotX ENT                       ; (VOC spike) the Video Overlay Card's slot * 16: the loader's answer, or
+                  dw    $0030      ; slot 3
 
 OneSecondCounter  dw  0
 DPSave            dw  0

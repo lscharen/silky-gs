@@ -12,8 +12,9 @@
 ;      blocks there (the Video Overlay Card's sprite plane)
 ;   3. zero each bank and read the segments into them, 16KB at a time through a bank 0 buffer
 ;   4. jump to the first segment's entry: A = the Master User ID, X = Y = 0, D = $0800, S = $17FF,
-;      native mode, 16-bit registers.  The direct page starts with 'P8BT' and the quit vector ($002003,
-;      Quit below), so the game can tell it isn't running under GS/OS (rom/scaffold.s)
+;      native mode, 16-bit registers.  The direct page starts with 'P8BT', the quit vector (D+4: Quit
+;      below) and the Video Overlay Card's slot the user typed (D+7: 1 - 7), so the game can tell it
+;      isn't running under GS/OS and where the card is (rom/scaffold.s)
 ;
 ; Bank 0 use: this code at $2000, the ProDOS file buffer at $4000, the header at $4400, the read buffer
 ; at $5000-$8FFF; the game's direct page and stack at $0800-$17FF.
@@ -24,6 +25,7 @@
 MLI         equ   $BF00
 DEVNUM      equ   $BF30                 ; the last device used: the boot device
 COUT        equ   $FDED
+RDKEY       equ   $FD0C
 CROUT       equ   $FD8E
 PRBYTE      equ   $FDDA
 
@@ -42,6 +44,22 @@ ATTR_FIXED  equ   $C017                 ; locked, fixed, fixed address, fixed ba
             jmp   Quit                  ; $2003: the game's quit vector
 
 Start       cld
+
+; 0. The Video Overlay Card's slot (1 - 7, RETURN = 3), for the game (D+7, see 4.)
+
+            ldx   #msgSlot-msgs
+            jsr   Print
+:key        jsr   RDKEY                 ; A = the key, high bit set
+            cmp   #$8D                  ; RETURN: slot 3
+            bne   :digit
+            lda   #'3'+$80
+:digit      cmp   #'1'+$80
+            bcc   :key
+            cmp   #'8'+$80
+            bcs   :key
+            jsr   COUT                  ; (echo it)
+            and   #$0F
+            sta   vocSlot
             ldx   #0
             jsr   Print
 
@@ -277,6 +295,10 @@ Start       cld
             lda   #Quit                 ; the quit vector, $00/Quit
             sta   $04
             stz   $06
+            sep   #$20
+            lda   vocSlot               ; and the Video Overlay Card's slot
+            sta   $07
+            rep   #$20
             pea   $0000                 ; DBR = 0
             plb
             plb
@@ -390,6 +412,9 @@ Print       lda   msgs,x
 msgs        db    $0D
             asc   'LOADING'
             db    0
+msgSlot     db    $0D
+            asc   'VOC CARD SLOT (1-7, RETURN = 3)? '
+            db    0
 msgErr      db    $0D
             asc   'LOAD ERROR $'
             db    0
@@ -425,6 +450,7 @@ quParms     db    4,0
             da    0
 
 tmpId       dw    0
+vocSlot     dw    3
 userId      dw    0
 errCode     dw    0
 segCount    dw    0

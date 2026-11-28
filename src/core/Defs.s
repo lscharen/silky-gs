@@ -35,10 +35,12 @@ SHR_LINE_WIDTH         equ   160
 
 ; VOC two-plane spike (SMB): the Video Overlay Card shows bank $E0 (the sprites) over the motherboard's
 ; bank $E1 (the background).  See SetupVOC (Graphics.s) and drawScreen (ppu/ppu_render.s).
-VOC_CONTROL_REGISTER   equ   $E0C0B1     ; bit 0 set: writes to bank $E0 are not captured; bits 5:4 page select; bit 3 linearize
-VOC_DISSOLVE_REGISTER  equ   $E0C0B3
-VOC_BLUE_GREEN_REGISTER equ  $E0C0B4
-VOC_RED_REGISTER       equ   $E0C0B5
+; The card's registers are its slot's device select space, $C0n0-$C0nF with n = 8 + slot: these are the
+; addresses for slot 0, indexed with vocSlotX (slot * 16; rom/scaffold.s)
+VOC_CONTROL_REGISTER   equ   $E0C081     ; bit 0 set: writes to bank $E0 are not captured; bits 5:4 page select; bit 3 linearize
+VOC_DISSOLVE_REGISTER  equ   $E0C083
+VOC_BLUE_GREEN_REGISTER equ  $E0C084
+VOC_RED_REGISTER       equ   $E0C085
 ChromaKeyRGB           equ   $0F0F       ; Bank $E0 color 0 (transparent): not one of the NES colors
 
 SHR_SCREEN_HEIGHT      equ   200

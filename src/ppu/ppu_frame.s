@@ -368,23 +368,31 @@ _ShadowOff
                  rep   #$20
                  rts
 
-; VOC spike: turn the Video Overlay Card's capture of the bank $E0 writes off / on (bit 0 of $C0B1)
+; VOC spike: turn the Video Overlay Card's capture of the bank $E0 writes off / on (bit 0 of $C0n1)
                  mx    %00
 VocCaptureOff
+                 phx
+                 ldal  vocSlotX              ; the card's slot * 16 (rom/scaffold.s)
+                 tax
                  sep   #$20
-                 ldal  VOC_CONTROL_REGISTER
+                 ldal  VOC_CONTROL_REGISTER,x
                  ora   #$01
-                 stal  VOC_CONTROL_REGISTER
+                 stal  VOC_CONTROL_REGISTER,x
                  rep   #$20
+                 plx
                  rts
 
                  mx    %00
 VocCaptureOn
+                 phx
+                 ldal  vocSlotX              ; the card's slot * 16 (rom/scaffold.s)
+                 tax
                  sep   #$20
-                 ldal  VOC_CONTROL_REGISTER
+                 ldal  VOC_CONTROL_REGISTER,x
                  and   #$FE
-                 stal  VOC_CONTROL_REGISTER
+                 stal  VOC_CONTROL_REGISTER,x
                  rep   #$20
+                 plx
                  rts
 
 ; Set the physical location of the virtual screen on the physical screen. The

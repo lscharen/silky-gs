@@ -9,6 +9,7 @@ SprBankCount            EXT
 vocLoAddr               EXT   ; core/Memory.s: (VOC spike) the Memory Manager's span of $E0/2000 - $9FFF
 vocLen                  EXT
 vocSwapBank             EXT
+vocSlotX                EXT   ; rom/scaffold.s: (VOC spike) the card's slot * 16
 renderActive            EXT   ; rom/rom_exec.s: RENDER_VBL_COUNT
 renderVblTicks          EXT
 framesPerSecond         EXT
