@@ -41,6 +41,10 @@ responsive.
 * **Input**: keyboard or SNES MAX controller for two players, with a configurable key map
 * **Settings**: an in-game configuration screen for audio, video and input options
 
+An optional [FME-7 register module](docs/fme7.md) records bank and mirroring selections for new ports.
+Native code/data mapping, CHR updates, PPU mirroring, IRQs and expansion audio still need a port's
+mapper adapter.
+
 ### Not implemented
 
 * The DMC (sample playback) audio channel; writes to `$4010-$4013` are ignored
